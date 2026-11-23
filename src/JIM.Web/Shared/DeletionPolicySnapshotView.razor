@@ -17,11 +17,11 @@
         <MudText Typo="Typo.body2">
             @if (!string.IsNullOrEmpty(ObjectTypeName))
             {
-                <text><strong>@ObjectTypeName</strong> objects were configured with the following deletion rule when this Activity ran:</text>
+                @Rich(ConnectorSpaceText.DpvLeadTyped, (ObjectTypeName ?? string.Empty, true))
             }
             else
             {
-                <text>The following deletion rule was configured when this Activity ran:</text>
+                @Rich(ConnectorSpaceText.DpvLeadUntyped)
             }
         </MudText>
 
@@ -31,8 +31,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Warning" />
                     <MudText Typo="Typo.body1">
-                        <strong>Manual deletion only.</strong> The Metaverse Object would not be automatically
-                        deleted even when all connectors were removed; an administrator must delete it manually.
+                        <strong>@ConnectorSpaceText.DpvManualLabel</strong> @ConnectorSpaceText.DpvManualBody
                     </MudText>
                 </MudStack>
                 break;
@@ -41,8 +40,8 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Info" />
                     <MudText Typo="Typo.body1">
-                        <strong>Delete when last connector disconnects.</strong> The Metaverse Object would be
-                        @FatePhrase when all Connected System Objects are removed.
+                        <strong>@ConnectorSpaceText.DpvLastLabel</strong>
+                        @FateSentence(true)
                     </MudText>
                 </MudStack>
                 break;
@@ -51,9 +50,9 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Info" />
                     <MudText Typo="Typo.body1">
-                        <strong>Delete when authoritative source disconnects.</strong>
-                        Trigger mode: <strong>@ModeLabel</strong>; @ModeDescription
-                        The Metaverse Object would be @FatePhrase.
+                        <strong>@ConnectorSpaceText.DpvAuthLabel</strong>
+                        @Rich(ConnectorSpaceText.DpvTriggerMode, (ModeLabel, true), (ModeDescription, false))
+                        @FateSentence(false)
                     </MudText>
                 </MudStack>
                 @if (Snapshot.SelectedSourceSystemNames.Count > 0)
@@ -70,24 +69,24 @@
                 @if (!string.IsNullOrEmpty(Snapshot.TriggeringSystemName))
                 {
                     <MudText Typo="Typo.body1" Class="ml-6">
-                        Evaluation triggered by the disconnection of <strong>@Snapshot.TriggeringSystemName</strong>.
+                        @Rich(ConnectorSpaceText.DpvTriggeredBy, (Snapshot.TriggeringSystemName ?? string.Empty, true))
                     </MudText>
                 }
                 <MudText Typo="Typo.body1" Class="ml-6 mud-text-secondary">
                     @if (Snapshot.RemainingConnectedSourceSystemNames.Count > 0)
                     {
-                        <text>Selected sources still connected at decision time: <strong>@string.Join(", ", Snapshot.RemainingConnectedSourceSystemNames)</strong>.</text>
+                        @Rich(ConnectorSpaceText.DpvStillConnected, (string.Join(", ", Snapshot.RemainingConnectedSourceSystemNames), true))
                     }
                     else
                     {
-                        <text>No selected sources remained connected at decision time.</text>
+                        @ConnectorSpaceText.DpvNoneConnected
                     }
                 </MudText>
                 break;
         }
 
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            Recorded when this Activity ran.
+            @ConnectorSpaceText.DpvRecorded
         </MudText>
     </MudStack>
 </MudAlert>
@@ -106,35 +105,65 @@
     public string? ObjectTypeName { get; set; }
 
     private string ModeLabel => Snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
-        ? "All sources disconnect"
-        : "Specific source(s) disconnect";
+        ? ConnectorSpaceText.DelAllSourcesLabel
+        : ConnectorSpaceText.DpvModeSpecific;
 
     private string ModeDescription => Snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
-        ? "deletion occurs only once every selected source has disconnected."
-        : "deletion occurs when any one of the selected sources disconnects.";
+        ? ConnectorSpaceText.DpvModeAll
+        : ConnectorSpaceText.DpvModeAny;
 
     /// <summary>
-    /// "marked for deletion with a 30 days grace period" or "deleted immediately", matching the
-    /// established phrasing of the current-configuration panel this view replaces.
+    /// "The Metaverse Object would be marked for deletion with a 30 days grace period.", or "... deleted immediately.",
+    /// with the grace period set in bold. Asked for with the last connector's removal as its condition where that is
+    /// the rule's trigger.
     /// </summary>
-    private RenderFragment FatePhrase => __builder =>
+    private RenderFragment FateSentence(bool whenLastConnectorRemoved) =>
+        Snapshot.GracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero
+            ? Rich(whenLastConnectorRemoved ? ConnectorSpaceText.DpvFateGraceLast : ConnectorSpaceText.DpvFateGrace, (FormatGracePeriod(gracePeriod), true))
+            : Rich(whenLastConnectorRemoved ? ConnectorSpaceText.DpvFateImmediateLast : ConnectorSpaceText.DpvFateImmediate);
+
+    /// <summary>
+    /// Renders a resource sentence in which each <c>{n}</c> stands for one of the values, in the order given. A value
+    /// flagged for emphasis is set in bold. The values are text, so Blazor encodes them; the sentence itself never
+    /// passes through markup.
+    /// </summary>
+    private static RenderFragment Rich(string template, params (string Text, bool Emphasis)[] values) => builder =>
     {
-        if (Snapshot.GracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero)
+        var sequence = 0;
+        var position = 0;
+        while (position < template.Length)
         {
-            <text>marked for deletion with a <strong>@FormatGracePeriod(gracePeriod)</strong> grace period</text>
-        }
-        else
-        {
-            <text>deleted immediately</text>
+            var open = template.IndexOf('{', position);
+            if (open < 0)
+            {
+                builder.AddContent(sequence++, template[position..]);
+                break;
+            }
+
+            var close = template.IndexOf('}', open);
+            builder.AddContent(sequence++, template[position..open]);
+            var (text, emphasis) = values[int.Parse(template[(open + 1)..close], System.Globalization.CultureInfo.InvariantCulture)];
+            if (emphasis)
+            {
+                builder.OpenElement(sequence++, "strong");
+                builder.AddContent(sequence++, text);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(sequence++, text);
+            }
+
+            position = close + 1;
         }
     };
 
     private static string FormatGracePeriod(TimeSpan period)
     {
         var parts = new List<string>();
-        if (period.Days > 0) parts.Add($"{period.Days} day{(period.Days != 1 ? "s" : "")}");
-        if (period.Hours > 0) parts.Add($"{period.Hours} hour{(period.Hours != 1 ? "s" : "")}");
-        if (period.Minutes > 0) parts.Add($"{period.Minutes} minute{(period.Minutes != 1 ? "s" : "")}");
+        if (period.Days > 0) parts.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(period.Days, ConnectorSpaceText.PdlDayOne, ConnectorSpaceText.PdlDayOther), period.Days.ToString("N0")));
+        if (period.Hours > 0) parts.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(period.Hours, ConnectorSpaceText.DpvHourOne, ConnectorSpaceText.DpvHourOther), period.Hours.ToString("N0")));
+        if (period.Minutes > 0) parts.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(period.Minutes, ConnectorSpaceText.DpvMinuteOne, ConnectorSpaceText.DpvMinuteOther), period.Minutes.ToString("N0")));
         return parts.Count > 0 ? string.Join(", ", parts) : "0";
     }
 }

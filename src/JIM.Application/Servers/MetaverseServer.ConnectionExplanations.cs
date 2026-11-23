@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using System.Globalization;
 using JIM.Application.Servers.Scoping;
 using JIM.Application.Utilities;
@@ -179,6 +180,8 @@ public partial class MetaverseServer
         ExistingObjectTypeName = conflict.ExistingObjectTypeName,
         Description = ScopingExplanationSummariser.DescribeObjectTypeConflict(rule.Name, conflict.TargetObjectTypeName,
             conflict.ExistingObjectTypeName, connectedSystemName),
+        DescriptionDetail = ScopingExplanationSummariser.DescribeObjectTypeConflictMessage(rule.Name, conflict.TargetObjectTypeName,
+            conflict.ExistingObjectTypeName, connectedSystemName),
         Scoping = scoping
     };
 
@@ -301,7 +304,8 @@ public partial class MetaverseServer
             record.MatchSource = string.IsNullOrWhiteSpace(source?.Expression) ? source?.ConnectedSystemAttribute?.Name : source.Expression;
         }
 
-        record.Description = ScopingExplanationSummariser.DescribeJoin(record);
+        record.DescriptionDetail = ScopingExplanationSummariser.DescribeJoinMessage(record);
+        record.Description = record.DescriptionDetail.ToEnglish();
         return record;
     }
 
@@ -352,6 +356,9 @@ public partial class MetaverseServer
             BulletsTitle = summary.BulletsTitle,
             Bullets = summary.Bullets,
             Summary = summary.Summary,
+            HintDetail = summary.HintDetail,
+            BulletsTitleDetail = summary.BulletsTitleDetail,
+            SummaryDetail = summary.SummaryDetail,
             Scoping = explanation
         };
     }

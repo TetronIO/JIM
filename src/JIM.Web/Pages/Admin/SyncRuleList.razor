@@ -9,18 +9,20 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Synchronisation Rules</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Synchronisation Rules
-    <PageInfo Title="Synchronisation Rules" DocsPage="configuration/synchronisation-rules.md">
-        Synchronisation Rules are used to define the flow of information between JIM and Connected Systems.
+<PageTitle>@SyncRuleText.SyncRulesTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@SyncRuleText.SyncRulesTitle
+    <PageInfo Title="@SyncRuleText.SyncRulesTitle" DocsPage="configuration/synchronisation-rules.md">
+        @SyncRuleText.SyncRulesIntro
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (!_canCreateSyncRules)
 {
-    <MudAlert Class="mt-2" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected
-        System</MudLink> first.</MudAlert>
+    <MudAlert Class="mt-2" Severity="Severity.Warning">
+        @((MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.CreateConnectedSystemFirst,
+            "<a href=\"/admin/connected-systems/\" class=\"mud-link\">" + System.Net.WebUtility.HtmlEncode(SyncRuleText.ConnectedSystemTerm) + "</a>"))
+    </MudAlert>
 }
 
 @* ─── Filters ─── *@
@@ -28,7 +30,7 @@
 {
     <MudStack Row="true" Spacing="3" Class="mt-2 flex-wrap" AlignItems="AlignItems.End">
         <MudItem Class="flex-grow-1">
-            <MudSelect T="int" Label="Connected System" Variant="Variant.Outlined"
+            <MudSelect T="int" Label="@SyncRuleText.ConnectedSystemTerm" Variant="Variant.Outlined"
                        Dense="true" Clearable="true" MultiSelection="true"
                        SelectedValues="SelectedConnectedSystemIds"
                        SelectedValuesChanged="OnConnectedSystemFilterChanged"
@@ -40,34 +42,34 @@
             </MudSelect>
         </MudItem>
         <MudItem Class="flex-grow-1">
-            <MudSelect T="SyncRuleDirection" Label="Direction" Variant="Variant.Outlined"
+            <MudSelect T="SyncRuleDirection" Label="@SyncRuleText.DirectionLabel" Variant="Variant.Outlined"
                        Dense="true" Clearable="true" MultiSelection="true"
                        SelectedValues="SelectedDirections"
                        SelectedValuesChanged="OnDirectionFilterChanged"
                        MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetDirectionFilterText))">
-                <MudSelectItem T="SyncRuleDirection" Value="SyncRuleDirection.Import">Inbound</MudSelectItem>
-                <MudSelectItem T="SyncRuleDirection" Value="SyncRuleDirection.Export">Outbound</MudSelectItem>
+                <MudSelectItem T="SyncRuleDirection" Value="SyncRuleDirection.Import">@SyncRuleText.DirectionInbound</MudSelectItem>
+                <MudSelectItem T="SyncRuleDirection" Value="SyncRuleDirection.Export">@SyncRuleText.DirectionOutbound</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem Class="flex-grow-1">
-            <MudSelect T="SyncRuleActionType" Label="Action" Variant="Variant.Outlined"
+            <MudSelect T="SyncRuleActionType" Label="@SyncRuleText.ActionLabel" Variant="Variant.Outlined"
                        Dense="true" Clearable="true" MultiSelection="true"
                        SelectedValues="SelectedActionTypes"
                        SelectedValuesChanged="OnActionTypeFilterChanged"
                        MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetActionTypeFilterText))">
-                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.Projects">Projects</MudSelectItem>
-                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.Provisions">Provisions</MudSelectItem>
-                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.FlowOnly">Flow Only</MudSelectItem>
+                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.Projects">@SyncRuleText.ActionProjects</MudSelectItem>
+                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.Provisions">@SyncRuleText.ActionProvisions</MudSelectItem>
+                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.FlowOnly">@SyncRuleText.ActionFlowOnly</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem Class="flex-grow-1">
-            <MudSelect T="SyncRuleStatus" Label="Status" Variant="Variant.Outlined"
+            <MudSelect T="SyncRuleStatus" Label="@CommonText.ColumnStatus" Variant="Variant.Outlined"
                        Dense="true" Clearable="true" MultiSelection="true"
                        SelectedValues="SelectedStatuses"
                        SelectedValuesChanged="OnStatusFilterChanged"
                        MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetStatusFilterText))">
-                <MudSelectItem T="SyncRuleStatus" Value="SyncRuleStatus.Enabled">Enabled</MudSelectItem>
-                <MudSelectItem T="SyncRuleStatus" Value="SyncRuleStatus.Disabled">Disabled</MudSelectItem>
+                <MudSelectItem T="SyncRuleStatus" Value="SyncRuleStatus.Enabled">@CommonText.Enabled</MudSelectItem>
+                <MudSelectItem T="SyncRuleStatus" Value="SyncRuleStatus.Disabled">@CommonText.Disabled</MudSelectItem>
             </MudSelect>
         </MudItem>
     </MudStack>
@@ -80,48 +82,48 @@
                      ContainerId="sync-rule-list"
                      DefaultSortBy="name"
                      LoadWindow="LoadWindowAsync"
-                     SingularName="Synchronisation Rule"
-                     PluralName="Synchronisation Rules">
+                     SingularName="@SyncRuleText.SingularSyncRule"
+                     PluralName="@SyncRuleText.PluralSyncRules">
     <ToolBarExtras>
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/sync-rules/new"
-                   Color="Color.Primary" Disabled="@(!_canCreateSyncRules)" DropShadow="false">Create Synchronisation Rule
+                   Color="Color.Primary" Disabled="@(!_canCreateSyncRules)" DropShadow="false">@SyncRuleText.CreateSyncRuleButton
         </MudButton>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@CommonText.ColumnName" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Name" Name="name" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudLink Href="@("/admin/sync-rules/" + context.Item.Id)">@context.Item.Name</MudLink>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Direction" Sortable="false">
+        <TemplateColumn Title="@SyncRuleText.DirectionLabel" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Direction" Name="direction" />
+                <VirtualisedSortHeader Title="@SyncRuleText.DirectionLabel" Name="direction" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.Direction == SyncRuleDirection.Import)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Inbound</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">@SyncRuleText.DirectionInbound</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Outbound</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@SyncRuleText.DirectionOutbound</MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Connected System" Sortable="false">
+        <TemplateColumn Title="@SyncRuleText.ConnectedSystemTerm" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
+                <VirtualisedSortHeader Title="@SyncRuleText.ConnectedSystemTerm" Name="connectedsystem" />
             </HeaderTemplate>
             <CellTemplate>
                 @context.Item.ConnectedSystemName
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Object Mapping" Sortable="false">
+        <TemplateColumn Title="@SyncRuleText.ObjectMappingColumn" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Object Mapping" Name="objectmapping" />
+                <VirtualisedSortHeader Title="@SyncRuleText.ObjectMappingColumn" Name="objectmapping" />
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line: this pair of chips and the arrow between them is a
@@ -131,40 +133,40 @@
                     {
                         @* Inbound: CS -> MV *@
                         <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@context.Item.ConnectedSystemObjectTypeName"
-                                    Tooltip="Connected System Object Type" />
+                                    Tooltip="@SyncRuleText.ConnectedSystemObjectTypeTooltip" />
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
                         <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
-                                    Tooltip="Metaverse Object Type" />
+                                    Tooltip="@SyncRuleText.MetaverseObjectTypeTooltip" />
                     }
                     else
                     {
                         @* Outbound: MV -> CS *@
                         <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
-                                    Tooltip="Metaverse Object Type" />
+                                    Tooltip="@SyncRuleText.MetaverseObjectTypeTooltip" />
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
                         <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@context.Item.ConnectedSystemObjectTypeName"
-                                    Tooltip="Connected System Object Type" />
+                                    Tooltip="@SyncRuleText.ConnectedSystemObjectTypeTooltip" />
                     }
                 </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Actions" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnActions" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Actions" Name="actions" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnActions" Name="actions" />
             </HeaderTemplate>
             <CellTemplate>
                 <div class="d-flex align-center gap-1 flex-wrap">
                     @switch (SyncRuleFilter.GetActionType(context.Item))
                     {
                         case SyncRuleActionType.Projects:
-                            <MudTooltip Text="Projects new objects to the Metaverse" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Projects</MudChip>
+                            <MudTooltip Text="@SyncRuleText.ProjectsTooltip" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">@SyncRuleText.ActionProjects</MudChip>
                             </MudTooltip>
                             break;
                         case SyncRuleActionType.Provisions:
-                            <MudTooltip Text="Provisions new objects to the Connected System" Arrow="true"
+                            <MudTooltip Text="@SyncRuleText.ProvisionsTooltip" Arrow="true"
                                         Placement="Placement.Top">
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Provisions</MudChip>
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@SyncRuleText.ActionProvisions</MudChip>
                             </MudTooltip>
                             break;
                         default:
@@ -174,9 +176,9 @@
                 </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Attention" Sortable="false">
+        <TemplateColumn Title="@SyncRuleText.ColumnAttention" Sortable="false">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Attention</MudText>
+                <MudText Typo="Typo.button">@SyncRuleText.ColumnAttention</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Item.Id)"
@@ -184,24 +186,24 @@
                 <GeneratedValueAttentionIndicator Attention="@GetGeneratedValueAttention(context.Item.Id)" SyncRuleId="@context.Item.Id" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Status" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnStatus" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Status" Name="status" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.Enabled)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">@CommonText.Enabled</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@CommonText.Disabled</MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Created" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnCreated" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Created" Name="created" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -214,22 +216,22 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No Synchronisation Rules match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.NoRulesMatchSearch, grid.SearchText))"
+                             SecondaryText="@SyncRuleText.NoRulesMatchSearchHint"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else if (!_filter.IsEmpty)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                             PrimaryText="No Synchronisation Rules match the current filters"
-                             SecondaryText="Adjust or clear the filters above to see more results." />
+                             PrimaryText="@SyncRuleText.NoRulesMatchFilters"
+                             SecondaryText="@SyncRuleText.NoRulesMatchFiltersHint" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.Sync"
-                             PrimaryText="No Synchronisation Rules yet"
-                             SecondaryText="Use the Create Synchronisation Rule button to define your first flow." />
+                             PrimaryText="@SyncRuleText.NoRulesYet"
+                             SecondaryText="@SyncRuleText.NoRulesYetHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -254,9 +256,9 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Synchronisation Rules", href: null, disabled: true)
+        new(SyncRuleText.BreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(SyncRuleText.BreadcrumbAdministration, href: "/admin"),
+        new(SyncRuleText.SyncRulesTitle, href: null, disabled: true)
     };
 
     protected override async Task OnInitializedAsync()
@@ -409,10 +411,12 @@
     }
 
     private static string GetDirectionFilterText(IReadOnlyList<string> selectedValues) =>
-        GetMultiSelectText(selectedValues, value => value == nameof(SyncRuleDirection.Import) ? "Inbound" : "Outbound");
+        GetMultiSelectText(selectedValues, value => value == nameof(SyncRuleDirection.Import)
+            ? SyncRuleText.DirectionInbound
+            : SyncRuleText.DirectionOutbound);
 
     private static string GetActionTypeFilterText(IReadOnlyList<string> selectedValues) =>
-        GetMultiSelectText(selectedValues, value => value == nameof(SyncRuleActionType.FlowOnly) ? "Flow Only" : value);
+        GetMultiSelectText(selectedValues, value => value == nameof(SyncRuleActionType.FlowOnly) ? SyncRuleText.ActionFlowOnly : value);
 
     private static string GetStatusFilterText(IReadOnlyList<string> selectedValues) => GetMultiSelectText(selectedValues);
 
@@ -427,7 +431,7 @@
         {
             0 => string.Empty,
             1 => displayLabel == null ? selectedValues[0] : displayLabel(selectedValues[0]),
-            _ => $"{selectedValues.Count} selected"
+            _ => string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.SelectedCount, selectedValues.Count)
         };
     }
 }

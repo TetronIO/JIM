@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Expressions;
 
 /// <summary>
@@ -13,7 +15,13 @@ public sealed class AttributeFlowTestResult
     /// Why the sample inputs could not be used, one message per problem, such as text that is not a date for a date
     /// and time attribute. When any are present the Expression was not evaluated.
     /// </summary>
-    public IReadOnlyList<string> InputErrors { get; init; } = [];
+    public IReadOnlyList<string> InputErrors => InputErrorDetails.Select(error => error.ToEnglish()).ToList();
+
+    /// <summary>
+    /// <see cref="InputErrors"/> as messages, so the portal can show each in the viewer's language; the REST API and
+    /// PowerShell read <see cref="InputErrors"/>, which is their British English.
+    /// </summary>
+    public IReadOnlyList<JimMessage> InputErrorDetails { get; init; } = [];
 
     /// <summary>
     /// The evaluation pipeline's outcome. Null when <see cref="InputErrors"/> stopped the test, or when the Attribute

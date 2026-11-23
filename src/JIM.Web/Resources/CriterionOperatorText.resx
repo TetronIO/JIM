@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LabelEquals" xml:space="preserve">
+    <value>equals</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department equals Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelNotEquals" xml:space="preserve">
+    <value>does not equal</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department does not equal Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelStartsWith" xml:space="preserve">
+    <value>starts with</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department starts with Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelNotStartsWith" xml:space="preserve">
+    <value>does not start with</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department does not start with Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelEndsWith" xml:space="preserve">
+    <value>ends with</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department ends with Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelNotEndsWith" xml:space="preserve">
+    <value>does not end with</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department does not end with Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelContains" xml:space="preserve">
+    <value>contains</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department contains Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelNotContains" xml:space="preserve">
+    <value>does not contain</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department does not contain Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelLessThan" xml:space="preserve">
+    <value>less than</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department less than Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelLessThanOrEquals" xml:space="preserve">
+    <value>less than or equal to</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department less than or equal to Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelGreaterThan" xml:space="preserve">
+    <value>greater than</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department greater than Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelGreaterThanOrEquals" xml:space="preserve">
+    <value>greater than or equal to</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department greater than or equal to Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelHasValue" xml:space="preserve">
+    <value>has a value</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department has a value Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelHasNoValue" xml:space="preserve">
+    <value>has no value</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department has no value Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelMatchesPattern" xml:space="preserve">
+    <value>matches pattern</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department matches pattern Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelNotMatchesPattern" xml:space="preserve">
+    <value>does not match pattern</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department does not match pattern Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelDateBefore" xml:space="preserve">
+    <value>before</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department before Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelDateOnOrBefore" xml:space="preserve">
+    <value>on or before</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department on or before Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelDateAfter" xml:space="preserve">
+    <value>after</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department after Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+  <data name="LabelDateOnOrAfter" xml:space="preserve">
+    <value>on or after</value>
+    <comment>A comparison operator in a criterion, read between an attribute name and a value ("Department on or after Sales"). Lower case; no trailing punctuation.</comment>
+  </data>
+</root>

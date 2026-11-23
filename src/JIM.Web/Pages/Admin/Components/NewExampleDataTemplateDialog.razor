@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.ExampleData
@@ -12,15 +13,15 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="4">
-            <MudTextField T="string" Label="Name" Variant="Variant.Outlined" Immediate="true" @bind-Value="_name" AutoFocus="true"
+            <MudTextField T="string" Label="@CommonText.FieldName" Variant="Variant.Outlined" Immediate="true" @bind-Value="_name" AutoFocus="true"
                           Error="@(_nameError != null)" ErrorText="@_nameError" />
 
-            <SegmentedToggle TValue="bool" Options="@StartOptions" @bind-Value="_copy" AriaLabel="Start from" />
+            <SegmentedToggle TValue="bool" Options="@StartOptions" @bind-Value="_copy" AriaLabel="@ExampleDataText.StartFrom" />
 
             @if (_copy)
             {
-                <MudSelect T="int?" Label="Template to copy" Variant="Variant.Outlined" @bind-Value="_sourceId"
-                           HelperText="The new template starts with the same Metaverse Object Types and rules, and can then be changed.">
+                <MudSelect T="int?" Label="@ExampleDataText.TemplateToCopy" Variant="Variant.Outlined" @bind-Value="_sourceId"
+                           HelperText="@ExampleDataText.CopyHelp">
                     @foreach (var header in _templates)
                     {
                         <MudSelectItem T="int?" Value="@header.Id">@header.Name</MudSelectItem>
@@ -30,15 +31,15 @@
             else
             {
                 @* a template needs at least one Object Type to be valid, so a blank template starts with one. *@
-                <MudSelect T="MetaverseObjectType" Label="Metaverse Object Type" Variant="Variant.Outlined"
+                <MudSelect T="MetaverseObjectType" Label="@ExampleDataText.MetaverseObjectType" Variant="Variant.Outlined"
                            @bind-Value="_metaverseObjectType" ToStringFunc="@(t => t?.Name ?? string.Empty)"
-                           HelperText="The first Metaverse Object Type to generate. You can add attributes and more types next.">
+                           HelperText="@ExampleDataText.FirstTypeHelp">
                     @foreach (var objectType in _objectTypes)
                     {
                         <MudSelectItem T="MetaverseObjectType" Value="@objectType">@objectType.Name</MudSelectItem>
                     }
                 </MudSelect>
-                <MudNumericField T="int" Label="Objects to create" Variant="Variant.Outlined" Immediate="true" @bind-Value="_objectsToCreate" Min="1" />
+                <MudNumericField T="int" Label="@ExampleDataText.ObjectsToCreate" Variant="Variant.Outlined" Immediate="true" @bind-Value="_objectsToCreate" Min="1" />
             }
 
             @if (_saveError != null)
@@ -48,8 +49,8 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanCreate())" OnClick="CreateAsync">Create Template</MudButton>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">@CommonText.Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanCreate())" OnClick="CreateAsync">@ExampleDataText.CreateTemplate</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -64,10 +65,11 @@
     [Parameter]
     public ExampleDataTemplateHeader? CopyOf { get; set; }
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> StartOptions =
+    // A property rather than a static field, so the labels follow the viewer's language on every use.
+    private static IReadOnlyList<SegmentedToggleOption<bool>> StartOptions =>
     [
-        new(false, "Start blank"),
-        new(true, "Copy an existing template")
+        new(false, ExampleDataText.StartBlank),
+        new(true, ExampleDataText.CopyExistingTemplate)
     ];
 
     private string? _name;
@@ -91,7 +93,7 @@
         {
             _copy = true;
             _sourceId = CopyOf.Id;
-            _name = $"{CopyOf.Name} (copy)";
+            _name = string.Format(CultureInfo.CurrentCulture, ExampleDataText.CopyOfName, CopyOf.Name);
         }
     }
 
@@ -100,7 +102,7 @@
 
     private async Task CreateAsync()
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Create");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Create);
         if (cancelled)
             return;
 
@@ -131,19 +133,19 @@
         catch (InvalidOperationException ex)
         {
             // the only conflict a create raises is the name.
-            _nameError = ex.Message;
+            _nameError = ex.ToDisplayText();
         }
         catch (KeyNotFoundException)
         {
-            _saveError = "The template to copy no longer exists.";
+            _saveError = ExampleDataText.TemplateToCopyMissing;
         }
         catch (ExampleDataTemplateException ex)
         {
-            _saveError = ex.Message;
+            _saveError = ex.ToDisplayText();
         }
         catch (ExampleDataTemplateAttributeException ex)
         {
-            _saveError = ex.Message;
+            _saveError = ex.ToDisplayText();
         }
         finally
         {
@@ -156,7 +158,9 @@
     {
         var parameters = new DialogParameters<NewExampleDataTemplateDialog> { { x => x.CopyOf, copyOf } };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var title = copyOf == null ? "New Data Generation Template" : $"Duplicate {copyOf.Name}";
+        var title = copyOf == null
+            ? ExampleDataText.NewDataGenerationTemplateTitle
+            : string.Format(CultureInfo.CurrentCulture, ExampleDataText.DuplicateNamed, copyOf.Name);
         var dialog = await dialogService.ShowAsync<NewExampleDataTemplateDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: int id } ? id : null;

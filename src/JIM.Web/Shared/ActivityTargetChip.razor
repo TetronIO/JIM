@@ -10,20 +10,20 @@
 @switch (Activity.TargetType)
 {
     case ActivityTargetType.ConnectedSystem when Activity.ConnectedSystemId.HasValue:
-        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@Activity.TargetName" Class="ma-0"
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@Activity.TargetNameForDisplay()" Class="ma-0"
                     Href="@Helpers.GetConnectedSystemActivityHref(Activity.ConnectedSystemId, Activity.TargetOperationType)" />
         break;
     case ActivityTargetType.PasswordSynchronisation when Activity.ConnectedSystemId.HasValue:
     case ActivityTargetType.ExchangeRecipient when Activity.ConnectedSystemId.HasValue:
         @* A password delivered to one Connected System, or an Exchange change made through one: that system. *@
-        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@Activity.TargetName" Class="ma-0"
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@Activity.TargetNameForDisplay()" Class="ma-0"
                     Href="@($"/admin/connected-systems/{Activity.ConnectedSystemId}/")" />
         break;
     case ActivityTargetType.ConnectedSystemObject when Helpers.GetConnectedSystemObjectActivityHref(Activity.ConnectedSystemId, Activity.ConnectedSystemObjectId) is { } csoHref:
-        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" Name="@Activity.TargetName" Href="@csoHref" Class="ma-0" />
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" Name="@Activity.TargetNameForDisplay()" Href="@csoHref" Class="ma-0" />
         break;
     case ActivityTargetType.ConnectedSystemRunProfile when Activity.ConnectedSystemId.HasValue:
-        <ObjectChip Kind="ObjectChipKind.RunProfile" TypeName="@ConnectedSystemName" Name="@Activity.TargetName" Class="ma-0"
+        <ObjectChip Kind="ObjectChipKind.RunProfile" TypeName="@ConnectedSystemName" Name="@Activity.TargetNameForDisplay()" Class="ma-0"
                     Href="@($"/admin/connected-systems/{Activity.ConnectedSystemId}/?t=run-profiles")" />
         break;
     case ActivityTargetType.MetaverseObject when MetaverseObject != null:
@@ -31,14 +31,14 @@
                     Href="@JIM.Utilities.Utilities.GetMetaverseObjectHref(MetaverseObject.Id, MetaverseObject.TypePluralName)" />
         break;
     case ActivityTargetType.SynchronisationRule:
-        <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@Activity.TargetName" Class="ma-0"
+        <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@Activity.TargetNameForDisplay()" Class="ma-0"
                     Href="@Helpers.GetSyncRuleActivityHref(Activity.SyncRuleId, Activity.TargetName)" />
         break;
     case ActivityTargetType.Schedule:
-        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@Activity.TargetName" Href="/admin/operations?t=schedules" Class="ma-0" />
+        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@Activity.TargetNameForDisplay()" Href="/admin/operations?t=schedules" Class="ma-0" />
         break;
     case ActivityTargetType.ApiKey:
-        <ObjectChip Kind="ObjectChipKind.ApiKey" Name="@Activity.TargetName" Class="ma-0"
+        <ObjectChip Kind="ObjectChipKind.ApiKey" Name="@Activity.TargetNameForDisplay()" Class="ma-0"
                     Href="@(Activity.ApiKeyId is { } keyId ? $"/admin/apikeys/{keyId}" : null)" />
         break;
     default:

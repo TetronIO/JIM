@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Security.Cryptography.X509Certificates;
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -78,7 +80,7 @@ internal sealed class LdapExchangeSettingsCheck
             // the check is not a failure.
             logger.Warning("Exchange settings check: signing in to {Endpoint} as {Principal} failed: {Message}",
                 LogSanitiser.Sanitise(endpoint.ToString()), LogSanitiser.Sanitise(signIn.Principal), LogSanitiser.Sanitise(ex.Message));
-            return Refused(serverSetting, LdapExchangeCheckFailures.Describe(ex, signIn, endpoint));
+            return Refused(serverSetting, LdapExchangeCheckFailures.DescribeMessage(ex, signIn, endpoint));
         }
 
         using (session)
@@ -87,7 +89,7 @@ internal sealed class LdapExchangeSettingsCheck
             try
             {
                 var visible = await session.GetVisibleCommandsAsync(LdapExchangeCommandCoverage.RequiredCommands, cancellationToken);
-                if (LdapExchangeCommandCoverage.WarningFor(signIn.Principal, visible) is { } warning)
+                if (LdapExchangeCommandCoverage.WarningMessageFor(signIn.Principal, visible) is { } warning)
                     result.Results.Add(ConnectorSettingValueValidationResult.Warning(serverSetting, warning));
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -96,7 +98,7 @@ internal sealed class LdapExchangeSettingsCheck
                 logger.Warning("Exchange settings check: listing the commands {Principal} can run failed: {Message}",
                     LogSanitiser.Sanitise(signIn.Principal), LogSanitiser.Sanitise(ex.Message));
                 result.Results.Add(ConnectorSettingValueValidationResult.Warning(serverSetting,
-                    $"JIM signed in to Exchange as {signIn.Principal}, but could not tell which commands the account may run, because Get-Command failed: {ex.Message}"));
+                    JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.LdapExchangeGetCommandFailed), signIn.Principal, ex.Message)));
             }
 
             if (await session.GetServerVersionAsync(endpoint.Host, cancellationToken) is { } version)
@@ -107,8 +109,8 @@ internal sealed class LdapExchangeSettingsCheck
         }
     }
 
-    private static ConnectorSettingsCheckResult Refused(ConnectedSystemSettingValue? serverSetting, string message) => new()
+    private static ConnectorSettingsCheckResult Refused(ConnectedSystemSettingValue? serverSetting, JimMessage message) => new()
     {
-        Results = [new ConnectorSettingValueValidationResult { SettingValue = serverSetting, IsValid = false, ErrorMessage = message }]
+        Results = [ConnectorSettingValueValidationResult.Failure(serverSetting, message)]
     };
 }

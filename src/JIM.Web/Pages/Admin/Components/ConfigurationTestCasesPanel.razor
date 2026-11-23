@@ -16,12 +16,12 @@
 
 <MudPaper Outlined="true" Class="@($"pa-4 {Class}")" data-testid="jim-test-cases-panel">
     <div class="d-flex align-center flex-wrap gap-2">
-        <MudText Typo="Typo.h6" Class="flex-grow-1">Test cases</MudText>
+        <MudText Typo="Typo.h6" Class="flex-grow-1">@SyncRuleText.TestCasesHeading</MudText>
         <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="RunAllAsync"
-                   Disabled="@(_testCases.Count == 0 || _running)" data-testid="jim-test-cases-run-all">Run all</MudButton>
+                   Disabled="@(_testCases.Count == 0 || _running)" data-testid="jim-test-cases-run-all">@SyncRuleText.RunAllButton</MudButton>
         @if (_coverageOptions.Count > 0)
         {
-            <MudMenu Label="New test case" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" EndIcon="@Icons.Material.Filled.ArrowDropDown"
+            <MudMenu Label="@SyncRuleText.NewTestCaseMenu" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                      data-testid="jim-test-cases-new">
                 @foreach (var option in _coverageOptions)
                 {
@@ -33,8 +33,8 @@
     </div>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
         @(ConnectedSystem != null
-            ? "Each case gives an Object Matching Rule inputs and says what match values it should give. Runs test the rules as saved."
-            : "Each case gives this Synchronisation Rule's Scope, an Attribute Flow or an Object Matching Rule inputs, and says what it should give. Runs test the rule as saved: save edits on the other tabs first.")
+            ? SyncRuleText.TestCasesIntroConnectedSystem
+            : SyncRuleText.TestCasesIntroRule)
     </MudText>
 
     @if (_loading)
@@ -43,16 +43,16 @@
     }
     else if (_testCases.Count == 0)
     {
-        <TableEmptyState Icon="@Icons.Material.Outlined.FactCheck" PrimaryText="No test cases yet"
+        <TableEmptyState Icon="@Icons.Material.Outlined.FactCheck" PrimaryText="@SyncRuleText.NoTestCasesYet"
                          SecondaryText="@(ConnectedSystem != null
-                             ? "Save one from an Object Matching Rule's Try it, or create one here."
-                             : "Save one from a tester on the Scope, Matching or Attribute Flow tab, or create one here.")" />
+                             ? SyncRuleText.NoTestCasesYetConnectedSystem
+                             : SyncRuleText.NoTestCasesYetRule)" />
     }
     else
     {
         <MudSimpleTable Dense="true" Hover="true" Class="mt-4" Style="overflow-x: auto">
             <thead>
-                <tr><th>Name</th><th>Tests</th><th>Expects</th><th class="jim-fill-column">Result</th><th></th></tr>
+                <tr><th>@CommonText.ColumnName</th><th>@SyncRuleText.TestsColumn</th><th>@SyncRuleText.ExpectsHeading</th><th class="jim-fill-column">@SyncRuleText.ResultLabel</th><th></th></tr>
             </thead>
             <tbody>
                 @foreach (var testCase in _testCases)
@@ -73,7 +73,7 @@
                                     @if (result.RanAsOfNow)
                                     {
                                         <MudTooltip Arrow="true" Placement="Placement.Top"
-                                                    Text="This configuration reads the clock and the case has no run-as-of time, so it ran as of now and can give a different result tomorrow.">
+                                                    Text="@SyncRuleText.RanAsOfNowTooltip">
                                             <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" Class="ml-1" />
                                         </MudTooltip>
                                     }
@@ -81,21 +81,21 @@
                             }
                             else
                             {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Not run</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@SyncRuleText.NotRun</MudText>
                             }
                         </td>
                         <td class="jim-nowrap">
-                            <MudTooltip Text="Run" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@SyncRuleText.RunTooltip" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" OnClick="@(() => RunAsync([current]))"
-                                               Disabled="_running" aria-label="@($"Run {current.Name}")" />
+                                               Disabled="_running" aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RunNamedAria, current.Name)" />
                             </MudTooltip>
-                            <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@CommonText.Edit" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditAsync(current))"
-                                               aria-label="@($"Edit {current.Name}")" />
+                                               aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.EditNamedAria, current.Name)" />
                             </MudTooltip>
-                            <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@CommonText.Delete" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteAsync(current))"
-                                               aria-label="@($"Delete {current.Name}")" />
+                                               aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DeleteNamedAria, current.Name)" />
                             </MudTooltip>
                         </td>
                     </tr>
@@ -210,7 +210,7 @@
         var options = new List<CoverageOption>();
         if (_savedRule is { } rule)
         {
-            options.Add(new CoverageOption("Scope", Template(ConfigurationTestCaseKind.Scope, syncRuleId: rule.Id)));
+            options.Add(new CoverageOption(SyncRuleText.CoverageScope, Template(ConfigurationTestCaseKind.Scope, syncRuleId: rule.Id)));
             foreach (var mapping in rule.AttributeFlowRules.Where(m => m.Id > 0))
             {
                 var generated = mapping.Generation != null;
@@ -313,8 +313,9 @@
 
     private async Task DeleteAsync(ConfigurationTestCase testCase)
     {
-        var confirmed = await DialogService.ShowMessageBoxAsync("Delete test case?", $"Delete the test case '{testCase.Name}'? Nothing it tests changes.",
-            yesText: "Delete", cancelText: "Cancel");
+        var confirmed = await DialogService.ShowMessageBoxAsync(SyncRuleText.DeleteTestCaseTitle,
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DeleteTestCaseQuestion, testCase.Name),
+            yesText: CommonText.Delete, cancelText: CommonText.Cancel);
         if (confirmed != true)
             return;
 
@@ -324,7 +325,7 @@
             await jim.ConfigurationTests.DeleteTestCaseAsync(testCase, user);
         }
 
-        Snackbar.Add($"Deleted test case '{testCase.Name}'.", Severity.Success);
+        Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.TestCaseDeleted, testCase.Name), Severity.Success);
         await LoadAsync();
     }
 
@@ -350,10 +351,10 @@
 
     private static string StatusLabel(ConfigurationTestStatus status) => status switch
     {
-        ConfigurationTestStatus.Passed => "Passed",
-        ConfigurationTestStatus.Failed => "Failed",
-        ConfigurationTestStatus.NeedsReview => "Needs review",
-        _ => "Error"
+        ConfigurationTestStatus.Passed => SyncRuleText.TestStatusPassed,
+        ConfigurationTestStatus.Failed => SyncRuleText.TestStatusFailed,
+        ConfigurationTestStatus.NeedsReview => SyncRuleText.TestStatusNeedsReview,
+        _ => SyncRuleText.TestStatusError
     };
 
     private static Color StatusColour(ConfigurationTestStatus status) => status switch

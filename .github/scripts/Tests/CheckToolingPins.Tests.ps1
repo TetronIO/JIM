@@ -106,6 +106,8 @@ BeforeAll {
         param(
             [string]$PlaywrightVersion = '0.0.79',
             [string]$DotnetEfVersion = '10.0.10',
+            # The EF Core version the projects reference, which dotnet-ef follows.
+            [string]$EfCoreVersion = $DotnetEfVersion,
             [string]$LycheeTag = '0.24.2',
             [string]$LycheeDigest = $script:DigestA,
             [string]$TrivyTag = '0.76.0',
@@ -116,6 +118,20 @@ BeforeAll {
         New-Item -ItemType Directory -Path (Join-Path $root '.devcontainer') -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $root 'scripts') -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $root '.github') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $root 'src/JIM.PostgresData') -Force | Out-Null
+
+        Set-Content -Path (Join-Path $root 'src/JIM.PostgresData/JIM.PostgresData.csproj') -Value @"
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="$EfCoreVersion">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="$EfCoreVersion">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
+"@
 
         Set-Content -Path (Join-Path $root '.github/trivy-image.txt') -Value @"
 # The Trivy scanner image the scan-images job runs, pinned by tag and digest.
@@ -337,6 +353,44 @@ Describe 'check-tooling-pins.ps1' {
         }
     }
 
+    Context 'when dotnet-ef has to follow the EF Core version the projects use' {
+
+        # The CLI drives the projects' own EF Core design-time assemblies, so it has to stay on their
+        # version; the newest dotnet-ef on NuGet is the wrong target as soon as a new EF Core major ships.
+
+        It 'proposes no new major while the projects stay on the old one' {
+            New-FakeRegistry -NpmLatest '0.0.79' -NpmVersions @('0.0.79') -NuGetVersions @('10.0.10', '10.0.11', '11.0.0')
+
+            Invoke-CheckToolingPins -Tree (New-PinTree -DotnetEfVersion '10.0.10' -EfCoreVersion '10.0.10')
+
+            $script:ExitCode | Should -Be 0
+            $script:Output | Should -Match 'dotnet-ef\s+10\.0\.10\s+->\s+10\.0\.10\s+current'
+        }
+
+        It 'moves to the version EF Core moved to, not the newest published' {
+            New-FakeRegistry -NpmLatest '0.0.79' -NpmVersions @('0.0.79') -NuGetVersions @('10.0.10', '10.0.11', '11.0.0')
+            $tree = New-PinTree -DotnetEfVersion '10.0.10' -EfCoreVersion '10.0.11'
+
+            Invoke-CheckToolingPins -Tree $tree -Apply
+
+            $script:ExitCode | Should -Be 2
+            $setup = Get-Content (Join-Path $tree '.devcontainer/setup.sh') -Raw
+            $setup | Should -Match 'dotnet-ef --version 10\.0\.11;'
+            $setup | Should -Match 'dotnet-ef 10\.0\.11 installed globally'
+            $setup | Should -Not -Match '11\.0\.0'
+        }
+
+        It 'waits while the matching dotnet-ef is not yet on NuGet' {
+            New-FakeRegistry -NpmLatest '0.0.79' -NpmVersions @('0.0.79') -NuGetVersions @('10.0.10', '11.0.0')
+
+            Invoke-CheckToolingPins -Tree (New-PinTree -DotnetEfVersion '10.0.10' -EfCoreVersion '10.0.11')
+
+            $script:ExitCode | Should -Be 0
+            $script:Output | Should -Match 'dotnet-ef\s+10\.0\.10\s+->\s+10\.0\.10\s+current'
+            $script:Output | Should -Match '10\.0\.11.*not yet published'
+        }
+    }
+
     Context "against the repository's own pin files" {
 
         It 'finds every pin, so a reworded pin line cannot leave a tool unwatched' {
@@ -344,7 +398,7 @@ Describe 'check-tooling-pins.ps1' {
             # patterns. Copy the real ones and read them: a pattern that no longer matches throws here.
             $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).Path
             $tree = Join-Path $TestDrive ("Real_" + [guid]::NewGuid().ToString('N'))
-            foreach ($file in @('.devcontainer/setup.sh', '.mcp.json', 'scripts/Test-DocsSite.ps1', '.github/trivy-image.txt')) {
+            foreach ($file in @('.devcontainer/setup.sh', '.mcp.json', 'scripts/Test-DocsSite.ps1', '.github/trivy-image.txt', 'src/JIM.PostgresData/JIM.PostgresData.csproj')) {
                 New-Item -ItemType Directory -Path (Split-Path (Join-Path $tree $file)) -Force | Out-Null
                 Copy-Item -Path (Join-Path $repoRoot $file) -Destination (Join-Path $tree $file)
             }

@@ -18,7 +18,9 @@
 # Triggers: nightly on main and workflow_dispatch. NEVER pull_request or push. Split-trust runner model (see
 # ci.yml): a pull_request runs code from anyone's fork, and the lab runner has a route to the domain controller
 # network and holds the lab's secrets, so fork code must never reach it. Nothing here is triggered by a fork:
-#   - the triggers are a schedule (always the default branch) and a dispatch (needs write access to this repository);
+#   - the triggers are a schedule (always the default branch) and a dispatch (needs write access to this repository;
+#     the lab host's nightly task dispatches on main with a fine-grained token for this repository holding Actions:
+#     read and write only, stored on the host for SYSTEM and Administrators; see Timing);
 #   - the lab runner is alone in a DEDICATED runner group named `jim-ad-lab`, with repository access to TetronIO/JIM
 #     only and a workflow allowlist of exactly this file and ad-lab-rebuild.yml, both at refs/heads/main, so that
 #     even a branch that edits this workflow cannot reach the runner. It is not in `tetron-trusted`, because a
@@ -58,9 +60,17 @@
 # and the nightly of 23 November (45144900858), slowed by a toolbox rebuild, was cancelled at 300 minutes with most
 # of its scenarios passed and nothing reported. ad-lab-rebuild.yml (after Patch Tuesday) shares the concurrency group.
 # The minute is deliberately off the hour: GitHub delays scheduled runs under load, most at the top of the hour, and at
-# '0 2 * * *' the nightly was created between 06:31 and 07:16 UTC every day, finishing mid-morning.
+# '0 2 * * *' the nightly was created between 06:31 and 07:16 UTC every day, finishing mid-morning. At '23 1 * * *' it
+# fared no better (created between 07:16 and 09:17 UTC through November 2026), so the lab host starts the nightly
+# itself: its scheduled task \JIM\Start AD lab nightly runs Start-LabNightly.ps1 (test/integration/ad-lab/host) at
+# 01:23 UTC, which dispatches this workflow on main with trigger=host-nightly. The cron stays as the fallback for a host
+# that is off or a token that has expired. One nightly a day, whichever is created first: the host's script dispatches
+# nothing if a nightly was created since 00:00 UTC, and a scheduled run skips the lab (the job below) when the host's
+# was.
 
 name: jim-ad-lab
+# The host's nightly is named apart, so both sides can recognise it (Start-LabNightly.ps1 matches this name).
+run-name: ${{ inputs.trigger == 'host-nightly' && 'jim-ad-lab nightly (lab host)' || 'jim-ad-lab' }}
 
 on:
   schedule:
@@ -80,19 +90,62 @@ on:
         description: 'Also run the RequiresActiveDirectory connector probes'
         type: boolean
         default: true
+      trigger:
+        description: 'What started the run: manual, or host-nightly (the lab host''s 01:23 UTC task, Start-LabNightly.ps1)'
+        type: choice
+        options: [manual, host-nightly]
+        default: 'manual'
 
 permissions:
   contents: read
   statuses: write
+  # The nightly check below lists this workflow's runs.
+  actions: read
   # The Entra ID sign-in checks (Scenario 035, #2367) sign in to Microsoft Graph as the CI app, whose federated
   # credential trusts GitHub's OIDC token for the jim-ad-lab environment, so no Graph secret is stored anywhere.
   id-token: write
 
 jobs:
+  # A scheduled run is the fallback nightly (see Timing): it leaves the lab alone when the lab host's nightly was created
+  # since 00:00 UTC. On a GitHub-hosted runner and outside the lab's concurrency group, so it never waits behind that
+  # run. It fails open: if the runs cannot be listed, the scheduled run goes ahead, since two nightlies are better than
+  # none.
+  nightly:
+    name: Is the lab host's nightly already running?
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Decide
+        id: decide
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $since = [DateTime]::UtcNow.Date.ToString('yyyy-MM-dd')
+          $titles = gh api "repos/$env:REPOSITORY/actions/workflows/ad-lab.yml/runs?branch=main&event=workflow_dispatch&created=>=$since&per_page=100" --jq '.workflow_runs[] | select(.display_title == "jim-ad-lab nightly (lab host)") | "\(.id) \(.created_at)"'
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning title=Could not list this workflow's runs::Running the scheduled nightly in case the lab host's did not start."
+            'run=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+          elseif ($titles) {
+            Write-Host "::notice title=The lab host started today's nightly::Run $(@($titles)[0]). This scheduled run leaves the lab alone."
+            'run=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+          else {
+            Write-Host "::warning title=The lab host did not start today's nightly::Running the scheduled one. Check \JIM\Start AD lab nightly and its log, start-lab-nightly.log, on the lab host."
+            'run=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+
   jim-ad-lab:
     name: jim-ad-lab
-    # A schedule always runs the default branch, but say so: only main's copy of this file may reach the lab.
-    if: ${{ github.event_name != 'schedule' || github.ref == 'refs/heads/main' }}
+    needs: nightly
+    # A schedule always runs the default branch, but say so: only main's copy of this file may reach the lab. The nightly
+    # job runs only for a schedule: skipped (a dispatch) or failed, it lets this run; only its run=false stops it.
+    if: ${{ !cancelled() && (needs.nightly.result != 'success' || needs.nightly.outputs.run == 'true') && (github.event_name != 'schedule' || github.ref == 'refs/heads/main') }}
     runs-on: [self-hosted, jim-ad-lab]
     environment: jim-ad-lab
     timeout-minutes: 360
@@ -336,7 +389,12 @@ jobs:
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
           JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
         run: |
-          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 31 -Template Nano -DirectoryType ActiveDirectory
+          # -SkipBuild only when the suite built this very commit's images in this job (Run-IntegrationTests.ps1 writes
+          # the marker after a successful build; the checkout deletes it at the start of every job). Otherwise build,
+          # so a run whose suite failed early never tests images left from an earlier commit.
+          $marker = 'test/integration/.jim-images-built'
+          $build = @(if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq (git rev-parse HEAD))) { '-SkipBuild' })
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 31 -Template Nano -DirectoryType ActiveDirectory @build
           exit $LASTEXITCODE
 
       # The Entra ID sign-in checks (Scenario 035, #2367): people sign in to JIM through the JIM test tenant in Microsoft
@@ -359,7 +417,10 @@ jobs:
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
           JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
         run: |
-          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 35 -Template Nano -DirectoryType ActiveDirectory
+          # -SkipBuild as in the AD FS step above.
+          $marker = 'test/integration/.jim-images-built'
+          $build = @(if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq (git rev-parse HEAD))) { '-SkipBuild' })
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 35 -Template Nano -DirectoryType ActiveDirectory @build
           exit $LASTEXITCODE
 
       # The Entra ID Connector checks (#361): in Scenario 036 JIM provisions, updates, disables and deletes users and
@@ -384,8 +445,11 @@ jobs:
           ENTRA_CONNECTOR_SCENARIOS: ${{ steps.plan.outputs.entra_connector_scenarios }}
         run: |
           $failed = @()
+          # -SkipBuild as in the AD FS step above; a scenario that builds writes the marker, so the next one reuses it.
+          $marker = 'test/integration/.jim-images-built'
           foreach ($number in ($env:ENTRA_CONNECTOR_SCENARIOS -split ' ' | Where-Object { $_ })) {
-            pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario $number -Template Nano -DirectoryType ActiveDirectory
+            $build = @(if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq (git rev-parse HEAD))) { '-SkipBuild' })
+            pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario $number -Template Nano -DirectoryType ActiveDirectory @build
             if ($LASTEXITCODE -ne 0) { $failed += $number }
           }
           if ($failed.Count -gt 0) { Write-Host "::error::Entra ID Connector scenario(s) failed: $($failed -join ', ')"; exit 1 }

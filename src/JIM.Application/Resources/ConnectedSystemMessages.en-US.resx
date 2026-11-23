@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SyncRuleObjectTypesCannotChange" xml:space="preserve">
+    <value>The {0} of Synchronization Rule '{1}' cannot be changed once it is saved: its Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of its Object Types. Create a new Synchronization Rule for the other Object Type instead.</value>
+  </data>
+  <data name="SyncRuleEnabledOnDeselectedObjectType" xml:space="preserve">
+    <value>Synchronization Rule '{0}' cannot be enabled because its Object Type '{1}' is not selected on the Connected System. Select the Object Type first, or save the Synchronization Rule disabled.</value>
+  </data>
+  <data name="SyncRuleDeprovisionDisableUnsupported" xml:space="preserve">
+    <value>Synchronization Rule '{0}' cannot deprovision with Disable: the {1} that '{2}' uses cannot disable an account. Choose Delete or Disconnect.</value>
+  </data>
+  <data name="ObjectTypeStillManagedOne" xml:space="preserve">
+    <value>Object Type '{0}' cannot be deselected while an enabled Synchronization Rule still manages it: {2}. Disable that Synchronization Rule first, or keep the Object Type selected.</value>
+  </data>
+  <data name="ObjectTypeStillManagedOther" xml:space="preserve">
+    <value>Object Type '{0}' cannot be deselected while {1} enabled Synchronization Rules still manage it: {2}. Disable those Synchronization Rules first, or keep the Object Type selected.</value>
+  </data>
+  <data name="DuplicateMappingTargetNamed" xml:space="preserve">
+    <value>Synchronization Rule '{0}' already has an Attribute Flow targeting '{1}'; only one mapping per target attribute is supported, and a disabled mapping still counts. To fall back between source attributes within one rule, use a single expression mapping (for example attribute_1 ?? attribute_2). To arbitrate between sources with Attribute Priority, define the second flow on a separate, differently-scoped Synchronization Rule.</value>
+  </data>
+  <data name="DuplicateMappingTargetUnnamed" xml:space="preserve">
+    <value>This Synchronization Rule already has an Attribute Flow targeting '{0}'; only one mapping per target attribute is supported, and a disabled mapping still counts. To fall back between source attributes within one rule, use a single expression mapping (for example attribute_1 ?? attribute_2). To arbitrate between sources with Attribute Priority, define the second flow on a separate, differently-scoped Synchronization Rule.</value>
+  </data>
+  <data name="MappingImportOnlySettings" xml:space="preserve">
+    <value>Null is a value, inbound value processing and case normalization apply to import mappings only.</value>
+  </data>
+  <data name="PriorityMappingOfRule" xml:space="preserve">
+    <value>mapping {0} (Synchronization Rule '{1}')</value>
+  </data>
+  <data name="MappingRemovalChoicesUpdatesOnly" xml:space="preserve">
+    <value>Mapping removal choices apply to updates only: a Synchronization Rule being created has no persisted Attribute Flow mappings to remove.</value>
+  </data>
+  <data name="MappingRemovalChoiceStillPresent" xml:space="preserve">
+    <value>Mapping removal choice for mapping {0} names a mapping still present on the Synchronization Rule; a choice may only describe a staged removal.</value>
+  </data>
+  <data name="MappingRemovalChoiceWrongRule" xml:space="preserve">
+    <value>Mapping removal choice for mapping {0} names a mapping that does not belong to Synchronization Rule {1}.</value>
+  </data>
+  <data name="SaveWarningProjectionConflict" xml:space="preserve">
+    <value>The import Synchronization Rule '{0}' also projects '{1}' objects from '{2}', but as '{3}'. A synchronization projects nothing for an object both rules have in scope, and reports it as a Projection Type Conflict. Give the rules scopes that never overlap, or have them project into one Metaverse Object Type.</value>
+  </data>
+  <data name="SaveWarningExportRulesOverlap" xml:space="preserve">
+    <value>The export Synchronization Rule '{0}' also manages '{1}' objects in '{2}' for '{3}'. Only one export rule may manage an object: a synchronization exports nothing to this Connected System for an object both rules have in scope, and reports it as Export Rules Overlap. Give the rules scopes that never overlap, or combine them into one rule.</value>
+  </data>
+  <data name="SaveWarningExportObjectTypesDiffer" xml:space="preserve">
+    <value>The export Synchronization Rule '{0}' provisions '{1}' objects to '{2}' as '{3}', and this rule provisions them as {4}. Each can have only one object in '{2}', so where both rules' scopes cover the same one, only one rule provisions it and the other reports Synchronization Failed for it on every synchronization. Make sure the scopes never overlap.</value>
+  </data>
+  <data name="ReaderOwnerSyncRule" xml:space="preserve">
+    <value>Synchronization Rule '{0}'</value>
+  </data>
+  <data name="HeldAfterImportMatched" xml:space="preserve">
+    <value>the object is matched on the next synchronization</value>
+  </data>
+  <data name="HeldAfterImportScope" xml:space="preserve">
+    <value>the object's scope is decided at the next synchronization</value>
+  </data>
+</root>

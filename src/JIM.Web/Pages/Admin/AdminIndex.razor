@@ -8,18 +8,18 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Administration</PageTitle>
+<PageTitle>@LayoutText.NavAdministration</PageTitle>
 
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Administration</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@LayoutText.NavAdministration</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 @* page-description: exempt - the Administration landing page orients a first-time visitor to the sections
    below; it is a directory of the admin area, not a page with a purpose of its own to explain. *@
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Manage system configuration, operations, and security.
+    @AdminText.AdminIntro
 </MudText>
 
 @* ─── Operations & Monitoring ─── *@
-<MudText Typo="Typo.h5" Class="mt-8">Operations &amp; Monitoring</MudText>
+<MudText Typo="Typo.h5" Class="mt-8">@AdminText.AdminSectionOperations</MudText>
 <MudGrid Class="mt-3" Spacing="4">
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/operations"))">
@@ -28,7 +28,7 @@
                    banner's, read once when the index loads. The tile is the way to the strip that explains it. *@
                 @if (_operationsNeedAttention)
                 {
-                    <MudTooltip Text="A JIM service is not reporting; open Operations." Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@AdminText.AdminOperationsAttention" Arrow="true" Placement="Placement.Top">
                         <MudBadge Dot="true" Color="Color.Error" Overlap="true">
                             <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Primary" />
                         </MudBadge>
@@ -38,123 +38,123 @@
                 {
                     <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Primary" />
                 }
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Operations</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.AdminTileOperations</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage sync operations, schedules, run history and password delivery</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileOperationsDesc</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/logs"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Custom.FileFormats.FileDocument" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Logs</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.LogsPageTitle</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">View application and synchronisation logs</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileLogsDesc</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo(Utilities.GetPendingDeletionsHref()))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.AutoDelete" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Pending Deletions</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.AdminTilePendingDeletions</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Review Metaverse Objects awaiting deletion before it is finalised</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTilePendingDeletionsDesc</MudText>
         </MudPaper>
     </MudItem>
 </MudGrid>
 
 @* ─── Identity Configuration ─── *@
-<MudText Typo="Typo.h5" Class="mt-8">Synchronisation Configuration</MudText>
+<MudText Typo="Typo.h5" Class="mt-8">@AdminText.AdminSectionSyncConfig</MudText>
 <MudGrid Class="mt-3" Spacing="4">
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Cable" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Connected Systems</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@LayoutText.NavConnectedSystems</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Configure external system connections</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileConnectedSystemsDesc</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/sync-rules"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Sync" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Synchronisation Rules</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@LayoutText.NavSynchronisationRules</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Define how attributes flow between systems</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileDefineFlow</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/schema"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Schema" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Schema</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.SchemaPageTitle</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage object types and attributes</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileSchemaDesc</MudText>
         </MudPaper>
     </MudItem>
 </MudGrid>
 
 @* ─── Data Management ─── *@
-<MudText Typo="Typo.h5" Class="mt-8">Data Management</MudText>
+<MudText Typo="Typo.h5" Class="mt-8">@AdminText.AdminSectionData</MudText>
 <MudGrid Class="mt-3" Spacing="4">
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/predefined-searches"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.SavedSearch" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Predefined Searches</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.AdminTilePredefinedSearches</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Create and manage saved search queries</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTilePredefinedSearchesDesc</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/example-data"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Science" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Example Data</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.AdminTileExampleData</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Generate test data from templates</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileExampleDataDesc</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/deleted-objects"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Deleted Objects</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.AdminTileDeletedObjects</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">View the history of deleted objects</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileDeletedObjectsDesc</MudText>
         </MudPaper>
     </MudItem>
 </MudGrid>
 
 @* ─── Security & Settings ─── *@
-<MudText Typo="Typo.h5" Class="mt-8">Security &amp; Settings</MudText>
+<MudText Typo="Typo.h5" Class="mt-8">@AdminText.AdminSectionSecurity</MudText>
 <MudGrid Class="mt-3" Spacing="4">
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/apikeys"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Api" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">API Keys</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.ApiKeyPageTitle</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage API authentication keys</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileApiKeysDesc</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/certificates"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Certificates</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.CertificateBreadcrumb</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage trusted certificates</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileCertificatesDesc</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/settings"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.DisplaySettings" Color="Color.Primary" />
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">Settings</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.AdminTileSettings</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Configure service settings</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileSettingsDesc</MudText>
         </MudPaper>
     </MudItem>
 </MudGrid>
@@ -163,7 +163,7 @@
 <MudDivider Class="mt-8 mb-4" />
 <div class="d-flex align-center cursor-pointer" style="width: fit-content;" @onclick="@(() => _dangerZoneExpanded = !_dangerZoneExpanded)">
     <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Error" Size="Size.Small" Class="me-2" />
-    <MudText Typo="Typo.body2" Color="Color.Error" Style="font-weight: 500;">Danger Zone</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Error" Style="font-weight: 500;">@AdminText.AdminTileDangerZone</MudText>
     <MudIcon Icon="@Icons.Material.Filled.ExpandMore" Color="Color.Error" Size="Size.Small" Class="ms-1"
              Style="@($"transition: transform .25s ease; transform: rotate({(_dangerZoneExpanded ? "180" : "0")}deg);")" />
 </div>
@@ -173,9 +173,9 @@
             <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/factory-reset"))">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.RestartAlt" Color="Color.Error" />
-                    <MudText Typo="Typo.body1" Style="font-weight: 500;">Factory Reset</MudText>
+                    <MudText Typo="Typo.body1" Style="font-weight: 500;">@AdminText.FactoryResetTitle</MudText>
                 </MudStack>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Wipe all data and configuration to start fresh</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AdminTileFactoryResetDesc</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -199,7 +199,7 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavAdministration, href: null, disabled: true)
     };
 }

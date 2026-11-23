@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Models.Activities;
@@ -87,10 +90,9 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         var storedScope = SyncRuleScopingProposal.FromCurrentScope(rule);
         if (storedScope.DescribesSameScopeAs(proposal))
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The proposed Scoping Criteria match the ones this Synchronisation Rule already has, so no object " +
-                "changes scope and no impact is counted below.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalSameAsStored)),
                 nameof(SyncRule.ObjectScopingCriteriaGroups)));
             return findings;
         }
@@ -99,24 +101,22 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         // silently evaluates wider than it looks. Caught here rather than at evaluation, where it would surface as
         // a failed preview with a stack trace instead of a sentence.
         foreach (var message in DescribeUnreadableCriteria(rule, proposal))
-            findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Blocking, message, nameof(SyncRule.ObjectScopingCriteriaGroups)));
+            findings.Add(PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking, message, nameof(SyncRule.ObjectScopingCriteriaGroups)));
 
         if (proposal.IsUnscoped && !storedScope.IsUnscoped)
         {
-            findings.Add(new PreviewValidationFinding(
+            MessageArgument typeName = rule.ConnectedSystemObjectType?.Name ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingConfiguredType));
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                $"The proposal removes every Scoping Criterion, so this Synchronisation Rule would manage every " +
-                $"object of type '{rule.ConnectedSystemObjectType?.Name ?? "the configured type"}' rather than a " +
-                "selected population.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalRemovesEveryCriterion), typeName),
                 nameof(SyncRule.ObjectScopingCriteriaGroups)));
         }
 
         if (!rule.Enabled)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "This Synchronisation Rule is disabled, so no synchronisation applies its scope today. The counts " +
-                "below describe what the next synchronisation would do once it is enabled.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -127,14 +127,11 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
             if (unscopedSibling != null)
             {
-                findings.Add(new PreviewValidationFinding(
+                findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    $"Import Synchronisation Rule '{unscopedSibling.Name}' covers this object type with no Scoping " +
-                    "Criteria, so every object stays joined whatever this rule says: narrowing this rule's criteria " +
-                    "disconnects nothing. An object that leaves this rule's scope stops receiving its Attribute Flow; " +
-                    (rule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect
-                        ? "under its Out-of-Scope Action, Disconnect, the values this rule contributed are handed to the rules that still cover the object."
-                        : "under its Out-of-Scope Action, Remain Joined, the values this rule contributed stay as they are."),
+                    rule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect
+                        ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalUnscopedSiblingDisconnect), unscopedSibling.Name)
+                        : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalUnscopedSiblingRemainJoined), unscopedSibling.Name),
                     nameof(SyncRule.ObjectScopingCriteriaGroups)));
             }
         }
@@ -555,7 +552,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// wrong side (a Metaverse Attribute on an import rule, or the reverse) can never be evaluated, so it silently
     /// contributes nothing and the proposal evaluates wider than it reads.
     /// </summary>
-    private static IEnumerable<string> DescribeUnreadableCriteria(SyncRule rule, SyncRuleScopingProposal proposal)
+    private static IEnumerable<JimMessage> DescribeUnreadableCriteria(SyncRule rule, SyncRuleScopingProposal proposal)
     {
         var wantsConnectedSystemAttribute = rule.Direction == SyncRuleDirection.Import;
 
@@ -568,7 +565,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// <summary>
     /// Why one criterion could not be evaluated, or null where it can be.
     /// </summary>
-    private static string? DescribeIfUnreadable(SyncRuleScopingCriterionProposal criterion, bool wantsConnectedSystemAttribute)
+    private static JimMessage? DescribeIfUnreadable(SyncRuleScopingCriterionProposal criterion, bool wantsConnectedSystemAttribute)
     {
         // An expression reads one side only: the object the rule scopes (#2054).
         if (criterion.IsExpression)
@@ -577,30 +574,24 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
             var otherSideInput = ExpressionInputResolver.Resolve(criterion.Expression).FirstOrDefault(input => input.Source == otherSide);
             return otherSideInput == null
                 ? null
-                : $"A proposed Scoping Criterion's expression reads {otherSideInput.Accessor}, but an " +
-                  $"{(wantsConnectedSystemAttribute ? "import" : "export")} Synchronisation Rule evaluates its scope against " +
-                  $"{(wantsConnectedSystemAttribute ? "Connected System attributes (cs[\"...\"])" : "Metaverse Attributes (mv[\"...\"])")}, " +
-                  "so that input would never hold a value.";
+                : wantsConnectedSystemAttribute
+                    ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalExpressionReadsMetaverseOnImport), otherSideInput.Accessor)
+                    : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalExpressionReadsConnectedSystemOnExport), otherSideInput.Accessor);
         }
 
         if (criterion.MetaverseAttributeId == null && criterion.ConnectedSystemAttributeId == null)
         {
-            return "A proposed Scoping Criterion names no attribute, so there is nothing for it to evaluate and it " +
-                   "would narrow nothing.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalNamesNoAttribute));
         }
 
         if (wantsConnectedSystemAttribute && criterion.MetaverseAttributeId != null)
         {
-            return "A proposed Scoping Criterion reads a Metaverse Attribute, but an import Synchronisation Rule " +
-                   "evaluates its scope against Connected System attributes, so the criterion would never match and " +
-                   "the scope would be wider than it appears.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalReadsMetaverseOnImport));
         }
 
         if (!wantsConnectedSystemAttribute && criterion.ConnectedSystemAttributeId != null)
         {
-            return "A proposed Scoping Criterion reads a Connected System attribute, but an export Synchronisation " +
-                   "Rule evaluates its scope against Metaverse Attributes, so the criterion would never match and " +
-                   "the scope would be wider than it appears.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalReadsConnectedSystemOnExport));
         }
 
         return null;

@@ -11,7 +11,7 @@
         <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="my-0"
                  OnClose="@(() => RemoveAsync(anchorColumn))">@anchorColumn</MudChip>
     }
-    <SqlCatalogueNameField @ref="_picker" Label="Add column" Options="@ColumnOptions.Where(c => !AnchorColumns.Contains(c, StringComparer.OrdinalIgnoreCase))"
+    <SqlCatalogueNameField @ref="_picker" Label="@SqlText.AddColumn" Options="@ColumnOptions.Where(c => !AnchorColumns.Contains(c, StringComparer.OrdinalIgnoreCase))"
                            ValueChanged="AddAsync" Class="jim-sql-inline-picker" TestId="jim-sql-anchor-add" />
 </div>
 

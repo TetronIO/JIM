@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FullSyncSystemGone" xml:space="preserve">
+    <value>Dieses verbundene System existiert nicht mehr, daher gibt es keine vollständige Synchronisierung, für die eine Vorschau erstellt werden könnte.</value>
+  </data>
+  <data name="FullSyncSystemDeleting" xml:space="preserve">
+    <value>Dieses verbundene System wird gelöscht und daher nicht mehr synchronisiert.</value>
+  </data>
+  <data name="FullSyncCapTooLow" xml:space="preserve">
+    <value>Eine auf weniger als ein Objekt begrenzte Vorschau würde nichts auswerten. Lassen Sie die Begrenzung weg, um jedes Objekt auszuwerten.</value>
+  </data>
+  <data name="FullSyncNoRunProfile" xml:space="preserve">
+    <value>Dieses verbundene System hat kein Ausführungsprofil für eine vollständige Synchronisierung, daher kann keine vollständige Synchronisierung ausgeführt werden. Erstellen Sie eines auf der Registerkarte „Ausführungsprofile“ und erstellen Sie dann die Vorschau.</value>
+  </data>
+  <data name="FullSyncDerivedFlowCycle" xml:space="preserve">
+    <value>Eine vollständige Synchronisierung würde nicht starten, weil die aktivierten abgeleiteten Attributflüsse einen Abhängigkeitszyklus bilden: {0}</value>
+  </data>
+  <data name="FullSyncCapped" xml:space="preserve">
+    <value>Diese Vorschau wertet nur die ersten {0} der {1} Objekte des Systems aus. Ihre Zahlen beschreiben diese Objekte, nicht das ganze System, und eine vollständige Synchronisierung könnte mehr bewirken, als sie zeigt.</value>
+  </data>
+  <data name="DeletionSystemGone" xml:space="preserve">
+    <value>Dieses verbundene System existiert nicht mehr, daher gibt es keine Löschung, für die eine Vorschau erstellt werden könnte.</value>
+  </data>
+  <data name="DeletionAlreadyDeleting" xml:space="preserve">
+    <value>Dieses verbundene System wird bereits gelöscht. Ein Teil dessen, was eine Vorschau beschreiben würde, ist bereits geschehen, daher kann keine Vorschau erstellt werden; die Aktivität der Löschung meldet den Fortschritt.</value>
+  </data>
+  <data name="DeletionDerivedFlowsRead" xml:space="preserve">
+    <value>Abgeleitete Flüsse in {0} lesen '{1}', das durch diese Löschung geleert oder geändert wird. Die Löschung markiert die betroffenen Objekte, sodass diese Flüsse bei der nächsten Synchronisierung des sie hostenden Systems neu berechnet werden; diese Vorschau zeigt die Änderung an '{1}', nicht aber die davon abhängigen abgeleiteten Werte.</value>
+  </data>
+  <data name="DeletionDerivedFlowCycle" xml:space="preserve">
+    <value>Die abgeleiteten Flüsse der verbleibenden Synchronisierungsregeln bilden einen Zyklus, mit dem die synchronisierte Deprovisionierung nicht ausgeführt wird: {0}</value>
+  </data>
+  <data name="ScopeSelectionNoPartitions" xml:space="preserve">
+    <value>„{0}“ verwendet einen Connector ohne Partitionen, daher gibt es keine Partitions- oder Containerauswahl, für die eine Vorschau erstellt werden könnte.</value>
+  </data>
+  <data name="ScopeSelectionNothingSelected" xml:space="preserve">
+    <value>Diese Auswahl lässt JIM in diesem verbundenen System nichts zu verwalten: {0}. Ausführungsprofile können dafür nicht ausgeführt werden, und jedes bereits importierte Objekt würde aus dem Geltungsbereich genommen.</value>
+  </data>
+  <data name="ScopeSelectionInoperableRunProfiles" xml:space="preserve">
+    <value>{0} Ausführungsprofil(e) zielen auf eine Partition, die diese Auswahl abwählt, und würden bei der Ausführung abgelehnt: {1}. Richten Sie sie auf eine ausgewählte Partition, oder lassen Sie die Partition ausgewählt.</value>
+  </data>
+  <data name="ScopeSelectionContainersNotMeasured" xml:space="preserve">
+    <value>Der Connector „{0}“ hat Container, kann aber nicht angeben, ob ein Objekt in einem liegt, daher zählt diese Vorschau nur, was eine Änderung der Partitionsauswahl bewirken würde. Containeränderungen werden nicht gemessen, und die folgenden Zahlen sind keine vollständige Antwort.</value>
+  </data>
+  <data name="ScopeSelectionBringsNewScope" xml:space="preserve">
+    <value>Diese Auswahl bringt einen Geltungsbereich in JIM, den es derzeit nicht importiert. Objekte, die JIM dort bereits hält, werden unten gezählt; Objekte, die es nie importiert hat, können es nicht, da es nichts zu zählen gibt, bis ein vollständiger Import läuft und sie entdeckt.</value>
+  </data>
+  <data name="ActivityValidating" xml:space="preserve">
+    <value>Vorgeschlagene Konfiguration wird validiert</value>
+  </data>
+  <data name="ActivityCannotBeApplied" xml:space="preserve">
+    <value>Die vorgeschlagene Konfiguration kann nicht angewendet werden</value>
+  </data>
+  <data name="ActivityCounting" xml:space="preserve">
+    <value>Betroffene Objekte werden gezählt</value>
+  </data>
+  <data name="ActivityEvaluating" xml:space="preserve">
+    <value>Es wird ausgewertet, was die Änderung bewirken würde</value>
+  </data>
+  <data name="ActivityComplete" xml:space="preserve">
+    <value>Vorschau abgeschlossen</value>
+  </data>
+  <data name="ActivityCancelled" xml:space="preserve">
+    <value>Die Vorschau wurde abgebrochen</value>
+  </data>
+  <data name="ActivityFailedWhile" xml:space="preserve">
+    <value>Die Vorschau ist bei {0} fehlgeschlagen</value>
+  </data>
+  <data name="ActivityWhileValidating" xml:space="preserve">
+    <value>der Validierung der vorgeschlagenen Konfiguration</value>
+  </data>
+  <data name="ActivityWhileCounting" xml:space="preserve">
+    <value>der Zählung der Objekte, die von der Änderung betroffen wären</value>
+  </data>
+  <data name="ActivityWhileEvaluating" xml:space="preserve">
+    <value>der Auswertung, was die Änderung bewirken würde</value>
+  </data>
+  <data name="EnglishFromElsewhere" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="ObjectMatchingSameAsStored" xml:space="preserve">
+    <value>Die vorgeschlagenen Objektabgleichsregeln entsprechen denen, die dieses verbundene System bereits hat, daher würde kein Objekt anders verknüpft, und unten wird keine Auswirkung gezählt.</value>
+  </data>
+  <data name="ObjectMatchingOnlyUnjoined" xml:space="preserve">
+    <value>Objektabgleichsregeln werden nur für Objekte ausgewertet, die noch nicht mit einem Metaverse-Objekt verknüpft sind. Bereits verknüpfte Objekte behalten ihr Metaverse-Objekt, was auch immer diese Änderung bewirkt, daher betrifft die Auswirkung unten nur die unverknüpften Objekte.</value>
+  </data>
+  <data name="ObjectMatchingSwitchToAdvanced" xml:space="preserve">
+    <value>Der Vorschlag stellt dieses verbundene System auf erweiterten Abgleich um, daher werden die je Objekttyp des verbundenen Systems hinterlegten Regeln nicht mehr verwendet, stattdessen gelten die eigenen Regeln jeder Synchronisierungsregel. Eine Synchronisierungsregel ohne eigene Regeln verknüpft nichts.</value>
+  </data>
+  <data name="ObjectMatchingSwitchToSimple" xml:space="preserve">
+    <value>Der Vorschlag stellt dieses verbundene System auf einfachen Abgleich um, daher werden die eigenen Regeln jeder Synchronisierungsregel nicht mehr verwendet, stattdessen gelten die je Objekttyp des verbundenen Systems hinterlegten Regeln. Ein Objekttyp ohne eigene Regeln verknüpft nichts.</value>
+  </data>
+  <data name="ObjectMatchingTypeLeftWithNoRule" xml:space="preserve">
+    <value>Der Vorschlag lässt „{0}“ ohne Objektabgleichsregel, daher würde nie ein Objekt dieses Typs mit einem vorhandenen Metaverse-Objekt verknüpft. Jedes unverknüpfte Objekt würde stattdessen eine neue Identität projizieren, wodurch doppelte Identitäten entstehen.</value>
+  </data>
+  <data name="ObjectMatchingThisType" xml:space="preserve">
+    <value>dieser Typ</value>
+  </data>
+  <data name="ObjectMatchingOwnerSyncRule" xml:space="preserve">
+    <value>eine Synchronisierungsregel</value>
+  </data>
+  <data name="ObjectMatchingOwnerObjectType" xml:space="preserve">
+    <value>ein Objekttyp</value>
+  </data>
+  <data name="ObjectMatchingRuleNamed" xml:space="preserve">
+    <value>Objektabgleichsregel {0} für „{1}“</value>
+  </data>
+  <data name="ObjectMatchingNoMetaverseObjectType" xml:space="preserve">
+    <value>{0} benennt keinen zu durchsuchenden Metaverse-Objekttyp. Regeln im einfachen Modus müssen einen benennen; im erweiterten Modus liefert ihn die Synchronisierungsregel.</value>
+  </data>
+  <data name="ObjectMatchingRuleProblem" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="ObjectMatchingTargetAttributeGone" xml:space="preserve">
+    <value>Sie zielt auf ein Metaverse-Attribut, das nicht mehr existiert.</value>
+  </data>
+  <data name="ObjectMatchingTypeNotInSchema" xml:space="preserve">
+    <value>Sie gehört zu einem Objekttyp des verbundenen Systems, der nicht Teil des Schemas dieses Systems ist.</value>
+  </data>
+  <data name="DirectionImport" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="DirectionExport" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="BehaviourSameSettings" xml:space="preserve">
+    <value>Die vorgeschlagenen Einstellungen entsprechen denen, die diese Synchronisierungsregel bereits hat, daher würde sich nichts ändern, und unten wird keine Auswirkung gezählt.</value>
+  </data>
+  <data name="BehaviourDirectionImmutable" xml:space="preserve">
+    <value>Die Richtung einer gespeicherten Synchronisierungsregel kann nicht geändert werden. Die Attributfluss-Zuordnungen und Objektabgleichsregeln dieser Regel sind für {0} geschrieben und würden als {1} alle die falsche Seite ansprechen. Erstellen Sie stattdessen eine Regel in der benötigten Richtung.</value>
+  </data>
+  <data name="BehaviourEnabling" xml:space="preserve">
+    <value>Das Aktivieren dieser Synchronisierungsregel lässt sie ab der nächsten Synchronisierung mitwirken: Sie beginnt, ihre Attributfluss-Zuordnungen zu übertragen, und was sie projiziert oder provisioniert, wird nun erstellt.</value>
+  </data>
+  <data name="BehaviourDisabling" xml:space="preserve">
+    <value>Das Deaktivieren dieser Synchronisierungsregel beendet ihre Mitwirkung ab der nächsten Synchronisierung. Attributwerte, die sie derzeit besitzt, gehen an einen anderen Beitragenden über, sofern es einen gibt, und bleiben erhalten, bereit für eine erneute Aktivierung der Regel, wenn sie die einzige war. Sie projiziert und provisioniert dann nicht mehr.</value>
+  </data>
+  <data name="BehaviourProjectOn" xml:space="preserve">
+    <value>Das Einschalten von „In das Metaverse projizieren“ erstellt ein neues Metaverse-Objekt für jedes im Geltungsbereich liegende Objekt, das diese Regel verwaltet und das mit keinem übereinstimmt; so entstehen Identitäten in großer Zahl.</value>
+  </data>
+  <data name="BehaviourProvisionOn" xml:space="preserve">
+    <value>Das Einschalten von „Im verbundenen System provisionieren“ erstellt im Zielsystem ein Objekt im verbundenen System für jedes im Geltungsbereich liegende Metaverse-Objekt, das keines hat. Das ist Objekterstellung in großem Maßstab, und unten steht, wie viele es sind.</value>
+  </data>
+  <data name="BehaviourEnforceStateOff" xml:space="preserve">
+    <value>Das Ausschalten von „Zustand erzwingen“ beendet die Driftkorrektur durch diese Regel, sodass die von ihr verwalteten Objekte ab dem Speichern frei von dem abweichen können, was JIM hält. Nichts wird korrigiert, bis es wieder eingeschaltet wird.</value>
+  </data>
+  <data name="BehaviourRuleDisabled" xml:space="preserve">
+    <value>Diese Synchronisierungsregel ist deaktiviert, daher wendet sie derzeit keine Synchronisierung an. Die Auswirkung unten beschreibt, was die nächste Synchronisierung nach der Aktivierung bewirken würde.</value>
+  </data>
+  <data name="BehaviourEnforceStateImportOnly" xml:space="preserve">
+    <value>„Zustand erzwingen“ steuert die Driftkorrektur nur bei Exportregeln, daher hat eine Änderung bei dieser Importregel keine Wirkung.</value>
+  </data>
+  <data name="BehaviourProvisionExportOnly" xml:space="preserve">
+    <value>„Im verbundenen System provisionieren“ gilt nur für Exportregeln, daher hat eine Änderung bei dieser Importregel keine Wirkung.</value>
+  </data>
+  <data name="BehaviourProjectImportOnly" xml:space="preserve">
+    <value>„In das Metaverse projizieren“ gilt nur für Importregeln, daher hat eine Änderung bei dieser Exportregel keine Wirkung.</value>
+  </data>
+  <data name="DestructiveNoChange" xml:space="preserve">
+    <value>Keine der beiden destruktiven Einstellungen ändert sich durch diesen Vorschlag, daher ändert sich das Schicksal keines Objekts, und unten wird keine Auswirkung gezählt.</value>
+  </data>
+  <data name="DestructiveOutboundOnExport" xml:space="preserve">
+    <value>Die ausgehende Deprovisionierungsaktion wird nur von Export-Synchronisierungsregeln gelesen, daher ändert eine Änderung bei dieser Importregel das Schicksal keines Objekts und wird unten nicht gezählt.</value>
+  </data>
+  <data name="DestructiveInboundOnImport" xml:space="preserve">
+    <value>Die eingehende Aktion außerhalb des Geltungsbereichs wird nur von Import-Synchronisierungsregeln gelesen, daher ändert eine Änderung bei dieser Exportregel das Schicksal keines Objekts und wird unten nicht gezählt.</value>
+  </data>
+  <data name="DestructiveRuleDisabled" xml:space="preserve">
+    <value>Diese Synchronisierungsregel ist deaktiviert, daher wendet derzeit keine Synchronisierung ihre Einstellungen an. Die Zahlen unten beschreiben, was die nächste Synchronisierung nach der Aktivierung bewirken würde.</value>
+  </data>
+  <data name="DestructiveSiblingKeepsJoin" xml:space="preserve">
+    <value>{0} deckt diesen Objekttyp ebenfalls ab und hält seine Objekte verknüpft (Verknüpfung beibehalten). Wenn ein Objekt jede Import-Synchronisierungsregel verlässt, entscheiden die Regeln, die es hielten, und „Verknüpfung beibehalten“ einer beliebigen von ihnen erhält die Verknüpfung, daher trennt diese Änderung nur Objekte, die diese Regeln nie hielten. Die Zahlen unten enthalten nur diese.</value>
+  </data>
+  <data name="DeletionSettingsNeedsAuthoritativeSource" xml:space="preserve">
+    <value>Das Löschen beim Trennen einer maßgeblichen Quelle erfordert mindestens ein verbundenes System, das als maßgebliche Quelle benannt ist. Ohne eines fällt die Synchronisierung auf das Löschen zurück, wenn der letzte Connector getrennt wird, was eine andere Regel als die gewählte ist.</value>
+  </data>
+  <data name="DeletionSettingsNegativeGracePeriod" xml:space="preserve">
+    <value>Eine Karenzzeit für die Löschung darf nicht negativ sein.</value>
+  </data>
+  <data name="DeletionSettingsSourcesChanged" xml:space="preserve">
+    <value>Die maßgeblichen Quellen haben sich geändert. Das entscheidet, was beim nächsten Trennen eines Objekts im verbundenen System geschieht, daher verschiebt es heute das Löschdatum keines Metaverse-Objekts und wird unten nicht gezählt.</value>
+  </data>
+  <data name="ScopingProposalSameAsStored" xml:space="preserve">
+    <value>Die vorgeschlagenen Geltungsbereichskriterien entsprechen denen, die diese Synchronisierungsregel bereits hat, daher ändert kein Objekt seinen Geltungsbereich, und unten wird keine Auswirkung gezählt.</value>
+  </data>
+  <data name="ScopingProposalRemovesEveryCriterion" xml:space="preserve">
+    <value>Der Vorschlag entfernt jedes Geltungsbereichskriterium, daher würde diese Synchronisierungsregel jedes Objekt vom Typ „{0}“ verwalten statt einer ausgewählten Menge.</value>
+  </data>
+  <data name="ScopingConfiguredType" xml:space="preserve">
+    <value>der konfigurierte Typ</value>
+  </data>
+  <data name="ScopingProposalRuleDisabled" xml:space="preserve">
+    <value>Diese Synchronisierungsregel ist deaktiviert, daher wendet derzeit keine Synchronisierung ihren Geltungsbereich an. Die Zahlen unten beschreiben, was die nächste Synchronisierung nach der Aktivierung bewirken würde.</value>
+  </data>
+  <data name="ScopingProposalUnscopedSiblingDisconnect" xml:space="preserve">
+    <value>Die Import-Synchronisierungsregel „{0}“ deckt diesen Objekttyp ohne Geltungsbereichskriterien ab, daher bleibt jedes Objekt verknüpft, was auch immer diese Regel besagt: Das Einengen der Kriterien dieser Regel trennt nichts. Ein Objekt, das den Geltungsbereich dieser Regel verlässt, erhält ihren Attributfluss nicht mehr; bei ihrer Aktion außerhalb des Geltungsbereichs, Trennen, werden die von dieser Regel beigesteuerten Werte an die Regeln übergeben, die das Objekt noch abdecken.</value>
+  </data>
+  <data name="ScopingProposalUnscopedSiblingRemainJoined" xml:space="preserve">
+    <value>Die Import-Synchronisierungsregel „{0}“ deckt diesen Objekttyp ohne Geltungsbereichskriterien ab, daher bleibt jedes Objekt verknüpft, was auch immer diese Regel besagt: Das Einengen der Kriterien dieser Regel trennt nichts. Ein Objekt, das den Geltungsbereich dieser Regel verlässt, erhält ihren Attributfluss nicht mehr; bei ihrer Aktion außerhalb des Geltungsbereichs, Verknüpfung beibehalten, bleiben die von dieser Regel beigesteuerten Werte unverändert.</value>
+  </data>
+  <data name="ScopingProposalExpressionReadsMetaverseOnImport" xml:space="preserve">
+    <value>Der Ausdruck eines vorgeschlagenen Geltungsbereichskriteriums liest {0}, aber eine Import-Synchronisierungsregel wertet ihren Geltungsbereich anhand von Attributen des verbundenen Systems aus (cs["..."]), daher hätte diese Eingabe nie einen Wert.</value>
+  </data>
+  <data name="ScopingProposalExpressionReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>Der Ausdruck eines vorgeschlagenen Geltungsbereichskriteriums liest {0}, aber eine Export-Synchronisierungsregel wertet ihren Geltungsbereich anhand von Metaverse-Attributen aus (mv["..."]), daher hätte diese Eingabe nie einen Wert.</value>
+  </data>
+  <data name="ScopingProposalNamesNoAttribute" xml:space="preserve">
+    <value>Ein vorgeschlagenes Geltungsbereichskriterium benennt kein Attribut, daher gibt es nichts auszuwerten, und es würde nichts einengen.</value>
+  </data>
+  <data name="ScopingProposalReadsMetaverseOnImport" xml:space="preserve">
+    <value>Ein vorgeschlagenes Geltungsbereichskriterium liest ein Metaverse-Attribut, aber eine Import-Synchronisierungsregel wertet ihren Geltungsbereich anhand von Attributen des verbundenen Systems aus, daher würde das Kriterium nie zutreffen und der Geltungsbereich wäre weiter, als er scheint.</value>
+  </data>
+  <data name="ScopingProposalReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>Ein vorgeschlagenes Geltungsbereichskriterium liest ein Attribut des verbundenen Systems, aber eine Export-Synchronisierungsregel wertet ihren Geltungsbereich anhand von Metaverse-Attributen aus, daher würde das Kriterium nie zutreffen und der Geltungsbereich wäre weiter, als er scheint.</value>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} und {1}</value>
+  </data>
+  <data name="MetaverseAttributeNumbered" xml:space="preserve">
+    <value>Metaverse-Attribut {0}</value>
+  </data>
+  <data name="RuleNamesOne" xml:space="preserve">
+    <value>Synchronisierungsregel „{0}“</value>
+  </data>
+  <data name="RuleNamesOther" xml:space="preserve">
+    <value>Synchronisierungsregeln {0}</value>
+  </data>
+  <data name="AttributeFlowSameAsStored" xml:space="preserve">
+    <value>Der vorgeschlagene Attributfluss entspricht den Zuordnungen, die diese Synchronisierungsregel bereits hat, daher ändert sich kein Objekt, und unten wird keine Auswirkung gezählt.</value>
+  </data>
+  <data name="AttributeFlowRemovesEveryMapping" xml:space="preserve">
+    <value>Der Vorschlag entfernt jede Zuordnung, daher würde diese Synchronisierungsregel nichts übertragen.</value>
+  </data>
+  <data name="AttributeFlowRuleDisabled" xml:space="preserve">
+    <value>Diese Synchronisierungsregel ist deaktiviert, daher wendet derzeit keine Synchronisierung ihren Attributfluss an. Die Werte unten beschreiben, was die nächste Synchronisierung nach der Aktivierung schreiben würde.</value>
+  </data>
+  <data name="AttributeFlowRemovedKeepValues" xml:space="preserve">
+    <value>Der Vorschlag entfernt den Attributfluss dieser Synchronisierungsregel nach '{0}', und Sie haben gewählt, die von ihm beigesteuerten Werte zu behalten. Sie bleiben ohne Herkunftsnachweis bestehen, und keine Synchronisierung wird sie je zurückrufen; für sie wird unten keine Wertänderung gezählt.</value>
+  </data>
+  <data name="AttributeFlowKeptAlsoWrittenBy" xml:space="preserve">
+    <value>'{0}' wird auch von {1} geschrieben. Die behaltenen Werte bleiben bestehen, bis eine dieser Regeln das Attribut das nächste Mal schreibt und die Attributpriorität gewinnt; was sie schreiben würde, wird unten nicht gezählt.</value>
+  </data>
+  <data name="AttributeFlowRemovedRecalled" xml:space="preserve">
+    <value>Der Vorschlag entfernt den Attributfluss dieser Synchronisierungsregel nach '{0}'. Die von ihm beigesteuerten Werte werden bei der nächsten Synchronisierung des beitragenden verbundenen Systems zurückgerufen, als Delta oder vollständig: Wo ein anderer Attributfluss das Attribut ebenfalls beisteuert, übernimmt dessen Wert, andernfalls wird das Attribut geleert. Für sie wird unten keine Wertänderung gezählt, weil der Rückruf in dieser Synchronisierung stattfindet und nicht bei diesem Speichern.</value>
+  </data>
+  <data name="AttributeFlowRecallReElects" xml:space="preserve">
+    <value>'{0}' wird auch von {1} geschrieben, daher wählt der Rückruf unter ihnen neu, statt das Attribut zu leeren; was sie anstelle der zurückgezogenen Werte schreiben würden, wird unten nicht gezählt.</value>
+  </data>
+  <data name="AttributeFlowBelowPriority" xml:space="preserve">
+    <value>Die vorgeschlagene Zuordnung für '{0}' steht in der Attributpriorität unter {1}, daher würde eine Synchronisierung sie auswerten und dann nichts schreiben. Erhöhen Sie ihre Priorität, damit sie der Beitragende wird, der das Attribut gewinnt.</value>
+  </data>
+  <data name="AttributeFlowDependantMissingInput" xml:space="preserve">
+    <value>Nach dem Speichern dieses Vorschlags würde dem Attributfluss nach '{0}' in der Synchronisierungsregel „{1}“ eine Eingabe fehlen: Er liest {2}. Sein Verhalten bei fehlender Eingabe entscheidet dann, was er schreibt.</value>
+  </data>
+  <data name="AttributeFlowMissingInputThroughDerived" xml:space="preserve">
+    <value>'{0}', dessen verbleibenden Beitragenden selbst eine Eingabe fehlt</value>
+  </data>
+  <data name="AttributeFlowMissingInputNoFlow" xml:space="preserve">
+    <value>'{0}', zu dem kein aktivierter Attributfluss beitragen würde</value>
+  </data>
+  <data name="AttributeFlowReadsChangedDirect" xml:space="preserve">
+    <value>liest '{0}'</value>
+  </data>
+  <data name="AttributeFlowReadsChangedThrough" xml:space="preserve">
+    <value>hängt von '{0}' ab, über andere abgeleitete Attribute</value>
+  </data>
+  <data name="AttributeFlowOtherSystemReader" xml:space="preserve">
+    <value>Der Attributfluss nach '{0}' in der Synchronisierungsregel „{1}“ {2}, das dieser Vorschlag ändert. Er läuft im eigenen verbundenen System dieser Synchronisierungsregel und wird daher bei dessen nächster Synchronisierung neu ausgewertet; was er schreiben würde, wird unten nicht gezählt.</value>
+  </data>
+  <data name="AttributeFlowNoTargetAttribute" xml:space="preserve">
+    <value>Eine vorgeschlagene Attributfluss-Zuordnung benennt kein Zielattribut, daher hat sie keinen Ort zum Schreiben.</value>
+  </data>
+  <data name="AttributeFlowWritesConnectedSystemOnImport" xml:space="preserve">
+    <value>Eine vorgeschlagene Attributfluss-Zuordnung schreibt ein Attribut des verbundenen Systems, aber eine Import-Synchronisierungsregel überträgt ins Metaverse, daher würde die Zuordnung nichts schreiben.</value>
+  </data>
+  <data name="AttributeFlowWritesMetaverseOnExport" xml:space="preserve">
+    <value>Eine vorgeschlagene Attributfluss-Zuordnung schreibt ein Metaverse-Attribut, aber eine Export-Synchronisierungsregel überträgt in ein verbundenes System, daher würde die Zuordnung nichts schreiben.</value>
+  </data>
+  <data name="AttributeFlowNoSource" xml:space="preserve">
+    <value>Eine vorgeschlagene Attributfluss-Zuordnung hat keine Quelle, daher gibt es keinen Wert, den sie schreiben könnte.</value>
+  </data>
+  <data name="SchemaSameAsStored" xml:space="preserve">
+    <value>Die vorgeschlagene Schemaauswahl entspricht der, die dieses verbundene System bereits hat, daher würde sich nichts ändern, und unten wird keine Auswirkung gezählt.</value>
+  </data>
+  <data name="SchemaSelectingObjectType" xml:space="preserve">
+    <value>Das Auswählen von {0} bringt seine Objekte mit dem nächsten Import-Ausführungsprofil in den Importgeltungsbereich.</value>
+  </data>
+  <data name="SchemaDeselectingObjectType" xml:space="preserve">
+    <value>Das Abwählen von {0} nimmt seine Objekte aus der Verwaltung. Der nächste vollständige Import liefert sie nicht mehr, daher werden die bereits importierten Objekte obsolet, und die folgende Synchronisierung trennt sie von ihren Metaverse-Objekten, die dadurch für die Löschung in Frage kommen können. Die Löschgrenzen des Ausführungsprofils gelten für sie wie für jedes andere gelöschte Objekt.</value>
+  </data>
+  <data name="SchemaOverlapDeselectFallsToOther" xml:space="preserve">
+    <value>Das Abwählen von {0} nimmt seine Objekte, die auch {1} tragen, nicht aus der Verwaltung: Bei abgewähltem {0} werden diese Einträge zu {1} aufgelöst, daher liefert der Import sie als {1}-Objekte statt als die {0}-Objekte, die JIM hält. Standardmäßig lehnt jeder Import sie ab, meldet jedes als Fehler „Objekttyp geändert“ und behält es als {0}, statt es obsolet zu machen, daher überzeichnet die Zahl der als obsolet beschriebenen Objekte, was mit ihnen geschieht. Wenn Sie diese Objekte nicht mehr verwalten möchten, nehmen Sie sie stattdessen per Container oder Partition aus dem Geltungsbereich, denn das Abwählen von {0} ändert ihren Objekttyp, statt sie zu entfernen. Sollen sie {1}-Objekte werden, führen Sie einen vollständigen Import aus, bei dem in seinem Ausführungsprofil „Objekttypänderungen zulassen“ aktiviert ist: JIM stuft die {0}-Objekte aus und importiert sie als neue {1}-Objekte im Geltungsbereich der Synchronisierungsregeln für {1}.</value>
+  </data>
+  <data name="SchemaOverlapSelectTakesFromOther" xml:space="preserve">
+    <value>Das Auswählen von {0} ändert den Objekttyp von {1}-Objekten, die auch {0} tragen: Bei beiden ausgewählt werden diese Einträge zu {0} aufgelöst, daher liefert der Import sie als {0}-Objekte statt als die {1}-Objekte, die JIM hält. Standardmäßig lehnt jeder Import sie ab, meldet jedes als Fehler „Objekttyp geändert“ und behält es als {1}. {2}</value>
+  </data>
+  <data name="SchemaOverlapSelectAndDeselect" xml:space="preserve">
+    <value>Das Auswählen von {0} bei gleichzeitigem Abwählen von {1} ändert den Objekttyp von {1}-Objekten, die auch {0} tragen: Diese Einträge werden nun zu {0} aufgelöst, daher liefert der Import sie als {0}-Objekte statt als die {1}-Objekte, die JIM hält. Standardmäßig lehnt jeder Import sie ab, meldet jedes als Fehler „Objekttyp geändert“ und behält es als {1}, statt es obsolet zu machen, daher überzeichnet die Zahl der als obsolet beschriebenen {1}-Objekte, was mit ihnen geschieht. {2}</value>
+  </data>
+  <data name="SchemaMoveInstruction" xml:space="preserve">
+    <value>Um sie zu verschieben, führen Sie einen vollständigen Import aus, bei dem in seinem Ausführungsprofil „Objekttypänderungen zulassen“ aktiviert ist: JIM stuft die {0}-Objekte aus und importiert sie als neue {1}-Objekte, daher muss eine Synchronisierungsregel für {1} bereit sein, sie mit denselben Metaverse-Objekten zu verknüpfen.</value>
+  </data>
+  <data name="SchemaThisAttribute" xml:space="preserve">
+    <value>Dieses Attribut</value>
+  </data>
+  <data name="SchemaAnchorCannotDeselect" xml:space="preserve">
+    <value>{0} ist die externe ID für {1} und kann nicht abgewählt werden. Anhand ihrer wird jedes importierte Objekt seinem Objekt im verbundenen System zugeordnet.</value>
+  </data>
+  <data name="SchemaDeselectingAttribute" xml:space="preserve">
+    <value>Das Abwählen von {0} für {1} beendet seinen Import. Die dafür bereits gehaltenen Werte bleiben an den Objekten im verbundenen System und fließen weiter, ohne je wieder aktualisiert zu werden.</value>
+  </data>
+  <data name="SchemaFlowMappingsReadOne" xml:space="preserve">
+    <value>{0} Attributfluss-Zuordnung liest {1} und wird weiter ihre eingefrorenen Werte übertragen: {2}.</value>
+  </data>
+  <data name="SchemaFlowMappingsReadOther" xml:space="preserve">
+    <value>{0} Attributfluss-Zuordnungen lesen {1} und werden weiter ihre eingefrorenen Werte übertragen: {2}.</value>
+  </data>
+  <data name="SchemaObsoletionWithdraws" xml:space="preserve">
+    <value>Das Obsoletmachen eines {0}-Objekts zieht künftig die von ihm beigesteuerten Metaverse-Werte zurück. Wo ein anderes verbundenes System das Attribut noch beisteuert, wird es an dieses übergeben; wo keines es tut, wird es geleert.</value>
+  </data>
+  <data name="SchemaObsoletionLeavesInPlace" xml:space="preserve">
+    <value>Das Obsoletmachen eines {0}-Objekts belässt künftig die von ihm beigesteuerten Metaverse-Werte an Ort und Stelle. Sie verfolgen ab dann nichts mehr, und nichts meldet sie als veraltet.</value>
+  </data>
+  <data name="SyncPreviewMetaverseObjectGone" xml:space="preserve">
+    <value>Das Metaverse-Objekt {0} existiert nicht.</value>
+  </data>
+  <data name="SyncPreviewConnectedSystemObjectGone" xml:space="preserve">
+    <value>Das Objekt im verbundenen System {0} existiert im verbundenen System {1} nicht.</value>
+  </data>
+  <data name="SyncPreviewNoImportRule" xml:space="preserve">
+    <value>Keine aktivierte Import-Synchronisierungsregel gilt für den Typ dieses Objekts; eine Synchronisierung würde es nicht eingehend verarbeiten.</value>
+  </data>
+  <data name="SyncPreviewOutOfScopeJoinKept" xml:space="preserve">
+    <value>Das Objekt liegt außerhalb des Geltungsbereichs jeder Import-Synchronisierungsregel mit Geltungsbereichskriterien. Eine Export-Synchronisierungsregel hat seine Verknüpfung hergestellt, daher behält eine Synchronisierung die Verknüpfung und zieht nur die Werte zurück, die die Importregeln gebracht haben.</value>
+  </data>
+  <data name="SyncPreviewOutOfScopeAction" xml:space="preserve">
+    <value>Das Objekt liegt außerhalb des Geltungsbereichs jeder Import-Synchronisierungsregel mit Geltungsbereichskriterien; eine Synchronisierung würde die Aktion außerhalb des Geltungsbereichs „{0}“ anwenden.</value>
+  </data>
+  <data name="OutOfScopeActionDisconnect" xml:space="preserve">
+    <value>Trennen</value>
+  </data>
+  <data name="OutOfScopeActionRemainJoined" xml:space="preserve">
+    <value>Verknüpfung beibehalten</value>
+  </data>
+  <data name="SyncPreviewJoinedObjectNotLoaded" xml:space="preserve">
+    <value>Das verknüpfte Metaverse-Objekt {0} konnte nicht geladen werden.</value>
+  </data>
+  <data name="SyncPreviewNoMatchNoProjection" xml:space="preserve">
+    <value>Keine Objektabgleichsregel hat ein vorhandenes Metaverse-Objekt gefunden, und keine Import-Synchronisierungsregel projiziert; eine Synchronisierung würde das Objekt unverbunden lassen.</value>
+  </data>
+  <data name="SyncPreviewExpressionFailed" xml:space="preserve">
+    <value>Ein Ausdruck konnte nicht ausgewertet werden: {0}</value>
+  </data>
+  <data name="SyncPreviewExpressionFailedHandingOver" xml:space="preserve">
+    <value>Ein Ausdruck konnte beim Übergeben eines zurückgezogenen Werts an den nächsten Beitragenden nicht ausgewertet werden: {0}</value>
+  </data>
+  <data name="SyncPreviewDerivedFlowHost" xml:space="preserve">
+    <value>{0} Der Attributfluss wird von der Synchronisierungsregel „{1}“ abgeleitet.</value>
+  </data>
+  <data name="SyncPreviewDriftNotChecked" xml:space="preserve">
+    <value>Die Drifterkennung konnte dieses Objekt nicht prüfen, daher würde keine Korrektur bereitgestellt. {0}</value>
+  </data>
+  <data name="SyncPreviewDerivedFlowCycle" xml:space="preserve">
+    <value>Eine Synchronisierung würde nicht starten, daher würde kein Objekt verarbeitet. {0}</value>
+  </data>
+  <data name="SyncPreviewGeneratedValueWaiting" xml:space="preserve">
+    <value>{0} würde noch nicht generiert: Ein daraus aufgebauter Wert benötigt eine Eingabe, für die das Objekt keinen Wert hat: {1}. Er wird von einer späteren Synchronisierung generiert, sobald die Eingabe eintrifft.</value>
+  </data>
+  <data name="SyncPreviewGeneratedValueUnresolved" xml:space="preserve">
+    <value>Der generierte Wert konnte nicht aufgelöst werden.</value>
+  </data>
+  <data name="SyncPreviewDownstreamDisconnectOnly" xml:space="preserve">
+    <value>Die Löschung des Metaverse-Objekts würde sein Objekt im verbundenen System in „{0}“ trennen, ohne es zu deprovisionieren (keine passende Export-Synchronisierungsregel stellt eine Löschung bereit).</value>
+  </data>
+  <data name="SyncPreviewFlowMultiValuedToSingle" xml:space="preserve">
+    <value>Das mehrwertige Quellattribut „{0}“ enthält {1} Werte, fließt aber in das einwertige Attribut „{2}“; das Attribut würde nicht übertragen.</value>
+  </data>
+  <data name="SyncPreviewFlowBaseNotSingleValue" xml:space="preserve">
+    <value>Der Basisausdruck für den generierten Wert mit dem Ziel „{0}“ hat mehr als einen Wert zurückgegeben, daher würde das Attribut nicht übertragen; der Basisausdruck eines generierten Werts muss einen einzelnen Textwert liefern, kein Array: „{1}“.</value>
+  </data>
+  <data name="SyncPreviewFlowNotConvertible" xml:space="preserve">
+    <value>Der Ausdruck mit dem Ziel „{0}“ hat „{1}“ zurückgegeben, was ein Attribut vom Typ {2} nicht aufnehmen kann, daher würde das Attribut nicht übertragen und seinen aktuellen Wert behalten: „{3}“.</value>
+  </data>
+  <data name="SyncPreviewFlowResultMultiValuedFromSource" xml:space="preserve">
+    <value>„{0}“ hat {1} Werte, aber „{2}“ ist einwertig, daher würde das Attribut nicht übertragen und seinen aktuellen Wert behalten. Verwenden Sie {4} oder {5} im Ausdruck, um festzulegen, welchen Wert es haben soll: „{3}“.</value>
+  </data>
+  <data name="SyncPreviewFlowDatesCollapse" xml:space="preserve">
+    <value>{0} Datumswerte für „{1}“ werden bei der Auflösung {3} des verbundenen Systems zu {2} verschiedenen Werten, daher würden {2} gesendet; das Attribut würde dennoch exportiert.</value>
+  </data>
+  <data name="SyncPreviewFlowCredentialTarget" xml:space="preserve">
+    <value>„{0}“ enthält Anmeldeinformationen, daher würde nichts dafür exportiert; entfernen Sie den Attributfluss. JIM liefert Kennwörter nur über die Kennwortsynchronisierung, in verbundenen Systemen, deren Connector sie unterstützt.</value>
+  </data>
+  <data name="SyncPreviewFlowResultMultiValued" xml:space="preserve">
+    <value>Der Ausdruck mit dem Ziel „{0}“ hat {1} Werte zurückgegeben, das Attribut ist aber einwertig, daher würde das Attribut nicht übertragen und seinen aktuellen Wert behalten: „{2}“.</value>
+  </data>
+  <data name="SyncPreviewFlowNotEvaluated" xml:space="preserve">
+    <value>Der Ausdruck mit dem Ziel „{0}“ wurde nicht ausgewertet: Eine erforderliche Eingabe hat keinen Wert.</value>
+  </data>
+</root>

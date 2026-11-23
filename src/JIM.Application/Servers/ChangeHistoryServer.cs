@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -498,7 +501,7 @@ public class ChangeHistoryServer
             // whose Activity belongs to the worker task pipeline), failing it here and again in the caller's
             // handler would record the same failure twice.
             if (completeActivity)
-                await _application.Activities.FailActivityWithErrorAsync(activity, $"Cleanup failed: {ex.Message}");
+                await _application.Activities.FailActivityWithErrorAsync(activity, ActivityMessage.Create(nameof(ActivityMessages.CleanupFailed), ActivityMessage.CauseOf(ex)));
 
             throw;
         }

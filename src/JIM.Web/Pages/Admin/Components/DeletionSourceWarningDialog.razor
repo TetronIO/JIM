@@ -12,7 +12,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6" Class="d-flex align-center">
             <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" Class="mr-2" />
-            Review before saving
+            @ConnectedSystemText.DsReviewTitle
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -24,18 +24,17 @@
                 <li><MudText Typo="Typo.body2">@Warning.DeletedWhileHeldConsequence.</MudText></li>
             </ul>
             <MudLink Href="@($"/admin/schema/object-types/{MetaverseObjectTypeId}")" Target="_blank" Class="mt-2 d-inline-block">
-                Open @Warning.ObjectTypeName's Deletion Rules
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsOpenDeletionRules, Warning.ObjectTypeName)
             </MudLink>
         </MudAlert>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-            Join-only Synchronisation Rules (projection off) never show this; leaving those out of the authoritative
-            sources is the normal way to add a system that only contributes attributes.
+            @ConnectedSystemText.DsJoinOnlyNote
         </MudText>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" data-testid="jim-deletion-source-save-cancel">Cancel</MudButton>
+        <MudButton OnClick="Cancel" data-testid="jim-deletion-source-save-cancel">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="Confirm"
-                   data-testid="jim-deletion-source-save-confirm">Save Synchronisation Rule</MudButton>
+                   data-testid="jim-deletion-source-save-confirm">@ConnectedSystemText.DsSaveRule</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -64,7 +63,7 @@
             { x => x.MetaverseObjectTypeId, metaverseObjectTypeId }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var dialog = await dialogService.ShowAsync<DeletionSourceWarningDialog>("Review before saving", parameters, options);
+        var dialog = await dialogService.ShowAsync<DeletionSourceWarningDialog>(ConnectedSystemText.DsReviewTitle, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false };
     }

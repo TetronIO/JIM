@@ -12,10 +12,22 @@ namespace JIM.Web.Localisation;
 /// de-CH, fr-BE, fr-CA) is served the same translation through .NET's parent-culture fallback.
 /// </param>
 /// <param name="NativeName">The language's name written in that language, as the picker shows it.</param>
-/// <param name="IsReleased">
-/// Whether the language is offered in production. A language stays unreleased while any portal text has no
-/// translation in it, so nobody is shown a page that is half one language and half another. Development builds
-/// offer every language, marked as a preview, so a translation can be checked as it fills in.
-/// <c>LocalisationResourceTests</c> fails the build for a released language missing any translation.
+/// <param name="Stage">
+/// How far the language has got: see <see cref="LanguageStage"/>. Languages are delivered one at a time, so at most a
+/// few are in progress while the rest wait as planned.
 /// </param>
-public sealed record UiLanguage(string CultureName, string NativeName, bool IsReleased);
+public sealed record UiLanguage(string CultureName, string NativeName, LanguageStage Stage)
+{
+    /// <summary>
+    /// Whether the language is offered in production. A language stays unreleased while any portal text has no
+    /// translation in it, so nobody is shown a page that is half one language and half another. Development builds
+    /// offer every language, marked as a preview, so a translation can be checked as it fills in.
+    /// </summary>
+    public bool IsReleased => Stage == LanguageStage.Released;
+
+    /// <summary>
+    /// Whether every string must be translated into this language in the change that adds or edits it. True once a
+    /// language is in progress: from then on <c>LocalisationResourceTests</c> fails a change that leaves it behind.
+    /// </summary>
+    public bool IsRequiredInEveryChange => Stage is LanguageStage.InProgress or LanguageStage.Released;
+}

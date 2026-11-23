@@ -1,5 +1,6 @@
 ﻿@page "/admin/example-data/datasets/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.ExampleData
 @using JIM.Web.Pages.Admin.Components
@@ -9,10 +10,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Example Data Set: @_exampleDataSet?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Example Data Sets:</span> <span class="mud-primary-text">@_exampleDataSet?.Name</span>
-    <PageInfo Title="Example Data Set" DocsPage="configuration/example-data.md#example-data-sets">
-        An Example Data Set is a named list of values, such as first names or job titles, that Example Data Templates draw on to generate attribute values. A built-in set cannot be changed.
+<PageTitle>@string.Format(CultureInfo.CurrentCulture, ExampleDataText.ExampleDataSetPageTitle, _exampleDataSet?.Name)</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@ExampleDataText.ExampleDataSetsLabel</span> <span class="mud-primary-text">@_exampleDataSet?.Name</span>
+    <PageInfo Title="@ExampleDataText.ExampleDataSet" DocsPage="configuration/example-data.md#example-data-sets">
+        @ExampleDataText.DataSetDetailInfo
     </PageInfo>
 </MudText>
 <div class="d-flex justify-space-between align-center">
@@ -27,26 +28,26 @@
 {
     <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-6">
 
-        <MudTabPanel Text="Details">
-    <MudText Typo="Typo.h5">Details</MudText>
+        <MudTabPanel Text="@ExampleDataText.Details">
+    <MudText Typo="Typo.h5">@ExampleDataText.Details</MudText>
     <MudPaper Class="pa-4" Outlined="true">
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Created" Variant="Variant.Outlined">@_exampleDataSet.Created</MudField>
+                <MudField Label="@CommonText.ColumnCreated" Variant="Variant.Outlined">@_exampleDataSet.Created</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Outlined">@(_exampleDataSet.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="@ExampleDataText.BuiltIn" Variant="Variant.Outlined">@(_exampleDataSet.BuiltIn ? CommonText.Yes : CommonText.No)</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="Culture" Variant="Variant.Outlined">@_exampleDataSet.Culture</MudField>
+                    <MudField Label="@ExampleDataText.CultureColumn" Variant="Variant.Outlined">@_exampleDataSet.Culture</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="Values" Variant="Variant.Outlined">@_exampleDataSet.Values.Count.ToString("N0")</MudField>
+                    <MudField Label="@ExampleDataText.Values" Variant="Variant.Outlined">@_exampleDataSet.Values.Count.ToString("N0")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
 
-    <MudText Typo="Typo.h5" Class="mt-5">Values</MudText>
+    <MudText Typo="Typo.h5" Class="mt-5">@ExampleDataText.Values</MudText>
     <MudPaper Class="pa-4 mt-6 mb-5" Outlined="true">
         @foreach (var val in _exampleDataSet.Values)
         {
@@ -55,8 +56,8 @@
     </MudPaper>
         </MudTabPanel>
 
-        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-            <ConfigurationChangesTab TargetType="ActivityTargetType.ExampleDataSet" ObjectId="@_exampleDataSet.Id" ObjectTypeLabel="Example Data Set" />
+        <MudTabPanel Text="@ExampleDataText.Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.ExampleDataSet" ObjectId="@_exampleDataSet.Id" ObjectTypeLabel="@ExampleDataText.ExampleDataSet" />
         </MudTabPanel>
 
     </NavigableMudTabs>
@@ -83,10 +84,10 @@
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Administration", href: "/admin"),
-            new("Example Data", href: "/admin/example-data/"),
-            new("Datasets", href: "/admin/example-data/datasets/"),
+            new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+            new(LayoutText.NavAdministration, href: "/admin"),
+            new(ExampleDataText.ExampleData, href: "/admin/example-data/"),
+            new(ExampleDataText.DatasetsBreadcrumb, href: "/admin/example-data/datasets/"),
             new(_exampleDataSet.Name, href: null, disabled: true)
         };
 

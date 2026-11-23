@@ -4,6 +4,8 @@
 using JIM.Models.Core;
 using JIM.Models.Search;
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Logic.Scoping;
 
 /// <summary>
@@ -96,4 +98,13 @@ public sealed class ScopingCriterionExplanation
 
     /// <summary>What the object held, for example "is Engineering" or "has no value".</summary>
     public string ActualDescription { get; set; } = string.Empty;
+
+    /// <summary><see cref="Description"/> as a <see cref="JimMessage"/> (#3030); null when not yet described.</summary>
+    public JimMessage? DescriptionDetail { get; set; }
+
+    /// <summary><see cref="ActualDescription"/> as a <see cref="JimMessage"/> (#3030); null when not yet described.</summary>
+    public JimMessage? ActualDescriptionDetail { get; set; }
+
+    /// <summary><see cref="FailureReason"/> as a <see cref="JimMessage"/> (#3030); null when it has none or is English only.</summary>
+    public JimMessage? FailureReasonDetail { get; set; }
 }

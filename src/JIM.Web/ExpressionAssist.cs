@@ -3,6 +3,7 @@
 
 using System.Text.RegularExpressions;
 using JIM.Application.Expressions;
+using JIM.Models.Localisation;
 using JIM.Web.Models;
 
 namespace JIM.Web;
@@ -15,6 +16,21 @@ namespace JIM.Web;
 /// </summary>
 public static partial class ExpressionAssist
 {
+    /// <summary>
+    /// A function's description in the viewer's language (#3030), as the catalogue words it; the English where the
+    /// catalogue holds no message for it.
+    /// </summary>
+    public static string DescriptionText(JIM.Models.Expressions.ExpressionFunction function) =>
+        function.DescriptionDetail?.ToCurrentLanguage() ?? function.Description;
+
+    /// <summary>A function parameter's description in the viewer's language (#3030).</summary>
+    public static string DescriptionText(JIM.Models.Expressions.ExpressionFunctionParameter parameter) =>
+        parameter.DescriptionDetail?.ToCurrentLanguage() ?? parameter.Description;
+
+    /// <summary>A function category's heading in the viewer's language (#3030).</summary>
+    public static string CategoryText(JIM.Models.Expressions.ExpressionFunctionCategory category) =>
+        ExpressionFunctionCatalogue.CategoryNameDetail(category)?.ToCurrentLanguage() ?? ExpressionFunctionCatalogue.CategoryName(category);
+
     /// <summary>The most suggestions offered at once.</summary>
     public const int MaxSuggestions = 10;
 
@@ -131,7 +147,7 @@ public static partial class ExpressionAssist
 
         var suggestions = Ranked(ExpressionFunctionCatalogue.All, function => function.Name, word)
             .Select(function => new ExpressionSuggestion(ExpressionSuggestionKind.Function, function.Name, function.Name + "(",
-                function.Signature, PlainText(function.Description)))
+                function.Signature, PlainText(DescriptionText(function))))
             .ToList();
 
         return new ExpressionCompletion(start, caret, suggestions);

@@ -12,7 +12,7 @@
 
 @if ((Changes == null || !Changes.Any()) && !Retirements.Any())
 {
-    <MudText Class="mud-text-secondary pa-1">No change history available.</MudText>
+    <MudText Class="mud-text-secondary pa-1">@ActivityText.ActivityHistoryNone</MudText>
 }
 else
 {
@@ -20,17 +20,17 @@ else
     <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
         <MudGrid>
             <MudItem xs="12" sm="6" md="3">
-                <SearchField @bind-Value="_searchText" Label="Search" />
+                <SearchField @bind-Value="_searchText" Label="@ActivityText.ActivityHistorySearch" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudSelect T="string" @bind-Value="_filterChangeType" Label="Change type" Variant="Variant.Outlined"
+                <MudSelect T="string" @bind-Value="_filterChangeType" Label="@ActivityText.ActivityHistoryChangeType" Variant="Variant.Outlined"
                            Dense="true" Margin="Margin.Dense">
-                    <MudSelectItem T="string" Value="@((string)null!)">All Changes</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
+                    <MudSelectItem T="string" Value="@((string)null!)">@ActivityText.ActivityHistoryAllChanges</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Set")">@ActivityText.ActivityChangeSet</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Updated")">@ActivityText.ActivityChangeUpdated</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Removed")">@ActivityText.ActivityChangeRemoved</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Add")">@ActivityText.ActivityChangeAdd</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Remove")">@ActivityText.ActivityChangeRemove</MudSelectItem>
                 </MudSelect>
             </MudItem>
         </MudGrid>
@@ -50,7 +50,7 @@ else
                                 <MudStack Spacing="2">
                                     <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Style="flex-wrap: wrap; gap: 6px;">
                                         <MudIcon Icon="@Icons.Material.Outlined.Archive" Color="Color.Warning" />
-                                        <MudText Typo="Typo.body1" Style="margin-right: 14px;"><strong>Value retired</strong></MudText>
+                                        <MudText Typo="Typo.body1" Style="margin-right: 14px;"><strong>@ActivityText.ActivityValueRetired</strong></MudText>
                                         <MudTooltip Text="@retirement.RetiredAt.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top" Arrow="true">
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="margin-right: 12px;">
                                                 @GetRelativeTime(retirement.RetiredAt)</MudText>
@@ -58,16 +58,16 @@ else
                                         @if (retirement.ActivityId is { } retirementActivityId)
                                         {
                                             <MudLink Typo="Typo.body2" Href="@($"/activity/{retirementActivityId}")">
-                                                @(retirement.ActivityTargetName ?? "View Activity")
+                                                @(retirement.ActivityTargetName ?? ActivityText.ActivityViewActivity)
                                             </MudLink>
                                         }
                                     </MudStack>
                                     <MudDivider />
                                     <div class="d-flex align-center flex-wrap gap-2">
                                         <MudText Class="mud-text-secondary">@retirement.AttributeName</MudText>
-                                        <MudText>generated value</MudText>
+                                        <MudText>@ActivityText.ActivityGeneratedValue</MudText>
                                         <code class="jim-code-inline" style="text-decoration: line-through;" title="@retirement.Value">@retirement.Value</code>
-                                        <MudText>retired</MudText>
+                                        <MudText>@ActivityText.ActivityRetired</MudText>
                                         <MudTooltip Arrow="true" Placement="Placement.Top">
                                             <ChildContent>
                                                 <MudChip T="string" Variant="Variant.Text" Color="@RetiredGeneratedValueReasonDisplay.Colour(retirement.Reason)" Class="ma-0">
@@ -98,14 +98,14 @@ else
                                     <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)"
                                              Color="@GetChangeTypeColor(changeGroup.ChangeType)" />
                                     <MudText Typo="Typo.body1" Style="margin-right: 14px;">
-                                        <strong>@changeGroup.ChangeType.ToString().SplitOnCapitalLetters()</strong>
+                                        <strong>@changeGroup.ChangeType.ForDisplay()</strong>
                                     </MudText>
                                     @if ((changeGroup.ChangeType == ObjectChangeType.Joined ||
                                                                  changeGroup.ChangeType == ObjectChangeType.Projected) &&
                                                                 !string.IsNullOrEmpty(changeGroup.CsoExternalId))
                                     {
                                         <span style="margin-right: 12px;">
-                                            <MudTooltip Text="@(changeGroup.ConnectedSystemName ?? "Connected System")"
+                                            <MudTooltip Text="@(changeGroup.ConnectedSystemName ?? ActivityText.ActivityFieldConnectedSystem)"
                                                         Placement="Placement.Top" Arrow="true">
                                                 @if (changeGroup.CsoId.HasValue && changeGroup.ConnectedSystemId.HasValue)
                                                 {
@@ -143,7 +143,7 @@ else
                                                     @change.AttributeName
                                                 </MudText>
                                                 <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(change)">
-                                                    @change.DisplayChangeType
+                                                    @DisplayChangeTypeLabel(change.DisplayChangeType)
                                                 </MudChip>
                                                 @* The value is one line, clipped with an ellipsis. A .jim-one-line-list rather than a
                                                    clamp on the cell itself, because the clamp has to sit on the element that directly
@@ -156,8 +156,8 @@ else
                                                     {
                                                         @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
                                                         {
-                                                            var oldReferenceName = change.OldReferenceValue?.DisplayName ?? "(none)";
-                                                            var newReferenceName = change.NewReferenceValue?.DisplayName ?? "(none)";
+                                                            var oldReferenceName = change.OldReferenceValue?.DisplayName ?? ActivityText.ActivityNone;
+                                                            var newReferenceName = change.NewReferenceValue?.DisplayName ?? ActivityText.ActivityNone;
                                                             <MudText Class="mud-text-secondary jim-one-line-list-value" title="@oldReferenceName">@oldReferenceName</MudText>
                                                             <MudText Class="mud-text-secondary">→</MudText>
                                                             <MudText Class="jim-one-line-list-value" title="@newReferenceName">@newReferenceName</MudText>
@@ -198,7 +198,7 @@ else
                                             {
                                                 <div class="more-changes-indicator">
                                                     <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">
-                                                        +@GetRemainingDisplayChangesCount(changeGroup).ToString("N0") more
+                                                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityMoreChanges, GetRemainingDisplayChangesCount(changeGroup).ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
                                                     </MudChip>
                                                 </div>
                                             }
@@ -207,7 +207,7 @@ else
                                     else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
                                     {
                                         <MudText Class="mud-text-secondary">
-                                            Object was deleted. Final attribute values were not captured.
+                                            @ActivityText.ActivityObjectDeletedNoValues
                                         </MudText>
                                     }
                                                 </MudStack>
@@ -229,7 +229,7 @@ else
                                          Style="margin-top: 4px;" />
                                 <div>
                                     <MudText Typo="Typo.h6">
-                                        @_selectedChange?.ChangeType.ToString().SplitOnCapitalLetters()
+                                        @_selectedChange?.ChangeType.ForDisplay()
                                         @if (_selectedChange?.ChangeType == ObjectChangeType.Joined &&
                                             !string.IsNullOrEmpty(_selectedChange?.CsoExternalId))
                                         {
@@ -258,7 +258,7 @@ else
                                         <div style="display: flex; flex-wrap: wrap; gap: 24px;">
                                             <!-- Initiated By (Who) - the principal that triggered the change -->
                                             <div>
-                                                <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
+                                                <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityColumnInitiatedBy</MudText>
                                                 @* Who only: the rule, the how, is the Mechanism beside it. *@
                                                 <div>
                                                     <InitiatorChip InitiatedByType="@_selectedChange.InitiatedByType" InitiatedById="@_selectedChange.ChangeInitiatorId"
@@ -268,7 +268,7 @@ else
 
                                             <!-- Mechanism (How) - how the change was triggered -->
                                             <div>
-                                                <MudText Typo="Typo.button" Class="mud-text-secondary">Mechanism</MudText>
+                                                <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityHistoryMechanism</MudText>
                                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                                     @GetModalMechanismIcon(_selectedChange)
                                                     @GetModalMechanismText(_selectedChange)
@@ -279,11 +279,11 @@ else
                                             @if (_selectedChange.ActivityRunProfileExecutionItemId != null)
                                             {
                                                 <div>
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Activity</MudText>
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFieldActivity</MudText>
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                                         <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
-                                                        <MudLink Href="@($"/activity/item/{_selectedChange.ActivityRunProfileExecutionItemId}")">View
-                                                            Activity</MudLink>
+                                                        <MudLink Href="@($"/activity/item/{_selectedChange.ActivityRunProfileExecutionItemId}")">
+                                                            @ActivityText.ActivityViewActivity</MudLink>
                                                     </MudStack>
                                                 </div>
                                             }
@@ -300,7 +300,7 @@ else
                                         @if (_selectedChange.AttributeChanges.Count > 1)
                                         {
                                             <MudExpansionPanels Elevation="0" Class="mb-4">
-                                                <MudExpansionPanel Text="Summary">
+                                                <MudExpansionPanel Text="@ActivityText.ActivityHistorySummary">
                                                     <MudGrid Spacing="2">
                                                         @foreach (var summary in GetAggregatedSummary(_selectedChange))
                                                         {
@@ -313,19 +313,19 @@ else
                                                                     @if (summary.SetCount > 0)
                                                                     {
                                                                         <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
-                                                                            Set
+                                                                            @ActivityText.ActivityChangeSet
                                                                         </MudChip>
                                                                     }
                                                                     @if (summary.UpdateCount > 0)
                                                                     {
                                                                         <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                                                                            Updated
+                                                                            @ActivityText.ActivityChangeUpdated
                                                                         </MudChip>
                                                                     }
                                                                     @if (summary.RemovedCount > 0)
                                                                     {
                                                                         <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
-                                                                            Removed
+                                                                            @ActivityText.ActivityChangeRemoved
                                                                         </MudChip>
                                                                     }
                                                                     @* MVA terminology: Add (+count), Remove (-count) *@
@@ -369,16 +369,16 @@ else
                                                              StateKey="@GetSelectedChangeStateKey()"
                                                              DefaultSortBy="@SourceOrderSort"
                                                              LoadWindow="LoadAttributeChangeWindow"
-                                                             SearchPlaceholder="Search changes..."
-                                                             SingularName="Change"
-                                                             PluralName="Changes">
+                                                             SearchPlaceholder="@ActivityText.ActivityHistorySearchChanges"
+                                                             SingularName="@ActivityText.ActivityHistoryChangeSingular"
+                                                             PluralName="@ActivityText.ActivityHistoryChangesPlural">
                                             <ToolBarExtras>
                                                 <div style="width: 180px;">
                                                     <MudSelect T="string" Value="@_modalFilterAttribute"
                                                                ValueChanged="OnModalFilterAttributeChangedAsync"
-                                                               Label="Attribute" Variant="Variant.Outlined"
+                                                               Label="@ActivityText.ActivityColumnAttribute" Variant="Variant.Outlined"
                                                                Dense="true" Margin="Margin.Dense">
-                                                        <MudSelectItem T="string" Value="@((string)null!)">All Attributes</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@((string)null!)">@ActivityText.ActivityHistoryAllAttributes</MudSelectItem>
                                                         @foreach (var attr in GetUniqueAttributes(selectedChange))
                                                         {
                                                             <MudSelectItem T="string" Value="@attr">@attr</MudSelectItem>
@@ -388,31 +388,31 @@ else
                                                 <div style="width: 150px;" class="ml-3">
                                                     <MudSelect T="string" Value="@_modalFilterChangeType"
                                                                ValueChanged="OnModalFilterChangeTypeChangedAsync"
-                                                               Label="Change type" Variant="Variant.Outlined"
+                                                               Label="@ActivityText.ActivityHistoryChangeType" Variant="Variant.Outlined"
                                                                Dense="true" Margin="Margin.Dense">
-                                                        <MudSelectItem T="string" Value="@((string)null!)">All</MudSelectItem>
-                                                        <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
-                                                        <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
-                                                        <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
-                                                        <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
-                                                        <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@((string)null!)">@ActivityText.ActivityFilterAll</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Set")">@ActivityText.ActivityChangeSet</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Updated")">@ActivityText.ActivityChangeUpdated</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Removed")">@ActivityText.ActivityChangeRemoved</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Add")">@ActivityText.ActivityChangeAdd</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Remove")">@ActivityText.ActivityChangeRemove</MudSelectItem>
                                                     </MudSelect>
                                                 </div>
                                             </ToolBarExtras>
                                             <Columns>
-                                                <TemplateColumn Title="Change" Sortable="false">
+                                                <TemplateColumn Title="@ActivityText.ActivityColumnChange" Sortable="false">
                                                     <HeaderTemplate>
-                                                        <MudText Typo="Typo.button">Change</MudText>
+                                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnChange</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
                                                         <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context.Item)">
-                                                            @context.Item.DisplayChangeType
+                                                            @DisplayChangeTypeLabel(context.Item.DisplayChangeType)
                                                         </MudChip>
                                                     </CellTemplate>
                                                 </TemplateColumn>
-                                                <TemplateColumn Title="Attribute" Sortable="false">
+                                                <TemplateColumn Title="@ActivityText.ActivityColumnAttribute" Sortable="false">
                                                     <HeaderTemplate>
-                                                        <MudText Typo="Typo.button">Attribute</MudText>
+                                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnAttribute</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
                                                         @* Linked into the attribute's Inspect view (#399) wherever the change carries a
@@ -428,9 +428,9 @@ else
                                                         }
                                                     </CellTemplate>
                                                 </TemplateColumn>
-                                                <TemplateColumn Title="Source" Sortable="false">
+                                                <TemplateColumn Title="@ActivityText.ActivityColumnSource" Sortable="false">
                                                     <HeaderTemplate>
-                                                        <MudText Typo="Typo.button">Source</MudText>
+                                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnSource</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
                                                         @* No contributor recorded (change rows from before provenance existed, or a
@@ -446,27 +446,27 @@ else
                                                         }
                                                     </CellTemplate>
                                                 </TemplateColumn>
-                                                <TemplateColumn Title="Type" Sortable="false">
+                                                <TemplateColumn Title="@ActivityText.ActivityColumnType" Sortable="false">
                                                     <HeaderTemplate>
-                                                        <MudText Typo="Typo.button">Type</MudText>
+                                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnType</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
                                                         <MudText Class="mud-text-secondary">@context.Item.AttributeType</MudText>
                                                     </CellTemplate>
                                                 </TemplateColumn>
-                                                <TemplateColumn Title="Plurality" Sortable="false">
+                                                <TemplateColumn Title="@ActivityText.ActivityColumnPlurality" Sortable="false">
                                                     <HeaderTemplate>
-                                                        <MudText Typo="Typo.button">Plurality</MudText>
+                                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnPlurality</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
                                                         <MudText Class="mud-text-secondary">
-                                                            @(context.Item.IsMultiValued ? "Multi-Valued" : "Single-Valued")
+                                                            @(context.Item.IsMultiValued ? ActivityText.ActivityMultiValued : ActivityText.ActivitySingleValued)
                                                         </MudText>
                                                     </CellTemplate>
                                                 </TemplateColumn>
-                                                <TemplateColumn Title="Value" Sortable="false">
+                                                <TemplateColumn Title="@ActivityText.ActivityColumnValue" Sortable="false">
                                                     <HeaderTemplate>
-                                                        <MudText Typo="Typo.button">Value</MudText>
+                                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnValue</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
                                                         <ChangeValueCell Change="@context.Item" />
@@ -479,15 +479,15 @@ else
                                                      || !string.IsNullOrEmpty(_modalFilterChangeType))
                                                 {
                                                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                                                     PrimaryText="No changes match the current filters"
-                                                                     SecondaryText="Try a different search term, or widen the attribute and change type filters."
-                                                                     ActionText="Clear Filters"
+                                                                     PrimaryText="@ActivityText.ActivityNoChangesMatch"
+                                                                     SecondaryText="@ActivityText.ActivityNoChangesMatchDetail"
+                                                                     ActionText="@ActivityText.ActivityClearFilters"
                                                                      OnAction="@(() => ClearModalFiltersAsync(grid))" />
                                                 }
                                                 else
                                                 {
                                                     <TableEmptyState Icon="@Icons.Material.Filled.List"
-                                                                     PrimaryText="There is nothing to show for these attribute changes" />
+                                                                     PrimaryText="@ActivityText.ActivityNothingToShowChanges" />
                                                 }
                                             </EmptyContent>
                                         </VirtualisedDataGrid>
@@ -495,18 +495,18 @@ else
                                             else if (_selectedChange?.ChangeType == ObjectChangeType.Deleted)
                                             {
                                                 <MudText Class="mud-text-secondary">
-                                                    Object was deleted. Final attribute values were not captured.
+                                                    @ActivityText.ActivityObjectDeletedNoValues
                                                 </MudText>
                                             }
                                             else
                                             {
                                                 <MudText Class="mud-text-secondary">
-                                                    No attribute changes were recorded for this operation.
+                                                    @ActivityText.ActivityNoAttributeChangesOperation
                                                 </MudText>
                                             }
                                         </DialogContent>
                                         <DialogActions>
-                                            <MudButton OnClick="CloseDetailsDialog">Close</MudButton>
+                                            <MudButton OnClick="CloseDetailsDialog">@CommonText.Close</MudButton>
                                         </DialogActions>
                                     </MudDialog>
 
@@ -1073,6 +1073,17 @@ else
     /// SVA terms: Set (green), Updated (blue), Removed (red)
     /// MVA terms: Add (green), Remove (red)
     /// </summary>
+    /// <summary>A display change type (the key the filters and colours use) as the chip names it.</summary>
+    private static string DisplayChangeTypeLabel(string displayChangeType) => displayChangeType switch
+    {
+        "Set" => ActivityText.ActivityChangeSet,
+        "Updated" => ActivityText.ActivityChangeUpdated,
+        "Removed" => ActivityText.ActivityChangeRemoved,
+        "Add" => ActivityText.ActivityChangeAdd,
+        "Remove" => ActivityText.ActivityChangeRemove,
+        _ => displayChangeType
+    };
+
     private Color GetDisplayChangeTypeColor(AttributeChangeDisplay change)
     {
         return change.DisplayChangeType switch
@@ -1363,18 +1374,18 @@ else
         var diff = now - localTime;
 
         if (diff.TotalMinutes < 1)
-            return "Just now";
+            return ActivityText.ActivityTimeJustNow;
         if (diff.TotalMinutes < 60)
-            return $"{(int)diff.TotalMinutes}m ago";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityTimeMinutesAgo, (int)diff.TotalMinutes);
         if (diff.TotalHours < 24)
-            return $"{(int)diff.TotalHours}h ago";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityTimeHoursAgo, (int)diff.TotalHours);
         if (diff.TotalDays < 7)
-            return $"{(int)diff.TotalDays}d ago";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityTimeDaysAgo, (int)diff.TotalDays);
         if (diff.TotalDays < 30)
-            return $"{(int)(diff.TotalDays / 7)}w ago";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityTimeWeeksAgo, (int)(diff.TotalDays / 7));
         if (diff.TotalDays < 365)
-            return $"{(int)(diff.TotalDays / 30)}mo ago";
-        return $"{(int)(diff.TotalDays / 365)}y ago";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityTimeMonthsAgo, (int)(diff.TotalDays / 30));
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityTimeYearsAgo, (int)(diff.TotalDays / 365));
     }
 
 
@@ -1492,7 +1503,7 @@ else
                 {
                     builder.OpenComponent<MudText>(seq++);
                     builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
-                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "via")));
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, ActivityText.ActivityMechanismVia)));
                     builder.CloseComponent();
 
                     if (changeGroup.SyncRuleId != null)
@@ -1500,7 +1511,7 @@ else
                         builder.OpenComponent<MudLink>(seq++);
                         builder.AddAttribute(seq++, "Href", $"/admin/sync-rules/{changeGroup.SyncRuleId}");
                         builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
-                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Synchronisation Rule")));
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? ActivityText.ActivityTypeSynchronisationRule)));
                         builder.CloseComponent();
                     }
                     else
@@ -1508,7 +1519,7 @@ else
                         // Synchronisation Rule was deleted, show name with "(deleted)" indicator
                         builder.OpenComponent<MudText>(seq++);
                         builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
-                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"{changeGroup.SyncRuleName} (deleted)")));
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityNameDeleted, changeGroup.SyncRuleName))));
                         builder.CloseComponent();
                     }
                 }
@@ -1517,7 +1528,7 @@ else
             {
                 // Sync change without Synchronisation Rule or Connected System info - show Run Profile name or "Synchronisation"
                 var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName :
-        "Synchronisation";
+        ActivityText.ActivityMechanismSynchronisation;
                 builder.OpenComponent<MudText>(seq++);
                 builder.AddAttribute(seq++, "Style", "display: inline;");
                 builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, runProfileDisplayName)));
@@ -1528,13 +1539,13 @@ else
                 // Other mechanisms (User, Workflow, etc.)
                 string mechanismText = changeGroup.ChangeMechanismType switch
                 {
-                    "User" => "Direct Edit",
-                    "WorkflowInstance" => "Workflow",
-                    "GroupMembershipRuleEvaluation" => "Group Rule",
-                    "Import" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Import",
-                    "Export" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Export",
-                    "ExampleData" => "Data Generation",
-                    "System" => "System",
+                    "User" => ActivityText.ActivityMechanismDirectEdit,
+                    "WorkflowInstance" => ActivityText.ActivityMechanismWorkflow,
+                    "GroupMembershipRuleEvaluation" => ActivityText.ActivityMechanismGroupRule,
+                    "Import" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : ActivityText.ActivityMechanismImport,
+                    "Export" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : ActivityText.ActivityMechanismExport,
+                    "ExampleData" => ActivityText.ActivityTypeDataGeneration,
+                    "System" => ActivityText.ActivityInitiatorSystem,
                     _ => changeGroup.ChangeMechanismType
                 };
 

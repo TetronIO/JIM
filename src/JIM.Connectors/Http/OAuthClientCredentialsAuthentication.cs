@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using JIM.Models.Localisation;
 using Serilog;
 
 namespace JIM.Connectors.Http;
@@ -28,6 +29,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
     private readonly string? _scope;
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<HttpStatusCode, string?, string>? _describeFailure;
+    private readonly Func<HttpStatusCode, string?, JimMessage>? _describeFailureMessage;
     private readonly OAuthStillBeingAppliedRetry? _stillBeingApplied;
     private readonly ILogger? _logger;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
@@ -80,7 +82,8 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         Func<HttpStatusCode, string?, string>? describeFailure = null,
         OAuthStillBeingAppliedRetry? stillBeingApplied = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        Func<HttpStatusCode, string?, JimMessage>? describeFailureMessage = null)
     {
         ArgumentNullException.ThrowIfNull(tokenClient);
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
@@ -99,6 +102,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         _scope = string.IsNullOrWhiteSpace(scope) ? null : scope;
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         _describeFailure = describeFailure;
+        _describeFailureMessage = describeFailureMessage;
         _stillBeingApplied = stillBeingApplied;
         _delay = delay ?? Task.Delay;
         _logger = logger;
@@ -191,6 +195,9 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
 
     private HttpAuthenticationException DescribeRefusal(HttpStatusCode status, string? reasonPhrase, string? body)
     {
+        if (_describeFailureMessage != null)
+            return new HttpAuthenticationException(_describeFailureMessage(status, body));
+
         if (_describeFailure != null)
             return new HttpAuthenticationException(_describeFailure(status, body));
 
@@ -234,7 +241,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         {
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = _describeFailure != null || _stillBeingApplied != null
+                var errorBody = _describeFailure != null || _describeFailureMessage != null || _stillBeingApplied != null
                     ? await response.Content.ReadAsStringAsync(cancellationToken)
                     : null;
                 return (null, (response.StatusCode, response.ReasonPhrase, errorBody));

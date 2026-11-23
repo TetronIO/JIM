@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
@@ -805,6 +806,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         => throw new PreviewWriteAttemptedException(nameof(UpdateActivityAsync));
 
     public Task UpdateActivityMessageAsync(Activity activity, string message)
+        => throw new PreviewWriteAttemptedException(nameof(UpdateActivityMessageAsync));
+
+    public Task UpdateActivityMessageAsync(Activity activity, JimMessage message)
         => throw new PreviewWriteAttemptedException(nameof(UpdateActivityMessageAsync));
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)

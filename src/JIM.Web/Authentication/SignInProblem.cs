@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Web.Authentication;
 
 /// <summary>
@@ -21,11 +23,22 @@ public enum SignInProblemSource
 /// </summary>
 /// <param name="Source">Where the failure was met.</param>
 /// <param name="Setting">The setting involved, such as <c>JIM_SSO_API_SCOPE</c>.</param>
-/// <param name="Description">What went wrong, in a sentence.</param>
+/// <param name="Description">What went wrong, in a sentence, in English (the REST API and the log read it).</param>
 /// <param name="Expected">The value JIM expected.</param>
 /// <param name="Received">The value JIM received.</param>
 /// <param name="Fix">Where to fix it.</param>
-public sealed record SignInProblemReport(SignInProblemSource Source, string Setting, string Description, string Expected, string Received, string Fix);
+public sealed record SignInProblemReport(SignInProblemSource Source, string Setting, string Description, string Expected, string Received, string Fix)
+{
+    /// <summary>The same four texts as messages, so the portal can show them in its reader's language (#3030).</summary>
+    public SignInProblemText? Text { get; init; }
+}
+
+/// <summary>
+/// A sign-in problem's texts as messages, rendered in the portal in its reader's language (#3030). The English the REST
+/// API and the log read is held beside them, rendered once when the problem is diagnosed, so neither depends on the
+/// language of whoever happened to meet the failure.
+/// </summary>
+public sealed record SignInProblemText(JimMessage Description, JimMessage Expected, JimMessage Received, JimMessage Fix);
 
 /// <summary>
 /// A sign-in problem JIM has met, with how often and when.
@@ -61,6 +74,9 @@ public sealed record SignInProblem
 
     /// <summary>How many times JIM has met the problem since it started.</summary>
     public required int Count { get; init; }
+
+    /// <inheritdoc cref="SignInProblemReport.Text"/>
+    public SignInProblemText? Text { get; init; }
 
     /// <summary>When the problem was last written to the log.</summary>
     public required DateTimeOffset LoggedAt { get; init; }

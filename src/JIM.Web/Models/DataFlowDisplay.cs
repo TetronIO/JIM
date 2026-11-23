@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -41,9 +43,11 @@ public static class DataFlowDisplay
 
         var priority = flow.Priority.Value;
         if (priority == int.MaxValue)
-            return "Unranked";
+            return SchemaText.DataFlowPriorityUnranked;
 
-        return flow.HasMultipleContributors ? $"{priority} of {flow.ContributorCount}" : priority.ToString();
+        return flow.HasMultipleContributors
+            ? string.Format(CultureInfo.CurrentCulture, SchemaText.DataFlowPriorityOfContributors, priority, flow.ContributorCount)
+            : priority.ToString();
     }
 
     /// <summary>
@@ -71,7 +75,7 @@ public static class DataFlowDisplay
     /// The direction in the vocabulary the rest of the portal uses for Synchronisation Rules.
     /// </summary>
     public static string DirectionLabel(SyncRuleDirection direction) =>
-        direction == SyncRuleDirection.Import ? "Inbound" : "Outbound";
+        direction == SyncRuleDirection.Import ? SchemaText.DataFlowDirectionInbound : SchemaText.DataFlowDirectionOutbound;
 
     /// <summary>
     /// The attribute on the Connected System side of the flow: its source inbound, its target outbound. Where
@@ -174,7 +178,7 @@ public static class DataFlowDisplay
         ArgumentNullException.ThrowIfNull(flow);
 
         if (flow.Direction != SyncRuleDirection.Import)
-            return "Priority orders competing contributions into the Metaverse, so it applies to Inbound flows only.";
+            return SchemaText.DataFlowPriorityTooltipOutbound;
 
         var unranked = flow.Priority == int.MaxValue;
         var contributors = flow.ContributorCount ?? 0;
@@ -182,12 +186,12 @@ public static class DataFlowDisplay
         if (contributors <= 1)
         {
             return unranked
-                ? "This is the only contributor to this Metaverse Attribute, so it is not competing with anything and has never needed a position."
-                : "This is the only contributor to this Metaverse Attribute, so its position decides nothing until another Synchronisation Rule contributes to it.";
+                ? SchemaText.DataFlowPriorityTooltipSoleContributorUnranked
+                : SchemaText.DataFlowPriorityTooltipSoleContributorRanked;
         }
 
         return unranked
-            ? $"This contribution has never been given a position, so it ranks lowest of the {contributors} contributors to this Metaverse Attribute. Give it a position to change that."
-            : $"{contributors} Synchronisation Rules contribute to this Metaverse Attribute; the lowest-numbered contribution with a value wins.";
+            ? string.Format(CultureInfo.CurrentCulture, SchemaText.DataFlowPriorityTooltipUnpositionedOfMany, contributors)
+            : string.Format(CultureInfo.CurrentCulture, SchemaText.DataFlowPriorityTooltipOrdered, contributors);
     }
 }

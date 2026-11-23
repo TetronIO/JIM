@@ -1,4 +1,5 @@
 @using JIM.Models.Staging
+@using System.Globalization
 @using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -21,28 +22,26 @@
             var recordedAt = watermark.RecordedAt;
             <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Class="jim-scope-partition-watermark-icon" />
             <span>
-                Next Delta Import reads changes after
+                @SchemaText.WatermarkNextDeltaImportReadsAfter
                 <span class="jim-scope-partition-watermark-position">@ImportWatermarkText.Positions(description)</span>
             </span>
             <span class="jim-scope-partition-watermark-recorded" aria-hidden="true">·</span>
             <MudTooltip Arrow="true" Placement="Placement.Top" Text="@recordedAt.ToLocalTime().ToFriendlyDate()">
-                <span class="jim-scope-partition-watermark-recorded">Recorded @recordedAt.ToRelativeTime()</span>
+                <span class="jim-scope-partition-watermark-recorded">@string.Format(CultureInfo.CurrentCulture, SchemaText.WatermarkRecordedAt, recordedAt.ToRelativeTime())</span>
             </MudTooltip>
         }
         else if (watermark != null)
         {
             <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Size="Size.Small" Color="Color.Warning" />
             <span>
-                The recorded watermark could not be read. The next Delta Import reads every object in this partition, as a
-                Full Import does, and records a new one.
+                @SchemaText.WatermarkUnreadable
             </span>
         }
         else
         {
             <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Info" />
             <span>
-                No watermark recorded. The next Delta Import reads every object in this partition, as a Full Import does,
-                and records one.
+                @SchemaText.WatermarkNone
             </span>
         }
     </div>

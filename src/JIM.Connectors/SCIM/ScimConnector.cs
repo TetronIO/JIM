@@ -4,6 +4,8 @@
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using JIM.Connectors.Http;
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Core;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
@@ -217,15 +219,8 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
 
         // JIM is deployed in high-trust environments; neither identity data nor credentials may travel over
         // cleartext HTTP. Loopback is permitted to support local test service providers.
-        if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out _, out var baseUrlError, ScimTransportSecurity.BaseUrlExample))
-        {
-            response.Add(new ConnectorSettingValueValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = baseUrlError,
-                SettingValue = baseUrlSetting
-            });
-        }
+        if (!ScimTransportSecurity.TryValidateMessage(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out _, out var baseUrlError, ScimTransportSecurity.BaseUrlExample))
+            response.Add(ConnectorSettingValueValidationResult.Failure(baseUrlSetting, baseUrlError));
 
         // The Token Endpoint URL only matters for OAuth; a value left over from switching Authentication
         // Method is ignored, matching how RequiredWhenSetting treats it.
@@ -234,14 +229,9 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
         if (authenticationMethod == ScimConnectorConstants.AuthMethodOAuthClientCredentials
             && tokenEndpointSetting != null
             && !string.IsNullOrWhiteSpace(tokenEndpointSetting.StringValue)
-            && !ScimTransportSecurity.TryValidate(tokenEndpointSetting.StringValue, ScimConnectorConstants.SettingTokenEndpointUrl, ScimTransportSecurity.TokenEndpointPayload, out _, out var tokenEndpointError))
+            && !ScimTransportSecurity.TryValidateMessage(tokenEndpointSetting.StringValue, ScimConnectorConstants.SettingTokenEndpointUrl, ScimTransportSecurity.TokenEndpointPayload, out _, out var tokenEndpointError))
         {
-            response.Add(new ConnectorSettingValueValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = tokenEndpointError,
-                SettingValue = tokenEndpointSetting
-            });
+            response.Add(ConnectorSettingValueValidationResult.Failure(tokenEndpointSetting, tokenEndpointError));
         }
 
         // The connectivity test acquires a token before its first request, so it must not run while either
@@ -628,31 +618,30 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
             if (reachable)
                 return null;
 
-            return Failure(baseUrlSetting,
-                $"Connected to '{baseUrlSetting.StringValue}', but it did not answer on any SCIM discovery endpoint " +
-                $"({ScimEndpoints.ServiceProviderConfig}, {ScimEndpoints.ResourceTypes} or {ScimEndpoints.Schemas}). " +
-                "Check the Base URL points at the root of the SCIM service, not at a resource endpoint such as /Users.");
+            return Failure(baseUrlSetting, Message(nameof(ConnectorMessages.ScimNoDiscoveryAnswer), baseUrlSetting.StringValue,
+                ScimEndpoints.ServiceProviderConfig, ScimEndpoints.ResourceTypes, ScimEndpoints.Schemas));
         }
         catch (HttpAuthenticationException ex)
         {
             logger.Warning(ex, "The SCIM connectivity test could not authenticate with the service provider.");
-            return Failure(baseUrlSetting, $"Could not authenticate with the SCIM service provider: {LogSanitiser.Sanitise(ex.Message)}");
+            return Failure(baseUrlSetting, Message(nameof(ConnectorMessages.ScimCouldNotAuthenticate),
+                ex.Detail is { } detail ? detail : (MessageArgument)LogSanitiser.Sanitise(ex.Message)));
         }
         catch (ScimRequestException ex)
         {
             logger.Warning(ex, "The SCIM connectivity test failed.");
             if (DescribeCertificateRejection(settingValues, ex, logger) is { } rejection)
-                return Failure(baseUrlSetting, rejection.Message, rejection);
+                return Failure(baseUrlSetting, rejection);
 
-            return Failure(baseUrlSetting, $"Could not connect to the SCIM service provider: {LogSanitiser.Sanitise(ex.Message)}");
+            return Failure(baseUrlSetting, Message(nameof(ConnectorMessages.ScimCouldNotConnect), LogSanitiser.Sanitise(ex.Message)));
         }
         catch (Exception ex) when (ex is HttpRequestException or TimeoutException or TaskCanceledException or UriFormatException or InvalidOperationException)
         {
             logger.Warning(ex, "The SCIM connectivity test failed.");
             if (DescribeCertificateRejection(settingValues, ex, logger) is { } rejection)
-                return Failure(baseUrlSetting, rejection.Message, rejection);
+                return Failure(baseUrlSetting, rejection);
 
-            return Failure(baseUrlSetting, $"Could not connect to the SCIM service provider: {LogSanitiser.Sanitise(ex.Message)}");
+            return Failure(baseUrlSetting, Message(nameof(ConnectorMessages.ScimCouldNotConnect), LogSanitiser.Sanitise(ex.Message)));
         }
     }
 
@@ -750,6 +739,18 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
     }
 
     #endregion
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
+
+    private static ConnectorSettingValueValidationResult Failure(ConnectedSystemSettingValue settingValue, JimMessage message, Exception? exception = null) =>
+        ConnectorSettingValueValidationResult.Failure(settingValue, message, exception);
+
+    /// <summary>A refusal because of the provider's certificate: its message where it has one, so the portal can translate it.</summary>
+    private static ConnectorSettingValueValidationResult Failure(ConnectedSystemSettingValue settingValue, ServerCertificateRejectedException rejection) =>
+        rejection.Detail is { } detail
+            ? ConnectorSettingValueValidationResult.Failure(settingValue, detail, rejection)
+            : Failure(settingValue, rejection.Message, rejection);
 
     private static ConnectorSettingValueValidationResult Failure(ConnectedSystemSettingValue settingValue, string errorMessage, Exception? exception = null)
     {

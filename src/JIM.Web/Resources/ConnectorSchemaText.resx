@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Graph_user_id" xml:space="preserve">
+    <value>The object's identifier, assigned by Entra ID and never changed. The External ID.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "id" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_userPrincipalName" xml:space="preserve">
+    <value>The user's sign-in name, i.e. ada@contoso.com. Required to create a user.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "userPrincipalName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_displayName" xml:space="preserve">
+    <value>The name shown in address lists. Required to create a user.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "displayName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_mailNickname" xml:space="preserve">
+    <value>The mail alias. Required to create a user.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "mailNickname" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_accountEnabled" xml:space="preserve">
+    <value>Whether the account can sign in. Required to create a user.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "accountEnabled" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_givenName" xml:space="preserve">
+    <value>The user's given name.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "givenName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_surname" xml:space="preserve">
+    <value>The user's surname.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "surname" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_mail" xml:space="preserve">
+    <value>The user's primary SMTP address.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "mail" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_otherMails" xml:space="preserve">
+    <value>Additional email addresses.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "otherMails" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_proxyAddresses" xml:space="preserve">
+    <value>Every address the mail system knows the user by. Read-only in Graph; Exchange Online maintains it.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "proxyAddresses" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_jobTitle" xml:space="preserve">
+    <value>The user's job title.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "jobTitle" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_department" xml:space="preserve">
+    <value>The user's department.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "department" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_companyName" xml:space="preserve">
+    <value>The user's company.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "companyName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_employeeId" xml:space="preserve">
+    <value>The organisation's identifier for the employee.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "employeeId" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_employeeType" xml:space="preserve">
+    <value>The kind of worker, i.e. Employee or Contractor.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "employeeType" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_employeeHireDate" xml:space="preserve">
+    <value>When the user was hired, or will start.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "employeeHireDate" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_officeLocation" xml:space="preserve">
+    <value>The user's office.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "officeLocation" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_businessPhones" xml:space="preserve">
+    <value>The user's business telephone number. Graph holds one.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "businessPhones" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_mobilePhone" xml:space="preserve">
+    <value>The user's mobile telephone number.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "mobilePhone" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_streetAddress" xml:space="preserve">
+    <value>The street address of the user's place of business.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "streetAddress" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_city" xml:space="preserve">
+    <value>The city of the user's place of business.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "city" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_state" xml:space="preserve">
+    <value>The state or province of the user's place of business.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "state" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_postalCode" xml:space="preserve">
+    <value>The postal code of the user's place of business.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "postalCode" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_country" xml:space="preserve">
+    <value>The country of the user's place of business.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "country" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_usageLocation" xml:space="preserve">
+    <value>A two-letter country code, required before Microsoft 365 licences can be assigned.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "usageLocation" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_preferredLanguage" xml:space="preserve">
+    <value>The user's preferred language, as an ISO 639-1 code such as en-GB.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "preferredLanguage" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_userType" xml:space="preserve">
+    <value>Member, or Guest for an account invited from outside the organisation.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "userType" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesImmutableId" xml:space="preserve">
+    <value>Links a cloud user to an on-premises account, for a user whose domain is federated.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesImmutableId" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_manager" xml:space="preserve">
+    <value>The user's manager.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "manager" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_creationType" xml:space="preserve">
+    <value>How the account was created, i.e. Invitation for a guest; null for an ordinary account.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "creationType" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_externalUserState" xml:space="preserve">
+    <value>For a guest, whether the invitation has been accepted.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "externalUserState" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_createdDateTime" xml:space="preserve">
+    <value>When the user was created.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "createdDateTime" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesSyncEnabled" xml:space="preserve">
+    <value>True while the object is synchronised from on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesSyncEnabled" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesLastSyncDateTime" xml:space="preserve">
+    <value>When the object was last synchronised from on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesLastSyncDateTime" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesSecurityIdentifier" xml:space="preserve">
+    <value>The object's security identifier in on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesSecurityIdentifier" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesSamAccountName" xml:space="preserve">
+    <value>The object's sAMAccountName in on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesSamAccountName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesDomainName" xml:space="preserve">
+    <value>The on-premises Active Directory domain the object comes from.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesDomainName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesDistinguishedName" xml:space="preserve">
+    <value>The user's distinguished name in on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesDistinguishedName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_onPremisesUserPrincipalName" xml:space="preserve">
+    <value>The user's userPrincipalName in on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesUserPrincipalName" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute1" xml:space="preserve">
+    <value>Exchange custom attribute 1. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute1" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute2" xml:space="preserve">
+    <value>Exchange custom attribute 2. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute2" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute3" xml:space="preserve">
+    <value>Exchange custom attribute 3. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute3" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute4" xml:space="preserve">
+    <value>Exchange custom attribute 4. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute4" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute5" xml:space="preserve">
+    <value>Exchange custom attribute 5. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute5" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute6" xml:space="preserve">
+    <value>Exchange custom attribute 6. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute6" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute7" xml:space="preserve">
+    <value>Exchange custom attribute 7. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute7" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute8" xml:space="preserve">
+    <value>Exchange custom attribute 8. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute8" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute9" xml:space="preserve">
+    <value>Exchange custom attribute 9. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute9" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute10" xml:space="preserve">
+    <value>Exchange custom attribute 10. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute10" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute11" xml:space="preserve">
+    <value>Exchange custom attribute 11. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute11" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute12" xml:space="preserve">
+    <value>Exchange custom attribute 12. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute12" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute13" xml:space="preserve">
+    <value>Exchange custom attribute 13. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute13" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute14" xml:space="preserve">
+    <value>Exchange custom attribute 14. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute14" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_extensionAttribute15" xml:space="preserve">
+    <value>Exchange custom attribute 15. For a synchronised user, written in on-premises Active Directory instead.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "extensionAttribute15" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_user_sourceOfAuthority" xml:space="preserve">
+    <value>Where the user is managed, derived by JIM: cloud (in Entra ID, so JIM can write to it through Microsoft Graph), onPremisesDirectory (synchronised from Active Directory, so most attributes are written there instead) or externalEntraDirectory (a guest from another tenant). An object whose Source of Authority was switched to Entra ID reads as cloud only with Track Source of Authority Changes on. Flow it into a Metaverse Attribute to scope export Synchronisation Rules on it.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "sourceOfAuthority" user attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_id" xml:space="preserve">
+    <value>The object's identifier, assigned by Entra ID and never changed. The External ID.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "id" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_displayName" xml:space="preserve">
+    <value>The group's name. Required to create a group.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "displayName" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_mailNickname" xml:space="preserve">
+    <value>The mail alias. Required to create a group.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "mailNickname" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_mailEnabled" xml:space="preserve">
+    <value>Whether the group has a mailbox or receives mail. Required to create a group.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "mailEnabled" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_securityEnabled" xml:space="preserve">
+    <value>Whether the group can be used to grant access. Required to create a group.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "securityEnabled" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_groupTypes" xml:space="preserve">
+    <value>Unified for a Microsoft 365 group, and DynamicMembership for a group whose members follow its membership rule. Empty for a security group.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "groupTypes" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_description" xml:space="preserve">
+    <value>The group's description.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "description" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_visibility" xml:space="preserve">
+    <value>Public, Private or HiddenMembership, for a Microsoft 365 group.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "visibility" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_membershipRule" xml:space="preserve">
+    <value>The rule that decides a dynamic group's members.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "membershipRule" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_membershipRuleProcessingState" xml:space="preserve">
+    <value>On or Paused: whether a dynamic group's rule is being applied.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "membershipRuleProcessingState" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_mail" xml:space="preserve">
+    <value>The group's SMTP address. Read-only in Graph.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "mail" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_proxyAddresses" xml:space="preserve">
+    <value>Every address the mail system knows the group by. Read-only in Graph.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "proxyAddresses" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_securityIdentifier" xml:space="preserve">
+    <value>The group's security identifier in Entra ID.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "securityIdentifier" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_members" xml:space="preserve">
+    <value>The group's members: users and groups.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "members" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_owners" xml:space="preserve">
+    <value>The group's owners.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "owners" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_createdDateTime" xml:space="preserve">
+    <value>When the group was created.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "createdDateTime" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_onPremisesSyncEnabled" xml:space="preserve">
+    <value>True while the object is synchronised from on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesSyncEnabled" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_onPremisesLastSyncDateTime" xml:space="preserve">
+    <value>When the object was last synchronised from on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesLastSyncDateTime" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_onPremisesSecurityIdentifier" xml:space="preserve">
+    <value>The object's security identifier in on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesSecurityIdentifier" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_onPremisesSamAccountName" xml:space="preserve">
+    <value>The object's sAMAccountName in on-premises Active Directory.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesSamAccountName" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_onPremisesDomainName" xml:space="preserve">
+    <value>The on-premises Active Directory domain the object comes from.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "onPremisesDomainName" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+  <data name="Graph_group_sourceOfAuthority" xml:space="preserve">
+    <value>Where the group is managed, derived by JIM: cloud (in Entra ID, so JIM can write to it through Microsoft Graph), onPremisesDirectory (synchronised from Active Directory, so most attributes are written there instead) or externalEntraDirectory (a guest from another tenant). An object whose Source of Authority was switched to Entra ID reads as cloud only with Track Source of Authority Changes on. Flow it into a Metaverse Attribute to scope export Synchronisation Rules on it.</value>
+    <comment>The description of the Microsoft Entra ID Connector's "sourceOfAuthority" group attribute, shown on the Schema tab. Attribute names stay in English.</comment>
+  </data>
+</root>

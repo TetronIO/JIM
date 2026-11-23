@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Staging;
 
 /// <summary>
@@ -24,8 +26,16 @@ public class ConnectorSettingValueValidationResult
     public string? ErrorMessage { get; set; }
 
     /// <summary>
+    /// The same message as <see cref="ErrorMessage"/> held as a catalogue key and arguments, where the producer has one,
+    /// so the portal can show it in the viewer's language (#3030). <see cref="ErrorMessage"/> is always its British English,
+    /// which the REST API, PowerShell and logs keep reading. Null where the message is text from another system, or has
+    /// not been converted.
+    /// </summary>
+    public JimMessage? ErrorDetail { get; set; }
+
+    /// <summary>
     /// Whether this refuses the settings (an error) or only tells the administrator something (a warning). An error
-    /// unless set otherwise; use <see cref="Warning"/> to make a warning.
+    /// unless set otherwise; use <see cref="Warning(ConnectedSystemSettingValue, string)"/> to make a warning.
     /// </summary>
     public ConnectorSettingValidationSeverity Severity { get; set; } = ConnectorSettingValidationSeverity.Error;
 
@@ -51,5 +61,29 @@ public class ConnectorSettingValueValidationResult
         IsValid = true,
         ErrorMessage = message,
         Severity = ConnectorSettingValidationSeverity.Warning
+    };
+
+    /// <summary>
+    /// A finding that does not refuse the settings, held as a message the portal renders in the viewer's language.
+    /// </summary>
+    public static ConnectorSettingValueValidationResult Warning(ConnectedSystemSettingValue? settingValue, JimMessage detail) => new()
+    {
+        SettingValue = settingValue,
+        IsValid = true,
+        ErrorMessage = detail.ToEnglish(),
+        ErrorDetail = detail,
+        Severity = ConnectorSettingValidationSeverity.Warning
+    };
+
+    /// <summary>
+    /// A refusal of the settings, held as a message the portal renders in the viewer's language.
+    /// </summary>
+    public static ConnectorSettingValueValidationResult Failure(ConnectedSystemSettingValue? settingValue, JimMessage detail, Exception? exception = null) => new()
+    {
+        SettingValue = settingValue,
+        IsValid = false,
+        ErrorMessage = detail.ToEnglish(),
+        ErrorDetail = detail,
+        Exception = exception
     };
 }

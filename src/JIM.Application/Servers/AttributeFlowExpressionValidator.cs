@@ -2,9 +2,11 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Resources;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -32,8 +34,11 @@ public enum AttributeFlowExpressionProblemKind
 /// <summary>One problem with an Attribute Flow's expression, with the message an administrator is shown.</summary>
 /// <param name="Kind">What is wrong.</param>
 /// <param name="Message">What is wrong, naming the Attribute Flow by its target.</param>
-public sealed record AttributeFlowExpressionProblem(AttributeFlowExpressionProblemKind Kind, string Message)
+public sealed record AttributeFlowExpressionProblem(AttributeFlowExpressionProblemKind Kind, JimMessage Detail)
 {
+    /// <summary>The problem in British English, which the REST API, PowerShell and logs read.</summary>
+    public string Message => Detail.ToEnglish();
+
     /// <summary>
     /// True for a problem that never stops a save. The others stop the save of a mapping that is new or changed, and
     /// are reported as warnings on one the save leaves as it was (#2055 Phase 3).
@@ -96,7 +101,8 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
         {
             // Nothing else can be said about an expression that does not parse.
             yield return Problem(AttributeFlowExpressionProblemKind.DoesNotParse,
-                $"The expression for '{targetName}' does not parse: {parsed.ErrorMessage}");
+                ExpressionMessage.Of(nameof(ExpressionMessages.ProblemDoesNotParse), targetName,
+                    parsed.ErrorDetail is { } parseDetail ? parseDetail : parsed.ErrorMessage ?? string.Empty));
             yield break;
         }
 
@@ -108,8 +114,7 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
             if (isExport && input.Source == ExpressionInputSource.ConnectedSystem)
             {
                 yield return Problem(AttributeFlowExpressionProblemKind.WrongSide,
-                    $"The expression for '{targetName}' reads {input.Accessor}, but an export Attribute Flow reads the Metaverse Object, " +
-                    "so it never has a value. Read mv[\"...\"] instead.");
+                    ExpressionMessage.Of(nameof(ExpressionMessages.ProblemWrongSide), targetName, input.Accessor));
                 continue;
             }
 
@@ -124,13 +129,13 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
             if (unknown != null)
             {
                 yield return Problem(AttributeFlowExpressionProblemKind.UnknownAttribute,
-                    $"The expression for '{targetName}' reads {input.Accessor}, which is not an attribute of '{unknown}', so it never has a value.");
+                    ExpressionMessage.Of(nameof(ExpressionMessages.ProblemUnknownAttribute), targetName, input.Accessor, unknown));
             }
         }
 
         // A Generated Value's base has a token added to it as text; the generation validator owns the target's type.
         if (mapping.Generation == null && target.Type is { } type &&
-            ExpressionResultTypeCheck.DescribeProblem(expression, type, targetName) is { } mismatch)
+            ExpressionResultTypeCheck.DescribeProblemMessage(expression, type, targetName) is { } mismatch)
         {
             yield return Problem(AttributeFlowExpressionProblemKind.ResultTypeMismatch, mismatch);
         }
@@ -141,13 +146,12 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
             if (nonRepeatable.Count > 0)
             {
                 yield return Problem(AttributeFlowExpressionProblemKind.NonRepeatable,
-                    $"The expression for '{targetName}' calls {string.Join(", ", nonRepeatable)}, which returns a different value each " +
-                    "time, so every synchronisation can change the value it flows.");
+                    ExpressionMessage.Of(nameof(ExpressionMessages.ProblemNonRepeatable), targetName, string.Join(", ", nonRepeatable)));
             }
         }
     }
 
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-    private static AttributeFlowExpressionProblem Problem(AttributeFlowExpressionProblemKind kind, string message) => new(kind, message);
+    private static AttributeFlowExpressionProblem Problem(AttributeFlowExpressionProblemKind kind, JimMessage detail) => new(kind, detail);
 }

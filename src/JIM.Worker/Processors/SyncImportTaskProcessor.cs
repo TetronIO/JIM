@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using System.Collections.ObjectModel;
 using System.Data.Common;
 using System.Diagnostics;
@@ -1284,8 +1287,8 @@ public partial class SyncImportTaskProcessor
         _activity.ObjectsToProcess = totalObjectsImported;
         _activity.ObjectsProcessed = totalObjectsImported;
         var unchangedCount = _hashSkippedCount + _unchangedObjectCount;
-        _activity.Message = ImportOutcomeMessage.ForImport(totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount,
-            _connectorReportedDeletionCount, _detectedDeletionCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported),
+        _activity.MessageDetail = ActivityMessage.ImportComplete(totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount,
+            _connectorReportedDeletionCount, _detectedDeletionCount, _activity.TotalErrors, throughput.CompletionArgument(totalObjectsImported),
             _withheldDeletionCount);
 
         await _syncRepo.UpdateActivityAsync(_activity);
@@ -1865,10 +1868,8 @@ public partial class SyncImportTaskProcessor
             // Connector reported (#2089); the counter carries both.
             _activity.DetectedDeletionsWithheld = _withheldDeletionCount + newlyMarkedCount;
 
-            var warning = ImportOutcomeMessage.ForRefusedDeletionDetection(newlyMarkedCount, existingCsoCount, maxCount, maxPercent, _connectedSystemRunProfile.RunType);
-            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-                ? warning
-                : $"{_activity.WarningMessage}\n{warning}";
+            ActivityMessage.AddWarning(_activity,
+                ActivityMessage.RefusedDeletionDetection(newlyMarkedCount, existingCsoCount, maxCount, maxPercent, _connectedSystemRunProfile.RunType));
 
             Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection refused. {NewlyMarkedCount} of {ExistingCsoCount} Connected System Objects in scope would have been newly marked as deleted, above the Run Profile's limit(s) (MaxDetectedDeletions={MaxCount}, MaxDetectedDeletionsPercent={MaxPercent}). None were marked; {AlreadyObsoleteCount} already-Obsolete candidate(s) also left untouched.",
                 newlyMarkedCount, existingCsoCount, maxCount, maxPercent, candidates.AlreadyObsolete.Count);
@@ -1966,9 +1967,8 @@ public partial class SyncImportTaskProcessor
             return;
         }
 
-        var warning = ImportCompleteness.DescribeStillIncompleteAfterImport(_connectedSystem,
-            readOnlyChanges: !ReadEveryObjectInScope, scopedToOnePartition: _connectedSystemRunProfile.Partition != null);
-        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+        ActivityMessage.AddWarning(_activity, ActivityMessage.ImportStillIncomplete(_connectedSystem,
+            readOnlyChanges: !ReadEveryObjectInScope, scopedToOnePartition: _connectedSystemRunProfile.Partition != null));
         Log.Warning("SettleImportIncompleteMarkerAsync: Connected System {ConnectedSystemId} stays marked import incomplete (since {Since:o}): this run " +
             "(Run Profile {RunProfileId}, {RunType}, Partition {PartitionId}, {ObjectsRead} objects read, read every object in scope: {ReadEveryObject}) did not read every object " +
             "of the whole Connected System. Synchronisation of it is refused until a Full Import of every selected Partition completes.",
@@ -2124,9 +2124,9 @@ public partial class SyncImportTaskProcessor
             return objectTypes;
 
         if (unreadable.Count > 0)
-            AddActivityWarning(ImportOutcomeMessage.ForUnreadableExternalIds(unreadable, _connectedSystemRunProfile.RunType));
+            AddActivityWarning(ActivityMessage.UnreadableExternalIds(unreadable, _connectedSystemRunProfile.RunType)!);
         if (missing.Count > 0)
-            AddActivityWarning(ImportOutcomeMessage.ForMissingExternalIds(missing, _connectedSystemRunProfile.RunType));
+            AddActivityWarning(ActivityMessage.MissingExternalIds(missing, _connectedSystemRunProfile.RunType)!);
 
         Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection held back for Object Type(s) with objects JIM cannot identify. Unreadable External IDs: {Unreadable}. No External ID: {Missing}",
             string.Join(", ", unreadable.Select(item => $"{item.ObjectTypeName} ({item.Count})")),
@@ -2138,10 +2138,7 @@ public partial class SyncImportTaskProcessor
             types.Where(ot => counts.ContainsKey(ot.Id)).Select(ot => (ot.Name, counts[ot.Id])).ToList();
     }
 
-    private void AddActivityWarning(string warning) =>
-        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-            ? warning
-            : $"{_activity.WarningMessage}\n{warning}";
+    private void AddActivityWarning(JimMessage warning) => ActivityMessage.AddWarning(_activity, warning);
 
     /// <summary>
     /// Which Object Types deletion detection walks (#1474): every selected one, and every deselected one that can
@@ -2199,10 +2196,8 @@ public partial class SyncImportTaskProcessor
 
         if (heldBack.Count > 0)
         {
-            var warning = ImportOutcomeMessage.ForDeselectedObjectTypesHeldBack(heldBack);
-            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-                ? warning
-                : $"{_activity.WarningMessage}\n{warning}";
+            if (ActivityMessage.DeselectedObjectTypesHeldBack(heldBack) is { } warning)
+                ActivityMessage.AddWarning(_activity, warning);
         }
 
         return objectTypes;
@@ -3738,9 +3733,10 @@ public partial class SyncImportTaskProcessor
                 if (importObject.ErrorType is not null and not ConnectedSystemImportObjectError.NotSet)
                 {
                     activityRunProfileExecutionItem.ErrorType = MapConnectorImportError(importObject.ErrorType.Value);
-                    activityRunProfileExecutionItem.ErrorMessage = importObject.AttributeValueErrors is { Count: > 0 } unreadableValues
-                        ? ImportOutcomeMessage.ForUnreadableAttributeValues(unreadableValues)
-                        : importObject.ErrorMessage;
+                    if (importObject.AttributeValueErrors is { Count: > 0 } unreadableValues)
+                        activityRunProfileExecutionItem.ErrorMessageDetail = ActivityMessage.UnreadableAttributeValues(unreadableValues);
+                    else
+                        activityRunProfileExecutionItem.ErrorMessage = importObject.ErrorMessage;
 
                     // The values themselves, each with its attribute's type, and where the object was read from, so the
                     // item can show what came in and the administrator can find it in the source (#2066).
@@ -3828,7 +3824,7 @@ public partial class SyncImportTaskProcessor
                 if (importObject.ChangeType != ObjectChangeType.Deleted && (externalIdImportAttr == null || !HasExternalIdValue(externalIdImportAttr)))
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue;
-                    activityRunProfileExecutionItem.ErrorMessage = ImportOutcomeMessage.ForMissingExternalId(externalIdAttribute.Name);
+                    activityRunProfileExecutionItem.ErrorMessageDetail = ActivityMessage.MissingExternalId(externalIdAttribute.Name);
                     Log.Warning("ProcessImportObjectsAsync: Import object at index {Index} has no value for External ID attribute '{ExternalIdName}'. Rejecting it.",
                         importIndex, externalIdAttribute.Name);
                     continue;
@@ -4898,10 +4894,7 @@ public partial class SyncImportTaskProcessor
         _withheldDeletionCount = count;
         _activity.DetectedDeletionsWithheld = count;
 
-        var warning = ImportOutcomeMessage.ForWithheldConnectorReportedDeletes(count, existingCsoCount, maxCount, maxPercent);
-        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-            ? warning
-            : $"{_activity.WarningMessage}\n{warning}";
+        ActivityMessage.AddWarning(_activity, ActivityMessage.WithheldConnectorReportedDeletes(count, existingCsoCount, maxCount, maxPercent));
 
         Log.Warning("WithholdConnectorReportedDeletesOverTheLimitsAsync: Delta Import deletes withheld. The Connector reported {Count} deletes of the {ExistingCsoCount} Connected System Objects in scope, above the Run Profile's limit(s) (MaxDetectedDeletions={MaxCount}, MaxDetectedDeletionsPercent={MaxPercent}). None were marked as deleted, and the watermark is kept so the next Delta Import reads them again.",
             count, existingCsoCount, maxCount, maxPercent);
@@ -6705,7 +6698,7 @@ public partial class SyncImportTaskProcessor
             return;
 
         item.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-        item.ErrorMessage = ImportOutcomeMessage.ForUnresolvedReferences(references);
+        item.ErrorMessageDetail = ActivityMessage.UnresolvedReferences(references);
     }
 
     /// <summary>

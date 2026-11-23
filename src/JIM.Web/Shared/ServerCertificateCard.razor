@@ -24,18 +24,18 @@
             @* The frame stretches with the page; the content does not. It stays a centred column of a readable
                width, which is what keeps a wide card reading as a certificate rather than a banner. *@
             <div class="jim-certificate-content">
-                <div class="jim-certificate-eyebrow">Certificate presented by @Diagnostic.Host:@Diagnostic.Port</div>
+                <div class="jim-certificate-eyebrow">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CertEyebrow, Diagnostic.Host, Diagnostic.Port)</div>
 
                 <div class="jim-certificate-subject">@CertificateDisplay.FormatDistinguishedName(Diagnostic.Subject)</div>
 
                 <div class="jim-certificate-issuer">
                     @if (Diagnostic.IsSelfSigned)
                     {
-                        <span>Self-signed</span>
+                        <span>@ConnectedSystemText.CertSelfSigned</span>
                     }
                     else
                     {
-                        <span>Issued by @CertificateDisplay.FormatDistinguishedName(Diagnostic.Issuer)</span>
+                        <span>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CertIssuedBy, CertificateDisplay.FormatDistinguishedName(Diagnostic.Issuer))</span>
                     }
                 </div>
 
@@ -43,7 +43,7 @@
 
                 <div class="jim-certificate-fields">
                     <div class="jim-certificate-field">
-                        <span class="jim-certificate-label">Issued for</span>
+                        <span class="jim-certificate-label">@ConnectedSystemText.CertFieldIssuedFor</span>
                         @if (Diagnostic.SubjectAlternativeNames.Count > 0)
                         {
                             <span class="jim-certificate-names">
@@ -60,21 +60,21 @@
                     </div>
 
                     <div class="jim-certificate-field">
-                        <span class="jim-certificate-label">Valid</span>
+                        <span class="jim-certificate-label">@ConnectedSystemText.CertFieldValid</span>
                         <span class="jim-certificate-value @(Diagnostic.IsExpired || Diagnostic.IsNotYetValid ? "jim-certificate-value-problem" : "")">
-                            @FormatDate(Diagnostic.ValidFrom) to @FormatDate(Diagnostic.ValidTo)
+                            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CertValidRange, FormatDate(Diagnostic.ValidFrom), FormatDate(Diagnostic.ValidTo))
                         </span>
                     </div>
 
                     <div class="jim-certificate-field">
-                        <span class="jim-certificate-label">Thumbprint</span>
+                        <span class="jim-certificate-label">@ConnectedSystemText.CertFieldThumbprint</span>
                         <span class="jim-certificate-value jim-certificate-thumbprint">@CertificateDisplay.FormatThumbprint(Diagnostic.Thumbprint)</span>
                     </div>
 
                     @if (!string.IsNullOrEmpty(Diagnostic.SignatureAlgorithm))
                     {
                         <div class="jim-certificate-field">
-                            <span class="jim-certificate-label">Signature</span>
+                            <span class="jim-certificate-label">@ConnectedSystemText.CertFieldSignature</span>
                             <span class="jim-certificate-value">@Diagnostic.SignatureAlgorithm</span>
                         </div>
                     }
@@ -89,7 +89,7 @@
 
                 @if (!string.IsNullOrEmpty(Diagnostic.Remediation))
                 {
-                    <div class="jim-certificate-remediation">@Diagnostic.Remediation</div>
+                    <div class="jim-certificate-remediation">@(Diagnostic.RemediationDetail is { } remediation ? remediation.Show() : Diagnostic.Remediation)</div>
                 }
 
                 @* The chain JIM assembled, from the root down to the server, with where each certificate came from: a
@@ -98,13 +98,13 @@
                 @if (Diagnostic.Chain.Count > 0)
                 {
                     <div class="jim-certificate-chain">
-                        <div class="jim-certificate-label">Certificate chain</div>
+                        <div class="jim-certificate-label">@ConnectedSystemText.CertChainHeading</div>
                         @if (!Diagnostic.IsChainComplete && !string.IsNullOrEmpty(Diagnostic.MissingIssuer))
                         {
                             <div class="jim-certificate-chain-row jim-certificate-chain-row-missing" data-testid="jim-certificate-chain-missing">
-                                <span class="jim-certificate-chain-name">@CertificateDisplay.FormatDistinguishedName(Diagnostic.MissingIssuer) and above</span>
-                                <span class="jim-certificate-chain-source">Not sent, and not downloadable</span>
-                                <span class="jim-certificate-chain-role">Not found</span>
+                                <span class="jim-certificate-chain-name">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CertChainMissing, CertificateDisplay.FormatDistinguishedName(Diagnostic.MissingIssuer))</span>
+                                <span class="jim-certificate-chain-source">@ConnectedSystemText.CertChainNotSent</span>
+                                <span class="jim-certificate-chain-role">@ConnectedSystemText.CertChainNotFound</span>
                             </div>
                         }
                         @* On a connection that accepts only a root, the whole chain is still shown, so the card does not read
@@ -122,7 +122,7 @@
                         @if (Diagnostic.TrustAnchorMustBeRoot && ChainForDisplay.Any(link => !link.CanBeTrusted))
                         {
                             <div class="jim-certificate-chain-caption" data-testid="jim-certificate-chain-reference-note">
-                                This connection accepts only the root, so the rest of the chain is shown for reference.
+                                @ConnectedSystemText.CertChainReferenceNote
                             </div>
                         }
                     </div>
@@ -138,44 +138,32 @@
                             @if (Diagnostic.IsSelfSigned)
                             {
                                 <text>
-                                    Self-signed, so there is no separate authority to trust. Adds this certificate alone
-                                    to the <MudLink Href="/admin/certificates">Trusted Certificates</MudLink> store; it
-                                    will need trusting again when it is renewed.
+                                    @ConnectedSystemText.CertSelfSignedBefore <MudLink Href="/admin/certificates">@ConnectedSystemText.CertTrustedStore</MudLink> @ConnectedSystemText.CertSelfSignedAfter
                                 </text>
                             }
                             else if (Diagnostic.TrustAnchorMustBeRoot)
                             {
                                 <text>
-                                    Trusting the root keeps working through renewals of everything beneath it. JIM reads
-                                    the chain from the server again first, adds the root to
-                                    <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>, and records who
-                                    trusted it and why.
+                                    @ConnectedSystemText.CertRootBefore <MudLink Href="/admin/certificates">@ConnectedSystemText.CertTrustedStore</MudLink>@ConnectedSystemText.CertAfterStoreLink
                                 </text>
                             }
                             else if (HasAChoice)
                             {
                                 <text>
-                                    Trust any certificate in this chain. Trusting the root keeps working through
-                                    renewals of everything beneath it. JIM reads the chain from the server again first,
-                                    adds your choice to <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>,
-                                    and records who trusted it and why.
+                                    @ConnectedSystemText.CertChoiceBefore <MudLink Href="/admin/certificates">@ConnectedSystemText.CertTrustedStore</MudLink>@ConnectedSystemText.CertAfterStoreLink
                                 </text>
                             }
                             else
                             {
                                 <text>
-                                    JIM can only offer the server's own certificate, which needs trusting again when it
-                                    is renewed. To trust its certificate authority instead, which survives renewals, add
-                                    the authority's certificate under
-                                    <MudLink Href="/admin/certificates">Trusted Certificates</MudLink> and test again.
+                                    @ConnectedSystemText.CertServerOnlyBefore <MudLink Href="/admin/certificates">@ConnectedSystemText.CertTrustedStore</MudLink> @ConnectedSystemText.CertServerOnlyAfter
                                 </text>
                             }
                         </span>
                         <MudButton Variant="Variant.Filled" DropShadow="false"
                                    StartIcon="@Icons.Material.Filled.VerifiedUser" Disabled="_trusting"
                                    OnClick="TrustAsync" data-testid="jim-certificate-trust">
-                            @(Diagnostic.TrustAnchorMustBeRoot && !Diagnostic.IsSelfSigned ? "Trust the root"
-                              : HasAChoice ? "Choose what to trust" : "Trust this certificate")
+                            @(Diagnostic.TrustAnchorMustBeRoot && !Diagnostic.IsSelfSigned ? ConnectedSystemText.CertTrustRoot : HasAChoice ? ConnectedSystemText.CertChooseTrust : ConnectedSystemText.CertTrustThis)
                         </MudButton>
                     </div>
                 }
@@ -281,8 +269,8 @@
                 return;
 
             Snackbar.Add(outcome == ServerCertificateTrustOutcome.AlreadyTrusted
-                ? "That certificate was already in the Trusted Certificates store."
-                : "Certificate trusted.", Severity.Success);
+                ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CertAlreadyTrusted, ConnectedSystemText.CertTrustedStore)
+                : ConnectedSystemText.CertTrusted, Severity.Success);
 
             await OnTrusted.InvokeAsync();
         }
@@ -305,14 +293,14 @@
 
     private static string DescribeReason(ServerCertificateFailureReason reason) => reason switch
     {
-        ServerCertificateFailureReason.UntrustedIssuer => "Not trusted: nothing in this chain is in Trusted Certificates",
-        ServerCertificateFailureReason.InvalidChain => "Broken chain: a certificate authority in it cannot be relied on",
-        ServerCertificateFailureReason.NameMismatch => "Wrong name: this certificate was not issued for the host JIM connected to",
-        ServerCertificateFailureReason.Expired => "Expired",
-        ServerCertificateFailureReason.NotYetValid => "Not valid yet",
-        ServerCertificateFailureReason.NoCertificatePresented => "No certificate was offered",
-        ServerCertificateFailureReason.None => "No problem found with this certificate",
-        _ => "Refused for an unrecognised reason"
+        ServerCertificateFailureReason.UntrustedIssuer => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CertReasonUntrusted, ConnectedSystemText.CertTrustedStore),
+        ServerCertificateFailureReason.InvalidChain => ConnectedSystemText.CertReasonInvalidChain,
+        ServerCertificateFailureReason.NameMismatch => ConnectedSystemText.CertReasonNameMismatch,
+        ServerCertificateFailureReason.Expired => ConnectedSystemText.CertReasonExpired,
+        ServerCertificateFailureReason.NotYetValid => ConnectedSystemText.CertReasonNotYetValid,
+        ServerCertificateFailureReason.NoCertificatePresented => ConnectedSystemText.CertReasonNoCertificate,
+        ServerCertificateFailureReason.None => ConnectedSystemText.CertReasonNone,
+        _ => ConnectedSystemText.CertReasonUnrecognised
     };
 
     /// <summary>
@@ -328,6 +316,6 @@
     }
 
 
-    private static string FormatDate(DateTime? value) => value?.ToString("dd MMM yyyy") ?? "unknown";
+    private static string FormatDate(DateTime? value) => value?.ToString("dd MMM yyyy") ?? ConnectedSystemText.CertUnknownDate;
 
 }

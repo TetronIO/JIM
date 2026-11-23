@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Core.DTOs;
 
 /// <summary>
@@ -38,5 +40,18 @@ public class AttributeSourceCandidate
     public List<string> CandidateValues { get; set; } = new();
 
     /// <summary>Why the candidate could not be evaluated, or other context worth showing; null otherwise.</summary>
-    public string? Note { get; set; }
+    public string? Note
+    {
+        get => _note ?? NoteDetail?.ToEnglish();
+        set => _note = value;
+    }
+
+    private string? _note;
+
+    /// <summary>
+    /// <see cref="Note"/> as a message the portal renders in the viewer's language, where the server gave one;
+    /// <see cref="Note"/> is its British English, which the REST API keeps reading.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public JimMessage? NoteDetail { get; set; }
 }

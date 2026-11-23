@@ -1,0 +1,1956 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ActivityOutcomeSkippedTooltip" xml:space="preserve">
+    <value>Für diese Ausführung nicht erforderlich</value>
+  </data>
+  <data name="ActivityOutcomeFailedTooltip" xml:space="preserve">
+    <value>Die Ausführung ist in diesem Schritt fehlgeschlagen</value>
+  </data>
+  <data name="ActivityFollowUpLabel" xml:space="preserve">
+    <value>Folgeaktion</value>
+  </data>
+  <data name="ActivityFollowUpDescription" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="ActivityViewActivity" xml:space="preserve">
+    <value>Aktivität anzeigen</value>
+  </data>
+  <data name="ActivityFollowUpTitleInitialPassword" xml:space="preserve">
+    <value>Initialkennwort</value>
+  </data>
+  <data name="ActivityFollowUpTitleExchangeChanges" xml:space="preserve">
+    <value>Exchange-Änderungen</value>
+  </data>
+  <data name="ActivityFollowUpStateDelivered" xml:space="preserve">
+    <value>Zugestellt</value>
+  </data>
+  <data name="ActivityFollowUpStateQueued" xml:space="preserve">
+    <value>In Warteschlange</value>
+  </data>
+  <data name="ActivityFollowUpStateDelivering" xml:space="preserve">
+    <value>Wird zugestellt</value>
+  </data>
+  <data name="ActivityFollowUpStateRetrying" xml:space="preserve">
+    <value>Wiederholung</value>
+  </data>
+  <data name="ActivityFollowUpStateHeld" xml:space="preserve">
+    <value>Zurückgehalten</value>
+  </data>
+  <data name="ActivityFollowUpStateParked" xml:space="preserve">
+    <value>Zurückgestellt</value>
+  </data>
+  <data name="ActivityFollowUpStateExpired" xml:space="preserve">
+    <value>Abgelaufen</value>
+  </data>
+  <data name="ActivityFollowUpStateCancelled" xml:space="preserve">
+    <value>Abgebrochen</value>
+  </data>
+  <data name="ActivityFollowUpStateCarried" xml:space="preserve">
+    <value>Übernommen</value>
+  </data>
+  <data name="ActivityStatusNotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="ActivityStatusInProgress" xml:space="preserve">
+    <value>In Bearbeitung</value>
+  </data>
+  <data name="ActivityStatusComplete" xml:space="preserve">
+    <value>Abgeschlossen</value>
+  </data>
+  <data name="ActivityStatusCompleteWithWarning" xml:space="preserve">
+    <value>Abgeschlossen mit Warnung</value>
+  </data>
+  <data name="ActivityStatusCompleteWithError" xml:space="preserve">
+    <value>Abgeschlossen mit Fehler</value>
+  </data>
+  <data name="ActivityStatusFailedWithError" xml:space="preserve">
+    <value>Fehlgeschlagen mit Fehler</value>
+  </data>
+  <data name="ActivityStatusCancelled" xml:space="preserve">
+    <value>Abgebrochen</value>
+  </data>
+  <data name="ActivityPreviewObjectsAffected" xml:space="preserve">
+    <value>Von dieser Änderung betroffene Objekte</value>
+  </data>
+  <data name="ActivityPreviewFromPreview" xml:space="preserve">
+    <value>aus der Vorschau</value>
+  </data>
+  <data name="ActivityVerdictSubjectOne" xml:space="preserve">
+    <value>1 Objekt</value>
+  </data>
+  <data name="ActivityVerdictSubjectOther" xml:space="preserve">
+    <value>{0} Objekte</value>
+  </data>
+  <data name="ActivityVerdictSentenceOne" xml:space="preserve">
+    <value>{0} würde {1}.</value>
+  </data>
+  <data name="ActivityVerdictSentenceOther" xml:space="preserve">
+    <value>{0} würden {1}.</value>
+  </data>
+  <data name="ActivityVerdictLabelSentence" xml:space="preserve">
+    <value>{0}: {1}.</value>
+  </data>
+  <data name="ActivityWordingNowFrom" xml:space="preserve">
+    <value>, jetzt aus {0}</value>
+  </data>
+  <data name="ActivityWordingIn" xml:space="preserve">
+    <value> in {0}</value>
+  </data>
+  <data name="ActivityWordingThisConnectedSystem" xml:space="preserve">
+    <value>diesem verbundenen System</value>
+  </data>
+  <data name="ActivityWordingDeletionNoChange" xml:space="preserve">
+    <value>Das Löschen dieses Systems würde außerhalb davon nichts ändern: Kein Metaverse-Objekt würde einen Wert verlieren oder ändern, keines würde für eine Löschung infrage kommen, und nichts würde an ein anderes verbundenes System exportiert. Die eigenen Objekte im verbundenen System werden weiterhin mit ihm gelöscht.</value>
+  </data>
+  <data name="ActivityWordingFullSyncNoChange" xml:space="preserve">
+    <value>Eine vollständige Synchronisierung von {0} würde nichts ändern. Jedes Objekt befindet sich bereits in dem Zustand, den seine Synchronisierungsregeln beschreiben.</value>
+  </data>
+  <data name="ActivityWordingNoChange" xml:space="preserve">
+    <value>Diese Änderung würde nichts bewirken: Dadurch durchläuft kein Objekt einen Übergang.</value>
+  </data>
+  <data name="ActivityWordingQueued" xml:space="preserve">
+    <value>In Warteschlange</value>
+  </data>
+  <data name="ActivityWordingTargetKeeps" xml:space="preserve">
+    <value>Ziel behält</value>
+  </data>
+  <data name="ActivityWordingNow" xml:space="preserve">
+    <value>Jetzt</value>
+  </data>
+  <data name="ActivityWordingAfterSynchronisation" xml:space="preserve">
+    <value>Nach der Synchronisierung</value>
+  </data>
+  <data name="ActivityWordingCurrentValue" xml:space="preserve">
+    <value>Aktueller Wert</value>
+  </data>
+  <data name="ActivityWordingProposedValue" xml:space="preserve">
+    <value>Vorgeschlagener Wert</value>
+  </data>
+  <data name="ActivityEffectProcessedInFull" xml:space="preserve">
+    <value>Bei der nächsten Synchronisierung von {0}, Delta oder vollständig. Dieser Lauf verarbeitet alle {1}-Objekte, nicht nur die geänderten: {2}{3}. Andere Objekttypen werden wie gewohnt verarbeitet.</value>
+  </data>
+  <data name="ActivityEffectDurationClause" xml:space="preserve">
+    <value>, {0} bei der Geschwindigkeit der letzten vollständigen Synchronisierung</value>
+  </data>
+  <data name="ActivityEffectUnderAMinute" xml:space="preserve">
+    <value>unter einer Minute</value>
+  </data>
+  <data name="ActivityEffectAboutMinutesOne" xml:space="preserve">
+    <value>etwa {0} Minute</value>
+  </data>
+  <data name="ActivityEffectAboutMinutesOther" xml:space="preserve">
+    <value>etwa {0} Minuten</value>
+  </data>
+  <data name="ActivityEffectUntilThen" xml:space="preserve">
+    <value>Bis dahin führt die Seite des verbundenen Systems es als wartend auf Synchronisierung auf, mit einer Schaltfläche, um diese Synchronisierung sofort auszuführen.</value>
+  </data>
+  <data name="ActivityEffectExportReview" xml:space="preserve">
+    <value>Bei der nächsten Synchronisierung eines beliebigen verbundenen Systems, bei der jedes {0}-Metaverse-Objekt anhand der Regel in ihrem jetzigen Stand geprüft wird.</value>
+  </data>
+  <data name="ActivityEffectFullSyncSentence" xml:space="preserve">
+    <value>Vorhandene Objekte erhalten {0} bei der nächsten vollständigen Synchronisierung von {1}.</value>
+  </data>
+  <data name="ActivityEffectThisChange" xml:space="preserve">
+    <value>diese Änderung</value>
+  </data>
+  <data name="ActivityEffectChangeTo" xml:space="preserve">
+    <value>die Änderung an {0}</value>
+  </data>
+  <data name="ActivityEffectObjectsOne" xml:space="preserve">
+    <value>1 Objekt</value>
+  </data>
+  <data name="ActivityEffectObjectsOther" xml:space="preserve">
+    <value>{0} Objekte</value>
+  </data>
+  <data name="ActivityConsequenceRemovingThis" xml:space="preserve">
+    <value>Das Entfernen nimmt Objekte aus dem Geltungsbereich</value>
+  </data>
+  <data name="ActivityConsequenceRemovingThese" xml:space="preserve">
+    <value>Das Entfernen nimmt Objekte aus dem Geltungsbereich</value>
+  </data>
+  <data name="ActivityConsequenceChangesDecideRemoval" xml:space="preserve">
+    <value>Diese Änderungen entscheiden, ob Objekte entfernt werden</value>
+  </data>
+  <data name="ActivityConsequencePropertyDecidesRemoval" xml:space="preserve">
+    <value>Diese Eigenschaft entscheidet, ob Objekte entfernt werden</value>
+  </data>
+  <data name="ActivityConsequencePropertiesDecideRemoval" xml:space="preserve">
+    <value>Diese Eigenschaften entscheiden, ob Objekte entfernt werden</value>
+  </data>
+  <data name="ActivityOperationClearConnectedSystemObjects" xml:space="preserve">
+    <value>Objekte im verbundenen System leeren</value>
+  </data>
+  <data name="ActivityOperationDeleteConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System löschen</value>
+  </data>
+  <data name="ActivityOperationDeprovisionConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System deprovisionieren</value>
+  </data>
+  <data name="ActivityOperationOther" xml:space="preserve">
+    <value>{0} verbundenes System</value>
+  </data>
+  <data name="ActivityOutcomeConnectedSystemObjectsRemoved" xml:space="preserve">
+    <value>Objekte im verbundenen System entfernt</value>
+  </data>
+  <data name="ActivityOutcomePendingExportsRemoved" xml:space="preserve">
+    <value>Ausstehende Exporte entfernt</value>
+  </data>
+  <data name="ActivityOutcomeJoinsTracked" xml:space="preserve">
+    <value>Verknüpfungen für den Abgleich nachverfolgt</value>
+  </data>
+  <data name="ActivityConsequenceItem" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="ActivityInitiatorScheduleTooltip" xml:space="preserve">
+    <value>Zeitplan: {0}</value>
+  </data>
+  <data name="ActivityInitiatorSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="ActivityInitiatorApiKey" xml:space="preserve">
+    <value>API-Schlüssel</value>
+  </data>
+  <data name="ActivityInitiatorApiKeyNamed" xml:space="preserve">
+    <value>API-Schlüssel: {0}</value>
+  </data>
+  <data name="ActivityInitiatorAnonymous" xml:space="preserve">
+    <value>Anonym</value>
+  </data>
+  <data name="ActivityInitiatorUnknown" xml:space="preserve">
+    <value>Unbekannt</value>
+  </data>
+  <data name="ActivityMetricRate" xml:space="preserve">
+    <value>Rate</value>
+  </data>
+  <data name="ActivityMetricRemaining" xml:space="preserve">
+    <value>Verbleibend</value>
+  </data>
+  <data name="ActivityMetricProcessed" xml:space="preserve">
+    <value>Verarbeitet</value>
+  </data>
+  <data name="ActivityMetricReferenceValuesProcessed" xml:space="preserve">
+    <value>Verarbeitete Referenzwerte</value>
+  </data>
+  <data name="ActivityStepScope" xml:space="preserve">
+    <value>Schritt {0} von {1}: {2}</value>
+  </data>
+  <data name="ActivityMetricPerSecond" xml:space="preserve">
+    <value>{0} /s</value>
+  </data>
+  <data name="ActivityMetricFinishingUp" xml:space="preserve">
+    <value>Wird abgeschlossen</value>
+  </data>
+  <data name="ActivityWorkerTaskWaiting" xml:space="preserve">
+    <value>Wartet ...</value>
+  </data>
+  <data name="ActivityWorkerTaskWaitingPreviousStep" xml:space="preserve">
+    <value>Wartet auf vorherigen Schritt ...</value>
+  </data>
+  <data name="ActivityCaptionJoined" xml:space="preserve">
+    <value>{0} - {1}</value>
+  </data>
+  <data name="ActivityFieldNotSet" xml:space="preserve">
+    <value>nicht festgelegt</value>
+  </data>
+  <data name="ActivityFieldSecretSet" xml:space="preserve">
+    <value>Geheimnis festgelegt</value>
+  </data>
+  <data name="ActivityFieldSecretChanged" xml:space="preserve">
+    <value>Geheimnis geändert; Wert verborgen</value>
+  </data>
+  <data name="ActivityFieldRemoved" xml:space="preserve">
+    <value>entfernt</value>
+  </data>
+  <data name="ActivityHistoryCreatedAtVersion" xml:space="preserve">
+    <value>Dieses Objekt wurde in dieser Version erstellt.</value>
+  </data>
+  <data name="ActivityHistoryDeletedAtVersion" xml:space="preserve">
+    <value>Dieses Objekt wurde in dieser Version gelöscht.</value>
+  </data>
+  <data name="ActivityHistoryNoDifferences" xml:space="preserve">
+    <value>Keine Unterschiede zwischen diesen Versionen.</value>
+  </data>
+  <data name="ActivityHistoryDialogTitle" xml:space="preserve">
+    <value>Änderungsverlauf: {0}</value>
+  </data>
+  <data name="ActivityHistoryDefaultObjectLabel" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="ActivityFollowUpSummaryNote" xml:space="preserve">
+    <value>Das eigene Ergebnis des Laufs bleibt unverändert. Diese Werte ändern sich, sobald die Arbeit zugestellt wird; die Folgeaktion jedes Exportelements nennt den Grund.</value>
+  </data>
+  <data name="ActivityTitleLabel" xml:space="preserve">
+    <value>Aktivität:</value>
+  </data>
+  <data name="ActivityPageTitle" xml:space="preserve">
+    <value>Aktivität</value>
+  </data>
+  <data name="ActivityPageDescription" xml:space="preserve">
+    <value>Eine Aktivität hält fest, was JIM getan hat: was es ausgelöst hat, wann und wie es endete. Die Aktivität eines Ausführungsprofils listet außerdem auf, was der Lauf mit jedem berührten Objekt gemacht hat.</value>
+  </data>
+  <data name="ActivitySummaryHeading" xml:space="preserve">
+    <value>Zusammenfassung</value>
+  </data>
+  <data name="ActivityFieldId" xml:space="preserve">
+    <value>ID:</value>
+  </data>
+  <data name="ActivityFieldTarget" xml:space="preserve">
+    <value>Ziel:</value>
+  </data>
+  <data name="ActivityTargetHistoryRetentionCleanup" xml:space="preserve">
+    <value>Bereinigung der Verlaufsaufbewahrung</value>
+  </data>
+  <data name="ActivityTargetAuthentication" xml:space="preserve">
+    <value>Authentifizierung</value>
+  </data>
+  <data name="ActivityFieldWhen" xml:space="preserve">
+    <value>Zeitpunkt:</value>
+  </data>
+  <data name="ActivityFieldInitiatedBy" xml:space="preserve">
+    <value>Gestartet von:</value>
+  </data>
+  <data name="ActivityFieldStatus" xml:space="preserve">
+    <value>Status:</value>
+  </data>
+  <data name="ActivityTooltipExecutionTime" xml:space="preserve">
+    <value>Wie lange der Worker diese Aktivität ausgeführt hat. Die Zeit beginnt, wenn der Worker die Aktivität übernimmt.</value>
+  </data>
+  <data name="ActivityFieldExecutionTime" xml:space="preserve">
+    <value>Ausführungszeit:</value>
+  </data>
+  <data name="ActivityTooltipTotalTime" xml:space="preserve">
+    <value>Wie lange diese Aktivität von der Erstellung bis zum Abschluss gedauert hat. Eingeschlossen ist die Zeit in der Warteschlange, bevor der Worker sie übernommen hat.</value>
+  </data>
+  <data name="ActivityFieldTotalTime" xml:space="preserve">
+    <value>Gesamtdauer der Aktivität:</value>
+  </data>
+  <data name="ActivityFieldParentActivity" xml:space="preserve">
+    <value>Übergeordnete Aktivität:</value>
+  </data>
+  <data name="ActivityNoName" xml:space="preserve">
+    <value>(kein Name)</value>
+  </data>
+  <data name="ActivityParentActivityFallback" xml:space="preserve">
+    <value>Übergeordnete Aktivität</value>
+  </data>
+  <data name="ActivityFieldFollowUpTo" xml:space="preserve">
+    <value>Folgeaktion zu:</value>
+  </data>
+  <data name="ActivityExecutionItemFallback" xml:space="preserve">
+    <value>Ausführungselement</value>
+  </data>
+  <data name="ActivityExportItemNoLongerRetained" xml:space="preserve">
+    <value>Exportelement nicht mehr aufbewahrt</value>
+  </data>
+  <data name="ActivityFieldPreview" xml:space="preserve">
+    <value>Vorschau:</value>
+  </data>
+  <data name="ActivityInformedByPreviewRun" xml:space="preserve">
+    <value>Auf Grundlage eines Vorschaulaufs</value>
+  </data>
+  <data name="ActivityOpenPreview" xml:space="preserve">
+    <value>Vorschau öffnen</value>
+  </data>
+  <data name="ActivityInformedByRemovedPreview" xml:space="preserve">
+    <value>Auf Grundlage einer Vorschau, die seitdem nach Ablauf der Aufbewahrungsfrist des Verlaufs entfernt wurde.</value>
+  </data>
+  <data name="ActivityPreviewOutOfDate" xml:space="preserve">
+    <value>Sie war veraltet, als diese Änderung vorgenommen wurde:</value>
+  </data>
+  <data name="ActivityPreviewOvertaken" xml:space="preserve">
+    <value>{0}, nachdem die Vorschau gestartet wurde.</value>
+  </data>
+  <data name="ActivityPreviewOvertakenFallback" xml:space="preserve">
+    <value>etwas hat sich geändert</value>
+  </data>
+  <data name="ActivityWentAheadWithoutPreview" xml:space="preserve">
+    <value>Ohne Vorschau durchgeführt</value>
+  </data>
+  <data name="ActivityFieldMessage" xml:space="preserve">
+    <value>Meldung:</value>
+  </data>
+  <data name="ActivityExchangeChangeHeading" xml:space="preserve">
+    <value>Exchange-Änderung</value>
+  </data>
+  <data name="ActivityExchangeChildActivitiesNote" xml:space="preserve">
+    <value>Jeder Versuch, der etwas Neues meldete, und das Ergebnis werden unten als untergeordnete Aktivitäten festgehalten.</value>
+  </data>
+  <data name="ActivityProgressHeading" xml:space="preserve">
+    <value>Fortschritt</value>
+  </data>
+  <data name="ActivityViewAffectedObjects" xml:space="preserve">
+    <value>Betroffene Objekte anzeigen</value>
+  </data>
+  <data name="ActivityConfigurationChangeHeading" xml:space="preserve">
+    <value>Konfigurationsänderung</value>
+  </data>
+  <data name="ActivityNoSnapshotNotice" xml:space="preserve">
+    <value>Für diese Änderung wurde kein Konfigurations-Snapshot erfasst, daher lässt sich nicht anzeigen, was sich geändert hat. Das passiert, wenn die Änderung vor Einführung der Konfigurationsänderungsverfolgung vorgenommen wurde, während sie deaktiviert war oder wenn die gespeicherte Konfiguration mit der vorherigen Version identisch war.</value>
+  </data>
+  <data name="ActivityCleanupSummaryHeading" xml:space="preserve">
+    <value>Zusammenfassung der Bereinigung</value>
+  </data>
+  <data name="ActivityCleanupSummaryText" xml:space="preserve">
+    <value>Die automatische Aufbewahrungsbereinigung hat abgelaufene Änderungsverläufe und Aktivitätsdatensätze entfernt.</value>
+  </data>
+  <data name="ActivityRetentionConfiguredIn" xml:space="preserve">
+    <value>Aufbewahrungsfristen lassen sich konfigurieren unter</value>
+  </data>
+  <data name="ActivityLinkSettings" xml:space="preserve">
+    <value>Einstellungen</value>
+  </data>
+  <data name="ActivityCleanupTotalDeleted" xml:space="preserve">
+    <value>Insgesamt gelöscht</value>
+  </data>
+  <data name="ActivityCsoChangesTitle" xml:space="preserve">
+    <value>Änderungen an Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityCsoChangesLabel" xml:space="preserve">
+    <value>CSO-Änderungen</value>
+  </data>
+  <data name="ActivityMvoChangesTitle" xml:space="preserve">
+    <value>Änderungen an Metaverse-Objekten</value>
+  </data>
+  <data name="ActivityMvoChangesLabel" xml:space="preserve">
+    <value>MVO-Änderungen</value>
+  </data>
+  <data name="ActivityFieldActivities" xml:space="preserve">
+    <value>Aktivitäten</value>
+  </data>
+  <data name="ActivityOldestRecordDeleted" xml:space="preserve">
+    <value>Ältester gelöschter Datensatz</value>
+  </data>
+  <data name="ActivityNewestRecordDeleted" xml:space="preserve">
+    <value>Neuester gelöschter Datensatz</value>
+  </data>
+  <data name="ActivitySecurityEventDetailsHeading" xml:space="preserve">
+    <value>Details zum Sicherheitsereignis</value>
+  </data>
+  <data name="ActivitySecurityAggregatedDescription" xml:space="preserve">
+    <value>Fehlgeschlagene Authentifizierungsversuche mit demselben API-Schlüsselpräfix, derselben Client-IP und demselben Grund innerhalb von 15 Minuten werden in dieser Aktivität zusammengefasst; die Zahl der Versuche wird fortlaufend aktualisiert.</value>
+  </data>
+  <data name="ActivitySecuritySignInDescription" xml:space="preserve">
+    <value>Eine erfolgreiche interaktive Anmeldung, einmal pro Sitzungsaufbau erfasst.</value>
+  </data>
+  <data name="ActivityFieldReason" xml:space="preserve">
+    <value>Grund:</value>
+  </data>
+  <data name="ActivityFieldApiKeyPrefix" xml:space="preserve">
+    <value>API-Schlüsselpräfix:</value>
+  </data>
+  <data name="ActivityFieldClientIpAddress" xml:space="preserve">
+    <value>Client-IP-Adresse:</value>
+  </data>
+  <data name="ActivityFieldAttemptCount" xml:space="preserve">
+    <value>Anzahl der Versuche:</value>
+  </data>
+  <data name="ActivityFieldWindowStart" xml:space="preserve">
+    <value>Beginn des Zeitfensters:</value>
+  </data>
+  <data name="ActivityFieldFirstSeen" xml:space="preserve">
+    <value>Erstmals gesehen:</value>
+  </data>
+  <data name="ActivityFieldLastSeen" xml:space="preserve">
+    <value>Zuletzt gesehen:</value>
+  </data>
+  <data name="ActivityScimRequestsHeading" xml:space="preserve">
+    <value>SCIM-Anfragen</value>
+  </data>
+  <data name="ActivityScimRequestsDescription" xml:space="preserve">
+    <value>Was die Anfragen dieses Schlüssels in einem 15-Minuten-Fenster am SCIM-Endpunkt des verbundenen Systems bewirkt haben. Lese- und Suchanfragen werden nicht gezählt, ebenso wenig wegen der Authentifizierung abgelehnte Anfragen; diese sind eigene Sicherheitsereignisse.</value>
+  </data>
+  <data name="ActivityScimCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="ActivityScimUpdated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="ActivityScimDeleted" xml:space="preserve">
+    <value>Gelöscht</value>
+  </data>
+  <data name="ActivityScimRejected" xml:space="preserve">
+    <value>Abgelehnt</value>
+  </data>
+  <data name="ActivityScimFirstRequest" xml:space="preserve">
+    <value>Erste Anfrage:</value>
+  </data>
+  <data name="ActivityScimLatestRequest" xml:space="preserve">
+    <value>Letzte Anfrage:</value>
+  </data>
+  <data name="ActivityClearSummaryHeading" xml:space="preserve">
+    <value>Zusammenfassung des Leerens</value>
+  </data>
+  <data name="ActivityClearSummaryDescription" xml:space="preserve">
+    <value>Alle Objekte im Connectorbereich und alle ausstehenden Exporte wurden aus diesem verbundenen System entfernt.</value>
+  </data>
+  <data name="ActivityClearTotalRemoved" xml:space="preserve">
+    <value>Insgesamt entfernt</value>
+  </data>
+  <data name="ActivityClearCsosRemovedTitle" xml:space="preserve">
+    <value>Entfernte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityClearCsosRemoved" xml:space="preserve">
+    <value>Entfernte CSOs</value>
+  </data>
+  <data name="ActivityClearPendingExportsRemoved" xml:space="preserve">
+    <value>Entfernte ausstehende Exporte</value>
+  </data>
+  <data name="ActivityClearTrackedForReconciliation" xml:space="preserve">
+    <value>Für Abgleich nachverfolgt</value>
+  </data>
+  <data name="ActivityClearTrackedTooltip" xml:space="preserve">
+    <value>Zum Zeitpunkt des Leerens verknüpfte Objekte, damit die nächste vollständige Synchronisierung erkennen kann, welche zurückgekehrt sind.</value>
+  </data>
+  <data name="ActivitySafeguardsHeading" xml:space="preserve">
+    <value>Schutzmaßnahmen</value>
+  </data>
+  <data name="ActivitySafeguardsFullImport" xml:space="preserve">
+    <value>Dieser Import zählt nicht als erfolgreicher vollständiger Import für die Abgleichssperre nach dem Leeren.</value>
+  </data>
+  <data name="ActivitySafeguardsDeltaImport" xml:space="preserve">
+    <value>Keine der vom verbundenen System gemeldeten Löschungen wurde angewendet. Jeder Deltaimport meldet sie erneut, bis ein Limit sie zulässt oder ein Ausführungsprofil für den Deltaimport ohne das Limit läuft.</value>
+  </data>
+  <data name="ActivityWithheldExports" xml:space="preserve">
+    <value>Zurückgehaltene Exporte bleiben ausstehend, bis ein Lauf, dessen Limit sie zulässt, oder ein Ausführungsprofil für den Export ohne das Limit sie versucht.</value>
+  </data>
+  <data name="ActivityStatDeletionsWithheld" xml:space="preserve">
+    <value>Zurückgehaltene Löschungen</value>
+  </data>
+  <data name="ActivityStatDetectedDeletionsWithheld" xml:space="preserve">
+    <value>Zurückgehaltene erkannte Löschungen</value>
+  </data>
+  <data name="ActivityStatCreatesWithheld" xml:space="preserve">
+    <value>Zurückgehaltene Erstellungen</value>
+  </data>
+  <data name="ActivityStatUpdatesWithheld" xml:space="preserve">
+    <value>Zurückgehaltene Aktualisierungen</value>
+  </data>
+  <data name="ActivityStatDeletesWithheld" xml:space="preserve">
+    <value>Zurückgehaltene Löschungen</value>
+  </data>
+  <data name="ActivityPreviewResults" xml:space="preserve">
+    <value>Vorschauergebnisse</value>
+  </data>
+  <data name="ActivityStatsHeading" xml:space="preserve">
+    <value>Statistik</value>
+  </data>
+  <data name="ActivityStatMvoDeletedTitle" xml:space="preserve">
+    <value>Gelöschte Metaverse-Objekte</value>
+  </data>
+  <data name="ActivityStatMvoDeleted" xml:space="preserve">
+    <value>Gelöschte MVOs</value>
+  </data>
+  <data name="ActivityStatRecallPendingExports" xml:space="preserve">
+    <value>Ausstehende Exporte zurückgerufen</value>
+  </data>
+  <data name="ActivityStatCsoAddedTitle" xml:space="preserve">
+    <value>Hinzugefügte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsoAdded" xml:space="preserve">
+    <value>Hinzugefügte CSOs</value>
+  </data>
+  <data name="ActivityStatCsoUpdatedTitle" xml:space="preserve">
+    <value>Aktualisierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsoUpdated" xml:space="preserve">
+    <value>Aktualisierte CSOs</value>
+  </data>
+  <data name="ActivityStatCsoDeletionsDetectedTitle" xml:space="preserve">
+    <value>Erkannte Löschungen von Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsoDeletionsDetected" xml:space="preserve">
+    <value>Erkannte CSO-Löschungen</value>
+  </data>
+  <data name="ActivityStatCsoExportsConfirmedTitle" xml:space="preserve">
+    <value>Bestätigte Exporte von Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsoExportsConfirmed" xml:space="preserve">
+    <value>Bestätigte CSO-Exporte</value>
+  </data>
+  <data name="ActivityStatExportsRetrying" xml:space="preserve">
+    <value>Exporte werden wiederholt</value>
+  </data>
+  <data name="ActivityStatCsoExportsFailedTitle" xml:space="preserve">
+    <value>Fehlgeschlagene Exporte von Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsoExportsFailed" xml:space="preserve">
+    <value>Fehlgeschlagene CSO-Exporte</value>
+  </data>
+  <data name="ActivityStatCsosJoinedTitle" xml:space="preserve">
+    <value>Verknüpfte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsosJoined" xml:space="preserve">
+    <value>Verknüpfte CSOs</value>
+  </data>
+  <data name="ActivityStatMvosProjectedTitle" xml:space="preserve">
+    <value>Projizierte Metaverse-Objekte</value>
+  </data>
+  <data name="ActivityStatMvosProjected" xml:space="preserve">
+    <value>Projizierte MVOs</value>
+  </data>
+  <data name="ActivityStatMvosAttributeFlowTitle" xml:space="preserve">
+    <value>Metaverse-Objekte mit Attributfluss</value>
+  </data>
+  <data name="ActivityStatMvosAttributeFlow" xml:space="preserve">
+    <value>MVOs mit Attributfluss</value>
+  </data>
+  <data name="ActivityStatValuesGenerated" xml:space="preserve">
+    <value>Generierte Werte</value>
+  </data>
+  <data name="ActivityStatCsosProvisionedTitle" xml:space="preserve">
+    <value>Provisionierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsosProvisioned" xml:space="preserve">
+    <value>Provisionierte CSOs</value>
+  </data>
+  <data name="ActivityStatCsoPendingExportsTitle" xml:space="preserve">
+    <value>Ausstehende Exporte von Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsoPendingExports" xml:space="preserve">
+    <value>Ausstehende Exporte (CSO)</value>
+  </data>
+  <data name="ActivityStatCsosDisconnected" xml:space="preserve">
+    <value>Getrennte CSOs</value>
+  </data>
+  <data name="ActivityStatCsosDeletedTitle" xml:space="preserve">
+    <value>Gelöschte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsosDeleted" xml:space="preserve">
+    <value>Gelöschte CSOs</value>
+  </data>
+  <data name="ActivityStatCsosDriftCorrectedTitle" xml:space="preserve">
+    <value>Objekte im verbundenen System mit korrigierter Drift (Driftkorrektur)</value>
+  </data>
+  <data name="ActivityStatCsosDriftCorrected" xml:space="preserve">
+    <value>CSOs mit Driftkorrektur</value>
+  </data>
+  <data name="ActivityStatCsosExportedTitle" xml:space="preserve">
+    <value>Exportierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsosExported" xml:space="preserve">
+    <value>Exportierte CSOs</value>
+  </data>
+  <data name="ActivityStatCsosDeprovisionedTitle" xml:space="preserve">
+    <value>Deprovisionierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsosDeprovisioned" xml:space="preserve">
+    <value>Deprovisionierte CSOs</value>
+  </data>
+  <data name="ActivityStatValuesCorrected" xml:space="preserve">
+    <value>Korrigierte Werte</value>
+  </data>
+  <data name="ActivityStatNeedsDecision" xml:space="preserve">
+    <value>Entscheidung erforderlich</value>
+  </data>
+  <data name="ActivityStatCsosUnchangedTitle" xml:space="preserve">
+    <value>Unveränderte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsosUnchanged" xml:space="preserve">
+    <value>Unveränderte CSOs</value>
+  </data>
+  <data name="ActivityStatObjectTypes" xml:space="preserve">
+    <value>Objekttypen</value>
+  </data>
+  <data name="ActivityStatErrors" xml:space="preserve">
+    <value>Fehler</value>
+  </data>
+  <data name="ActivityDiscardedEntriesHeading" xml:space="preserve">
+    <value>Durch den Containergeltungsbereich verworfene Einträge</value>
+  </data>
+  <data name="ActivityDiscardedEntriesDescription" xml:space="preserve">
+    <value>Ein verbundenes System lässt sich nicht in einer einzigen Suche nach einem Zweig abzüglich eines Teils davon fragen, daher liest JIM die Einträge, die ein ausgeschlossener Container abdeckt, und verwirft sie. Diese Einträge wurden übertragen und nie importiert. Ist die Zahl groß, beseitigt das Verschieben des ausgeschlossenen Zweigs außerhalb des ausgewählten die Kosten vollständig.</value>
+  </data>
+  <data name="ActivityColumnExcludedContainer" xml:space="preserve">
+    <value>Ausgeschlossener Container</value>
+  </data>
+  <data name="ActivityColumnEntriesDiscarded" xml:space="preserve">
+    <value>Verworfene Einträge</value>
+  </data>
+  <data name="ActivityContainerNoLongerInHierarchy" xml:space="preserve">
+    <value>Container nicht mehr in der Hierarchie</value>
+  </data>
+  <data name="ActivityTotal" xml:space="preserve">
+    <value>Gesamt</value>
+  </data>
+  <data name="ActivityDeletionResultsHeading" xml:space="preserve">
+    <value>Löschergebnisse</value>
+  </data>
+  <data name="ActivityFilterByOutcomeType" xml:space="preserve">
+    <value>Nach Ergebnistyp filtern:</value>
+  </data>
+  <data name="ActivityUnchangedChip" xml:space="preserve">
+    <value>Unverändert</value>
+  </data>
+  <data name="ActivityFilterByExternalObjectType" xml:space="preserve">
+    <value>Nach externem Objekttyp filtern:</value>
+  </data>
+  <data name="ActivityFilterByErrorType" xml:space="preserve">
+    <value>Nach Fehlertyp filtern:</value>
+  </data>
+  <data name="ActivityExecutionItemSingular" xml:space="preserve">
+    <value>Ausführungselement des Ausführungsprofils</value>
+  </data>
+  <data name="ActivityExecutionItemPlural" xml:space="preserve">
+    <value>Ausführungselemente des Ausführungsprofils</value>
+  </data>
+  <data name="ActivitySearchExecutionItems" xml:space="preserve">
+    <value>Name oder externe ID suchen</value>
+  </data>
+  <data name="ActivityView" xml:space="preserve">
+    <value>Anzeigen</value>
+  </data>
+  <data name="ActivityColumnExternalId" xml:space="preserve">
+    <value>Externe ID</value>
+  </data>
+  <data name="ActivityColumnDisplayName" xml:space="preserve">
+    <value>Anzeigename</value>
+  </data>
+  <data name="ActivityColumnExternalObjectType" xml:space="preserve">
+    <value>Externer Objekttyp</value>
+  </data>
+  <data name="ActivityColumnOutcomes" xml:space="preserve">
+    <value>Ergebnisse</value>
+  </data>
+  <data name="ActivityNoItemsMatchSearch" xml:space="preserve">
+    <value>Keine Ausführungselemente des Ausführungsprofils entsprechen „{0}“</value>
+  </data>
+  <data name="ActivitySearchTryAgain" xml:space="preserve">
+    <value>Versuchen Sie einen anderen Suchbegriff oder setzen Sie die Suche zurück.</value>
+  </data>
+  <data name="ActivityClearSearch" xml:space="preserve">
+    <value>Suche zurücksetzen</value>
+  </data>
+  <data name="ActivityNoItemsMatchFilters" xml:space="preserve">
+    <value>Keine Ausführungselemente des Ausführungsprofils entsprechen den aktuellen Filtern</value>
+  </data>
+  <data name="ActivityAdjustFilters" xml:space="preserve">
+    <value>Passen Sie die Filter oben an oder setzen Sie sie zurück, um mehr Elemente zu sehen.</value>
+  </data>
+  <data name="ActivityClearFilters" xml:space="preserve">
+    <value>Filter zurücksetzen</value>
+  </data>
+  <data name="ActivityNoItemsYet" xml:space="preserve">
+    <value>Noch keine Ausführungselemente des Ausführungsprofils</value>
+  </data>
+  <data name="ActivityItemsAppearAsSaved" xml:space="preserve">
+    <value>Elemente erscheinen hier, sobald der Lauf sie speichert.</value>
+  </data>
+  <data name="ActivityNoItemsRecorded" xml:space="preserve">
+    <value>Diese Aktivität hat keine Ausführungselemente des Ausführungsprofils erfasst</value>
+  </data>
+  <data name="ActivityItemsAppearForEveryObject" xml:space="preserve">
+    <value>Hier erscheinen Elemente für jedes Objekt, das der Lauf hinzugefügt, aktualisiert, verknüpft, projiziert, exportiert hat oder bei dem er fehlgeschlagen ist.</value>
+  </data>
+  <data name="ActivityChildActivitiesHeading" xml:space="preserve">
+    <value>Untergeordnete Aktivitäten</value>
+  </data>
+  <data name="ActivityChildActivitySingular" xml:space="preserve">
+    <value>Untergeordnete Aktivität</value>
+  </data>
+  <data name="ActivitySearchChildActivities" xml:space="preserve">
+    <value>Ziel, Meldung oder Status suchen</value>
+  </data>
+  <data name="ActivityColumnType" xml:space="preserve">
+    <value>Typ</value>
+  </data>
+  <data name="ActivityColumnTarget" xml:space="preserve">
+    <value>Ziel</value>
+  </data>
+  <data name="ActivityColumnMessage" xml:space="preserve">
+    <value>Meldung</value>
+  </data>
+  <data name="ActivityColumnStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="ActivityColumnStarted" xml:space="preserve">
+    <value>Gestartet</value>
+  </data>
+  <data name="ActivityColumnDuration" xml:space="preserve">
+    <value>Dauer</value>
+  </data>
+  <data name="ActivityNoChildActivitiesMatchSearch" xml:space="preserve">
+    <value>Keine untergeordneten Aktivitäten entsprechen „{0}“</value>
+  </data>
+  <data name="ActivityHasNoChildActivities" xml:space="preserve">
+    <value>Diese Aktivität hat keine untergeordneten Aktivitäten</value>
+  </data>
+  <data name="ActivityChildActivitiesAppear" xml:space="preserve">
+    <value>Untergeordnete Aktivitäten erscheinen hier, wenn ein Vorgang eigene Arbeit erzeugt.</value>
+  </data>
+  <data name="ActivityBreadcrumbHome" xml:space="preserve">
+    <value>Startseite</value>
+  </data>
+  <data name="ActivityBreadcrumbActivity" xml:space="preserve">
+    <value>Aktivität</value>
+  </data>
+  <data name="ActivityBreadcrumbActivityDetail" xml:space="preserve">
+    <value>Aktivitätsdetails</value>
+  </data>
+  <data name="ActivityBreadcrumbOperations" xml:space="preserve">
+    <value>Betrieb</value>
+  </data>
+  <data name="ActivityStatCsosDisconnectedTitle" xml:space="preserve">
+    <value>Getrennte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityStatCsosDisconnectedIncluding" xml:space="preserve">
+    <value>Getrennte Objekte im verbundenen System, davon {0}, die den Geltungsbereich einer Importsynchronisierungsregel verlassen haben</value>
+  </data>
+  <data name="ActivityFilterCategory" xml:space="preserve">
+    <value>Kategorie:</value>
+  </data>
+  <data name="ActivityFilterAll" xml:space="preserve">
+    <value>Alle</value>
+  </data>
+  <data name="ActivityFilterInitiator" xml:space="preserve">
+    <value>Initiator</value>
+  </data>
+  <data name="ActivityColumnInitiatedBy" xml:space="preserve">
+    <value>Gestartet von</value>
+  </data>
+  <data name="ActivityColumnCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="ActivityOperationCreate" xml:space="preserve">
+    <value>Erstellen</value>
+  </data>
+  <data name="ActivityOperationRead" xml:space="preserve">
+    <value>Lesen</value>
+  </data>
+  <data name="ActivityOperationUpdate" xml:space="preserve">
+    <value>Aktualisieren</value>
+  </data>
+  <data name="ActivityOperationDelete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="ActivityOperationClear" xml:space="preserve">
+    <value>Leeren</value>
+  </data>
+  <data name="ActivityOperationExecute" xml:space="preserve">
+    <value>Ausführen</value>
+  </data>
+  <data name="ActivityOperationImportHierarchy" xml:space="preserve">
+    <value>Hierarchie importieren</value>
+  </data>
+  <data name="ActivityOperationImportSchema" xml:space="preserve">
+    <value>Schema importieren</value>
+  </data>
+  <data name="ActivityOperationRevert" xml:space="preserve">
+    <value>Rückgängig machen</value>
+  </data>
+  <data name="ActivityOperationAuthenticate" xml:space="preserve">
+    <value>Authentifizieren</value>
+  </data>
+  <data name="ActivityOutcomeAdded" xml:space="preserve">
+    <value>Hinzugefügt</value>
+  </data>
+  <data name="ActivityOutcomeUpdated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="ActivityOutcomeDeleted" xml:space="preserve">
+    <value>Gelöscht</value>
+  </data>
+  <data name="ActivityOutcomeProjected" xml:space="preserve">
+    <value>Projiziert</value>
+  </data>
+  <data name="ActivityOutcomeJoined" xml:space="preserve">
+    <value>Verknüpft</value>
+  </data>
+  <data name="ActivityOutcomeAttributeFlows" xml:space="preserve">
+    <value>Attributflüsse</value>
+  </data>
+  <data name="ActivityOutcomeDisconnected" xml:space="preserve">
+    <value>Getrennt</value>
+  </data>
+  <data name="ActivityOutcomeDriftCorrections" xml:space="preserve">
+    <value>Driftkorrekturen</value>
+  </data>
+  <data name="ActivityOutcomeProvisioned" xml:space="preserve">
+    <value>Provisioniert</value>
+  </data>
+  <data name="ActivityOutcomeExported" xml:space="preserve">
+    <value>Exportiert</value>
+  </data>
+  <data name="ActivityOutcomeDeprovisioned" xml:space="preserve">
+    <value>Deprovisioniert</value>
+  </data>
+  <data name="ActivityOutcomeCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="ActivityOutcomePendingExports" xml:space="preserve">
+    <value>Ausstehende Exporte</value>
+  </data>
+  <data name="ActivityOutcomeErrors" xml:space="preserve">
+    <value>Fehler</value>
+  </data>
+  <data name="ActivityTypeConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System</value>
+  </data>
+  <data name="ActivityTypeConnectedSystemRunProfile" xml:space="preserve">
+    <value>Ausführungsprofil des verbundenen Systems</value>
+  </data>
+  <data name="ActivityTypeSynchronisationRule" xml:space="preserve">
+    <value>Synchronisierungsregel</value>
+  </data>
+  <data name="ActivityTypeMetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="ActivityTypeConnectedSystemObject" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="ActivityTypeMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse-Attribut</value>
+  </data>
+  <data name="ActivityTypeExampleDataTemplate" xml:space="preserve">
+    <value>Beispieldatenvorlage</value>
+  </data>
+  <data name="ActivityTypeDataGeneration" xml:space="preserve">
+    <value>Datengenerierung</value>
+  </data>
+  <data name="ActivityTypeTrustedCertificate" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat</value>
+  </data>
+  <data name="ActivityTypeObjectMatchingRule" xml:space="preserve">
+    <value>Objektabgleichsregel</value>
+  </data>
+  <data name="ActivityTypeServiceSetting" xml:space="preserve">
+    <value>Diensteinstellung</value>
+  </data>
+  <data name="ActivityStatusFilterInProgress" xml:space="preserve">
+    <value>In Bearbeitung</value>
+  </data>
+  <data name="ActivityStatusFilterCompleteWithWarning" xml:space="preserve">
+    <value>Abgeschlossen mit Warnung</value>
+  </data>
+  <data name="ActivityStatusFilterCompleteWithError" xml:space="preserve">
+    <value>Abgeschlossen mit Fehler</value>
+  </data>
+  <data name="ActivityStatusFilterFailedWithError" xml:space="preserve">
+    <value>Fehlgeschlagen mit Fehler</value>
+  </data>
+  <data name="ActivityInitiatorUser" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="ActivityFilterCreatedBetween" xml:space="preserve">
+    <value>Erstellt zwischen</value>
+  </data>
+  <data name="ActivityFilterHasChildActivities" xml:space="preserve">
+    <value>Hat untergeordnete Aktivitäten</value>
+  </data>
+  <data name="ActivityResumeAutoRefresh" xml:space="preserve">
+    <value>Automatische Aktualisierung fortsetzen</value>
+  </data>
+  <data name="ActivityPauseAutoRefresh" xml:space="preserve">
+    <value>Automatische Aktualisierung anhalten</value>
+  </data>
+  <data name="ActivitySingularName" xml:space="preserve">
+    <value>Aktivität</value>
+  </data>
+  <data name="ActivityPluralName" xml:space="preserve">
+    <value>Aktivitäten</value>
+  </data>
+  <data name="ActivitySearchTargetOrInitiator" xml:space="preserve">
+    <value>Ziel oder Initiator suchen</value>
+  </data>
+  <data name="ActivityColumnOperation" xml:space="preserve">
+    <value>Vorgang</value>
+  </data>
+  <data name="ActivityChipAdded" xml:space="preserve">
+    <value>Hinzugefügte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipUpdated" xml:space="preserve">
+    <value>Aktualisierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipDeletionsDetected" xml:space="preserve">
+    <value>Erkannte Löschungen von Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityChipProjected" xml:space="preserve">
+    <value>Projizierte Metaverse-Objekte</value>
+  </data>
+  <data name="ActivityChipJoined" xml:space="preserve">
+    <value>Verknüpfte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipAttributeFlow" xml:space="preserve">
+    <value>Metaverse-Objekte mit Attributfluss</value>
+  </data>
+  <data name="ActivityChipDisconnected" xml:space="preserve">
+    <value>Getrennte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipDisconnectedOutOfScope" xml:space="preserve">
+    <value>Getrennte Objekte im verbundenen System (außerhalb des Geltungsbereichs)</value>
+  </data>
+  <data name="ActivityChipOutOfScopeRetainJoin" xml:space="preserve">
+    <value>Objekte im verbundenen System außerhalb des Geltungsbereichs (Verknüpfung beibehalten)</value>
+  </data>
+  <data name="ActivityChipDeleted" xml:space="preserve">
+    <value>Gelöschte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipDriftCorrected" xml:space="preserve">
+    <value>Objekte im verbundenen System mit Driftkorrektur</value>
+  </data>
+  <data name="ActivityChipProvisioned" xml:space="preserve">
+    <value>Provisionierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipPendingExports" xml:space="preserve">
+    <value>Ausstehende Exporte von Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityChipExported" xml:space="preserve">
+    <value>Exportierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipDeprovisioned" xml:space="preserve">
+    <value>Deprovisionierte Objekte im verbundenen System</value>
+  </data>
+  <data name="ActivityChipNoChanges" xml:space="preserve">
+    <value>Keine Änderungen</value>
+  </data>
+  <data name="ActivityChipObjectsGenerated" xml:space="preserve">
+    <value>Generierte Objekte</value>
+  </data>
+  <data name="ActivityChipCsoChangesDeleted" xml:space="preserve">
+    <value>Gelöschte Änderungen an Objekten im verbundenen System</value>
+  </data>
+  <data name="ActivityChipMvoChangesDeleted" xml:space="preserve">
+    <value>Gelöschte Änderungen an Metaverse-Objekten</value>
+  </data>
+  <data name="ActivityChipActivitiesDeleted" xml:space="preserve">
+    <value>Gelöschte Aktivitäten</value>
+  </data>
+  <data name="ActivityChipNoRecordsToClean" xml:space="preserve">
+    <value>Keine Datensätze zu bereinigen</value>
+  </data>
+  <data name="ActivityChipFailedAttempts" xml:space="preserve">
+    <value>Fehlgeschlagene Versuche</value>
+  </data>
+  <data name="ActivityChipResourcesCreated" xml:space="preserve">
+    <value>Erstellte Ressourcen</value>
+  </data>
+  <data name="ActivityChipResourcesReplaced" xml:space="preserve">
+    <value>Ersetzte oder gepatchte Ressourcen</value>
+  </data>
+  <data name="ActivityChipResourcesDeleted" xml:space="preserve">
+    <value>Gelöschte Ressourcen</value>
+  </data>
+  <data name="ActivityChipRequestsRejected" xml:space="preserve">
+    <value>Abgelehnte Anfragen</value>
+  </data>
+  <data name="ActivityChildCountOne" xml:space="preserve">
+    <value>{0} untergeordnete Aktivität</value>
+  </data>
+  <data name="ActivityChildCountOther" xml:space="preserve">
+    <value>{0} untergeordnete Aktivitäten</value>
+  </data>
+  <data name="ActivityNoActivitiesMatchSearch" xml:space="preserve">
+    <value>Keine Aktivitäten entsprechen „{0}“</value>
+  </data>
+  <data name="ActivityNoActivitiesMatchFilters" xml:space="preserve">
+    <value>Keine Aktivitäten entsprechen den aktuellen Filtern</value>
+  </data>
+  <data name="ActivityAdjustFiltersActivities" xml:space="preserve">
+    <value>Passen Sie die Filter oben an oder setzen Sie sie zurück, um mehr Aktivitäten zu sehen.</value>
+  </data>
+  <data name="ActivityNoActivitiesYet" xml:space="preserve">
+    <value>Noch keine Aktivitäten</value>
+  </data>
+  <data name="ActivityNoActivitiesYetMine" xml:space="preserve">
+    <value>Aktivitäten erscheinen hier, sobald Sie in JIM Vorgänge auslösen, etwa Synchronisierungen und Konfigurationsänderungen.</value>
+  </data>
+  <data name="ActivityNoActivitiesYetAll" xml:space="preserve">
+    <value>Aktivitäten erscheinen hier, sobald in JIM Vorgänge laufen, ob von Benutzern, automatisierten Prozessen oder der API ausgelöst.</value>
+  </data>
+  <data name="ActivityCategoryConfiguration" xml:space="preserve">
+    <value>Konfiguration</value>
+  </data>
+  <data name="ActivityCategoryIdentity" xml:space="preserve">
+    <value>Identitäten</value>
+  </data>
+  <data name="ActivityCategorySynchronisation" xml:space="preserve">
+    <value>Synchronisierung</value>
+  </data>
+  <data name="ActivityCategorySystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="ActivityCategorySecurity" xml:space="preserve">
+    <value>Sicherheit</value>
+  </data>
+  <data name="ActivityCategoryPasswords" xml:space="preserve">
+    <value>Kennwörter</value>
+  </data>
+  <data name="ActivitySelectedCountOne" xml:space="preserve">
+    <value>{0} ausgewählt</value>
+  </data>
+  <data name="ActivitySelectedCountOther" xml:space="preserve">
+    <value>{0} ausgewählt</value>
+  </data>
+  <data name="ActivityMyActivityTitle" xml:space="preserve">
+    <value>Meine Aktivität</value>
+  </data>
+  <data name="ActivityMyActivityDescription" xml:space="preserve">
+    <value>Zeigt von Ihnen ausgelöste Vorgänge an, darunter Synchronisierungen, Konfigurationsänderungen und andere Aktionen.</value>
+  </data>
+  <data name="ActivityListDescription" xml:space="preserve">
+    <value>Überwachen Sie alle Aktivitäten im System. Zeigt Vorgänge an, die von Benutzern oder automatisierten Prozessen ausgelöst wurden, darunter Synchronisierungen, Konfigurationsänderungen und Systemereignisse.</value>
+  </data>
+  <data name="ActivityItemPageTitlePrefix" xml:space="preserve">
+    <value>Elementdetails:</value>
+  </data>
+  <data name="ActivityItemPageTitle" xml:space="preserve">
+    <value>Ausführungselement</value>
+  </data>
+  <data name="ActivityItemPageDescription" xml:space="preserve">
+    <value>Was ein Lauf eines Ausführungsprofils mit einem Objekt gemacht hat: was geschah, was daraus folgte und welcher Fehler aufgetreten ist.</value>
+  </data>
+  <data name="ActivityItemTabOverview" xml:space="preserve">
+    <value>Übersicht</value>
+  </data>
+  <data name="ActivityItemExecutionSummary" xml:space="preserve">
+    <value>Zusammenfassung der Ausführung</value>
+  </data>
+  <data name="ActivityFieldConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System</value>
+  </data>
+  <data name="ActivityFieldActivity" xml:space="preserve">
+    <value>Aktivität</value>
+  </data>
+  <data name="ActivityFieldRunProfile" xml:space="preserve">
+    <value>Ausführungsprofil</value>
+  </data>
+  <data name="ActivityFieldExecuted" xml:space="preserve">
+    <value>Ausgeführt</value>
+  </data>
+  <data name="ActivityViewObject" xml:space="preserve">
+    <value>Objekt anzeigen</value>
+  </data>
+  <data name="ActivityDeletedMarker" xml:space="preserve">
+    <value>(gelöscht)</value>
+  </data>
+  <data name="ActivityObjectFallback" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="ActivityRejectedWithId" xml:space="preserve">
+    <value>Abgelehnt: {0}</value>
+  </data>
+  <data name="ActivityPendingRemovalWithId" xml:space="preserve">
+    <value>Entfernung ausstehend: {0}</value>
+  </data>
+  <data name="ActivityDeletedWithId" xml:space="preserve">
+    <value>Gelöscht: {0}</value>
+  </data>
+  <data name="ActivityCsoDeleted" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde gelöscht.</value>
+  </data>
+  <data name="ActivityFieldSource" xml:space="preserve">
+    <value>Quelle</value>
+  </data>
+  <data name="ActivityItemDeletionAlert" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde als im Quellsystem gelöscht erkannt und zur Entfernung markiert. Wenn ein Ausführungsprofil für die vollständige Synchronisierung oder die Deltasynchronisierung ausgeführt wird, trennt JIM dieses Objekt vom Metaverse und wertet die Löschregel für den Metaverse-Objekttyp aus.</value>
+  </data>
+  <data name="ActivityItemCausalityHeading" xml:space="preserve">
+    <value>Kausalität</value>
+  </data>
+  <data name="ActivityItemCausalityDescription" xml:space="preserve">
+    <value>Was bei der Verarbeitung geschah und welche Folgen sich daraus ergaben.</value>
+  </data>
+  <data name="ActivityItemDeletionRuleAtTime" xml:space="preserve">
+    <value>Zum damaligen Zeitpunkt geltende Löschregel</value>
+  </data>
+  <data name="ActivityItemErrorDetails" xml:space="preserve">
+    <value>Fehlerdetails</value>
+  </data>
+  <data name="ActivityItemAttributeChangesHeading" xml:space="preserve">
+    <value>Attributänderungen</value>
+  </data>
+  <data name="ActivityItemAttributeChangeSingular" xml:space="preserve">
+    <value>Attributänderung</value>
+  </data>
+  <data name="ActivityItemSearchAttributes" xml:space="preserve">
+    <value>Attribut oder Wert suchen</value>
+  </data>
+  <data name="ActivityColumnAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="ActivityColumnChange" xml:space="preserve">
+    <value>Änderung</value>
+  </data>
+  <data name="ActivityColumnValue" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="ActivityNoAttributeChangesMatch" xml:space="preserve">
+    <value>Keine Attributänderungen entsprechen „{0}“</value>
+  </data>
+  <data name="ActivityNoAttributeChangesRecorded" xml:space="preserve">
+    <value>Es wurden keine Attributänderungen erfasst</value>
+  </data>
+  <data name="ActivityNoAttributeChangesDetail" xml:space="preserve">
+    <value>Dieser Vorgang hat keine Attributwerte des Objekts geändert.</value>
+  </data>
+  <data name="ActivityItemNoChangesRequired" xml:space="preserve">
+    <value>Keine Änderungen erforderlich</value>
+  </data>
+  <data name="ActivityItemAlreadyUpToDate" xml:space="preserve">
+    <value>Das Objekt war bereits auf dem neuesten Stand; es waren keine Attributänderungen nötig.</value>
+  </data>
+  <data name="ActivityItemTabPendingExport" xml:space="preserve">
+    <value>Ausstehender Export</value>
+  </data>
+  <data name="ActivityBreadcrumbItemDetails" xml:space="preserve">
+    <value>Elementdetails</value>
+  </data>
+  <data name="ActivityNoChangeReasonMvoNoAttributeChanges" xml:space="preserve">
+    <value>MVO ohne Attributänderungen</value>
+  </data>
+  <data name="ActivityNoChangeReasonCsoAlreadyCurrent" xml:space="preserve">
+    <value>CSO bereits aktuell</value>
+  </data>
+  <data name="ActivityItemTitleAdded" xml:space="preserve">
+    <value>{0} zum Connectorbereich hinzugefügt</value>
+  </data>
+  <data name="ActivityItemTitleUpdated" xml:space="preserve">
+    <value>{0} aktualisiert</value>
+  </data>
+  <data name="ActivityItemTitleMetaverseDeleted" xml:space="preserve">
+    <value>Metaverse-{0} gelöscht</value>
+  </data>
+  <data name="ActivityItemTitleSourceDeletionProcessed" xml:space="preserve">
+    <value>Quelllöschung verarbeitet</value>
+  </data>
+  <data name="ActivityItemTitleDeletionDetected" xml:space="preserve">
+    <value>Löschung von {0} erkannt</value>
+  </data>
+  <data name="ActivityItemTitleProjected" xml:space="preserve">
+    <value>{0} in das Metaverse projiziert</value>
+  </data>
+  <data name="ActivityItemTitleJoined" xml:space="preserve">
+    <value>{0} mit Metaverse-{1} verknüpft</value>
+  </data>
+  <data name="ActivityItemTitleAttributeFlow" xml:space="preserve">
+    <value>{0}-Attribute in Metaverse-{1} übertragen</value>
+  </data>
+  <data name="ActivityItemTitleDisconnected" xml:space="preserve">
+    <value>{0} vom Metaverse getrennt</value>
+  </data>
+  <data name="ActivityItemTitleExported" xml:space="preserve">
+    <value>{0} exportiert</value>
+  </data>
+  <data name="ActivityItemTitleDeprovisioned" xml:space="preserve">
+    <value>{0} deprovisioniert</value>
+  </data>
+  <data name="ActivityItemTitleNoChanges" xml:space="preserve">
+    <value>Keine Änderungen</value>
+  </data>
+  <data name="ActivityItemTitleExportReview" xml:space="preserve">
+    <value>Exportprüfung: {0}</value>
+  </data>
+  <data name="ActivityItemTitleSynchronisationComplete" xml:space="preserve">
+    <value>Synchronisierung abgeschlossen</value>
+  </data>
+  <data name="ActivityFieldConnectedSystemObject" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="ActivityFieldMetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="ActivityFieldExternalIdFromSource" xml:space="preserve">
+    <value>Externe ID (aus Quelldaten)</value>
+  </data>
+  <data name="ActivityFieldExternalId" xml:space="preserve">
+    <value>Externe ID</value>
+  </data>
+  <data name="ActivityItemErrorMetaverseObject" xml:space="preserve">
+    <value>Beim Synchronisieren des Metaverse-Objekts ist ein Fehler aufgetreten.</value>
+  </data>
+  <data name="ActivityItemErrorConnectedSystemObject" xml:space="preserve">
+    <value>Beim Synchronisieren des Objekts im verbundenen System ist ein Fehler aufgetreten.</value>
+  </data>
+  <data name="ActivityItemUnresolvedAppend" xml:space="preserve">
+    <value>{0} {1} konnten nicht mit Objekten im verbundenen System verknüpft werden.</value>
+  </data>
+  <data name="ActivityObjectLowercase" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="ActivityItemImportedAdded" xml:space="preserve">
+    <value>wurde dem Connectorbereich hinzugefügt</value>
+  </data>
+  <data name="ActivityItemImportedUpdated" xml:space="preserve">
+    <value>wurde aktualisiert</value>
+  </data>
+  <data name="ActivityItemImportedDefault" xml:space="preserve">
+    <value>wurde importiert</value>
+  </data>
+  <data name="ActivityItemUnresolvedSentence" xml:space="preserve">
+    <value>Das Objekt vom Typ {0} {1}, aber {2} konnten nicht mit Objekten im verbundenen System verknüpft werden.</value>
+  </data>
+  <data name="ActivityItemReferencesCount" xml:space="preserve">
+    <value>{0} seiner Verweise</value>
+  </data>
+  <data name="ActivityItemSomeReferences" xml:space="preserve">
+    <value>Einige seiner Verweise</value>
+  </data>
+  <data name="ActivityItemStatusAdded" xml:space="preserve">
+    <value>Ein neues Objekt im verbundenen System wurde importiert und dem Connectorbereich hinzugefügt.</value>
+  </data>
+  <data name="ActivityItemStatusUpdated" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde mit neuen Attributwerten aktualisiert.</value>
+  </data>
+  <data name="ActivityItemStatusHousekeepingDeleted" xml:space="preserve">
+    <value>Die Karenzzeit für die Löschung des Metaverse-Objekts ist abgelaufen, und der Wartungsprozess hat es aus dem Metaverse gelöscht.</value>
+  </data>
+  <data name="ActivityItemStatusSyncDeleted" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde aus dem Connectorbereich entfernt, nachdem die Löschung im Quellsystem bestätigt wurde.</value>
+  </data>
+  <data name="ActivityItemStatusDeletionDetected" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde als im Quellsystem gelöscht erkannt und zur Entfernung markiert.</value>
+  </data>
+  <data name="ActivityItemStatusProjected" xml:space="preserve">
+    <value>Durch Projektion aus dem Objekt im verbundenen System wurde ein neues Metaverse-Objekt erstellt.</value>
+  </data>
+  <data name="ActivityItemStatusJoined" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde mit einem vorhandenen Metaverse-Objekt verknüpft.</value>
+  </data>
+  <data name="ActivityItemStatusAttributeFlow" xml:space="preserve">
+    <value>Attribute wurden zwischen dem Objekt im verbundenen System und dem Metaverse übertragen.</value>
+  </data>
+  <data name="ActivityItemStatusDisconnected" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde vom Metaverse getrennt. Verknüpfungs- und Metaverse-Löschregeln wurden ausgewertet.</value>
+  </data>
+  <data name="ActivityItemStatusExported" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde in das Zielsystem exportiert.</value>
+  </data>
+  <data name="ActivityItemStatusDeprovisioned" xml:space="preserve">
+    <value>Das Objekt im verbundenen System wurde im Zielsystem deprovisioniert.</value>
+  </data>
+  <data name="ActivityItemStatusNoChange" xml:space="preserve">
+    <value>Das Objekt im verbundenen System war bereits auf dem neuesten Stand.</value>
+  </data>
+  <data name="ActivityItemStatusExportScopeReview" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt wurde bei dieser Synchronisierung anhand der Export-Synchronisierungsregeln geprüft, weil sich eine Exportregel geändert hat oder das Objekt außerhalb der Synchronisierung erstellt oder geändert wurde. Die Ergebnisse unten zeigen, was die Prüfung bewirkt hat: Provisionierung, Deprovisionierung oder Zustellung von außerhalb der Synchronisierung geänderten Werten.</value>
+  </data>
+  <data name="ActivityItemStatusDefault" xml:space="preserve">
+    <value>Die Synchronisierung für das Objekt im verbundenen System wurde abgeschlossen.</value>
+  </data>
+  <data name="ActivityOperationTextAdded" xml:space="preserve">
+    <value>Objekt im verbundenen System hinzugefügt</value>
+  </data>
+  <data name="ActivityOperationTextUpdated" xml:space="preserve">
+    <value>Objekt im verbundenen System aktualisiert</value>
+  </data>
+  <data name="ActivityOperationTextMetaverseDeleted" xml:space="preserve">
+    <value>Metaverse-Objekt gelöscht</value>
+  </data>
+  <data name="ActivityOperationTextDeletionProcessed" xml:space="preserve">
+    <value>Löschung verarbeitet</value>
+  </data>
+  <data name="ActivityOperationTextDeletionDetected" xml:space="preserve">
+    <value>Löschung erkannt</value>
+  </data>
+  <data name="ActivityOperationTextProjected" xml:space="preserve">
+    <value>Projiziert</value>
+  </data>
+  <data name="ActivityOperationTextJoined" xml:space="preserve">
+    <value>Verknüpft</value>
+  </data>
+  <data name="ActivityOperationTextAttributeFlow" xml:space="preserve">
+    <value>Attributfluss</value>
+  </data>
+  <data name="ActivityOperationTextDisconnected" xml:space="preserve">
+    <value>Getrennt</value>
+  </data>
+  <data name="ActivityOperationTextExported" xml:space="preserve">
+    <value>Exportiert</value>
+  </data>
+  <data name="ActivityOperationTextDeprovisioned" xml:space="preserve">
+    <value>Deprovisioniert</value>
+  </data>
+  <data name="ActivityOperationTextNoChange" xml:space="preserve">
+    <value>Keine Änderung</value>
+  </data>
+  <data name="ActivityOperationTextExportReview" xml:space="preserve">
+    <value>Exportprüfung</value>
+  </data>
+  <data name="ActivityUnknown" xml:space="preserve">
+    <value>Unbekannt</value>
+  </data>
+  <data name="ActivityItemAttributesModifiedImport" xml:space="preserve">
+    <value>Die folgenden Attribute des Objekts im verbundenen System wurden bei diesem Importvorgang geändert.</value>
+  </data>
+  <data name="ActivityItemAttributesModifiedSync" xml:space="preserve">
+    <value>Die folgenden Attribute des Metaverse-Objekts wurden bei diesem Synchronisierungsvorgang geändert.</value>
+  </data>
+  <data name="ActivityHistoryNone" xml:space="preserve">
+    <value>Kein Änderungsverlauf verfügbar.</value>
+  </data>
+  <data name="ActivityHistorySearch" xml:space="preserve">
+    <value>Suchen</value>
+  </data>
+  <data name="ActivityHistoryChangeType" xml:space="preserve">
+    <value>Änderungsart</value>
+  </data>
+  <data name="ActivityHistoryAllChanges" xml:space="preserve">
+    <value>Alle Änderungen</value>
+  </data>
+  <data name="ActivityChangeSet" xml:space="preserve">
+    <value>Festgelegt</value>
+  </data>
+  <data name="ActivityChangeUpdated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="ActivityChangeRemoved" xml:space="preserve">
+    <value>Entfernt</value>
+  </data>
+  <data name="ActivityChangeAdd" xml:space="preserve">
+    <value>Hinzufügen</value>
+  </data>
+  <data name="ActivityChangeRemove" xml:space="preserve">
+    <value>Entfernen</value>
+  </data>
+  <data name="ActivityValueRetired" xml:space="preserve">
+    <value>Wert ausgemustert</value>
+  </data>
+  <data name="ActivityGeneratedValue" xml:space="preserve">
+    <value>generierter Wert</value>
+  </data>
+  <data name="ActivityRetired" xml:space="preserve">
+    <value>stillgelegt</value>
+  </data>
+  <data name="ActivityNone" xml:space="preserve">
+    <value>(keine)</value>
+  </data>
+  <data name="ActivityMoreChanges" xml:space="preserve">
+    <value>+{0} weitere</value>
+  </data>
+  <data name="ActivityObjectDeletedNoValues" xml:space="preserve">
+    <value>Das Objekt wurde gelöscht. Die endgültigen Attributwerte wurden nicht erfasst.</value>
+  </data>
+  <data name="ActivityHistoryMechanism" xml:space="preserve">
+    <value>Mechanismus</value>
+  </data>
+  <data name="ActivityHistorySummary" xml:space="preserve">
+    <value>Zusammenfassung</value>
+  </data>
+  <data name="ActivityHistorySearchChanges" xml:space="preserve">
+    <value>Änderungen suchen ...</value>
+  </data>
+  <data name="ActivityHistoryChangeSingular" xml:space="preserve">
+    <value>Änderung</value>
+  </data>
+  <data name="ActivityHistoryChangesPlural" xml:space="preserve">
+    <value>Änderungen</value>
+  </data>
+  <data name="ActivityHistoryAllAttributes" xml:space="preserve">
+    <value>Alle Attribute</value>
+  </data>
+  <data name="ActivityColumnSource" xml:space="preserve">
+    <value>Quelle</value>
+  </data>
+  <data name="ActivityColumnPlurality" xml:space="preserve">
+    <value>Wertigkeit</value>
+  </data>
+  <data name="ActivityMultiValued" xml:space="preserve">
+    <value>Mehrwertig</value>
+  </data>
+  <data name="ActivitySingleValued" xml:space="preserve">
+    <value>Einwertig</value>
+  </data>
+  <data name="ActivityNoChangesMatch" xml:space="preserve">
+    <value>Keine Änderungen entsprechen den aktuellen Filtern</value>
+  </data>
+  <data name="ActivityNoChangesMatchDetail" xml:space="preserve">
+    <value>Versuchen Sie einen anderen Suchbegriff oder erweitern Sie die Filter für Attribut und Änderungstyp.</value>
+  </data>
+  <data name="ActivityNothingToShowChanges" xml:space="preserve">
+    <value>Für diese Attributänderungen gibt es nichts anzuzeigen</value>
+  </data>
+  <data name="ActivityNoAttributeChangesOperation" xml:space="preserve">
+    <value>Für diesen Vorgang wurden keine Attributänderungen erfasst.</value>
+  </data>
+  <data name="ActivityTimeJustNow" xml:space="preserve">
+    <value>Gerade eben</value>
+  </data>
+  <data name="ActivityTimeMinutesAgo" xml:space="preserve">
+    <value>vor {0} Min.</value>
+  </data>
+  <data name="ActivityTimeHoursAgo" xml:space="preserve">
+    <value>vor {0} Std.</value>
+  </data>
+  <data name="ActivityTimeDaysAgo" xml:space="preserve">
+    <value>vor {0} T.</value>
+  </data>
+  <data name="ActivityTimeWeeksAgo" xml:space="preserve">
+    <value>vor {0} Wo.</value>
+  </data>
+  <data name="ActivityTimeMonthsAgo" xml:space="preserve">
+    <value>vor {0} Mon.</value>
+  </data>
+  <data name="ActivityTimeYearsAgo" xml:space="preserve">
+    <value>vor {0} J.</value>
+  </data>
+  <data name="ActivityNameDeleted" xml:space="preserve">
+    <value>{0} (gelöscht)</value>
+  </data>
+  <data name="ActivityMechanismVia" xml:space="preserve">
+    <value>über</value>
+  </data>
+  <data name="ActivityMechanismSynchronisation" xml:space="preserve">
+    <value>Synchronisierung</value>
+  </data>
+  <data name="ActivityMechanismDirectEdit" xml:space="preserve">
+    <value>Direkte Bearbeitung</value>
+  </data>
+  <data name="ActivityMechanismWorkflow" xml:space="preserve">
+    <value>Workflow</value>
+  </data>
+  <data name="ActivityMechanismGroupRule" xml:space="preserve">
+    <value>Gruppenregel</value>
+  </data>
+  <data name="ActivityMechanismImport" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="ActivityMechanismExport" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="ActivityPreviewClose" xml:space="preserve">
+    <value>Diese Vorschau schließen</value>
+  </data>
+  <data name="ActivityPreviewNoLongerAvailable" xml:space="preserve">
+    <value>Diese Vorschau ist nicht mehr verfügbar. Vorschauen werden mit ihrer Aktivität nach der für dieses System konfigurierten Aufbewahrungsfrist entfernt; führen Sie die Vorschau erneut aus, um zu sehen, was die Änderung jetzt bewirken würde.</value>
+  </data>
+  <data name="ActivityPreviewDidNotFinish" xml:space="preserve">
+    <value>Die Vorschau wurde nicht abgeschlossen und hat daher nur einen Teil der von der Änderung betroffenen Objekte erfasst. Nichts davon wird angezeigt, denn eine Teilzahl, die als Gesamtzahl gelesen wird, führt dazu, dass eine Änderung fälschlich als sicher freigegeben wird.</value>
+  </data>
+  <data name="ActivityPreviewCancelled" xml:space="preserve">
+    <value>Die Vorschau wurde abgebrochen und deckt daher nur die Objekte ab, die sie erreicht hatte. Führen Sie sie erneut aus, um eine vollständige Antwort zu erhalten.</value>
+  </data>
+  <data name="ActivityPreviewStaleness" xml:space="preserve">
+    <value>Ausgewertet anhand des Datenstands, wie er {0} bestand. Ein seither erfolgter Import kann die Vorschauergebnisse verändern.</value>
+  </data>
+  <data name="ActivityPreviewBlocking" xml:space="preserve">
+    <value>Die vorgeschlagene Konfiguration kann nicht angewendet werden.</value>
+  </data>
+  <data name="ActivityPreviewWhatWouldChange" xml:space="preserve">
+    <value>Was sich ändern würde</value>
+  </data>
+  <data name="ActivityPreviewSearchChanges" xml:space="preserve">
+    <value>Änderungen suchen</value>
+  </data>
+  <data name="ActivityPreviewTransitionWithPattern" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="ActivityPreviewAppliesTo" xml:space="preserve">
+    <value>Gilt für</value>
+  </data>
+  <data name="ActivityPreviewObjectsOf" xml:space="preserve">
+    <value>{0}-Objekte{1}</value>
+  </data>
+  <data name="ActivityPreviewObjectsWord" xml:space="preserve">
+    <value>Objekte</value>
+  </data>
+  <data name="ActivityPreviewObjectsHeading" xml:space="preserve">
+    <value>Objekte</value>
+  </data>
+  <data name="ActivityPreviewCountExact" xml:space="preserve">
+    <value>Diese Zahl ist exakt. Die Objektliste darunter ist eine Stichprobe von {0} davon, nicht alle.</value>
+  </data>
+  <data name="ActivityPreviewListSampled" xml:space="preserve">
+    <value>Liste als Stichprobe</value>
+  </data>
+  <data name="ActivityPreviewNoChangesMatch" xml:space="preserve">
+    <value>Keine Änderungen entsprechen „{0}“</value>
+  </data>
+  <data name="ActivityPreviewNothingWouldChange" xml:space="preserve">
+    <value>Nichts würde sich ändern</value>
+  </data>
+  <data name="ActivityPreviewNothingDetail" xml:space="preserve">
+    <value>Durch diese Änderung durchläuft kein Objekt einen Übergang.</value>
+  </data>
+  <data name="ActivityPreviewUnchangedOne" xml:space="preserve">
+    <value>1 Objekt würde sich nicht ändern</value>
+  </data>
+  <data name="ActivityPreviewUnchangedOther" xml:space="preserve">
+    <value>{0} Objekte würden sich nicht ändern</value>
+  </data>
+  <data name="ActivityPreviewShowThem" xml:space="preserve">
+    <value>Anzeigen</value>
+  </data>
+  <data name="ActivityPreviewGroupCount" xml:space="preserve">
+    <value>Objekte ({0})</value>
+  </data>
+  <data name="ActivityPreviewDeltasSampled" xml:space="preserve">
+    <value>Diese Gruppe enthält {0} Objekte. Die Liste darunter ist eine Stichprobe der ersten {1}; dass ein Objekt darin fehlt, heißt nicht, dass es nicht betroffen ist.</value>
+  </data>
+  <data name="ActivityPreviewObjectSingular" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="ActivityPreviewSearchObject" xml:space="preserve">
+    <value>Objekt, Attribut oder Wert suchen</value>
+  </data>
+  <data name="ActivityPreviewMatches" xml:space="preserve">
+    <value>Treffer</value>
+  </data>
+  <data name="ActivityPreviewNoObjectsMatch" xml:space="preserve">
+    <value>Keine Objekte in dieser Gruppe entsprechen dieser Suche</value>
+  </data>
+  <data name="ActivityPreviewNoDetailKept" xml:space="preserve">
+    <value>Für diese Gruppe wurden keine Details auf Objektebene aufbewahrt</value>
+  </data>
+  <data name="ActivityPreviewNoDetailKeptDetail" xml:space="preserve">
+    <value>Objektdetails werden nur erfasst, wenn die Vorschau dazu aufgefordert wurde; die Zahl der Gruppe oben ist dennoch exakt.</value>
+  </data>
+  <data name="ActivityPreviewDefaultTitle" xml:space="preserve">
+    <value>Vorschau</value>
+  </data>
+  <data name="ActivityPreviewStatusRunning" xml:space="preserve">
+    <value>Läuft</value>
+  </data>
+  <data name="ActivityPreviewStatusCompleteWarnings" xml:space="preserve">
+    <value>Abgeschlossen mit Warnungen</value>
+  </data>
+  <data name="ActivityPreviewStatusFailed" xml:space="preserve">
+    <value>Fehlgeschlagen</value>
+  </data>
+  <data name="ActivityPreviewObjectInSystem" xml:space="preserve">
+    <value>Objekt im verbundenen System {0}</value>
+  </data>
+  <data name="ActivityPreviewMatchesFor" xml:space="preserve">
+    <value>Treffer für {0} ({1})</value>
+  </data>
+  <data name="ActivityPreviewCountOf" xml:space="preserve">
+    <value>{0} von {1}</value>
+  </data>
+  <data name="ActivityPreviewStageValidation" xml:space="preserve">
+    <value>Validierung</value>
+  </data>
+  <data name="ActivityPreviewStageObjectsAffected" xml:space="preserve">
+    <value>Betroffene Objekte</value>
+  </data>
+  <data name="ActivityPreviewStageSummary" xml:space="preserve">
+    <value>Zusammenfassung</value>
+  </data>
+  <data name="ActivityPreviewStageObjectDetail" xml:space="preserve">
+    <value>Objektdetails</value>
+  </data>
+  <data name="ActivityObjectChangesTitle" xml:space="preserve">
+    <value>Objektänderungen</value>
+  </data>
+  <data name="ActivityObjectChangesDescription" xml:space="preserve">
+    <value>Suchen Sie Änderungen an Metaverse-Objekten über alle Objekte hinweg: wann sie vorgenommen wurden, an welchem Objekttyp und wie sich ihre Attribute geändert haben. Es lassen sich nur von JIM erfasste Änderungen finden; bei ausgeschalteter Änderungsverfolgung für Metaverse-Objekte erscheinen daher keine, und die Aufbewahrung des Verlaufs entfernt ältere.</value>
+  </data>
+  <data name="ActivityObjectChangesChangedBetween" xml:space="preserve">
+    <value>Geändert zwischen</value>
+  </data>
+  <data name="ActivityObjectChangesObjectType" xml:space="preserve">
+    <value>Metaverse-Objekttyp</value>
+  </data>
+  <data name="ActivityObjectChangesAttributeChanges" xml:space="preserve">
+    <value>Attributänderungen</value>
+  </data>
+  <data name="ActivityObjectChangesHowCombine" xml:space="preserve">
+    <value>Verknüpfung der Bedingungen</value>
+  </data>
+  <data name="ActivityObjectChangesCondition" xml:space="preserve">
+    <value>Bedingung</value>
+  </data>
+  <data name="ActivityOperatorChangedTo" xml:space="preserve">
+    <value>geändert in</value>
+  </data>
+  <data name="ActivityOperatorChangedFrom" xml:space="preserve">
+    <value>geändert von</value>
+  </data>
+  <data name="ActivityOperatorChanged" xml:space="preserve">
+    <value>geändert (in oder von)</value>
+  </data>
+  <data name="ActivityObjectChangesRemoveCondition" xml:space="preserve">
+    <value>Bedingung entfernen</value>
+  </data>
+  <data name="ActivityObjectChangesAddCondition" xml:space="preserve">
+    <value>Bedingung hinzufügen</value>
+  </data>
+  <data name="ActivityObjectChangesSearch" xml:space="preserve">
+    <value>Namen des Metaverse-Objekts suchen</value>
+  </data>
+  <data name="ActivityObjectChangesChanged" xml:space="preserve">
+    <value>Geändert</value>
+  </data>
+  <data name="ActivityObjectChangesAttributes" xml:space="preserve">
+    <value>Attribute</value>
+  </data>
+  <data name="ActivityObjectChangesFinalValues" xml:space="preserve">
+    <value>Endwerte</value>
+  </data>
+  <data name="ActivityObjectChangesCleared" xml:space="preserve">
+    <value>(geleert)</value>
+  </data>
+  <data name="ActivityObjectChangesMadeBy" xml:space="preserve">
+    <value>Vorgenommen von</value>
+  </data>
+  <data name="ActivityObjectChangesNoMatchName" xml:space="preserve">
+    <value>Keine Änderungen an Metaverse-Objekten mit Namen wie „{0}“</value>
+  </data>
+  <data name="ActivityObjectChangesTryDifferentName" xml:space="preserve">
+    <value>Versuchen Sie einen anderen Namen oder setzen Sie die Suche zurück.</value>
+  </data>
+  <data name="ActivityObjectChangesWidenRange" xml:space="preserve">
+    <value>Erweitern Sie den Zeitraum oder passen Sie die Attributbedingungen an oder setzen Sie sie zurück.</value>
+  </data>
+  <data name="ActivityObjectChangesNoneRecorded" xml:space="preserve">
+    <value>Keine Änderungen erfasst</value>
+  </data>
+  <data name="ActivityObjectChangesNoneRecordedDetail" xml:space="preserve">
+    <value>Änderungen an Metaverse-Objekten erscheinen hier, sobald Synchronisierungen und Administratoren sie vornehmen, solange die Änderungsverfolgung für Metaverse-Objekte eingeschaltet ist.</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAll" xml:space="preserve">
+    <value>Alle Bedingungen</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAllTooltip" xml:space="preserve">
+    <value>Alle Bedingungen von derselben Änderung erfüllt: ein Metaverse-Objekt in einer Aktivität</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAny" xml:space="preserve">
+    <value>Beliebige Bedingung</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAnyTooltip" xml:space="preserve">
+    <value>Mindestens eine Bedingung erfüllt</value>
+  </data>
+  <data name="ActivityObjectChangesDeleted" xml:space="preserve">
+    <value>Gelöscht {0}</value>
+  </data>
+  <data name="ActivityHintText" xml:space="preserve">
+    <value>Beliebiger Wert; * steht für beliebig viel</value>
+  </data>
+  <data name="ActivityHintReference" xml:space="preserve">
+    <value>Name des referenzierten Objekts; * steht für beliebig viel</value>
+  </data>
+  <data name="ActivityHintDate" xml:space="preserve">
+    <value>yyyy-MM-dd für den ganzen Tag</value>
+  </data>
+  <data name="ActivityHintBoolean" xml:space="preserve">
+    <value>true oder false</value>
+  </data>
+  <data name="ActivityHintBinary" xml:space="preserve">
+    <value>Leer lassen; Binärwerte werden nicht erfasst</value>
+  </data>
+  <data name="ActivityHintAny" xml:space="preserve">
+    <value>Beliebiger Wert</value>
+  </data>
+  <data name="ActivityPendingDelete" xml:space="preserve">
+    <value>Dieses Objekt ist im verbundenen System zur Löschung vorgemerkt. Alle Attributwerte unten werden im ausstehenden Export mitgeführt, damit die Löschung weiterhin durchgeführt werden kann, sobald das Objekt im verbundenen System nicht mehr vorhanden ist.</value>
+  </data>
+  <data name="ActivityPendingAwaiting" xml:space="preserve">
+    <value>Die folgenden Attributänderungen sind vorgemerkt und warten auf den Export in das verbundene System.</value>
+  </data>
+  <data name="ActivityPendingExportNotConfirmed" xml:space="preserve">
+    <value>Die folgenden Attributänderungen wurden exportiert, aber noch nicht bestätigt. Sie werden beim nächsten Exportlauf erneut versucht.</value>
+  </data>
+  <data name="ActivityPendingFailed" xml:space="preserve">
+    <value>Der Export der folgenden Attributänderungen ist nach mehreren Versuchen fehlgeschlagen und erfordert möglicherweise ein manuelles Eingreifen.</value>
+  </data>
+  <data name="ActivityPendingChangeType" xml:space="preserve">
+    <value>Änderungstyp</value>
+  </data>
+  <data name="ActivityPendingFailingSince" xml:space="preserve">
+    <value>Schlägt seit {0} fehl. JIM versucht es bei jedem Exportlauf erneut.</value>
+  </data>
+  <data name="ActivityPendingFailing" xml:space="preserve">
+    <value>Schlägt fehl</value>
+  </data>
+  <data name="ActivityPendingLastAttempted" xml:space="preserve">
+    <value>Zuletzt versucht</value>
+  </data>
+  <data name="ActivityPendingAttributeChangesHeading" xml:space="preserve">
+    <value>Ausstehende Attributänderungen ({0})</value>
+  </data>
+  <data name="ActivityPendingAttributeFallback" xml:space="preserve">
+    <value>Attribut {0}</value>
+  </data>
+  <data name="ActivityPendingNoAttributeChanges" xml:space="preserve">
+    <value>Keine Attributänderungen aufgezeichnet.</value>
+  </data>
+  <data name="ActivityPendingViewDetails" xml:space="preserve">
+    <value>Vollständige Details des ausstehenden Exports anzeigen</value>
+  </data>
+  <data name="ActivityScheduleHeading" xml:space="preserve">
+    <value>Zeitplan</value>
+  </data>
+  <data name="ActivityScheduleCompactWithStep" xml:space="preserve">
+    <value>Teil von {0}, Schritt {1} von {2}</value>
+  </data>
+  <data name="ActivityScheduleCompact" xml:space="preserve">
+    <value>Teil von {0}</value>
+  </data>
+  <data name="ActivityScheduleHeadingPanel" xml:space="preserve">
+    <value>Teil eines Zeitplans</value>
+  </data>
+  <data name="ActivityScheduleFieldSchedule" xml:space="preserve">
+    <value>Zeitplan:</value>
+  </data>
+  <data name="ActivityScheduleFieldStep" xml:space="preserve">
+    <value>Schritt:</value>
+  </data>
+  <data name="ActivityScheduleStepOf" xml:space="preserve">
+    <value>{0} von {1}</value>
+  </data>
+  <data name="ActivityScheduleFieldExecution" xml:space="preserve">
+    <value>Zeitplanausführung:</value>
+  </data>
+  <data name="ActivityScheduleViewExecution" xml:space="preserve">
+    <value>Zeitplanausführung anzeigen</value>
+  </data>
+  <data name="ActivityScheduleStatusQueued" xml:space="preserve">
+    <value>In Warteschlange</value>
+  </data>
+  <data name="ActivityScheduleStatusInProgress" xml:space="preserve">
+    <value>In Bearbeitung</value>
+  </data>
+  <data name="ActivityScheduleStatusPaused" xml:space="preserve">
+    <value>Angehalten</value>
+  </data>
+  <data name="ActivityProcessedEveryObject" xml:space="preserve">
+    <value>Jedes {0}-Objekt verarbeitet</value>
+  </data>
+  <data name="ActivityChangesApplied" xml:space="preserve">
+    <value>Änderungen angewendet</value>
+  </data>
+  <data name="ActivityChangesNotApplied" xml:space="preserve">
+    <value>Änderungen nicht angewendet</value>
+  </data>
+  <data name="ActivityChangesNotAppliedTooltip" xml:space="preserve">
+    <value>Diese Synchronisierung wurde nicht abgeschlossen. Die nächste übernimmt diese Änderungen erneut.</value>
+  </data>
+  <data name="ActivityProcessedFullCovers" xml:space="preserve">
+    <value>Eine vollständige Synchronisierung verarbeitet jedes Objekt. Diese erfasst außerdem die folgenden, vor ihrem Start vorgenommenen Änderungen an allen {0}{1}-Objekten:</value>
+  </data>
+  <data name="ActivityProcessedFullCovered" xml:space="preserve">
+    <value>Eine vollständige Synchronisierung verarbeitet jedes Objekt. Diese hat außerdem die folgenden, vor ihrem Start vorgenommenen Änderungen an allen {0}{1}-Objekten erfasst:</value>
+  </data>
+  <data name="ActivityProcessedDeltaProcessing" xml:space="preserve">
+    <value>Eine Deltasynchronisierung verarbeitet nur geänderte Objekte. Diese verarbeitet außerdem alle {0}{1}-Objekte, weil die folgenden Änderungen vor ihrem Start vorgenommen wurden:</value>
+  </data>
+  <data name="ActivityProcessedDeltaProcessed" xml:space="preserve">
+    <value>Eine Deltasynchronisierung verarbeitet nur geänderte Objekte. Diese hat außerdem alle {0}{1}-Objekte verarbeitet, weil die folgenden Änderungen vor ihrem Start vorgenommen wurden:</value>
+  </data>
+  <data name="ActivityApplyingThisChange" xml:space="preserve">
+    <value>Anwendung dieser Änderung</value>
+  </data>
+  <data name="ActivityAppliedBy" xml:space="preserve">
+    <value>Angewendet durch</value>
+  </data>
+  <data name="ActivityApplySyncName" xml:space="preserve">
+    <value>Synchronisierung</value>
+  </data>
+  <data name="ActivityAppliedBySynchronisation" xml:space="preserve">
+    <value>eine Synchronisierung{0}</value>
+  </data>
+  <data name="ActivityPredictionNote" xml:space="preserve">
+    <value>Was die Vorschau vorhergesagt hat und was die Synchronisierung getan hat. Die tatsächliche Zahl enthält Objekte dieses Typs, die sich seit der Vorschau aus anderen Gründen geändert haben.</value>
+  </data>
+  <data name="ActivityPredictionLine" xml:space="preserve">
+    <value>{0}: vorhergesagt {1}, tatsächlich {2}</value>
+  </data>
+  <data name="ActivityAwaitingNextSynchronisation" xml:space="preserve">
+    <value>Wartet auf die nächste Synchronisierung von</value>
+  </data>
+  <data name="ActivityOpenMetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt öffnen</value>
+  </data>
+  <data name="ActivityValueChanges" xml:space="preserve">
+    <value>{0} Wertänderungen</value>
+  </data>
+  <data name="ActivityConfigPriorityNoteBefore" xml:space="preserve">
+    <value>Änderungen der Attributpriorität werden hier nicht angezeigt; die Priorität wird in den beitragenden Synchronisierungsregeln gespeichert. Sie finden sie auf der Seite</value>
+  </data>
+  <data name="ActivityConfigPriorityNoteAfter" xml:space="preserve">
+    <value>, aufgeführt als „Attributprioritätsreihenfolge für ...“.</value>
+  </data>
+  <data name="ActivityConfigNoChangesYet" xml:space="preserve">
+    <value>Für {0} wurden noch keine Konfigurationsänderungen erfasst.</value>
+  </data>
+  <data name="ActivityConfigCompareVersions" xml:space="preserve">
+    <value>Versionen vergleichen</value>
+  </data>
+  <data name="ActivityConfigFrom" xml:space="preserve">
+    <value>Von</value>
+  </data>
+  <data name="ActivityConfigTo" xml:space="preserve">
+    <value>Bis</value>
+  </data>
+  <data name="ActivityConfigCompare" xml:space="preserve">
+    <value>Vergleichen</value>
+  </data>
+  <data name="ActivityConfigClear" xml:space="preserve">
+    <value>Zurücksetzen</value>
+  </data>
+  <data name="ActivityConfigOpCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="ActivityConfigOpUpdated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="ActivityConfigOpDeleted" xml:space="preserve">
+    <value>Gelöscht</value>
+  </data>
+  <data name="ActivityConfigOpReverted" xml:space="preserve">
+    <value>Rückgängig gemacht</value>
+  </data>
+  <data name="ActivityConfigShowAll" xml:space="preserve">
+    <value>Alle Änderungen anzeigen</value>
+  </data>
+  <data name="ActivityConfigShowLess" xml:space="preserve">
+    <value>Weniger anzeigen</value>
+  </data>
+  <data name="ActivityConfigLoadMore" xml:space="preserve">
+    <value>Mehr laden ({0} verbleibend)</value>
+  </data>
+  <data name="ActivityAckSaveChanges" xml:space="preserve">
+    <value>Änderungen speichern</value>
+  </data>
+  <data name="ActivityAckSaving" xml:space="preserve">
+    <value>Wird gespeichert ...</value>
+  </data>
+  <data name="ActivityAckFromPreview" xml:space="preserve">
+    <value>Aus der Vorschau.</value>
+  </data>
+  <data name="ActivityAckChangeTo" xml:space="preserve">
+    <value>Änderung an</value>
+  </data>
+  <data name="ActivityAckChangesTo" xml:space="preserve">
+    <value>Änderungen an</value>
+  </data>
+  <data name="ActivityAckChanged" xml:space="preserve">
+    <value>Geändert</value>
+  </data>
+  <data name="ActivityAckAdded" xml:space="preserve">
+    <value>Hinzugefügt</value>
+  </data>
+  <data name="ActivityAckRemoved" xml:space="preserve">
+    <value>Entfernt</value>
+  </data>
+  <data name="ActivityAckAndMore" xml:space="preserve">
+    <value>und {0} weitere Änderung(en).</value>
+  </data>
+  <data name="ActivityAckWhenTakesEffect" xml:space="preserve">
+    <value>Wann dies wirksam wird</value>
+  </data>
+  <data name="ActivityAckGeneralEffect" xml:space="preserve">
+    <value>Das Speichern wendet dies nicht auf vorhandene Objekte an. Führen Sie eine vollständige Synchronisierung für die betroffenen verbundenen Systeme aus, damit es wirksam wird.</value>
+  </data>
+  <data name="ActivityAckConfirmRemoval" xml:space="preserve">
+    <value>Änderung der Objektentfernung bestätigen</value>
+  </data>
+  <data name="ActivityAckConfirmChange" xml:space="preserve">
+    <value>Konfigurationsänderung bestätigen</value>
+  </data>
+  <data name="ActivityAckDefaultLabel" xml:space="preserve">
+    <value>Konfiguration</value>
+  </data>
+  <data name="ActivityTitleTargetSeparator" xml:space="preserve">
+    <value>: </value>
+  </data>
+</root>

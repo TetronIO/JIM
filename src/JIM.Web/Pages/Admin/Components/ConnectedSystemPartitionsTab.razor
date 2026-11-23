@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Preview
 @using JIM.Models.Staging
@@ -20,16 +21,16 @@
 @if (ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0)
 {
     <MudAlert Severity="Severity.Info">
-        <MudText>Retrieve the @PartitionAndHierarchyText hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</MudText>
+        <MudText>@string.Format(CultureInfo.CurrentCulture, SchemaText.RetrieveHierarchyIntro, PartitionAndHierarchyText)</MudText>
         <AlertButton Severity="Severity.Info" Disabled="@_hierarchyBeingRetrieved" OnClick="HandleImportHierarchyAsync" Class="mt-5">
             @if (_hierarchyBeingRetrieved)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Retrieving Hierarchy</span>
+                <span class="ms-2">@SchemaText.RetrievingHierarchy</span>
             }
             else
             {
-                <text>Retrieve Hierarchy</text>
+                <text>@SchemaText.RetrieveHierarchy</text>
             }
         </AlertButton>
     </MudAlert>
@@ -40,12 +41,12 @@ else
     <MudPaper Outlined="true" Class="pa-4">
         <div class="jim-scope-summary" data-testid="jim-scope-summary">
             <div class="jim-scope-stat">
-                <span class="jim-scope-stat-value">@SelectedContainerCount of @TotalContainerCount</span>
-                <span class="jim-scope-stat-label">Containers selected</span>
+                <span class="jim-scope-stat-value">@string.Format(CultureInfo.CurrentCulture, SchemaText.ValueOfTotal, SelectedContainerCount, TotalContainerCount)</span>
+                <span class="jim-scope-stat-label">@SchemaText.ContainersSelected</span>
             </div>
             <div class="jim-scope-stat">
-                <span class="jim-scope-stat-value">@SelectedPartitionCount of @ConnectedSystem.Partitions.Count</span>
-                <span class="jim-scope-stat-label">@(ConnectedSystem.Partitions.Count == 1 ? "Partition" : "Partitions") managed</span>
+                <span class="jim-scope-stat-value">@string.Format(CultureInfo.CurrentCulture, SchemaText.ValueOfTotal, SelectedPartitionCount, ConnectedSystem.Partitions.Count)</span>
+                <span class="jim-scope-stat-label">@PluralRules.Choose(ConnectedSystem.Partitions.Count, SchemaText.PartitionsManagedOne, SchemaText.PartitionsManagedOther)</span>
             </div>
             @* Only where there are any: a permanent "0 excluded" would sit on every Connected System that has never
                carved anything out, which is most of them, saying nothing. Where there are exclusions the selected count
@@ -54,7 +55,7 @@ else
             {
                 <div class="jim-scope-stat" data-testid="jim-scope-excluded">
                     <span class="jim-scope-stat-value">@ExcludedContainerCount</span>
-                    <span class="jim-scope-stat-label">@(ExcludedContainerCount == 1 ? "Container" : "Containers") excluded</span>
+                    <span class="jim-scope-stat-label">@PluralRules.Choose(ExcludedContainerCount, SchemaText.ContainersExcludedOne, SchemaText.ContainersExcludedOther)</span>
                 </div>
             }
         </div>
@@ -67,31 +68,31 @@ else
                 {
                     var retrievedAt = _hierarchyRetrievedAt.Value;
                     <MudTooltip Arrow="true" Placement="Placement.Top" Text="@retrievedAt.ToLocalTime().ToFriendlyDate()">
-                        @($"Hierarchy last retrieved {retrievedAt.ToLocalTime().ToRelativeTime()}")
+                        @string.Format(CultureInfo.CurrentCulture, SchemaText.HierarchyLastRetrieved, retrievedAt.ToLocalTime().ToRelativeTime())
                     </MudTooltip>
                 }
                 else
                 {
-                    <text>The hierarchy as last retrieved from @ConnectedSystem.Name</text>
+                    <text>@string.Format(CultureInfo.CurrentCulture, SchemaText.HierarchyAsRetrievedFrom, ConnectedSystem.Name)</text>
                 }
             </span>
-            <InfoPopover Title="Refreshing the hierarchy">
-                Refreshing reads the partitions and Containers again and preserves your selections where possible:
-                existing ones are matched by their external ID, so renamed or moved items keep their selection state.
-                Partitions and Containers that no longer exist in the Connected System (deleted OUs, permission
-                changes) are removed. Make sure the Connected System identity has the permissions needed to retrieve
-                the hierarchy.
+            <InfoPopover Title="@SchemaText.RefreshingHierarchyTitle">
+                @SchemaText.RefreshHierarchyInfo
+                
+                
+                
+                
             </InfoPopover>
             <MudButton Variant="Variant.Filled" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
                        OnClick="HandleImportHierarchyAsync" DropShadow="false" Class="ms-auto" data-testid="jim-hierarchy-refresh">
                 @if (_hierarchyBeingRetrieved)
                 {
                     <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                    <span class="ms-2">Refreshing</span>
+                    <span class="ms-2">@SchemaText.Refreshing</span>
                 }
                 else
                 {
-                    <text>Refresh</text>
+                    <text>@SchemaText.RefreshButton</text>
                 }
             </MudButton>
         </div>
@@ -107,24 +108,24 @@ else
                 <div class="d-flex align-center gap-3">
                     <MudIcon Icon="@Icons.Material.Filled.Sync" />
                     <MudText Typo="Typo.body1">
-                        Hierarchy refreshed: @_hierarchyRefreshResult.GetSummary()
+                        @string.Format(CultureInfo.CurrentCulture, SchemaText.HierarchyRefreshedSummary, _hierarchyRefreshResult.GetSummary())
                     </MudText>
                     @if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
                     {
                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled">
-                            Selected items removed
+                            @SchemaText.SelectedItemsRemoved
                         </MudChip>
                     }
                     @if (_hierarchyRefreshResult.AffectedRunProfiles.Count > 0)
                     {
                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled">
-                            Run Profiles disabled
+                            @SchemaText.RunProfilesDisabled
                         </MudChip>
                     }
                     @if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
                     {
                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text">
-                            Partitions selected
+                            @SchemaText.PartitionsSelected
                         </MudChip>
                     }
                 </div>
@@ -136,7 +137,7 @@ else
                                    Variant="Variant.Filled"
 
                                    OnClick="CopyHierarchyChangesToClipboardAsync">
-                            Copy Changes
+                            @SchemaText.CopyChanges
                         </MudButton>
                     </div>
 
@@ -145,13 +146,13 @@ else
                     {
                         <MudText Typo="Typo.subtitle2" Class="mb-2">
                             <MudIcon Icon="@Icons.Material.Filled.PauseCircleOutline" Class="mr-1" Color="Color.Warning" />
-                            Run Profiles disabled
+                            @SchemaText.RunProfilesDisabled
                         </MudText>
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
                             <thead>
                                 <tr>
-                                    <th>Run Profile</th>
-                                    <th>Partition removed</th>
+                                    <th>@SchemaText.RunProfileHeader</th>
+                                    <th>@SchemaText.PartitionRemovedHeader</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -171,16 +172,16 @@ else
                     {
                         <MudText Typo="Typo.subtitle2" Class="mb-2">
                             <MudIcon Icon="@Icons.Material.Filled.CheckBox" Class="mr-1" Color="Color.Info" />
-                            Partitions selected
+                            @SchemaText.PartitionsSelected
                         </MudText>
                         <MudText Class="mb-2">
-                            A selected Container moved into each of these partitions. A Container is only imported while its partition is selected, so JIM selected the partition to keep it in scope.
+                            @SchemaText.PartitionsSelectedExplain
                         </MudText>
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
                             <thead>
                                 <tr>
-                                    <th>Partition</th>
-                                    <th>Containers moved in</th>
+                                    <th>@SchemaText.PartitionNoun</th>
+                                    <th>@SchemaText.ContainersMovedIn</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -204,33 +205,33 @@ else
                     {
                         <MudText Typo="Typo.subtitle2" Class="mb-2">
                             <MudIcon Icon="@Icons.Material.Filled.Delete" Class="mr-1" Color="Color.Error" />
-                            Removed
+                            @SchemaText.RemovedHeading
                         </MudText>
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
                             <thead>
                                 <tr>
-                                    <th>Type</th>
-                                    <th>Name</th>
-                                    <th>External ID</th>
-                                    <th>Was Selected</th>
+                                    <th>@CommonText.ColumnType</th>
+                                    <th>@CommonText.ColumnName</th>
+                                    <th>@SchemaText.ColumnExternalId</th>
+                                    <th>@SchemaText.WasSelected</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach (var item in _hierarchyRefreshResult.RemovedPartitions)
                                 {
                                     <tr class="@(item.WasSelected ? "mud-error-text" : "")">
-                                        <td>Partition</td>
+                                        <td>@SchemaText.PartitionNoun</td>
                                         <td>@item.Name</td>
                                         <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
                                         <td>
                                             @if (item.WasSelected)
                                             {
                                                 <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
-                                                <text>Yes</text>
+                                                <text>@CommonText.Yes</text>
                                             }
                                             else
                                             {
-                                                <text>No</text>
+                                                <text>@CommonText.No</text>
                                             }
                                         </td>
                                     </tr>
@@ -238,18 +239,18 @@ else
                                 @foreach (var item in _hierarchyRefreshResult.RemovedContainers)
                                 {
                                     <tr class="@(item.WasSelected ? "mud-error-text" : "")">
-                                        <td>Container</td>
+                                        <td>@SchemaText.ContainerNoun</td>
                                         <td>@item.Name</td>
                                         <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
                                         <td>
                                             @if (item.WasSelected)
                                             {
                                                 <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
-                                                <text>Yes</text>
+                                                <text>@CommonText.Yes</text>
                                             }
                                             else
                                             {
-                                                <text>No</text>
+                                                <text>@CommonText.No</text>
                                             }
                                         </td>
                                     </tr>
@@ -263,21 +264,21 @@ else
                     {
                         <MudText Typo="Typo.subtitle2" Class="mb-2">
                             <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-1" Color="Color.Success" />
-                            Added
+                            @SchemaText.AddedHeading
                         </MudText>
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
                             <thead>
                                 <tr>
-                                    <th>Type</th>
-                                    <th>Name</th>
-                                    <th>External ID</th>
+                                    <th>@CommonText.ColumnType</th>
+                                    <th>@CommonText.ColumnName</th>
+                                    <th>@SchemaText.ColumnExternalId</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach (var item in _hierarchyRefreshResult.AddedPartitions)
                                 {
                                     <tr>
-                                        <td>Partition</td>
+                                        <td>@SchemaText.PartitionNoun</td>
                                         <td>@item.Name</td>
                                         <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
                                     </tr>
@@ -285,7 +286,7 @@ else
                                 @foreach (var item in _hierarchyRefreshResult.AddedContainers)
                                 {
                                     <tr>
-                                        <td>Container</td>
+                                        <td>@SchemaText.ContainerNoun</td>
                                         <td>@item.Name</td>
                                         <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
                                     </tr>
@@ -299,22 +300,22 @@ else
                     {
                         <MudText Typo="Typo.subtitle2" Class="mb-2">
                             <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-1" Color="Color.Info" />
-                            Renamed
+                            @SchemaText.RenamedHeading
                         </MudText>
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
                             <thead>
                                 <tr>
-                                    <th>Type</th>
-                                    <th>Old Name</th>
-                                    <th>New Name</th>
-                                    <th>External ID</th>
+                                    <th>@CommonText.ColumnType</th>
+                                    <th>@SchemaText.OldName</th>
+                                    <th>@SchemaText.NewName</th>
+                                    <th>@SchemaText.ColumnExternalId</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach (var item in _hierarchyRefreshResult.RenamedPartitions)
                                 {
                                     <tr>
-                                        <td>Partition</td>
+                                        <td>@SchemaText.PartitionNoun</td>
                                         <td>@item.OldName</td>
                                         <td>@item.NewName</td>
                                         <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
@@ -323,7 +324,7 @@ else
                                 @foreach (var item in _hierarchyRefreshResult.RenamedContainers)
                                 {
                                     <tr>
-                                        <td>Container</td>
+                                        <td>@SchemaText.ContainerNoun</td>
                                         <td>@item.OldName</td>
                                         <td>@item.NewName</td>
                                         <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
@@ -338,14 +339,14 @@ else
                     {
                         <MudText Typo="Typo.subtitle2" Class="mb-2">
                             <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Class="mr-1" Color="Color.Info" />
-                            Moved
+                            @SchemaText.MovedHeading
                         </MudText>
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
                             <thead>
                                 <tr>
-                                    <th>Name</th>
-                                    <th>Old Parent</th>
-                                    <th>New Parent</th>
+                                    <th>@CommonText.ColumnName</th>
+                                    <th>@SchemaText.OldParent</th>
+                                    <th>@SchemaText.NewParent</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -370,12 +371,7 @@ else
 {
     <MudAlert Severity="Severity.Warning" Class="mt-5">
         <MudText>
-            <strong>No partitions or containers have been selected.</strong> You must select at least one partition
-            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
-            {
-                <text> and at least one container within that partition</text>
-            }
-            before you can configure Object Matching Rules or create Run Profiles.
+            <strong>@SchemaText.NoPartitionsSelectedLabel</strong> @string.Format(CultureInfo.CurrentCulture, SchemaText.NoPartitionsSelectedBody, ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers ? SchemaText.AndContainerWithinPartition : string.Empty)
         </MudText>
     </MudAlert>
 }
@@ -385,12 +381,12 @@ else
 {
     <div class="jim-scope-mode mt-6">
         <SegmentedToggle TValue="bool" Options="@ScopeModes" Value="@_advancedMode" ValueChanged="SetAdvancedMode"
-                         AriaLabel="Container Scope editor" TestId="jim-scope-mode" />
+                         AriaLabel="@SchemaText.ContainerScopeEditorLabel" TestId="jim-scope-mode" />
         <TermHint Term="Term.ContainerScope" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
             @(_advancedMode
-                ? "One statement per line, in hierarchy order. This states the whole of Container Scope: a Container it does not name is not managed."
-                : "Tick the Containers to manage. Advanced states the same scope as text, for a hierarchy too large to click through.")
+                ? SchemaText.ScopeTextModeHelp
+                : SchemaText.ScopeTreeModeHelp)
         </MudText>
     </div>
 }
@@ -399,20 +395,20 @@ else
 {
     <MudPaper Class="pa-4 mt-6" Outlined="true">
         <MudTextField T="string" @bind-Value="_advancedText" Immediate="true" Variant="Variant.Outlined"
-                      Lines="10" Label="Container Scope" spellcheck="false"
+                      Lines="10" Label="@SchemaText.ContainerScopeLabel" spellcheck="false"
                       Class="jim-scope-text" data-testid="jim-scope-text"
-                      HelperText="include (or +) or exclude (or -), an optional one-level, then the Container's path. Blank lines and lines beginning with # are ignored." />
+                      HelperText="@SchemaText.ScopeTextHelper" />
 
         @if (_advancedErrors.Count > 0)
         {
             @* Every problem at once, each tied to its line: an administrator correcting a scope of any size one
                round trip at a time is how a half-corrected text gets saved. *@
             <MudAlert Severity="Severity.Error" Class="mt-4" data-testid="jim-scope-text-errors">
-                <MudText Class="mb-2"><strong>This Container Scope was not applied.</strong> Nothing has been changed.</MudText>
+                <MudText Class="mb-2"><strong>@SchemaText.ScopeNotApplied</strong> @SchemaText.NothingChanged</MudText>
                 <ul class="jim-scope-text-error-list">
                     @foreach (var error in _advancedErrors)
                     {
-                        <li>Line @error.LineNumber: @error.Message</li>
+                        <li>@string.Format(CultureInfo.CurrentCulture, SchemaText.ScopeErrorLine, error.LineNumber, error.Message)</li>
                     }
                 </ul>
             </MudAlert>
@@ -421,10 +417,10 @@ else
         <div class="d-flex align-center gap-4 mt-4">
             <MudButton Variant="Variant.Filled" DropShadow="false"
                        OnClick="ApplyAdvancedTextWithFeedback" data-testid="jim-scope-text-apply">
-                Apply
+                @CommonText.Apply
             </MudButton>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                Applying edits the selection; nothing reaches the Connected System until you save.
+                @SchemaText.ScopeApplyingExplain
             </MudText>
         </div>
     </MudPaper>
@@ -438,7 +434,7 @@ else
             <div class="jim-scope-partition-head">
                 <span class="jim-scope-partition-name">@partition.Name</span>
                 <MudSwitch T="bool" Value="@partition.Selected" ValueChanged="@(v => PartitionSelectedChanged(partition, v))"
-                           Color="Color.Primary" Label="Manage this partition" Class="ms-auto" />
+                           Color="Color.Primary" Label="@SchemaText.ManagePartition" Class="ms-auto" />
             </div>
 
             @* Where this partition's next Delta Import starts (#2715); nothing for a deselected one *@
@@ -463,13 +459,13 @@ else
         {
             <span class="jim-scope-pending" data-testid="jim-scope-pending">
                 <MudIcon Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" />
-                Unsaved changes to what this Connected System imports
+                @SchemaText.UnsavedChangesImports
             </span>
         }
         else
         {
             <span class="jim-scope-pending jim-scope-pending-clean" data-testid="jim-scope-saved">
-                No unsaved changes
+                @SchemaText.NoUnsavedChanges
             </span>
         }
 
@@ -479,11 +475,11 @@ else
         <MudButton data-testid="jim-preview-scope-selection" Variant="Variant.Filled"
                    StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewScopeSelectionAsync"
                    Disabled="@_startingPreview" DropShadow="false">
-            Preview Changes
+            @SchemaText.PreviewChanges
         </MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync"
                    DropShadow="false" data-testid="jim-scope-save">
-            Save Changes
+            @CommonText.SaveChanges
         </MudButton>
     </div>
 
@@ -495,13 +491,12 @@ else
         {
             <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                       data-testid="jim-preview-stale">
-                The selection has been edited since this preview ran, so it no longer describes what saving would do.
-                Preview again for an answer about the current selection.
+                @SchemaText.ScopePreviewStale
             </MudAlert>
         }
 
         <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
-                                         Title="Preview: Partitions and Containers"
+                                         Title="@SchemaText.ScopePreviewTitle"
                                          OnPreviewChanged="OnScopeSelectionPreviewChanged"
                                          OnClose="DiscardScopeSelectionPreview"
                                          Class="mt-6" />
@@ -587,10 +582,10 @@ else
     /// does not happen and the errors stand; the two modes express exactly the same scopes, so there is nothing an
     /// administrator can write here that the tree cannot then show them.
     /// </remarks>
-    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> ScopeModes =
+    private static IReadOnlyList<SegmentedToggleOption<bool>> ScopeModes =>
     [
-        new(false, "Simple", "jim-scope-mode-simple"),
-        new(true, "Advanced", "jim-scope-mode-advanced")
+        new(false, SchemaText.ScopeSimple, "jim-scope-mode-simple"),
+        new(true, SchemaText.ScopeAdvanced, "jim-scope-mode-advanced")
     ];
 
     private void SetAdvancedMode(bool advanced)
@@ -613,7 +608,7 @@ else
     private void ApplyAdvancedTextWithFeedback()
     {
         if (ApplyAdvancedText())
-            Snackbar.Add("Container Scope applied. Save your changes to send them to the Connected System.", Severity.Success);
+            Snackbar.Add(SchemaText.ScopeAppliedSave, Severity.Success);
     }
 
     /// <summary>
@@ -687,7 +682,7 @@ else
                 _hierarchyRefreshResult = null;
                 if (!await RemovedPartitionRunProfilesDialog.ShowAsync(DialogService, affected))
                 {
-                    Snackbar.Add("Hierarchy refresh cancelled. Nothing was changed.", Severity.Info);
+                    Snackbar.Add(SchemaText.RefreshCancelled, Severity.Info);
                     return;
                 }
 
@@ -701,29 +696,29 @@ else
                 if (_hierarchyRefreshResult.AffectedRunProfiles.Count > 0)
                 {
                     var count = _hierarchyRefreshResult.AffectedRunProfiles.Count;
-                    Snackbar.Add($"Hierarchy refreshed. Disabled {count} Run Profile{(count == 1 ? "" : "s")} that targeted a removed partition.", Severity.Warning);
+                    Snackbar.Add(string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, SchemaText.RefreshedDisabledOne, SchemaText.RefreshedDisabledOther), count), Severity.Warning);
                 }
                 else if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
                 {
-                    Snackbar.Add("Hierarchy refreshed with warnings. Some selected items were removed.", Severity.Warning);
+                    Snackbar.Add(SchemaText.RefreshedWithWarnings, Severity.Warning);
                 }
                 else if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
                 {
                     // A refresh that widened what JIM imports says why, not only that it did.
-                    Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}, to keep in scope the selected Containers that moved into them.", Severity.Info);
+                    Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.RefreshedKeepInScope, _hierarchyRefreshResult.GetSummary()), Severity.Info);
                 }
                 else if (_hierarchyRefreshResult.HasChanges)
                 {
-                    Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}", Severity.Success);
+                    Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.HierarchyRefreshedSummary, _hierarchyRefreshResult.GetSummary()), Severity.Success);
                 }
                 else
                 {
-                    Snackbar.Add("Hierarchy refreshed. No changes detected.", Severity.Info);
+                    Snackbar.Add(SchemaText.RefreshedNoChanges, Severity.Info);
                 }
             }
             else
             {
-                Snackbar.Add($"Hierarchy refresh failed: {_hierarchyRefreshResult.ErrorMessage}", Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.RefreshFailed, _hierarchyRefreshResult.ErrorMessage), Severity.Error);
             }
 
             // The reload below replaces the edited selection with the saved one, so there is nothing left unsaved,
@@ -739,7 +734,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to import hierarchy for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to retrieve hierarchy: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.RetrieveFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -754,10 +749,10 @@ else
     /// <returns>True to discard the edits and refresh; false to keep them.</returns>
     private async Task<bool> ConfirmDiscardingUnsavedEditsAsync() =>
         await DialogService.ShowMessageBoxAsync(
-            "Discard unsaved changes?",
-            "Refreshing the hierarchy discards your unsaved changes to what this Connected System imports.",
-            yesText: "Discard and Refresh",
-            cancelText: "Cancel") == true;
+            SchemaText.DiscardUnsavedTitle,
+            SchemaText.DiscardUnsavedBody,
+            yesText: SchemaText.DiscardAndRefresh,
+            cancelText: CommonText.Cancel) == true;
 
     private async Task CopyHierarchyChangesToClipboardAsync()
     {
@@ -765,74 +760,74 @@ else
             return;
 
         var sb = new StringBuilder();
-        sb.AppendLine("Hierarchy Refresh Results");
+        sb.AppendLine(SchemaText.ClipboardTitle);
         sb.AppendLine(new string('=', 50));
-        sb.AppendLine($"Summary: {_hierarchyRefreshResult.GetSummary()}");
-        sb.AppendLine($"Total Partitions: {_hierarchyRefreshResult.TotalPartitions}");
-        sb.AppendLine($"Total Containers: {_hierarchyRefreshResult.TotalContainers}");
+        sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardSummary, _hierarchyRefreshResult.GetSummary()));
+        sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardTotalPartitions, _hierarchyRefreshResult.TotalPartitions));
+        sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardTotalContainers, _hierarchyRefreshResult.TotalContainers));
         sb.AppendLine();
 
         if (_hierarchyRefreshResult.AffectedRunProfiles.Count > 0)
         {
-            sb.AppendLine("RUN PROFILES DISABLED:");
+            sb.AppendLine(SchemaText.ClipboardRunProfilesDisabled);
             foreach (var runProfile in _hierarchyRefreshResult.AffectedRunProfiles)
-                sb.AppendLine($"  {runProfile.RunProfileName} (partition {runProfile.PartitionName})");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardRunProfile, runProfile.RunProfileName, runProfile.PartitionName));
             sb.AppendLine();
         }
 
         if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
         {
-            sb.AppendLine("PARTITIONS SELECTED (a selected Container moved into each):");
+            sb.AppendLine(SchemaText.ClipboardPartitionsSelected);
             foreach (var item in _hierarchyRefreshResult.PartitionsSelectedForMovedContainers)
-                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId}): {string.Join(", ", item.ContainerExternalIds)}");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardPartitionSelectedLine, item.Name, item.ExternalId, string.Join(", ", item.ContainerExternalIds)));
             sb.AppendLine();
         }
 
         if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
         {
-            sb.AppendLine("REMOVED:");
+            sb.AppendLine(SchemaText.ClipboardRemoved);
             foreach (var item in _hierarchyRefreshResult.RemovedPartitions)
-                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId}){(item.WasSelected ? " - WAS SELECTED!" : "")}");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardRemovedPartition, item.Name, item.ExternalId, item.WasSelected ? SchemaText.ClipboardWasSelected : string.Empty));
             foreach (var item in _hierarchyRefreshResult.RemovedContainers)
-                sb.AppendLine($"  [Container] {item.Name} ({item.ExternalId}){(item.WasSelected ? " - WAS SELECTED!" : "")}");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardRemovedContainer, item.Name, item.ExternalId, item.WasSelected ? SchemaText.ClipboardWasSelected : string.Empty));
             sb.AppendLine();
         }
 
         if (_hierarchyRefreshResult.AddedPartitions.Count > 0 || _hierarchyRefreshResult.AddedContainers.Count > 0)
         {
-            sb.AppendLine("ADDED:");
+            sb.AppendLine(SchemaText.ClipboardAdded);
             foreach (var item in _hierarchyRefreshResult.AddedPartitions)
-                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId})");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardPartitionLine, item.Name, item.ExternalId));
             foreach (var item in _hierarchyRefreshResult.AddedContainers)
-                sb.AppendLine($"  [Container] {item.Name} ({item.ExternalId})");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardContainerLine, item.Name, item.ExternalId));
             sb.AppendLine();
         }
 
         if (_hierarchyRefreshResult.RenamedPartitions.Count > 0 || _hierarchyRefreshResult.RenamedContainers.Count > 0)
         {
-            sb.AppendLine("RENAMED:");
+            sb.AppendLine(SchemaText.ClipboardRenamed);
             foreach (var item in _hierarchyRefreshResult.RenamedPartitions)
-                sb.AppendLine($"  [Partition] \"{item.OldName}\" -> \"{item.NewName}\" ({item.ExternalId})");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardRenamedPartition, item.OldName, item.NewName, item.ExternalId));
             foreach (var item in _hierarchyRefreshResult.RenamedContainers)
-                sb.AppendLine($"  [Container] \"{item.OldName}\" -> \"{item.NewName}\" ({item.ExternalId})");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardRenamedContainer, item.OldName, item.NewName, item.ExternalId));
             sb.AppendLine();
         }
 
         if (_hierarchyRefreshResult.MovedContainers.Count > 0)
         {
-            sb.AppendLine("MOVED:");
+            sb.AppendLine(SchemaText.ClipboardMoved);
             foreach (var item in _hierarchyRefreshResult.MovedContainers)
-                sb.AppendLine($"  [Container] {item.Name}: {DescribeMoveEnd(item.OldParentExternalId, item.OldPartitionExternalId)} -> {DescribeMoveEnd(item.NewParentExternalId, item.NewPartitionExternalId)}");
+                sb.AppendLine(string.Format(CultureInfo.CurrentCulture, SchemaText.ClipboardMovedContainer, item.Name, DescribeMoveEnd(item.OldParentExternalId, item.OldPartitionExternalId), DescribeMoveEnd(item.NewParentExternalId, item.NewPartitionExternalId)));
         }
 
         try
         {
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString());
-            Snackbar.Add("Changes copied to clipboard", Severity.Success);
+            Snackbar.Add(SchemaText.ChangesCopied, Severity.Success);
         }
         catch
         {
-            Snackbar.Add("Failed to copy to clipboard. Please copy manually.", Severity.Warning);
+            Snackbar.Add(SchemaText.ChangesCopyFailed, Severity.Warning);
         }
     }
 
@@ -841,7 +836,7 @@ else
     /// into or out of, that Partition; or "(root)", at the top level of the Partition it stayed in.
     /// </summary>
     private static string DescribeMoveEnd(string? parentExternalId, string? partitionExternalId) =>
-        parentExternalId ?? partitionExternalId ?? "(root)";
+        parentExternalId ?? partitionExternalId ?? SchemaText.ClipboardRoot;
 
     private async Task HandleHierarchySelectionSubmitAsync()
     {
@@ -853,7 +848,7 @@ else
         // says how many objects that is (#1251).
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                "Connected System", ConnectedSystem.Name,
+                SchemaText.ConnectedSystemTermName, ConnectedSystem.Name,
                 ConfigurationChangePreviewCounts.ForConfirmation(_preview, ScopeSelectionPreviewIsStale),
                 ConfigurationChangePreviewCounts.ForConfirmationVerdict(_preview, ScopeSelectionPreviewIsStale)))
             return;
@@ -866,7 +861,7 @@ else
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, previewActivityId: previewActivityId);
         DiscardScopeSelectionPreview();
         _selectionEdited = false;
-        Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
+        Snackbar.Add(SchemaText.HierarchySaved, Severity.Success);
         await OnConnectedSystemChanged.InvokeAsync();
     }
 
@@ -927,7 +922,7 @@ else
         {
             DiscardScopeSelectionPreview();
             Log.Error(ex, "Failed to start a partition and container selection preview for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {

@@ -3,6 +3,8 @@
 
 using JIM.Models.Logic.Scoping;
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
@@ -24,4 +26,13 @@ public sealed class NotConnectedSummary
 
     /// <summary>The whole entry as plain text to paste into a message or ticket, with the evaluation time in UTC.</summary>
     public string Summary { get; set; } = string.Empty;
+
+    /// <summary><see cref="Hint"/> as a <see cref="JimMessage"/> (#3030).</summary>
+    public JimMessage? HintDetail { get; set; }
+
+    /// <summary><see cref="BulletsTitle"/> as a <see cref="JimMessage"/> (#3030).</summary>
+    public JimMessage? BulletsTitleDetail { get; set; }
+
+    /// <summary><see cref="Summary"/> as a <see cref="JimMessage"/> (#3030), so the copyable text is in the viewer's language.</summary>
+    public JimMessage? SummaryDetail { get; set; }
 }

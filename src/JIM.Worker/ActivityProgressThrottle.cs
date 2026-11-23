@@ -96,7 +96,10 @@ public sealed class ActivityProgressThrottle : IAsyncDisposable
     public Task ReportAsync(string? message = null)
     {
         if (message != null)
+        {
             _activity.Message = message;
+            _activity.MessageDetailJson = null;
+        }
 
         return NoteChangeAsync();
     }

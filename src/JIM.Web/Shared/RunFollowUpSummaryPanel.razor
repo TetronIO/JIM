@@ -8,7 +8,7 @@
 @if (Lines.Count > 0)
 {
     <MudPaper Class="@($"pa-4 {Class}")" Outlined="true" data-testid="jim-run-follow-up">
-        <MudText Typo="Typo.h6" Class="mb-2">Follow-up</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">@ActivityText.ActivityFollowUpLabel</MudText>
         @foreach (var line in Lines)
         {
             <div class="jim-follow-up-summary-row">
@@ -31,7 +31,7 @@
             </div>
         }
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
-            The run's own result stays as it ended. These change as the work is delivered; each export item's Follow-up says why.
+            @ActivityText.ActivityFollowUpSummaryNote
         </MudText>
     </MudPaper>
 }

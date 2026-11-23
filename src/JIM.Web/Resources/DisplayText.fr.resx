@@ -1,0 +1,488 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AttributeSideMetaverse" xml:space="preserve">
+    <value>Metaverse</value>
+  </data>
+  <data name="AttributeSideConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="AttributeSingleValued" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="AttributeMultiValued" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="AttributeDescription" xml:space="preserve">
+    <value>{0} : {1}, {2}</value>
+  </data>
+  <data name="DayToday" xml:space="preserve">
+    <value>Aujourd’hui</value>
+  </data>
+  <data name="DayYesterday" xml:space="preserve">
+    <value>Hier</value>
+  </data>
+  <data name="DurationDayOne" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="DurationDayOther" xml:space="preserve">
+    <value>{0} jours</value>
+  </data>
+  <data name="DurationHourOne" xml:space="preserve">
+    <value>{0} h</value>
+  </data>
+  <data name="DurationHourOther" xml:space="preserve">
+    <value>{0} h</value>
+  </data>
+  <data name="DurationMinute" xml:space="preserve">
+    <value>{0} min</value>
+  </data>
+  <data name="DurationSecond" xml:space="preserve">
+    <value>{0} s</value>
+  </data>
+  <data name="DurationMillisecond" xml:space="preserve">
+    <value>{0} ms</value>
+  </data>
+  <data name="DurationApproxDayOne" xml:space="preserve">
+    <value>~{0} jour</value>
+  </data>
+  <data name="DurationApproxDayOther" xml:space="preserve">
+    <value>~{0} jours</value>
+  </data>
+  <data name="DurationApproxHourOne" xml:space="preserve">
+    <value>~{0} h</value>
+  </data>
+  <data name="DurationApproxHourOther" xml:space="preserve">
+    <value>~{0} h</value>
+  </data>
+  <data name="DurationApproxMinute" xml:space="preserve">
+    <value>~{0} min</value>
+  </data>
+  <data name="DurationApproxSecond" xml:space="preserve">
+    <value>~{0} s</value>
+  </data>
+  <data name="ErrorHeadingNoError" xml:space="preserve">
+    <value>Aucune erreur</value>
+  </data>
+  <data name="ErrorHeadingImportRejected" xml:space="preserve">
+    <value>Importation rejetée</value>
+  </data>
+  <data name="ErrorHeadingAttributeNotImported" xml:space="preserve">
+    <value>Attribut non importé</value>
+  </data>
+  <data name="ErrorHeadingReferenceUnresolved" xml:space="preserve">
+    <value>Référence non résolue</value>
+  </data>
+  <data name="ErrorHeadingImportVerification" xml:space="preserve">
+    <value>Vérification de l’importation</value>
+  </data>
+  <data name="ErrorHeadingImportFellBack" xml:space="preserve">
+    <value>Repli de l’importation</value>
+  </data>
+  <data name="ErrorHeadingSynchronisationFailed" xml:space="preserve">
+    <value>Échec de la synchronisation</value>
+  </data>
+  <data name="ErrorHeadingExpressionNotEvaluated" xml:space="preserve">
+    <value>Expression non évaluée</value>
+  </data>
+  <data name="ErrorHeadingDatesMerged" xml:space="preserve">
+    <value>Dates fusionnées</value>
+  </data>
+  <data name="ErrorHeadingCredentialNotExported" xml:space="preserve">
+    <value>Identifiants non exportés</value>
+  </data>
+  <data name="ErrorHeadingExportRulesOverlap" xml:space="preserve">
+    <value>Chevauchement des règles d’exportation</value>
+  </data>
+  <data name="ErrorHeadingExportPending" xml:space="preserve">
+    <value>Exportation en attente</value>
+  </data>
+  <data name="ErrorHeadingExportFailed" xml:space="preserve">
+    <value>Échec de l’exportation</value>
+  </data>
+  <data name="ErrorHeadingExportRefused" xml:space="preserve">
+    <value>Exportation refusée</value>
+  </data>
+  <data name="ErrorHeadingValueAlreadyInUse" xml:space="preserve">
+    <value>Valeur déjà utilisée</value>
+  </data>
+  <data name="ErrorHeadingPasswordRequired" xml:space="preserve">
+    <value>Mot de passe requis</value>
+  </data>
+  <data name="ErrorHeadingAccessDenied" xml:space="preserve">
+    <value>Accès refusé</value>
+  </data>
+  <data name="ErrorHeadingExportRejected" xml:space="preserve">
+    <value>Exportation rejetée</value>
+  </data>
+  <data name="ErrorHeadingPlaceholderMemberRejected" xml:space="preserve">
+    <value>Membre fictif rejeté</value>
+  </data>
+  <data name="ErrorHeadingDependencyNotYetExported" xml:space="preserve">
+    <value>Dépendance pas encore exportée</value>
+  </data>
+  <data name="ErrorHeadingChangedSinceLastImport" xml:space="preserve">
+    <value>Modifié depuis la dernière importation</value>
+  </data>
+  <data name="ErrorHeadingNoFreeValueFound" xml:space="preserve">
+    <value>Aucune valeur libre trouvée</value>
+  </data>
+  <data name="ErrorHeadingSequenceWidthExceeded" xml:space="preserve">
+    <value>Largeur de séquence dépassée</value>
+  </data>
+  <data name="ErrorHeadingNeedsADecision" xml:space="preserve">
+    <value>Décision requise</value>
+  </data>
+  <data name="ErrorHeadingOperationFailed" xml:space="preserve">
+    <value>Échec de l’opération</value>
+  </data>
+  <data name="ErrorChipNeedsADecision" xml:space="preserve">
+    <value>Décision requise</value>
+  </data>
+  <data name="ActivityTargetScimRequests" xml:space="preserve">
+    <value>Requêtes SCIM</value>
+  </data>
+  <data name="ExternalIdStatusRejected" xml:space="preserve">
+    <value>Cet objet n’a pas été créé à cause d’une erreur d’importation. L’identifiant externe affiché provient des données sources.</value>
+  </data>
+  <data name="ExternalIdStatusPendingRemoval" xml:space="preserve">
+    <value>Cet objet a été détecté comme supprimé du système source. Il sera retiré lors de la prochaine synchronisation.</value>
+  </data>
+  <data name="ExternalIdStatusDeleted" xml:space="preserve">
+    <value>Cet objet a été supprimé. L’identifiant externe affiché est conservé tel qu’il était lors de l’enregistrement de cette opération.</value>
+  </data>
+  <data name="ExternalIdStatusOther" xml:space="preserve">
+    <value>L’identifiant externe affiché est conservé tel qu’il était lors de l’enregistrement de cette opération.</value>
+  </data>
+  <data name="OperationAdded" xml:space="preserve">
+    <value>Un nouvel objet de système connecté a été découvert dans le système source et ajouté à l’espace connecteur.</value>
+  </data>
+  <data name="OperationUpdated" xml:space="preserve">
+    <value>Un objet de système connecté existant a été mis à jour avec les valeurs d’attributs modifiées du système source.</value>
+  </data>
+  <data name="OperationDeletedImport" xml:space="preserve">
+    <value>L’objet a été détecté comme supprimé du système source. Il sera retiré lors de la prochaine synchronisation.</value>
+  </data>
+  <data name="OperationDeletedSync" xml:space="preserve">
+    <value>La suppression de cet objet a été traitée pendant la synchronisation. Les liens et les données Metaverse associés ont été mis à jour.</value>
+  </data>
+  <data name="OperationProjected" xml:space="preserve">
+    <value>Un nouvel objet Metaverse a été créé, car aucune correspondance existante n’a été trouvée. Les attributs de l’objet de système connecté ont été projetés dans le Metaverse.</value>
+  </data>
+  <data name="OperationJoined" xml:space="preserve">
+    <value>L’objet de système connecté a été associé à un objet Metaverse existant au moyen des règles de jointure configurées.</value>
+  </data>
+  <data name="OperationAttributeFlow" xml:space="preserve">
+    <value>Les valeurs d’attributs ont été transmises de l’objet de système connecté à l’objet Metaverse selon les mappages de la règle de synchronisation.</value>
+  </data>
+  <data name="OperationDisconnected" xml:space="preserve">
+    <value>L’objet de système connecté a été dissocié de son objet Metaverse. Le flux d’attributs est arrêté.</value>
+  </data>
+  <data name="OperationDisconnectedOutOfScope" xml:space="preserve">
+    <value>L’objet est sorti du périmètre des critères de périmètre de la règle de synchronisation d’importation et a été dissocié du Metaverse.</value>
+  </data>
+  <data name="OperationOutOfScopeRetainJoin" xml:space="preserve">
+    <value>L’objet est sorti du périmètre, mais la jointure a été conservée. Le flux d’attributs est arrêté, mais le lien est préservé en vue d’une future remise dans le périmètre.</value>
+  </data>
+  <data name="OperationDriftCorrection" xml:space="preserve">
+    <value>Une dérive a été détectée : les valeurs du système cible différaient des valeurs Metaverse attendues. Une exportation en attente corrective a été créée pour rétablir l’état attendu.</value>
+  </data>
+  <data name="OperationExported" xml:space="preserve">
+    <value>Les modifications d’attributs en attente ont été exportées avec succès vers le système connecté cible.</value>
+  </data>
+  <data name="OperationDeprovisioned" xml:space="preserve">
+    <value>L’objet a été supprimé du système connecté cible dans le cadre du déprovisionnement.</value>
+  </data>
+  <data name="OperationPendingExport" xml:space="preserve">
+    <value>Une exportation en attente est préparée et attend la prochaine exécution d’exportation pour appliquer les modifications au système cible.</value>
+  </data>
+  <data name="OperationPendingExportConfirmed" xml:space="preserve">
+    <value>L’exportation en attente a été confirmée pendant l’importation de confirmation. Les valeurs exportées correspondaient aux valeurs importées.</value>
+  </data>
+  <data name="OperationCreated" xml:space="preserve">
+    <value>L’objet Metaverse a été créé directement (par exemple par la génération de données ou l’interface d’administration) plutôt que par la synchronisation.</value>
+  </data>
+  <data name="OperationExportScopeReview" xml:space="preserve">
+    <value>Cet objet Metaverse a été réexaminé au regard des règles de synchronisation d’exportation, car une règle d’exportation a changé ou l’objet a été créé ou modifié en dehors de la synchronisation. Il a été provisionné ou déprovisionné comme l’exigent désormais les règles, ou ses valeurs modifiées en dehors de la synchronisation ont été transmises à ses comptes.</value>
+  </data>
+  <data name="OperationNoChange" xml:space="preserve">
+    <value>L’objet a été évalué, mais aucune modification n’était nécessaire. Les valeurs existantes correspondent déjà à l’état attendu.</value>
+  </data>
+  <data name="OperationOther" xml:space="preserve">
+    <value>Une opération a été effectuée sur cet objet.</value>
+  </data>
+  <data name="WritabilityWritable" xml:space="preserve">
+    <value>Inscriptible</value>
+  </data>
+  <data name="WritabilityReadOnly" xml:space="preserve">
+    <value>Lecture seule</value>
+  </data>
+  <data name="WritabilityWritableOnCreate" xml:space="preserve">
+    <value>Définissable à la création uniquement</value>
+  </data>
+  <data name="WritabilityWritableDescription" xml:space="preserve">
+    <value>Le système connecté accepte les écritures dans cet attribut ; un flux d’attributs d’exportation peut donc le tenir à jour.</value>
+  </data>
+  <data name="WritabilityReadOnlyDescription" xml:space="preserve">
+    <value>Le système connecté n’accepte pas les écritures dans cet attribut. Il peut être importé, mais aucun flux d’attributs d’exportation ne peut le cibler.</value>
+  </data>
+  <data name="WritabilityWritableOnCreateDescription" xml:space="preserve">
+    <value>Le système connecté n’accepte une valeur pour cet attribut qu’à la création de l’objet. Un flux d’attributs d’exportation peut le cibler : la valeur est envoyée avec l’exportation en attente de création, et JIM ne la renvoie jamais, car la modifier romprait le lien avec l’objet.</value>
+  </data>
+  <data name="RunTypeResultsImport" xml:space="preserve">
+    <value>Résultats de l’importation</value>
+  </data>
+  <data name="RunTypeResultsSynchronisation" xml:space="preserve">
+    <value>Résultats de la synchronisation</value>
+  </data>
+  <data name="RunTypeResultsExport" xml:space="preserve">
+    <value>Résultats de l’exportation</value>
+  </data>
+  <data name="RunTypeResultsOther" xml:space="preserve">
+    <value>Résultats</value>
+  </data>
+  <data name="ObjectInSystem" xml:space="preserve">
+    <value>{0} dans {1}</value>
+  </data>
+  <data name="ObjectTypeNameInSystem" xml:space="preserve">
+    <value>{0} {1} dans {2}</value>
+  </data>
+  <data name="ObjectInSystemOnly" xml:space="preserve">
+    <value>dans {0}</value>
+  </data>
+  <data name="ObjectConnectedSystemObjectNamed" xml:space="preserve">
+    <value>Objet de système connecté {0}</value>
+  </data>
+  <data name="ObjectConnectedSystemObjectNoun" xml:space="preserve">
+    <value>Objet de système connecté</value>
+  </data>
+  <data name="ObjectMetaverseObjectNamed" xml:space="preserve">
+    <value>Objet Metaverse {0}</value>
+  </data>
+  <data name="ObjectMetaverseObjectNoun" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="ObjectTypeInMetaverse" xml:space="preserve">
+    <value>{0} dans le Metaverse</value>
+  </data>
+  <data name="ObjectInMetaverse" xml:space="preserve">
+    <value>dans le Metaverse</value>
+  </data>
+  <data name="TermMetaverseName" xml:space="preserve">
+    <value>Metaverse</value>
+  </data>
+  <data name="TermMetaverseText" xml:space="preserve">
+    <value>Le référentiel central et faisant autorité de JIM. Le Metaverse contient un objet Metaverse pour chaque élément du monde réel que JIM gère, agrégé à partir de chaque système connecté au moyen de règles de synchronisation.</value>
+  </data>
+  <data name="TermConnectorSpaceName" xml:space="preserve">
+    <value>Espace connecteur</value>
+  </data>
+  <data name="TermConnectorSpaceText" xml:space="preserve">
+    <value>La zone de transit où résident les objets de systèmes connectés avant et après la synchronisation. L’espace connecteur sert de tampon entre les systèmes externes et le Metaverse, afin de garantir que les modifications sont validées avant d’être appliquées.</value>
+  </data>
+  <data name="TermProjectionName" xml:space="preserve">
+    <value>Projection</value>
+  </data>
+  <data name="TermProjectionText" xml:space="preserve">
+    <value>Création d’un nouvel objet Metaverse lorsqu’aucun objet existant ne correspond à un objet de système connecté entrant. La projection est activée pour chaque règle de synchronisation.</value>
+  </data>
+  <data name="TermJoinName" xml:space="preserve">
+    <value>Jointure</value>
+  </data>
+  <data name="TermJoinText" xml:space="preserve">
+    <value>Association d’un objet de système connecté à un objet Metaverse existant. Une jointure a lieu lorsqu’une règle de correspondance d’objets constate qu’un objet de système connecté entrant correspond à un objet déjà existant.</value>
+  </data>
+  <data name="TermAttributeFlowName" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="TermAttributeFlowText" xml:space="preserve">
+    <value>Une règle qui met en correspondance un attribut entre un objet de système connecté et un objet Metaverse. Les flux d’attributs définissent la façon dont les données circulent pendant la synchronisation, y compris les transformations appliquées par des expressions.</value>
+  </data>
+  <data name="TermPendingExportName" xml:space="preserve">
+    <value>Exportation en attente</value>
+  </data>
+  <data name="TermPendingExportText" xml:space="preserve">
+    <value>Une modification en file d’attente, en attente d’être envoyée à un système cible. Les exportations en attente sont créées pendant la synchronisation et conservées jusqu’à l’exécution d’un profil d’exécution d’exportation, moment où elles sont appliquées au système connecté.</value>
+  </data>
+  <data name="TermObjectMatchingRuleName" xml:space="preserve">
+    <value>Règle de correspondance d’objets</value>
+  </data>
+  <data name="TermObjectMatchingRuleText" xml:space="preserve">
+    <value>Une règle qui détermine si un objet de système connecté entrant correspond à un objet Metaverse existant. La correspondance à l’importation associe un objet de système connecté à un objet Metaverse ; la correspondance à l’exportation associe un objet Metaverse en cours de provisionnement à un compte qui existe déjà dans le système cible, plutôt que de créer un doublon.</value>
+  </data>
+  <data name="TermScopingName" xml:space="preserve">
+    <value>Périmètre</value>
+  </data>
+  <data name="TermScopingText" xml:space="preserve">
+    <value>Les critères de périmètre qui déterminent les objets auxquels s’applique une règle de synchronisation. Tant qu’un objet est hors de ces critères, la règle ne fait rien circuler pour lui ; lorsqu’un objet joint les quitte, l’action hors périmètre de la règle (règles d’importation) ou son action de déprovisionnement (règles d’exportation) détermine la suite.</value>
+  </data>
+  <data name="TermContainerScopeName" xml:space="preserve">
+    <value>Portée du conteneur</value>
+  </data>
+  <data name="TermContainerScopeText" xml:space="preserve">
+    <value>Jusqu’où, sous un conteneur sélectionné, les objets sont importés : tout le sous-arbre situé en dessous (valeur par défaut), ou uniquement les objets contenus directement dans celui-ci.</value>
+  </data>
+  <data name="TermAttributePriorityName" xml:space="preserve">
+    <value>Priorité des attributs</value>
+  </data>
+  <data name="TermAttributePriorityText" xml:space="preserve">
+    <value>La priorité déterministe qui détermine la valeur du système connecté qui l’emporte lorsque plusieurs fournissent le même attribut d’un objet Metaverse. Chaque règle de synchronisation entrante contributrice détient une priorité pour l’attribut, et le contributeur de priorité la plus élevée qui possède une valeur la définit, de sorte que le résultat ne dépend jamais de l’ordre dans lequel les synchronisations s’exécutent.</value>
+  </data>
+  <data name="SiblingConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="SiblingConnectors" xml:space="preserve">
+    <value>Connecteurs</value>
+  </data>
+  <data name="SiblingTemplates" xml:space="preserve">
+    <value>Modèles</value>
+  </data>
+  <data name="SiblingDataSets" xml:space="preserve">
+    <value>Jeux de données</value>
+  </data>
+  <data name="PasswordChangeStatusWaiting" xml:space="preserve">
+    <value>En attente</value>
+  </data>
+  <data name="PasswordChangeStatusDelivering" xml:space="preserve">
+    <value>Remise en cours</value>
+  </data>
+  <data name="PasswordChangeStatusParked" xml:space="preserve">
+    <value>Suspendue</value>
+  </data>
+  <data name="PasswordChangeStatusExpired" xml:space="preserve">
+    <value>Expirée</value>
+  </data>
+  <data name="PasswordChangeStatusCancelled" xml:space="preserve">
+    <value>Annulée</value>
+  </data>
+  <data name="PasswordChangeCancelledByAdministrator" xml:space="preserve">
+    <value>Annulée par un administrateur</value>
+  </data>
+  <data name="PasswordChangeCancelledBy" xml:space="preserve">
+    <value>Annulée par {0}</value>
+  </data>
+  <data name="PasswordChangeHeld" xml:space="preserve">
+    <value>En attente de l’activation de la synchronisation des mots de passe pour ce système connecté</value>
+  </data>
+  <data name="PasswordChangeHeldAfterAttempt" xml:space="preserve">
+    <value>En attente de l’activation de la synchronisation des mots de passe pour ce système connecté. Dernière tentative : {0}</value>
+  </data>
+  <data name="PasswordChangeLastAttemptTargetMessage" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="PasswordChangeInitial" xml:space="preserve">
+    <value>Mot de passe initial d’un objet de système connecté nouvellement provisionné</value>
+  </data>
+  <data name="PasswordFailureTransient" xml:space="preserve">
+    <value>Cible indisponible</value>
+  </data>
+  <data name="PasswordFailureConfigurationFault" xml:space="preserve">
+    <value>Erreur de configuration</value>
+  </data>
+  <data name="PasswordFailurePolicyRejection" xml:space="preserve">
+    <value>Rejet par la stratégie</value>
+  </data>
+  <data name="PasswordFailureTargetObjectNotFound" xml:space="preserve">
+    <value>Objet de système connecté introuvable</value>
+  </data>
+  <data name="PasswordFailureUnsupportedOperation" xml:space="preserve">
+    <value>Opération non prise en charge</value>
+  </data>
+  <data name="PasswordOriginSet" xml:space="preserve">
+    <value>Définie</value>
+  </data>
+  <data name="PasswordOriginInitial" xml:space="preserve">
+    <value>Initiale</value>
+  </data>
+  <data name="PasswordOriginPropagated" xml:space="preserve">
+    <value>Propagée</value>
+  </data>
+  <data name="PasswordFirstPasswordLabel" xml:space="preserve">
+    <value>Premier mot de passe</value>
+  </data>
+  <data name="PasswordFirstPasswordTooltip" xml:space="preserve">
+    <value>Cette modification est aussi le premier mot de passe d’un objet de système connecté que JIM a provisionné pendant l’attente. Sa remise applique les paramètres de mot de passe initial de la règle de synchronisation de provisionnement, pour l’activation de l’objet de système connecté et pour savoir si son mot de passe n’expire jamais. L’annuler laisse cet objet de système connecté sans mot de passe fourni par JIM.</value>
+  </data>
+  <data name="PasswordCancelThisMetaverseObject" xml:space="preserve">
+    <value>cet objet Metaverse</value>
+  </data>
+  <data name="PasswordCancelQuestion" xml:space="preserve">
+    <value>Arrêter la remise de la modification du mot de passe de {0} vers {1} ?</value>
+  </data>
+  <data name="PasswordCancelFirstPasswordConsequence" xml:space="preserve">
+    <value>{0} Il s’agit du premier mot de passe d’un objet de système connecté que JIM y a provisionné ; l’annuler laisse donc cet objet de système connecté sans mot de passe fourni par JIM, et il n’est pas activé comme le demande le mot de passe initial de sa règle de synchronisation, tant qu’un mot de passe n’y a pas été défini.</value>
+  </data>
+  <data name="PasswordCancelOrdinaryConsequence" xml:space="preserve">
+    <value>{0} Son mot de passe reste inchangé sur ce système tant qu’une nouvelle modification n’a pas été synchronisée.</value>
+  </data>
+  <data name="TemplateAttributeChooseAttribute" xml:space="preserve">
+    <value>Choisissez un attribut Metaverse pour lequel générer des valeurs.</value>
+  </data>
+  <data name="TemplateAttributePopulationRange" xml:space="preserve">
+    <value>Le pourcentage d’objets recevant une valeur doit être compris entre 1 et 100.</value>
+  </data>
+  <data name="TemplateAttributeNumberRange" xml:space="preserve">
+    <value>Le maximum doit être supérieur au minimum.</value>
+  </data>
+  <data name="TemplateAttributeDateRange" xml:space="preserve">
+    <value>La date la plus tardive doit être postérieure à la date la plus ancienne.</value>
+  </data>
+  <data name="TemplateAttributeChooseReferenceTypes" xml:space="preserve">
+    <value>Choisissez au moins un type d’objet Metaverse vers lequel les références doivent pointer.</value>
+  </data>
+  <data name="TemplateAttributeFewestReferencesNegative" xml:space="preserve">
+    <value>Le nombre minimal de références ne peut pas être négatif.</value>
+  </data>
+  <data name="TemplateAttributeMostReferences" xml:space="preserve">
+    <value>Le nombre maximal de références doit être supérieur au nombre minimal.</value>
+  </data>
+  <data name="TemplateAttributeManagerDepthRequired" xml:space="preserve">
+    <value>Définissez la profondeur de gestion : le pourcentage d’utilisateurs qui gèrent d’autres utilisateurs.</value>
+  </data>
+  <data name="TemplateAttributeManagerDepthRange" xml:space="preserve">
+    <value>La profondeur de gestion doit être comprise entre 1 et 99.</value>
+  </data>
+  <data name="TemplateAttributeBooleanPercentage" xml:space="preserve">
+    <value>Le pourcentage d’objets recevant la valeur vrai doit être compris entre 0 et 100.</value>
+  </data>
+  <data name="TemplateAttributeChooseDataSets" xml:space="preserve">
+    <value>Choisissez au moins un jeu de données d’exemple dans lequel puiser des valeurs.</value>
+  </data>
+  <data name="TemplateAttributeEnterPattern" xml:space="preserve">
+    <value>Saisissez le modèle à partir duquel les valeurs sont construites.</value>
+  </data>
+  <data name="TemplateAttributeEnterExpression" xml:space="preserve">
+    <value>Saisissez l’expression qui construit chaque valeur.</value>
+  </data>
+  <data name="TemplateAttributeAddWeightedValue" xml:space="preserve">
+    <value>Ajoutez au moins une valeur à tirer.</value>
+  </data>
+  <data name="TemplateAttributeWeightedValueText" xml:space="preserve">
+    <value>Chaque valeur pondérée doit comporter du texte.</value>
+  </data>
+  <data name="TemplateAttributeWeightedValueWeight" xml:space="preserve">
+    <value>Chaque valeur pondérée doit avoir un poids supérieur à 0.</value>
+  </data>
+  <data name="TemplateAttributeChooseConditionAttribute" xml:space="preserve">
+    <value>Choisissez l’attribut de la condition, ou désactivez la condition.</value>
+  </data>
+  <data name="TemplateChangedSincePageLoaded" xml:space="preserve">
+    <value>Ce modèle de génération de données a changé depuis le chargement de la page. Rechargez la page et refaites la modification.</value>
+  </data>
+  <data name="TemplateNoLongerExists" xml:space="preserve">
+    <value>Ce modèle de génération de données n’existe plus.</value>
+  </data>
+</root>

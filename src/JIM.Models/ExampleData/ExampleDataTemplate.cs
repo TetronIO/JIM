@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -35,6 +36,13 @@ public class ExampleDataTemplate : IAuditable
     /// </summary>
     [NotMapped]
     public List<string> SaveWarnings { get; } = [];
+
+    /// <summary>
+    /// The same warnings as messages the portal renders in the viewer's language, in the same order as
+    /// <see cref="SaveWarnings"/>, which holds their British English for the REST API. Transient, like it.
+    /// </summary>
+    [NotMapped]
+    public List<JimMessage> SaveWarningDetails { get; } = [];
 
     /// <summary>
     /// Returns a detached copy of this template's graph (#1466) for saving as a new template: every template-owned row

@@ -1,7 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+using System.Text.RegularExpressions;
 using JIM.Models.Activities;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
@@ -13,8 +17,68 @@ namespace JIM.Web.Causality;
 /// (projection/join, out-of-scope/deletion, export attempt/failure, no change), with a generic
 /// fallback that always produces a valid sentence.
 /// </summary>
-public static class CausalitySummaryBuilder
+public static partial class CausalitySummaryBuilder
 {
+    [GeneratedRegex(@"\{(\d+)\}")]
+    private static partial Regex PlaceholderPattern();
+
+    /// <summary>
+    /// Fills a whole-sentence template's placeholders with segments, so an entity can sit anywhere in the sentence a
+    /// language needs it. A string or number argument becomes plain text; a segment or a list of segments is inserted
+    /// as it is.
+    /// </summary>
+    private static List<SummarySegment> Compose(string template, params object[] arguments)
+    {
+        var segments = new List<SummarySegment>();
+        var pending = new System.Text.StringBuilder();
+
+        void FlushText()
+        {
+            if (pending.Length == 0)
+                return;
+            segments.Add(new SummarySegment.Text(pending.ToString()));
+            pending.Clear();
+        }
+
+        var position = 0;
+        foreach (var match in PlaceholderPattern().Matches(template).Cast<Match>())
+        {
+            pending.Append(template, position, match.Index - position);
+            position = match.Index + match.Length;
+
+            switch (arguments[int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)])
+            {
+                case SummarySegment segment:
+                    FlushText();
+                    segments.Add(segment);
+                    break;
+                case IEnumerable<SummarySegment> list:
+                    FlushText();
+                    segments.AddRange(list);
+                    break;
+                case IFormattable formattable:
+                    pending.Append(formattable.ToString(null, CultureInfo.CurrentCulture));
+                    break;
+                case var other:
+                    pending.Append(other);
+                    break;
+            }
+        }
+
+        pending.Append(template, position, template.Length - position);
+        FlushText();
+        return segments;
+    }
+
+    private static List<SummarySegment> Clause(string template, params object[] arguments) => Compose(template, arguments);
+
+    private static List<SummarySegment> ConnectedSystemTarget(string? systemName, int? systemId) =>
+        systemName != null
+            ? [new SummarySegment.Entity(systemName,
+                systemId.HasValue ? JimUtilities.GetConnectedSystemHref(systemId.Value) : null,
+                CausalityEntityKind.ConnectedSystem)]
+            : [new SummarySegment.Text(CausalityText.SummaryDownstreamSystem)];
+
     /// <summary>
     /// Builds the summary for a causality model. Never throws for missing or legacy data.
     /// </summary>
@@ -22,17 +86,16 @@ public static class CausalitySummaryBuilder
     {
         var allEvents = model.AllEvents().ToList();
 
-        var segments = new List<SummarySegment>();
-        segments.AddRange(BuildOpening(model.Context, model.IsSpeculative));
+        var opening = BuildOpening(model.Context, model.IsSpeculative);
         var heldForDecision = model.ItemErrorType == ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
-        AppendClauses(segments, heldForDecision
-            ? [[new SummarySegment.Text("a generated value it carried was rejected as already in use, so the export is held until an administrator makes a decision")]]
-            : model.IsSpeculative ? BuildSpeculativeClauses(allEvents) : BuildClauses(allEvents));
-        segments.Add(new SummarySegment.Text("."));
+        List<List<SummarySegment>> clauses = heldForDecision
+            ? [[new SummarySegment.Text(CausalityText.SummaryHeldForDecision)]]
+            : model.IsSpeculative ? BuildSpeculativeClauses(allEvents) : BuildClauses(allEvents);
+        var segments = Compose(CausalityText.SummarySentence, opening, JoinClauseItems(clauses));
 
         var pills = BuildPills(allEvents);
         if (heldForDecision)
-            pills.Add(new CausalityPill("Needs a decision", CausalityTone.Error));
+            pills.Add(new CausalityPill(CausalityText.PillNeedsDecision, CausalityTone.Error));
 
         return new CausalitySummary
         {
@@ -43,22 +106,15 @@ public static class CausalitySummaryBuilder
 
     private static List<SummarySegment> BuildOpening(CausalityPageContext context, bool isSpeculative)
     {
-        var segments = new List<SummarySegment>();
-
-        if (!string.IsNullOrWhiteSpace(context.RunProfileName))
-        {
-            segments.Add(new SummarySegment.Text(StartsWithVowel(context.RunProfileName) ? "An " : "A "));
-            segments.Add(new SummarySegment.Entity(context.RunProfileName, null, CausalityEntityKind.RunProfile));
-        }
-        else
-        {
-            segments.Add(new SummarySegment.Text("A run"));
-        }
+        List<SummarySegment> subject = !string.IsNullOrWhiteSpace(context.RunProfileName)
+            ? Compose(
+                StartsWithVowel(context.RunProfileName) ? CausalityText.SummaryRunProfileAn : CausalityText.SummaryRunProfileA,
+                new SummarySegment.Entity(context.RunProfileName, null, CausalityEntityKind.RunProfile))
+            : [new SummarySegment.Text(CausalityText.SummaryRun)];
 
         if (!string.IsNullOrWhiteSpace(context.ConnectedSystemName))
         {
-            segments.Add(new SummarySegment.Text(" on "));
-            segments.Add(new SummarySegment.Entity(
+            subject = Compose(CausalityText.SummarySubjectOnSystem, subject, new SummarySegment.Entity(
                 context.ConnectedSystemName,
                 context.ConnectedSystemId.HasValue ? JimUtilities.GetConnectedSystemHref(context.ConnectedSystemId.Value) : null,
                 CausalityEntityKind.ConnectedSystem));
@@ -66,23 +122,21 @@ public static class CausalitySummaryBuilder
 
         var recordLabel = ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId);
         // Conditional mood throughout for a preview (#1519, D-S9): nothing here has happened yet.
-        var verb = isSpeculative ? "would process" : "processed";
 
         // An item that records a Metaverse Object (an export scope review) is about that object, not a record (#1982).
         if (context.SubjectMetaverseObjectId != null)
         {
             if (string.IsNullOrWhiteSpace(context.SubjectMetaverseObjectName))
             {
-                segments.Add(new SummarySegment.Text($" {verb} the Metaverse Object"));
-                return segments;
+                return Compose(isSpeculative ? CausalityText.SummaryWouldProcessMetaverseObject : CausalityText.SummaryProcessedMetaverseObject, subject);
             }
 
-            segments.Add(new SummarySegment.Text(!string.IsNullOrWhiteSpace(context.MvoTypeName)
-                ? $" {verb} {context.MvoTypeName} "
-                : $" {verb} "));
-            segments.Add(new SummarySegment.Entity(context.SubjectMetaverseObjectName, context.SubjectMetaverseObjectHref,
-                CausalityEntityKind.Identity));
-            return segments;
+            var subjectEntity = new SummarySegment.Entity(context.SubjectMetaverseObjectName, context.SubjectMetaverseObjectHref,
+                CausalityEntityKind.Identity);
+            return !string.IsNullOrWhiteSpace(context.MvoTypeName)
+                ? Compose(isSpeculative ? CausalityText.SummaryWouldProcessTypedObject : CausalityText.SummaryProcessedTypedObject,
+                    subject, context.MvoTypeName, subjectEntity)
+                : Compose(isSpeculative ? CausalityText.SummaryWouldProcessObject : CausalityText.SummaryProcessedObject, subject, subjectEntity);
         }
 
         if (recordLabel != null)
@@ -90,37 +144,25 @@ public static class CausalitySummaryBuilder
             // Named by its object type where the builder knows it ("processed person Baseline User"), so
             // the sentence states what kind of object this is without a second clause; otherwise the name
             // alone carries it ("processed Baseline User").
-            segments.Add(new SummarySegment.Text(!string.IsNullOrWhiteSpace(context.CsoObjectTypeName)
-                ? $" {verb} {context.CsoObjectTypeName} "
-                : $" {verb} "));
             // The record's own Connected System, not the run's: they diverge for cross-system
             // cascades, and linking with the wrong system id 404s (ConnectedSystemObjectDetail looks
             // the record up by {connectedSystemId}+{id}).
             var recordHref = context.CsoConnectedSystemId is { } recordSystemId && context.CsoId is { } recordId
                 ? context.Links.ConnectedSystemObjectHref(recordSystemId, recordId)
                 : null;
-            segments.Add(new SummarySegment.Entity(recordLabel, recordHref, CausalityEntityKind.Record));
-        }
-        else
-        {
-            segments.Add(new SummarySegment.Text($" {verb} the Connected System Object"));
+            var recordEntity = new SummarySegment.Entity(recordLabel, recordHref, CausalityEntityKind.Record);
+            return !string.IsNullOrWhiteSpace(context.CsoObjectTypeName)
+                ? Compose(isSpeculative ? CausalityText.SummaryWouldProcessTypedObject : CausalityText.SummaryProcessedTypedObject,
+                    subject, context.CsoObjectTypeName, recordEntity)
+                : Compose(isSpeculative ? CausalityText.SummaryWouldProcessObject : CausalityText.SummaryProcessedObject, subject, recordEntity);
         }
 
-        return segments;
+        return Compose(isSpeculative ? CausalityText.SummaryWouldProcessConnectedSystemObject : CausalityText.SummaryProcessedConnectedSystemObject, subject);
     }
 
     private static bool StartsWithVowel(string value)
     {
         return value.Length > 0 && "AEIOUaeiou".Contains(value[0]);
-    }
-
-    /// <summary>
-    /// Appends the result clauses to the sentence: ": clause1, clause2, and clause3".
-    /// </summary>
-    private static void AppendClauses(List<SummarySegment> segments, List<List<SummarySegment>> clauses)
-    {
-        segments.Add(new SummarySegment.Text(": "));
-        segments.AddRange(JoinClauseItems(clauses));
     }
 
     /// <summary>
@@ -133,9 +175,9 @@ public static class CausalitySummaryBuilder
         var segments = new List<SummarySegment>();
         for (var i = 0; i < items.Count; i++)
         {
-            if (i > 0)
-                segments.Add(new SummarySegment.Text(i == items.Count - 1 ? ", and " : ", "));
-            segments.AddRange(items[i]);
+            segments = i == 0
+                ? [.. items[i]]
+                : Compose(i == items.Count - 1 ? CausalityText.SummaryListJoinLast : CausalityText.SummaryListJoin, segments, items[i]);
         }
 
         return segments;
@@ -149,10 +191,10 @@ public static class CausalitySummaryBuilder
         // Unique Value Generation (#242, release 4): an export Collision Remediation corrected, or held for a decision,
         // wrote nothing this run; say what became of the generated value instead.
         if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated))
-            return [[new SummarySegment.Text("a generated value it carried was rejected as already in use, so JIM corrected it, and the next synchronisation will export the new value")]];
+            return [[new SummarySegment.Text(CausalityText.SummaryGeneratedValueCorrected)]];
 
         if (allEvents.Count == 0)
-            return [[new SummarySegment.Text("no changes were needed")]];
+            return [[new SummarySegment.Text(CausalityText.SummaryNoChangesWereNeeded)]];
 
         if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed))
             return BuildExportFailureClauses(allEvents);
@@ -191,7 +233,7 @@ public static class CausalitySummaryBuilder
     private static List<List<SummarySegment>> BuildSpeculativeClauses(IReadOnlyList<CausalityEvent> allEvents)
     {
         if (allEvents.Count == 0)
-            return [[new SummarySegment.Text("no changes are needed")]];
+            return [[new SummarySegment.Text(CausalityText.SummaryNoChangesAreNeeded)]];
 
         if (allEvents.Any(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Joined))
@@ -214,27 +256,24 @@ public static class CausalitySummaryBuilder
 
         if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected))
         {
-            clauses.Add([new SummarySegment.Text("a new Metaverse Object would be projected")]);
+            clauses.Add([new SummarySegment.Text(CausalityText.SummaryWouldProject)]);
         }
         else
         {
             var joined = allEvents.First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
             var identity = joined.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
             clauses.Add(identity != null
-                ? [
-                    new SummarySegment.Text("it would be joined to the Metaverse Object "),
-                    new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
-                ]
-                : [new SummarySegment.Text("it would be joined to an existing Metaverse Object")]);
+                ? Clause(CausalityText.SummaryWouldJoinTo, new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity))
+                : [new SummarySegment.Text(CausalityText.SummaryWouldJoinExisting)]);
         }
 
         var attributeFlows = allEvents.Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow).ToList();
         if (attributeFlows.Count > 0)
         {
             var flowedCount = attributeFlows.Sum(e => e.DetailCount ?? 0);
-            clauses.Add([new SummarySegment.Text(flowedCount > 0
-                ? $"{flowedCount} attribute{(flowedCount == 1 ? string.Empty : "s")} would flow to it"
-                : "attributes would flow to it")]);
+            clauses.Add(flowedCount > 0
+                ? Clause(PluralRules.Choose(flowedCount, CausalityText.SummaryWouldFlowOne, CausalityText.SummaryWouldFlowOther), flowedCount)
+                : [new SummarySegment.Text(CausalityText.SummaryWouldFlowUnknown)]);
         }
 
         clauses.AddRange(BuildGeneratedValueClauses(allEvents, isSpeculative: true));
@@ -247,20 +286,16 @@ public static class CausalitySummaryBuilder
             if (systems.Count == 1)
             {
                 var (systemId, systemName) = systems[0];
-                var countText = changeCount > 0
-                    ? $"an export of {changeCount} change{(changeCount == 1 ? string.Empty : "s")} would be queued for "
-                    : "an export would be queued for ";
-                var target = systemName != null
-                    ? new SummarySegment.Entity(systemName,
-                        systemId.HasValue ? JimUtilities.GetConnectedSystemHref(systemId.Value) : null,
-                        CausalityEntityKind.ConnectedSystem)
-                    : (SummarySegment)new SummarySegment.Text("a downstream system");
-                clauses.Add([new SummarySegment.Text(countText), target]);
+                var target = ConnectedSystemTarget(systemName, systemId);
+                clauses.Add(changeCount > 0
+                    ? Clause(PluralRules.Choose(changeCount, CausalityText.SummaryWouldQueueExportOne, CausalityText.SummaryWouldQueueExportOther), changeCount, target)
+                    : Clause(CausalityText.SummaryWouldQueueExportUnknown, target));
             }
             else
             {
-                clauses.Add([new SummarySegment.Text(
-                    $"exports of {changeCount} change{(changeCount == 1 ? string.Empty : "s")} would be queued for {systems.Count} systems")]);
+                clauses.Add(Clause(
+                    PluralRules.Choose(changeCount, CausalityText.SummaryWouldQueueExportsOne, CausalityText.SummaryWouldQueueExportsOther),
+                    changeCount, systems.Count));
             }
         }
 
@@ -281,32 +316,18 @@ public static class CausalitySummaryBuilder
         var clause = new List<SummarySegment>();
 
         var rule = retainedJoin.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
-        if (rule != null)
-        {
-            clause.Add(new SummarySegment.Text(isSpeculative
-                ? "it would leave the scope of Synchronisation Rule "
-                : "it left the scope of Synchronisation Rule "));
-            clause.Add(new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule));
-        }
-        else
-        {
-            clause.Add(new SummarySegment.Text(isSpeculative
-                ? "it would leave the scope of its Synchronisation Rule"
-                : "it left the scope of its Synchronisation Rule"));
-        }
+        var scopeExit = rule != null
+            ? Compose(isSpeculative ? CausalityText.SummaryWouldLeaveScopeOfRule : CausalityText.SummaryLeftScopeOfRule,
+                new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule))
+            : [new SummarySegment.Text(isSpeculative ? CausalityText.SummaryWouldLeaveScopeOfItsRule : CausalityText.SummaryLeftScopeOfItsRule)];
 
-        var keep = isSpeculative ? "keep" : "kept";
         var identity = retainedJoin.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
-        if (identity != null)
-        {
-            clause.Add(new SummarySegment.Text($" and {keep} its join to the Metaverse Object "));
-            clause.Add(new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity));
-        }
-        else
-        {
-            clause.Add(new SummarySegment.Text($" and {keep} its Metaverse Object join"));
-        }
+        var keptJoin = identity != null
+            ? Compose(isSpeculative ? CausalityText.SummaryWouldKeepJoinTo : CausalityText.SummaryKeptJoinTo,
+                new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity))
+            : [new SummarySegment.Text(isSpeculative ? CausalityText.SummaryWouldKeepJoin : CausalityText.SummaryKeptJoin)];
 
+        clause.AddRange(Compose(CausalityText.SummaryRetainedJoinJoin, scopeExit, keptJoin));
         return clause;
     }
 
@@ -319,11 +340,8 @@ public static class CausalitySummaryBuilder
         {
             var rule = outOfScope.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
             clauses.Add(rule != null
-                ? [
-                    new SummarySegment.Text("it would leave the scope of Synchronisation Rule "),
-                    new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule)
-                ]
-                : [new SummarySegment.Text("it would leave the scope of its Synchronisation Rule")]);
+                ? Clause(CausalityText.SummaryWouldLeaveScopeOfRule, new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule))
+                : [new SummarySegment.Text(CausalityText.SummaryWouldLeaveScopeOfItsRule)]);
         }
 
         var mvoDeleted = allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
@@ -334,12 +352,8 @@ public static class CausalitySummaryBuilder
             // deletion record.
             var identity = mvoDeleted.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
             clauses.Add(identity != null
-                ? [
-                    new SummarySegment.Text("the Metaverse Object "),
-                    new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity),
-                    new SummarySegment.Text(" would be deleted")
-                ]
-                : [new SummarySegment.Text("the Metaverse Object would be deleted")]);
+                ? Clause(CausalityText.SummaryMvoWouldBeDeleted, new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity))
+                : [new SummarySegment.Text(CausalityText.SummaryMvoWouldBeDeletedUnnamed)]);
         }
         else
         {
@@ -348,12 +362,8 @@ public static class CausalitySummaryBuilder
             {
                 var identity = deletionScheduled.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
                 clauses.Add(identity != null
-                    ? [
-                        new SummarySegment.Text("the Metaverse Object "),
-                        new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity),
-                        new SummarySegment.Text(" would be scheduled for deletion")
-                    ]
-                    : [new SummarySegment.Text("the Metaverse Object would be scheduled for deletion")]);
+                    ? Clause(CausalityText.SummaryMvoWouldBeScheduled, new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity))
+                    : [new SummarySegment.Text(CausalityText.SummaryMvoWouldBeScheduledUnnamed)]);
             }
         }
 
@@ -364,8 +374,7 @@ public static class CausalitySummaryBuilder
             .Count();
         if (deprovisionSystemCount > 0)
         {
-            clauses.Add([new SummarySegment.Text(
-                $"deprovisioning would be queued for {deprovisionSystemCount} system{(deprovisionSystemCount == 1 ? string.Empty : "s")}")]);
+            clauses.Add(Clause(PluralRules.Choose(deprovisionSystemCount, CausalityText.SummaryWouldQueueDeprovisionOne, CausalityText.SummaryWouldQueueDeprovisionOther), deprovisionSystemCount));
         }
 
         // Provisioning cancellations are counted separately from deprovisioning: nothing
@@ -377,9 +386,7 @@ public static class CausalitySummaryBuilder
             .Count();
         if (provisioningCancelledSystemCount > 0)
         {
-            clauses.Add([new SummarySegment.Text(
-                $"provisioning would be cancelled for {provisioningCancelledSystemCount} " +
-                $"system{(provisioningCancelledSystemCount == 1 ? string.Empty : "s")}, since nothing had been exported yet")]);
+            clauses.Add(Clause(PluralRules.Choose(provisioningCancelledSystemCount, CausalityText.SummaryWouldCancelProvisioningOne, CausalityText.SummaryWouldCancelProvisioningOther), provisioningCancelledSystemCount));
         }
 
         if (clauses.Count == 0)
@@ -394,7 +401,7 @@ public static class CausalitySummaryBuilder
 
         if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected))
         {
-            clauses.Add([new SummarySegment.Text("a new Metaverse Object was projected")]);
+            clauses.Add([new SummarySegment.Text(CausalityText.SummaryProjected)]);
         }
         else
         {
@@ -402,14 +409,11 @@ public static class CausalitySummaryBuilder
             var identity = joined.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
             if (identity != null)
             {
-                clauses.Add([
-                    new SummarySegment.Text("it was joined to the Metaverse Object "),
-                    new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
-                ]);
+                clauses.Add(Clause(CausalityText.SummaryJoinedTo, new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)));
             }
             else
             {
-                clauses.Add([new SummarySegment.Text("it was joined to an existing Metaverse Object")]);
+                clauses.Add([new SummarySegment.Text(CausalityText.SummaryJoinedExisting)]);
             }
         }
 
@@ -442,7 +446,7 @@ public static class CausalitySummaryBuilder
         var cancelled = allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
         return cancelled == null
             ? null
-            : [new SummarySegment.Text("its scheduled deletion was cancelled")];
+            : [new SummarySegment.Text(CausalityText.SummaryDeletionCancelled)];
     }
 
     private static List<SummarySegment>? BuildAttributeFlowClause(IReadOnlyList<CausalityEvent> allEvents)
@@ -455,8 +459,8 @@ public static class CausalitySummaryBuilder
 
         var flowedCount = attributeFlows.Sum(e => e.DetailCount ?? 0);
         return flowedCount > 0
-            ? [new SummarySegment.Text($"{flowedCount} attribute{(flowedCount == 1 ? string.Empty : "s")} flowed to it")]
-            : [new SummarySegment.Text("attributes flowed to it")];
+            ? Clause(PluralRules.Choose(flowedCount, CausalityText.SummaryFlowedOne, CausalityText.SummaryFlowedOther), flowedCount)
+            : [new SummarySegment.Text(CausalityText.SummaryFlowedUnknown)];
     }
 
     /// <summary>
@@ -486,13 +490,12 @@ public static class CausalitySummaryBuilder
         var detail = GeneratedValueDetailParser.Parse(causalityEvent.DetailMessage);
 
         if (detail.AttributeName == null || detail.Value == null)
-            return [new SummarySegment.Text(isSpeculative ? "a value would be generated" : "a value was generated")];
+            return [new SummarySegment.Text(isSpeculative ? CausalityText.SummaryWouldGenerateValue : CausalityText.SummaryGeneratedValue)];
 
-        return
-        [
-            new SummarySegment.Text($"{detail.AttributeName} {(isSpeculative ? "would be generated as" : "was generated as")} "),
-            new SummarySegment.LiteralValue(detail.Value)
-        ];
+        return Compose(
+            isSpeculative ? CausalityText.SummaryWouldGenerateAs : CausalityText.SummaryGeneratedAs,
+            detail.AttributeName,
+            new SummarySegment.LiteralValue(detail.Value));
     }
 
     private static List<SummarySegment>? BuildQueuedExportClause(IReadOnlyList<CausalityEvent> allEvents)
@@ -512,19 +515,15 @@ public static class CausalitySummaryBuilder
         if (systems.Count == 1)
         {
             var (systemId, systemName) = systems[0];
-            var countText = changeCount > 0
-                ? $"an export of {changeCount} change{(changeCount == 1 ? string.Empty : "s")} is now queued for "
-                : "an export is now queued for ";
-            var target = systemName != null
-                ? new SummarySegment.Entity(systemName,
-                    systemId.HasValue ? JimUtilities.GetConnectedSystemHref(systemId.Value) : null,
-                    CausalityEntityKind.ConnectedSystem)
-                : (SummarySegment)new SummarySegment.Text("a downstream system");
-            return [new SummarySegment.Text(countText), target];
+            var target = ConnectedSystemTarget(systemName, systemId);
+            return changeCount > 0
+                ? Clause(PluralRules.Choose(changeCount, CausalityText.SummaryQueuedExportOne, CausalityText.SummaryQueuedExportOther), changeCount, target)
+                : Clause(CausalityText.SummaryQueuedExportUnknown, target);
         }
 
-        return [new SummarySegment.Text(
-            $"exports of {changeCount} change{(changeCount == 1 ? string.Empty : "s")} are now queued for {systems.Count} systems")];
+        return Clause(
+            PluralRules.Choose(changeCount, CausalityText.SummaryQueuedExportsOne, CausalityText.SummaryQueuedExportsOther),
+            changeCount, systems.Count);
     }
 
     private static List<List<SummarySegment>> BuildLeaverClauses(IReadOnlyList<CausalityEvent> allEvents)
@@ -537,14 +536,11 @@ public static class CausalitySummaryBuilder
             var rule = outOfScope.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
             if (rule != null)
             {
-                clauses.Add([
-                    new SummarySegment.Text("it left the scope of Synchronisation Rule "),
-                    new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule)
-                ]);
+                clauses.Add(Clause(CausalityText.SummaryLeftScopeOfRule, new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule)));
             }
             else
             {
-                clauses.Add([new SummarySegment.Text("it left the scope of its Synchronisation Rule")]);
+                clauses.Add([new SummarySegment.Text(CausalityText.SummaryLeftScopeOfItsRule)]);
             }
         }
         else
@@ -555,14 +551,11 @@ public static class CausalitySummaryBuilder
                 var identity = disconnected.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
                 if (identity != null)
                 {
-                    clauses.Add([
-                        new SummarySegment.Text("it was disconnected from the Metaverse Object "),
-                        new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
-                    ]);
+                    clauses.Add(Clause(CausalityText.SummaryDisconnectedFromMvo, new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)));
                 }
                 else
                 {
-                    clauses.Add([new SummarySegment.Text("it was disconnected from its Metaverse Object")]);
+                    clauses.Add([new SummarySegment.Text(CausalityText.SummaryDisconnectedFromItsMvo)]);
                 }
             }
         }
@@ -581,15 +574,11 @@ public static class CausalitySummaryBuilder
                     .FirstOrDefault(l => l.Kind == CausalityEntityKind.DeletionRecord)?.Href
                     ?? CausalityModelBuilder.GetDeletedMvoHref(null);
 
-                clauses.Add([
-                    new SummarySegment.Text("the Metaverse Object "),
-                    new SummarySegment.Entity(identityName, deletionRecordHref, CausalityEntityKind.Identity),
-                    new SummarySegment.Text(" was deleted")
-                ]);
+                clauses.Add(Clause(CausalityText.SummaryMvoWasDeleted, new SummarySegment.Entity(identityName, deletionRecordHref, CausalityEntityKind.Identity)));
             }
             else
             {
-                clauses.Add([new SummarySegment.Text("the Metaverse Object was deleted")]);
+                clauses.Add([new SummarySegment.Text(CausalityText.SummaryMvoWasDeletedUnnamed)]);
             }
         }
         else
@@ -600,15 +589,11 @@ public static class CausalitySummaryBuilder
                 var identity = deletionScheduled.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
                 if (identity != null)
                 {
-                    clauses.Add([
-                        new SummarySegment.Text("the Metaverse Object "),
-                        new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity),
-                        new SummarySegment.Text(" was scheduled for deletion")
-                    ]);
+                    clauses.Add(Clause(CausalityText.SummaryMvoWasScheduled, new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)));
                 }
                 else
                 {
-                    clauses.Add([new SummarySegment.Text("the Metaverse Object was scheduled for deletion")]);
+                    clauses.Add([new SummarySegment.Text(CausalityText.SummaryMvoWasScheduledUnnamed)]);
                 }
             }
         }
@@ -624,8 +609,7 @@ public static class CausalitySummaryBuilder
             .Count();
         if (deprovisionSystemCount > 0)
         {
-            clauses.Add([new SummarySegment.Text(
-                $"deprovisioning is now queued for {deprovisionSystemCount} system{(deprovisionSystemCount == 1 ? string.Empty : "s")}")]);
+            clauses.Add(Clause(PluralRules.Choose(deprovisionSystemCount, CausalityText.SummaryDeprovisioningQueuedOne, CausalityText.SummaryDeprovisioningQueuedOther), deprovisionSystemCount));
         }
 
         // Provisioning cancellations are counted separately from deprovisioning: nothing was
@@ -637,9 +621,7 @@ public static class CausalitySummaryBuilder
             .Count();
         if (provisioningCancelledSystemCount > 0)
         {
-            clauses.Add([new SummarySegment.Text(
-                $"provisioning was cancelled for {provisioningCancelledSystemCount} " +
-                $"system{(provisioningCancelledSystemCount == 1 ? string.Empty : "s")}, since nothing had been exported yet")]);
+            clauses.Add(Clause(PluralRules.Choose(provisioningCancelledSystemCount, CausalityText.SummaryProvisioningCancelledOne, CausalityText.SummaryProvisioningCancelledOther), provisioningCancelledSystemCount));
         }
 
         if (clauses.Count == 0)
@@ -661,8 +643,8 @@ public static class CausalitySummaryBuilder
         }
 
         var clause = attemptedCount > 0
-            ? $"an export of {attemptedCount} change{(attemptedCount == 1 ? string.Empty : "s")} was attempted, but it failed and needs attention"
-            : "an export was attempted, but it failed and needs attention";
+            ? string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(attemptedCount, CausalityText.SummaryExportFailedOne, CausalityText.SummaryExportFailedOther), attemptedCount)
+            : CausalityText.SummaryExportFailedUnknown;
         return [[new SummarySegment.Text(clause)]];
     }
 
@@ -675,9 +657,9 @@ public static class CausalitySummaryBuilder
         {
             var clause = exportedCount switch
             {
-                1 => "1 change was exported",
-                > 1 => $"{exportedCount} changes were exported",
-                _ => "changes were exported"
+                1 => string.Format(CultureInfo.CurrentCulture, CausalityText.SummaryExportedOne, exportedCount),
+                > 1 => string.Format(CultureInfo.CurrentCulture, CausalityText.SummaryExportedOther, exportedCount),
+                _ => CausalityText.SummaryExportedUnknown
             };
             return [[new SummarySegment.Text(clause)]];
         }
@@ -687,9 +669,9 @@ public static class CausalitySummaryBuilder
             .Sum(e => e.DetailCount ?? 0);
         var confirmedClause = confirmedCount switch
         {
-            1 => "1 exported change was confirmed",
-            > 1 => $"{confirmedCount} exported changes were confirmed",
-            _ => "the export was confirmed"
+            1 => string.Format(CultureInfo.CurrentCulture, CausalityText.SummaryConfirmedOne, confirmedCount),
+            > 1 => string.Format(CultureInfo.CurrentCulture, CausalityText.SummaryConfirmedOther, confirmedCount),
+            _ => CausalityText.SummaryConfirmedUnknown
         };
         return [[new SummarySegment.Text(confirmedClause)]];
     }
@@ -745,28 +727,24 @@ public static class CausalitySummaryBuilder
             return null;
 
         var changeCount = withdrawals.Sum(e => e.DetailCount ?? 0);
-        var changes = $"{changeCount} change{(changeCount == 1 ? string.Empty : "s")} queued for ";
+        var single = changeCount == 1;
         var systems = withdrawals.Select(e => (e.SystemId, e.SystemName)).Distinct().ToList();
 
         if (systems.Count == 1)
         {
             var (systemId, systemName) = systems[0];
-            var target = systemName != null
-                ? new SummarySegment.Entity(systemName,
-                    systemId.HasValue ? JimUtilities.GetConnectedSystemHref(systemId.Value) : null,
-                    CausalityEntityKind.ConnectedSystem)
-                : (SummarySegment)new SummarySegment.Text("a downstream system");
-            var verb = isSpeculative ? "would be" : changeCount == 1 ? "was" : "were";
-            return
-            [
-                new SummarySegment.Text(changes),
-                target,
-                new SummarySegment.Text($" {verb} withdrawn, since it already holds the value{(changeCount == 1 ? string.Empty : "s")}")
-            ];
+            var target = ConnectedSystemTarget(systemName, systemId);
+            var template = isSpeculative
+                ? single ? CausalityText.SummaryWithdrawnOneSpec : CausalityText.SummaryWithdrawnOtherSpec
+                : single ? CausalityText.SummaryWithdrawnOne : CausalityText.SummaryWithdrawnOther;
+            return Clause(template, changeCount, target);
         }
 
-        return [new SummarySegment.Text(
-            $"{changes}{systems.Count} systems {(isSpeculative ? "would be" : "were")} withdrawn, since they already hold the values")];
+        return Clause(
+            isSpeculative
+                ? single ? CausalityText.SummaryWithdrawnSystemsOneSpec : CausalityText.SummaryWithdrawnSystemsOtherSpec
+                : single ? CausalityText.SummaryWithdrawnSystemsOne : CausalityText.SummaryWithdrawnSystemsOther,
+            changeCount, systems.Count);
     }
 
     /// <summary>
@@ -806,27 +784,27 @@ public static class CausalitySummaryBuilder
         var label = outcomeType switch
         {
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow when detailSum > 0 =>
-                $"{detailSum} attribute{(detailSum == 1 ? string.Empty : "s")} flowed",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(detailSum, CausalityText.PillAttributesFlowedOne, CausalityText.PillAttributesFlowedOther), detailSum),
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned =>
-                $"Provisioned · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(systemCount, CausalityText.PillProvisionedSystemsOne, CausalityText.PillProvisionedSystemsOther), systemCount),
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated when detailSum > 0 =>
-                $"Export queued · {detailSum} change{(detailSum == 1 ? string.Empty : "s")}",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(detailSum, CausalityText.PillExportQueuedChangesOne, CausalityText.PillExportQueuedChangesOther), detailSum),
             ActivityRunProfileExecutionItemSyncOutcomeType.Exported when detailSum > 0 =>
-                $"Exported · {detailSum} change{(detailSum == 1 ? string.Empty : "s")}",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(detailSum, CausalityText.PillExportedChangesOne, CausalityText.PillExportedChangesOther), detailSum),
             // Both deprovisioning pills count systems, never changes: a delete Pending Export's only attribute
             // row is the target's own identifier, so "1 change" would be a meaningless number to show.
             ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued =>
-                $"Deprovision queued · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(systemCount, CausalityText.PillDeprovisionQueuedSystemsOne, CausalityText.PillDeprovisionQueuedSystemsOther), systemCount),
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned =>
-                $"Deprovisioning · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(systemCount, CausalityText.PillDeprovisioningSystemsOne, CausalityText.PillDeprovisioningSystemsOther), systemCount),
             // Same reasoning as the deprovisioning pills above: counts systems, never changes, since a
             // cancellation carries no attribute changes at all (nothing was ever exported).
             ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled =>
-                $"Provisioning cancelled · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(systemCount, CausalityText.PillProvisioningCancelledSystemsOne, CausalityText.PillProvisioningCancelledSystemsOther), systemCount),
             ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected =>
-                $"Disconnected from target system · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of scope",
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "Deletion scheduled",
+                string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(systemCount, CausalityText.PillTargetDisconnectedSystemsOne, CausalityText.PillTargetDisconnectedSystemsOther), systemCount),
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => CausalityText.PillOutOfScope,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => CausalityText.PillDeletionScheduled,
             _ => display.Label
         };
 

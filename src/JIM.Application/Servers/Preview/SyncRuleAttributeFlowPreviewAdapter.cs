@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
@@ -89,31 +92,29 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
         if (SyncRuleAttributeFlowProposal.FromCurrentMappings(rule).DescribesSameMappingsAs(proposal))
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The proposed Attribute Flow matches the mappings this Synchronisation Rule already has, so no " +
-                "object changes and no impact is counted below.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowSameAsStored)),
                 nameof(SyncRule.AttributeFlowRules)));
             return findings;
         }
 
         foreach (var message in DescribeUnwritableMappings(rule, proposal))
-            findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Blocking, message, nameof(SyncRule.AttributeFlowRules)));
+            findings.Add(PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking, message, nameof(SyncRule.AttributeFlowRules)));
 
         if (proposal.Mappings.Count == 0 && rule.AttributeFlowRules.Count > 0)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                "The proposal removes every mapping, so this Synchronisation Rule would flow nothing.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovesEveryMapping)),
                 nameof(SyncRule.AttributeFlowRules)));
         }
 
         if (!rule.Enabled)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "This Synchronisation Rule is disabled, so no synchronisation applies its Attribute Flow today. " +
-                "The values below describe what the next synchronisation would write once it is enabled.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -554,8 +555,10 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
         foreach (var mapping in withdrawn)
         {
-            var attributeName = mapping.TargetMetaverseAttribute?.Name
-                ?? $"Metaverse Attribute {mapping.TargetMetaverseAttributeId}";
+            MessageArgument attributeName = mapping.TargetMetaverseAttribute?.Name
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), mapping.TargetMetaverseAttributeId ?? 0);
+            var attributeLabel = mapping.TargetMetaverseAttribute?.Name
+                ?? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), mapping.TargetMetaverseAttributeId ?? 0).ToEnglish();
 
             var others = contributors
                 .Where(contributor => contributor.RuleId != rule.Id
@@ -572,47 +575,36 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             // synchronisation rather than to this save.
             if (keepAttributeIds.Contains(mapping.TargetMetaverseAttributeId!.Value))
             {
-                findings.Add(new PreviewValidationFinding(
+                findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    $"The proposal removes this Synchronisation Rule's Attribute Flow to '{attributeName}', and " +
-                    "you chose to keep the values it contributed. They remain in place with no record of where " +
-                    "they came from, and no synchronisation will ever recall them; no value change is counted " +
-                    "below for them.",
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovedKeepValues), attributeName),
                     nameof(SyncRule.AttributeFlowRules),
-                    attributeName));
+                    attributeLabel));
 
                 if (others.Count > 0)
                 {
-                    findings.Add(new PreviewValidationFinding(
+                    findings.Add(PreviewValidationFinding.Of(
                         PreviewValidationSeverity.Information,
-                        $"'{attributeName}' is also written by {Describe(others)}. The kept values remain until " +
-                        "one of those rules next writes the attribute and wins Attribute Priority; what it would " +
-                        "write is not counted below.",
+                        JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowKeptAlsoWrittenBy), attributeName, Describe(others)),
                         nameof(SyncRule.AttributeFlowRules),
-                        attributeName));
+                        attributeLabel));
                 }
             }
             else
             {
-                findings.Add(new PreviewValidationFinding(
+                findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    $"The proposal removes this Synchronisation Rule's Attribute Flow to '{attributeName}'. The " +
-                    "values it contributed are recalled at the next synchronisation of the contributing " +
-                    "Connected System, Delta or Full: where another Attribute Flow also contributes the attribute its value " +
-                    "takes over, otherwise the attribute is cleared. No value change is counted below for them, " +
-                    "because the recall happens in that synchronisation rather than in this save.",
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovedRecalled), attributeName),
                     nameof(SyncRule.AttributeFlowRules),
-                    attributeName));
+                    attributeLabel));
 
                 if (others.Count > 0)
                 {
-                    findings.Add(new PreviewValidationFinding(
+                    findings.Add(PreviewValidationFinding.Of(
                         PreviewValidationSeverity.Information,
-                        $"'{attributeName}' is also written by {Describe(others)}, so the recall re-elects among " +
-                        "them rather than clearing the attribute; what they would write in place of the withdrawn " +
-                        "values is not counted below.",
+                        JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRecallReElects), attributeName, Describe(others)),
                         nameof(SyncRule.AttributeFlowRules),
-                        attributeName));
+                        attributeLabel));
                 }
             }
         }
@@ -646,15 +638,13 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             if (winners.Count == 0)
                 continue;
 
-            var attributeName = contributors
+            MessageArgument attributeName = contributors
                 .FirstOrDefault(contributor => contributor.AttributeId == attributeId)?.AttributeName
-                ?? $"Metaverse Attribute {attributeId}";
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), attributeId);
 
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                $"The proposed mapping for '{attributeName}' sits below {Describe(winners)} in Attribute Priority, " +
-                "so a synchronisation would evaluate it and then write nothing. Raise its priority to make it the " +
-                "contributor that wins the attribute.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowBelowPriority), attributeName, Describe(winners)),
                 nameof(SyncRule.AttributeFlowRules)));
         }
 
@@ -694,17 +684,16 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         if (assessment == null)
             return findings;
 
+        // The derived flow validator's reasons are English produced elsewhere, shown as they are until it is converted.
         findings.AddRange(assessment.Validation.Errors.Select(message =>
-            new PreviewValidationFinding(PreviewValidationSeverity.Blocking, message, nameof(SyncRule.AttributeFlowRules))));
+            PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking, JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), message), nameof(SyncRule.AttributeFlowRules))));
         findings.AddRange(assessment.Validation.Warnings.Select(warning =>
-            new PreviewValidationFinding(PreviewValidationSeverity.Warning, warning.Message, nameof(SyncRule.AttributeFlowRules))));
+            PreviewValidationFinding.Of(PreviewValidationSeverity.Warning, JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), warning.Message), nameof(SyncRule.AttributeFlowRules))));
 
         var dependants = DerivedFlowDependentDetector.Detect(assessment.SyncRulesBefore, assessment.SyncRulesAfter, assessment.MetaverseObjectTypes);
-        findings.AddRange(dependants.Select(dependant => new PreviewValidationFinding(
+        findings.AddRange(dependants.Select(dependant => PreviewValidationFinding.Of(
             PreviewValidationSeverity.Warning,
-            $"Once this proposal is saved, the Attribute Flow to '{dependant.Flow.TargetAttributeName}' on Synchronisation Rule " +
-            $"'{dependant.Flow.SyncRule.Name}' would be missing an input: it reads {DescribeMissingInputs(dependant.MissingInputs)}. " +
-            "Its Missing Input Behaviour then decides what it writes.",
+            JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowDependantMissingInput), dependant.Flow.TargetAttributeName, dependant.Flow.SyncRule.Name, DescribeMissingInputs(dependant.MissingInputs)),
             nameof(SyncRule.AttributeFlowRules),
             dependant.Flow.TargetAttributeName)));
 
@@ -712,10 +701,12 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         return findings;
     }
 
-    private static string DescribeMissingInputs(IReadOnlyList<DerivedFlowMissingInput> missingInputs) =>
-        string.Join(" and ", missingInputs.Select(input => input.ThroughDerivedFlows
-            ? $"'{input.MetaverseAttributeName}', whose only remaining contributors are themselves missing an input"
-            : $"'{input.MetaverseAttributeName}', which would have no enabled Attribute Flow contributing it"));
+    private static JimMessage DescribeMissingInputs(IReadOnlyList<DerivedFlowMissingInput> missingInputs) =>
+        missingInputs
+            .Select(input => input.ThroughDerivedFlows
+                ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowMissingInputThroughDerived), input.MetaverseAttributeName)
+                : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowMissingInputNoFlow), input.MetaverseAttributeName))
+            .Aggregate((joined, next) => JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ListAnd), joined, next));
 
     /// <summary>
     /// The enabled derived flows on other Connected Systems' rules that read, directly or through other derived
@@ -765,14 +756,15 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             .OrderBy(pair => pair.Key.SyncRule.Id)
             .ThenBy(pair => pair.Key.TargetAttributeId))
         {
-            var changedName = attributeNames.GetValueOrDefault(changedAttributeId) ?? $"Metaverse Attribute {changedAttributeId}";
-            var relation = direct ? $"reads '{changedName}'" : $"depends on '{changedName}', through other derived attributes";
+            MessageArgument changedName = attributeNames.GetValueOrDefault(changedAttributeId)
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), changedAttributeId);
+            var relation = direct
+                ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowReadsChangedDirect), changedName)
+                : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowReadsChangedThrough), changedName);
 
-            yield return new PreviewValidationFinding(
+            yield return PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                $"The Attribute Flow to '{flow.TargetAttributeName}' on Synchronisation Rule '{flow.SyncRule.Name}' {relation}, " +
-                "which this proposal changes. It runs in that Synchronisation Rule's own Connected System, so it is " +
-                "re-evaluated when that Connected System next synchronises; what it would write is not counted below.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowOtherSystemReader), flow.TargetAttributeName, flow.SyncRule.Name, relation),
                 nameof(SyncRule.AttributeFlowRules),
                 flow.TargetAttributeName);
         }
@@ -800,7 +792,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     /// Mappings the evaluation could not write, described one per message. A mapping naming an attribute of the
     /// wrong side can never be written, so it silently contributes nothing and the proposal does less than it reads.
     /// </summary>
-    private static IEnumerable<string> DescribeUnwritableMappings(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
+    private static IEnumerable<JimMessage> DescribeUnwritableMappings(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
     {
         var wantsMetaverseTarget = rule.Direction == SyncRuleDirection.Import;
 
@@ -810,25 +802,23 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             .Select(message => message!);
     }
 
-    private static string? DescribeIfUnwritable(SyncRuleMappingProposal mapping, bool wantsMetaverseTarget)
+    private static JimMessage? DescribeIfUnwritable(SyncRuleMappingProposal mapping, bool wantsMetaverseTarget)
     {
         if (mapping.TargetMetaverseAttributeId == null && mapping.TargetConnectedSystemAttributeId == null)
-            return "A proposed Attribute Flow mapping names no target attribute, so it has nowhere to write.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowNoTargetAttribute));
 
         if (wantsMetaverseTarget && mapping.TargetConnectedSystemAttributeId != null)
         {
-            return "A proposed Attribute Flow mapping writes a Connected System attribute, but an import " +
-                   "Synchronisation Rule flows into the Metaverse, so the mapping would write nothing.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowWritesConnectedSystemOnImport));
         }
 
         if (!wantsMetaverseTarget && mapping.TargetMetaverseAttributeId != null)
         {
-            return "A proposed Attribute Flow mapping writes a Metaverse Attribute, but an export " +
-                   "Synchronisation Rule flows out to a Connected System, so the mapping would write nothing.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowWritesMetaverseOnExport));
         }
 
         if (mapping.Sources.Count == 0)
-            return "A proposed Attribute Flow mapping has no source, so there is no value for it to write.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowNoSource));
 
         return null;
     }
@@ -865,9 +855,9 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
     private sealed record ImportContributor(int RuleId, string RuleName, int AttributeId, string? AttributeName, int Priority);
 
-    private static string Describe(List<string> ruleNames) => ruleNames.Count == 1
-        ? $"Synchronisation Rule '{ruleNames[0]}'"
-        : $"Synchronisation Rules {string.Join(", ", ruleNames.Select(name => $"'{name}'"))}";
+    private static JimMessage Describe(List<string> ruleNames) =>
+        JimMessage.Counted(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.RuleNamesOne), ruleNames.Count,
+            ruleNames.Count == 1 ? ruleNames[0] : string.Join(", ", ruleNames.Select(name => $"'{name}'")));
 
     #endregion
 

@@ -1,9 +1,9 @@
 # Scoping Criteria Evaluation Matrix (Scenario 011)
 
-- **Status:** Planned
+- **Status:** Done
 - **Created:** 2026-05-22
 - **Author:** Jay
-- **Issue:** #[number] *(to be filed after PRD review)*
+- **Delivered in:** [#766](https://github.com/TetronIO/JIM/pull/766) (no issue was filed)
 
 ## Problem Statement
 
@@ -253,21 +253,21 @@ These were open during PRD drafting and have been settled in conversation. They 
 
 ## Acceptance Criteria
 
-- [ ] `test/integration/scenarios/Invoke-Scenario-011-ScopingCriteriaMatrix.ps1` exists and is invoked via `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix`.
-- [ ] Three coverage tiers (Quick, Default, Exhaustive) are implemented per requirement 13; `-Quick` and `-Exhaustive` are mutually exclusive and the runner fails fast when both are supplied.
-- [ ] The Default tier covers every applicable `(operator, value-type)` pair (per requirement 14), `CaseSensitive` true/false for text, at least one `All` group, at least one `Any` group, at least one nested group, and at least one null-handling cell per operator/type.
-- [ ] The Exhaustive tier additionally covers, for every applicable `(operator, value-type)` pair, all four group-structure variations (single, two-criterion `All`, two-criterion `Any`, nested `(A OR B) AND C`).
-- [ ] Cell definitions live in a checked-in declarative manifest under `test/integration/scenarios/data/`; the scenario validates the manifest at load time and fails fast on malformed cells, including unknown tier values.
-- [ ] The scenario includes a round-trip persistence sub-test for every value carrier type, executed before the evaluation matrix in all three tiers.
-- [ ] The scenario includes negative-cell API checks for at least three semantically-invalid combinations (requirements 25 / 26).
-- [ ] Each cell appears as a named pass/fail in the scenario report; the summary line shows total / pass / fail counts and the active tier.
-- [ ] Cell failures do not halt the scenario; the matrix completes regardless and the scenario fails overall only if any cell failed.
-- [ ] Scenario wall-clock at Nano: Quick under 90 s, Default under 5 min, Exhaustive under 10 min (on the standard devcontainer host, assuming batched-sync cell isolation).
-- [ ] Scenario tears down cleanly with no orphaned sandbox rules, MVOs, PendingExports, or sandbox Metaverse Object Types; back-to-back runs at any tier produce identical results.
-- [ ] `engineering/INTEGRATION_TESTING.md` is updated with Scenario 011 in all the places where the existing scenarios are listed (Available Scenarios table, Quick Start commands including separate Default / `-Quick` / `-Exhaustive` examples, step example, detail section, Phase 1 status table), and the existing Phase 2 placeholders 11 / 12 / 13 are renumbered to 12 / 13 / 14 everywhere they appear.
-- [ ] `Run-IntegrationTests.ps1` registers Scenario 011 in the auto-detected scenario list with a human-readable description, exposes the scenario-specific options as named parameters that pass through to the scenario script, prompts for the same options (coverage tier, operator filter, negative cells) in the interactive menu when those parameters are not supplied, skips the prompts silently when they are, and prints the resolved values in both the pre-run banner and the end-of-run re-run hint.
-- [ ] Every scenario-specific option can be set in both ways (parameter and menu) and the two paths produce identical scenario invocations for the same selections.
-- [ ] No production code changes ship as part of this scenario; any bugs the matrix uncovers are filed as separate issues.
+- [x] `test/integration/scenarios/Invoke-Scenario-011-ScopingCriteriaMatrix.ps1` exists and is invoked via `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix`.
+- [x] Three coverage tiers (Quick, Default, Exhaustive) are implemented per requirement 13; `-Quick` and `-Exhaustive` are mutually exclusive and the runner fails fast when both are supplied.
+- [x] The Default tier covers every applicable `(operator, value-type)` pair (per requirement 14), `CaseSensitive` true/false for text, at least one `All` group, at least one `Any` group, at least one nested group, and at least one null-handling cell per operator/type.
+- [x] The Exhaustive tier additionally covers, for every applicable `(operator, value-type)` pair, all four group-structure variations (single, two-criterion `All`, two-criterion `Any`, nested `(A OR B) AND C`).
+- [x] Cell definitions live in a checked-in declarative manifest under `test/integration/scenarios/data/`; the scenario validates the manifest at load time and fails fast on malformed cells, including unknown tier values.
+- [x] The scenario includes a round-trip persistence sub-test for every value carrier type, executed before the evaluation matrix in all three tiers.
+- [x] The scenario includes negative-cell API checks for at least three semantically-invalid combinations (requirements 25 / 26).
+- [x] Each cell appears as a named pass/fail in the scenario report; the summary line shows total / pass / fail counts and the active tier.
+- [x] Cell failures do not halt the scenario; the matrix completes regardless and the scenario fails overall only if any cell failed.
+- [x] Scenario wall-clock at Nano: Quick under 90 s, Default under 5 min, Exhaustive under 10 min (on the standard devcontainer host, assuming batched-sync cell isolation).
+- [x] Scenario tears down cleanly with no orphaned sandbox rules, MVOs, PendingExports, or sandbox Metaverse Object Types; back-to-back runs at any tier produce identical results.
+- [x] `engineering/INTEGRATION_TESTING.md` is updated with Scenario 011 in all the places where the existing scenarios are listed (Available Scenarios table, Quick Start commands including separate Default / `-Quick` / `-Exhaustive` examples, step example, detail section, Phase 1 status table), and the existing Phase 2 placeholders 11 / 12 / 13 are renumbered to 12 / 13 / 14 everywhere they appear.
+- [x] `Run-IntegrationTests.ps1` registers Scenario 011 in the auto-detected scenario list with a human-readable description, exposes the scenario-specific options as named parameters that pass through to the scenario script, prompts for the same options (coverage tier, operator filter, negative cells) in the interactive menu when those parameters are not supplied, skips the prompts silently when they are, and prints the resolved values in both the pre-run banner and the end-of-run re-run hint.
+- [x] Every scenario-specific option can be set in both ways (parameter and menu) and the two paths produce identical scenario invocations for the same selections.
+- [x] No production code changes ship as part of this scenario; any bugs the matrix uncovers are filed as separate issues.
 
 ## Additional Context
 

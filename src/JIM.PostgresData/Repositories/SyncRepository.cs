@@ -4,6 +4,7 @@
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -662,7 +663,18 @@ public partial class SyncRepository : ISyncRepository
     public async Task UpdateActivityMessageAsync(Activity activity, string message)
     {
         activity.Message = message;
+        activity.MessageDetailJson = null;
+        await WriteActivityMessageAsync(activity);
+    }
 
+    public async Task UpdateActivityMessageAsync(Activity activity, JimMessage message)
+    {
+        activity.MessageDetail = message;
+        await WriteActivityMessageAsync(activity);
+    }
+
+    private async Task WriteActivityMessageAsync(Activity activity)
+    {
         // Use raw SQL to bypass the change tracker entirely. This avoids the overhead of
         // UpdateDetachedSafe + SaveChangesAsync after ClearChangeTracker at page boundaries,
         // which would re-attach the Activity and run DetectChanges on all tracked entities.
@@ -670,9 +682,11 @@ public partial class SyncRepository : ISyncRepository
             activity.ObjectsProcessed, NpgsqlTypes.NpgsqlDbType.Integer);
         var objectsToProcessParam = BulkSqlHelpers.NullableParam(
             activity.ObjectsToProcess, NpgsqlTypes.NpgsqlDbType.Integer);
+        var messageParam = BulkSqlHelpers.NullableParam(activity.Message, NpgsqlTypes.NpgsqlDbType.Text);
+        var messageDetailParam = BulkSqlHelpers.NullableParam(activity.MessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
         await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""Message"" = {0}, ""ObjectsProcessed"" = {1}, ""ObjectsToProcess"" = {2} WHERE ""Id"" = {3}",
-            message, objectsProcessedParam, objectsToProcessParam, activity.Id);
+            @"UPDATE ""Activities"" SET ""Message"" = {0}, ""MessageDetailJson"" = {1}, ""ObjectsProcessed"" = {2}, ""ObjectsToProcess"" = {3} WHERE ""Id"" = {4}",
+            messageParam, messageDetailParam, objectsProcessedParam, objectsToProcessParam, activity.Id);
     }
 
     public async Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)

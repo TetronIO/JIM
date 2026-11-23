@@ -1,0 +1,549 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExpressionBothAttributeAndExpression" xml:space="preserve">
+    <value>Ein Geltungsbereichskriterium vergleicht entweder ein Attribut oder einen Ausdruck, nicht beides.</value>
+  </data>
+  <data name="ExpressionNeedsCompareAs" xml:space="preserve">
+    <value>Ein Ausdruckskriterium benötigt einen Typ für „Vergleichen als“, den Typ, als der sein berechneter Wert verglichen wird: Text, Zahl, Lange Zahl, Dezimalzahl, Datum, Boolean oder Guid.</value>
+  </data>
+  <data name="ExpressionTooLong" xml:space="preserve">
+    <value>Der Ausdruck ist {0} Zeichen lang; ein Ausdruck darf höchstens {1} lang sein.</value>
+  </data>
+  <data name="ExpressionDoesNotParse" xml:space="preserve">
+    <value>Der Ausdruck lässt sich nicht analysieren: {0}</value>
+  </data>
+  <data name="ExpressionReadsMetaverseOnImport" xml:space="preserve">
+    <value>Der Ausdruck liest {0}, aber eine Import-Synchronisierungsregel legt den Geltungsbereich von Objekten im verbundenen System fest, die als cs["..."] gelesen werden, daher hätte diese Eingabe nie einen Wert.</value>
+  </data>
+  <data name="ExpressionReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>Der Ausdruck liest {0}, aber eine Export-Synchronisierungsregel legt den Geltungsbereich von Metaverse-Objekten fest, die als mv["..."] gelesen werden, daher hätte diese Eingabe nie einen Wert.</value>
+  </data>
+  <data name="ExpressionReadsNoAttributeOnImport" xml:space="preserve">
+    <value>Der Ausdruck liest kein Attribut, würde also für jedes Objekt denselben Wert berechnen und alle gleich behandeln. Lesen Sie mindestens ein Attribut, als cs["attributeName"].</value>
+  </data>
+  <data name="ExpressionReadsNoAttributeOnExport" xml:space="preserve">
+    <value>Der Ausdruck liest kein Attribut, würde also für jedes Objekt denselben Wert berechnen und alle gleich behandeln. Lesen Sie mindestens ein Attribut, als mv["attributeName"].</value>
+  </data>
+  <data name="ExpressionUnknownAttribute" xml:space="preserve">
+    <value>Der Ausdruck liest {0}, aber „{1}“ hat kein Attribut mit diesem Namen.</value>
+  </data>
+  <data name="ExpressionNonRepeatable" xml:space="preserve">
+    <value>Der Ausdruck ruft {0} auf, was bei jeder Ausführung einen anderen Wert liefert, sodass sich der Geltungsbereich eines Objekts ändern würde, ohne dass sich das Objekt ändert, und nichts darauf reagieren würde. Um den Geltungsbereich nach Datum festzulegen, vergleichen Sie den Ausdruck als Datum mit einem relativen Datum (zum Beispiel vor mehr als 30 Tagen).</value>
+  </data>
+  <data name="Verbatim" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="Concat" xml:space="preserve">
+    <value>{0}{1}</value>
+  </data>
+  <data name="QuotedValue" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="Is" xml:space="preserve">
+    <value>ist</value>
+  </data>
+  <data name="MustBe" xml:space="preserve">
+    <value>muss</value>
+  </data>
+  <data name="Or" xml:space="preserve">
+    <value>oder</value>
+  </data>
+  <data name="OrLeading" xml:space="preserve">
+    <value>oder</value>
+  </data>
+  <data name="OrAlternative" xml:space="preserve">
+    <value>oder</value>
+  </data>
+  <data name="Either" xml:space="preserve">
+    <value>entweder</value>
+  </data>
+  <data name="AndEither" xml:space="preserve">
+    <value>und entweder</value>
+  </data>
+  <data name="And" xml:space="preserve">
+    <value>und</value>
+  </data>
+  <data name="OpEquals" xml:space="preserve">
+    <value>entspricht</value>
+  </data>
+  <data name="OpNotEquals" xml:space="preserve">
+    <value>entspricht nicht</value>
+  </data>
+  <data name="OpStartsWith" xml:space="preserve">
+    <value>beginnt mit</value>
+  </data>
+  <data name="OpNotStartsWith" xml:space="preserve">
+    <value>beginnt nicht mit</value>
+  </data>
+  <data name="OpEndsWith" xml:space="preserve">
+    <value>endet mit</value>
+  </data>
+  <data name="OpNotEndsWith" xml:space="preserve">
+    <value>endet nicht mit</value>
+  </data>
+  <data name="OpContains" xml:space="preserve">
+    <value>enthält</value>
+  </data>
+  <data name="OpNotContains" xml:space="preserve">
+    <value>enthält nicht</value>
+  </data>
+  <data name="OpMatchesPattern" xml:space="preserve">
+    <value>stimmt mit Muster überein</value>
+  </data>
+  <data name="OpNotMatchesPattern" xml:space="preserve">
+    <value>stimmt nicht mit Muster überein</value>
+  </data>
+  <data name="MustEqual" xml:space="preserve">
+    <value>muss gleich</value>
+  </data>
+  <data name="MustNotEqual" xml:space="preserve">
+    <value>darf nicht gleich</value>
+  </data>
+  <data name="MustStartWith" xml:space="preserve">
+    <value>muss beginnen mit</value>
+  </data>
+  <data name="MustNotStartWith" xml:space="preserve">
+    <value>darf nicht beginnen mit</value>
+  </data>
+  <data name="MustEndWith" xml:space="preserve">
+    <value>muss enden mit</value>
+  </data>
+  <data name="MustNotEndWith" xml:space="preserve">
+    <value>darf nicht enden mit</value>
+  </data>
+  <data name="MustContain" xml:space="preserve">
+    <value>muss enthalten</value>
+  </data>
+  <data name="MustNotContain" xml:space="preserve">
+    <value>darf nicht enthalten</value>
+  </data>
+  <data name="MustMatchPattern" xml:space="preserve">
+    <value>muss übereinstimmen mit Muster</value>
+  </data>
+  <data name="MustNotMatchPattern" xml:space="preserve">
+    <value>darf nicht übereinstimmen mit Muster</value>
+  </data>
+  <data name="OpBefore" xml:space="preserve">
+    <value>vor</value>
+  </data>
+  <data name="OpOnOrBefore" xml:space="preserve">
+    <value>am oder vor</value>
+  </data>
+  <data name="OpAfter" xml:space="preserve">
+    <value>nach</value>
+  </data>
+  <data name="OpOnOrAfter" xml:space="preserve">
+    <value>am oder nach</value>
+  </data>
+  <data name="OpLessThan" xml:space="preserve">
+    <value>kleiner als</value>
+  </data>
+  <data name="OpLessThanOrEquals" xml:space="preserve">
+    <value>kleiner oder gleich</value>
+  </data>
+  <data name="OpGreaterThan" xml:space="preserve">
+    <value>größer als</value>
+  </data>
+  <data name="OpGreaterThanOrEquals" xml:space="preserve">
+    <value>größer oder gleich</value>
+  </data>
+  <data name="CriterionWithNoAttribute" xml:space="preserve">
+    <value>Kriterium ohne Attribut</value>
+  </data>
+  <data name="IgnoringCase" xml:space="preserve">
+    <value>Groß-/Kleinschreibung ignoriert</value>
+  </data>
+  <data name="ActualReferencesNoAttribute" xml:space="preserve">
+    <value>verweist auf kein Attribut</value>
+  </data>
+  <data name="ActualCannotBeEvaluated" xml:space="preserve">
+    <value>kann nicht ausgewertet werden</value>
+  </data>
+  <data name="ActualCannotBeEvaluatedBecause" xml:space="preserve">
+    <value>kann nicht ausgewertet werden. {0}</value>
+  </data>
+  <data name="ActualHasConnection" xml:space="preserve">
+    <value>hat eines</value>
+  </data>
+  <data name="ActualHasNoConnection" xml:space="preserve">
+    <value>hat keines</value>
+  </data>
+  <data name="ActualComputedHidden" xml:space="preserve">
+    <value>berechnete einen ausgeblendeten Wert</value>
+  </data>
+  <data name="ActualIsHidden" xml:space="preserve">
+    <value>ist ausgeblendet</value>
+  </data>
+  <data name="ActualComputedNoValue" xml:space="preserve">
+    <value>berechnete keinen Wert</value>
+  </data>
+  <data name="ActualHasNoValue" xml:space="preserve">
+    <value>hat keinen Wert</value>
+  </data>
+  <data name="ActualComputedValue" xml:space="preserve">
+    <value>berechnete {0}</value>
+  </data>
+  <data name="ActualIsValue" xml:space="preserve">
+    <value>ist {0}</value>
+  </data>
+  <data name="ActualComputedOneOf" xml:space="preserve">
+    <value>berechnete {0} (einer von {1} Werten)</value>
+  </data>
+  <data name="ActualIncludesOneOf" xml:space="preserve">
+    <value>enthält {0} (einer von {1} Werten)</value>
+  </data>
+  <data name="ActualComputedCount" xml:space="preserve">
+    <value>berechnete {0} Werte</value>
+  </data>
+  <data name="ActualHasCount" xml:space="preserve">
+    <value>hat {0} Werte</value>
+  </data>
+  <data name="ActualNoneOfComputedValues" xml:space="preserve">
+    <value>keiner der {0} berechneten Werte {1} {2}</value>
+  </data>
+  <data name="ActualNoneOfValues" xml:space="preserve">
+    <value>keiner der {0} Werte {1} {2}</value>
+  </data>
+  <data name="GroupAllMustBeMet" xml:space="preserve">
+    <value>Alle diese müssen erfüllt sein</value>
+  </data>
+  <data name="GroupAnyOneOfThese" xml:space="preserve">
+    <value>Eines davon</value>
+  </data>
+  <data name="GroupStateCannotBeEvaluated" xml:space="preserve">
+    <value>kann nicht ausgewertet werden</value>
+  </data>
+  <data name="GroupStateMet" xml:space="preserve">
+    <value>erfüllt</value>
+  </data>
+  <data name="GroupStateNoneMet" xml:space="preserve">
+    <value>keines erfüllt</value>
+  </data>
+  <data name="GroupStateNotMet" xml:space="preserve">
+    <value>nicht erfüllt</value>
+  </data>
+  <data name="GroupLine" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="Currently" xml:space="preserve">
+    <value>aktuell</value>
+  </data>
+  <data name="CaseSensitiveCurrently" xml:space="preserve">
+    <value>Groß-/Kleinschreibung beachtet; aktuell</value>
+  </data>
+  <data name="CurrentlyHasConnection" xml:space="preserve">
+    <value>hat aktuell eines</value>
+  </data>
+  <data name="CurrentlyHasNoConnection" xml:space="preserve">
+    <value>hat aktuell keines</value>
+  </data>
+  <data name="CurrentlyIncludes" xml:space="preserve">
+    <value>enthält aktuell</value>
+  </data>
+  <data name="OneOfCountValues" xml:space="preserve">
+    <value>einer von {0} Werten</value>
+  </data>
+  <data name="CurrentlyCountValues" xml:space="preserve">
+    <value>aktuell {0} Werte</value>
+  </data>
+  <data name="NoneOfItsValuesMatches" xml:space="preserve">
+    <value>keiner seiner {0} Werte stimmt überein</value>
+  </data>
+  <data name="NoValueWord" xml:space="preserve">
+    <value>kein Wert</value>
+  </data>
+  <data name="AHiddenValue" xml:space="preserve">
+    <value>ein ausgeblendeter Wert</value>
+  </data>
+  <data name="CurrentValueHidden" xml:space="preserve">
+    <value>aktueller Wert ausgeblendet</value>
+  </data>
+  <data name="AnEmptyValue" xml:space="preserve">
+    <value>ein leerer Wert</value>
+  </data>
+  <data name="AnAttribute" xml:space="preserve">
+    <value>ein Attribut</value>
+  </data>
+  <data name="MustHaveNoValue" xml:space="preserve">
+    <value>darf keinen Wert haben</value>
+  </data>
+  <data name="HasNoValueCondition" xml:space="preserve">
+    <value>hat keinen Wert</value>
+  </data>
+  <data name="NeedsAValue" xml:space="preserve">
+    <value>benötigt einen Wert</value>
+  </data>
+  <data name="HasAValue" xml:space="preserve">
+    <value>hat einen Wert</value>
+  </data>
+  <data name="NeedsAValueThat" xml:space="preserve">
+    <value>benötigt einen Wert, der {0}</value>
+  </data>
+  <data name="HasAValueThat" xml:space="preserve">
+    <value>hat einen Wert, der {0}</value>
+  </data>
+  <data name="ConnectionNeeds" xml:space="preserve">
+    <value>Benötigt</value>
+  </data>
+  <data name="ConnectionNeedsNo" xml:space="preserve">
+    <value>Benötigt kein</value>
+  </data>
+  <data name="ConnectionHas" xml:space="preserve">
+    <value>Hat</value>
+  </data>
+  <data name="ConnectionHasNo" xml:space="preserve">
+    <value>Hat kein</value>
+  </data>
+  <data name="CriterionHasNoAttributeStart" xml:space="preserve">
+    <value>Kriterium {0} hat kein Attribut und kann nie erfüllt werden</value>
+  </data>
+  <data name="CriterionHasNoAttributeMid" xml:space="preserve">
+    <value>Kriterium {0} hat kein Attribut und kann nie erfüllt werden</value>
+  </data>
+  <data name="FailsOn" xml:space="preserve">
+    <value>Nicht erfüllt bei {0}</value>
+  </data>
+  <data name="HintCriterionPath" xml:space="preserve">
+    <value>Kriterium {0}</value>
+  </data>
+  <data name="UndecidedUntilFullImport" xml:space="preserve">
+    <value>Unentschieden, bis ein vollständiger Import {0} liest</value>
+  </data>
+  <data name="ScopingCannotBeEvaluated" xml:space="preserve">
+    <value>Geltungsbereich kann nicht ausgewertet werden</value>
+  </data>
+  <data name="InvalidCriterionOn" xml:space="preserve">
+    <value>Ungültiges Kriterium für {0}</value>
+  </data>
+  <data name="InvalidCriteriaOn" xml:space="preserve">
+    <value>Ungültige Kriterien für {0}</value>
+  </data>
+  <data name="JoinLastAnd" xml:space="preserve">
+    <value>{0} und {1}</value>
+  </data>
+  <data name="CriterionCompares" xml:space="preserve">
+    <value>Kriterium {0} vergleicht</value>
+  </data>
+  <data name="WhichCannotBeEvaluatedYet" xml:space="preserve">
+    <value>, das noch nicht ausgewertet werden kann. {0}</value>
+  </data>
+  <data name="WithPatternThatCannotBeEvaluated" xml:space="preserve">
+    <value>mit einem Muster, das nicht ausgewertet werden kann; korrigieren oder entfernen Sie es in der Synchronisierungsregel.</value>
+  </data>
+  <data name="WithOperatorTypeCannotUse" xml:space="preserve">
+    <value>mit „{0}“, was ein Attribut vom Typ {1} nicht verwenden kann; korrigieren oder entfernen Sie es in der Synchronisierungsregel.</value>
+  </data>
+  <data name="TypeAText" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="TypeANumber" xml:space="preserve">
+    <value>Zahl</value>
+  </data>
+  <data name="TypeALongNumber" xml:space="preserve">
+    <value>Lange Zahl</value>
+  </data>
+  <data name="TypeADecimal" xml:space="preserve">
+    <value>Dezimalzahl</value>
+  </data>
+  <data name="TypeADate" xml:space="preserve">
+    <value>Datum</value>
+  </data>
+  <data name="TypeABoolean" xml:space="preserve">
+    <value>Boolean</value>
+  </data>
+  <data name="TypeAGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="TypeABinary" xml:space="preserve">
+    <value>Binär</value>
+  </data>
+  <data name="TypeAReference" xml:space="preserve">
+    <value>Referenz</value>
+  </data>
+  <data name="TypeAnUntyped" xml:space="preserve">
+    <value>Untypisiert</value>
+  </data>
+  <data name="GenericObjectName" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt</value>
+  </data>
+  <data name="TitleToComeIntoScope" xml:space="preserve">
+    <value>So gelangt es in den Geltungsbereich</value>
+  </data>
+  <data name="TitleWhatHappensNext" xml:space="preserve">
+    <value>Was als Nächstes geschieht</value>
+  </data>
+  <data name="TitleWhatWouldConnectIt" xml:space="preserve">
+    <value>Was es verbinden würde</value>
+  </data>
+  <data name="TitleWhatWouldFixIt" xml:space="preserve">
+    <value>Was es beheben würde</value>
+  </data>
+  <data name="HintInScopeStagedNext" xml:space="preserve">
+    <value>Im Geltungsbereich; wird bei der nächsten Synchronisierung bereitgestellt</value>
+  </data>
+  <data name="HintInScopeNothingStaged" xml:space="preserve">
+    <value>Im Geltungsbereich; noch nichts bereitgestellt</value>
+  </data>
+  <data name="HintInScopeProvisioningOff" xml:space="preserve">
+    <value>Im Geltungsbereich; Provisionierung ist aus</value>
+  </data>
+  <data name="HintConnectedSystemDisabled" xml:space="preserve">
+    <value>Verbundenes System deaktiviert</value>
+  </data>
+  <data name="BulletAwaitingExportReview" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt wartet auf seine Exportprüfung.</value>
+  </data>
+  <data name="BulletNextSynchronisationReviews" xml:space="preserve">
+    <value>Die nächste Synchronisierung eines beliebigen verbundenen Systems prüft es und stellt seine Provisionierung in {0} bereit.</value>
+  </data>
+  <data name="BulletStagedWhenValuesChange" xml:space="preserve">
+    <value>Die Provisionierung wird bereitgestellt, wenn sich die Attributwerte dieses Metaverse-Objekts das nächste Mal bei der Synchronisierung ändern.</value>
+  </data>
+  <data name="BulletSavingRuleStages" xml:space="preserve">
+    <value>Das Speichern einer Änderung an der Synchronisierungsregel, die Objekte in ihren Geltungsbereich bringen kann, stellt sie ebenfalls bereit, bei der nächsten Synchronisierung eines beliebigen verbundenen Systems.</value>
+  </data>
+  <data name="BulletSwitchOnProvision" xml:space="preserve">
+    <value>Schalten Sie in der Synchronisierungsregel „Im verbundenen System provisionieren“ ein, oder</value>
+  </data>
+  <data name="BulletCreateObjectThatJoins" xml:space="preserve">
+    <value>erstellen Sie in {0} ein Objekt, das mit diesem Metaverse-Objekt verknüpft wird.</value>
+  </data>
+  <data name="ReasonNotInScope" xml:space="preserve">
+    <value>nicht im Geltungsbereich der Synchronisierungsregel „{0}“.</value>
+  </data>
+  <data name="ReasonInScopeStagesNext" xml:space="preserve">
+    <value>im Geltungsbereich der Synchronisierungsregel „{0}“; die nächste Synchronisierung stellt seine Provisionierung bereit.</value>
+  </data>
+  <data name="ReasonInScopeNothingStaged" xml:space="preserve">
+    <value>im Geltungsbereich der Synchronisierungsregel „{0}“, aber es wurde noch nichts bereitgestellt.</value>
+  </data>
+  <data name="ReasonInScopeNoProvisioning" xml:space="preserve">
+    <value>im Geltungsbereich der Synchronisierungsregel „{0}“, aber die Regel provisioniert keine neuen Objekte.</value>
+  </data>
+  <data name="ReasonScopingCannotBeEvaluated" xml:space="preserve">
+    <value>der Geltungsbereich der Synchronisierungsregel „{0}“ kann nicht ausgewertet werden.</value>
+  </data>
+  <data name="SummaryNotProvisioned" xml:space="preserve">
+    <value>{0} wird nicht in {1} provisioniert.</value>
+  </data>
+  <data name="SummaryReason" xml:space="preserve">
+    <value>Grund: {0}</value>
+  </data>
+  <data name="SummaryNoteDisabled" xml:space="preserve">
+    <value>Hinweis: Das verbundene System {0} ist deaktiviert.</value>
+  </data>
+  <data name="SummaryTitleLine" xml:space="preserve">
+    <value>{0}:</value>
+  </data>
+  <data name="SummaryEvaluated" xml:space="preserve">
+    <value>Ausgewertet {0}.</value>
+  </data>
+  <data name="ObjectTypeConflict" xml:space="preserve">
+    <value>Die Synchronisierungsregel „{0}“ zielt auf „{1}“-Objekte in {2}, aber dieses Metaverse-Objekt wird dort bereits durch ein „{3}“-Objekt repräsentiert. Ein Metaverse-Objekt kann pro verbundenem System nur ein Objekt im verbundenen System haben, daher kann diese Regel es nicht verbinden.</value>
+  </data>
+  <data name="JoinRule" xml:space="preserve">
+    <value>der Synchronisierungsregel „{0}“</value>
+  </data>
+  <data name="JoinRuleSinceDeleted" xml:space="preserve">
+    <value>der Synchronisierungsregel „{0}“ (inzwischen gelöscht)</value>
+  </data>
+  <data name="JoinProjectedBy" xml:space="preserve">
+    <value>Projiziert von {0}</value>
+  </data>
+  <data name="JoinProvisionedBy" xml:space="preserve">
+    <value>Provisioniert von {0}</value>
+  </data>
+  <data name="JoinMatchedUnder" xml:space="preserve">
+    <value>Durch Abgleich verknüpft, unter {0}{1}</value>
+  </data>
+  <data name="JoinMatchedOnRules" xml:space="preserve">
+    <value>Durch Abgleich anhand der Objektabgleichsregeln des verbundenen Systems verknüpft{0}</value>
+  </data>
+  <data name="JoinExportMatched" xml:space="preserve">
+    <value>Verknüpft von {0}, die ein vorhandenes Objekt abgeglichen hat, statt ein neues zu provisionieren</value>
+  </data>
+  <data name="JoinProjectedNotRecorded" xml:space="preserve">
+    <value>Projiziert; die Synchronisierungsregel wurde nicht erfasst</value>
+  </data>
+  <data name="JoinProvisionedNotRecorded" xml:space="preserve">
+    <value>Provisioniert; die Synchronisierungsregel wurde nicht erfasst</value>
+  </data>
+  <data name="JoinNotRecorded" xml:space="preserve">
+    <value>Verknüpft; wie, wurde nicht erfasst</value>
+  </data>
+  <data name="MatchedRuleDeleted" xml:space="preserve">
+    <value>: „{0}“ abgeglichen (die Objektabgleichsregel wurde inzwischen gelöscht)</value>
+  </data>
+  <data name="MatchedOn" xml:space="preserve">
+    <value>: „{0}“ abgeglichen auf {1} (entspricht {2})</value>
+  </data>
+  <data name="CriterionIsInvalid" xml:space="preserve">
+    <value>Das Kriterium ist ungültig: {0}.</value>
+  </data>
+  <data name="InvalidReasonOperator" xml:space="preserve">
+    <value>der Vergleichsoperator „{0}“ ist für das Attribut vom Typ {1} nicht gültig</value>
+  </data>
+  <data name="NoTypeToCompareAs" xml:space="preserve">
+    <value>es hat keinen Typ, als der der Wert des Ausdrucks verglichen wird</value>
+  </data>
+  <data name="ConnectionCriterionOperatorReason" xml:space="preserve">
+    <value>ein Verbindungskriterium kann nur prüfen, ob das Objekt eine Verbindung hat oder nicht</value>
+  </data>
+  <data name="ConnectionUnreadable" xml:space="preserve">
+    <value>JIM konnte nicht lesen, mit welchen verbundenen Systemen das Objekt verbunden ist, daher ist unbekannt, ob es {0} hat.</value>
+  </data>
+  <data name="UnknownInputUnavailable" xml:space="preserve">
+    <value>Sein Ausdruck liest {0}, aber die Attribute des Objekttyps standen nicht zur Verfügung, um zu bestätigen, dass das Attribut existiert, daher ließ sich ein fehlender Wert nicht von einem fehlenden Attribut unterscheiden.</value>
+  </data>
+  <data name="UnknownInputGone" xml:space="preserve">
+    <value>Sein Ausdruck liest {0}, was kein Attribut des Objekttyps ist; es wurde möglicherweise seit dem Speichern der Regel umbenannt oder entfernt. Aktualisieren Sie den Ausdruck.</value>
+  </data>
+  <data name="ExpressionCouldNotBeEvaluated" xml:space="preserve">
+    <value>Sein Ausdruck konnte nicht ausgewertet werden: {0}</value>
+  </data>
+  <data name="ExpressionCouldNotBeEvaluatedCredential" xml:space="preserve">
+    <value>Sein Ausdruck konnte nicht ausgewertet werden oder hat einen Wert berechnet, der nicht als {0} verglichen werden kann; der Wert wird zurückgehalten, weil der Ausdruck ein Attribut liest, das Anmeldeinformationen enthalten könnte.</value>
+  </data>
+  <data name="PatternTimedOutOnExpressionValues" xml:space="preserve">
+    <value>Sein Muster „{0}“ hat bei einem der Werte des Ausdrucks sein Zeitlimit von {1} ms überschritten; vereinfachen Sie das Muster (verschachtelte Wiederholung wie (a+)+ ist die übliche Ursache).</value>
+  </data>
+  <data name="ComputedValueCannotBeCompared" xml:space="preserve">
+    <value>Sein Ausdruck hat „{0}“ berechnet, was nicht als {1} verglichen werden kann.</value>
+  </data>
+  <data name="CompareAsNumber" xml:space="preserve">
+    <value>Zahl</value>
+  </data>
+  <data name="CompareAsLongNumber" xml:space="preserve">
+    <value>Lange Zahl</value>
+  </data>
+  <data name="CompareAsDecimal" xml:space="preserve">
+    <value>Dezimalzahl</value>
+  </data>
+  <data name="CompareAsDateTime" xml:space="preserve">
+    <value>DateTime</value>
+  </data>
+  <data name="CompareAsBoolean" xml:space="preserve">
+    <value>Boolean</value>
+  </data>
+  <data name="CompareAsGuid" xml:space="preserve">
+    <value>Guid</value>
+  </data>
+  <data name="ScopeTestAttributeNotFound" xml:space="preserve">
+    <value>„{0}“ hat einen Wert, aber {1} hat kein Attribut mit diesem Namen, daher würde der Geltungsbereich nie einen sehen.</value>
+  </data>
+  <data name="ScopeTestTheObjectType" xml:space="preserve">
+    <value>der Objekttyp</value>
+  </data>
+</root>

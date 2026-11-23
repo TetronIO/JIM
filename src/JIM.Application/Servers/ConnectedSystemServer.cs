@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -15,6 +17,8 @@ using JIM.Models.Enums;
 using JIM.Models.History;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Security;
@@ -34,6 +38,8 @@ using JIM.Application.Utilities;
 using JIM.Models.Search;
 using JIM.Utilities;
 using Serilog;
+using CsText = JIM.Application.Resources.ConnectedSystemMessages;
+using Msg = JIM.Application.Localisation.ConnectedSystemMessage;
 
 namespace JIM.Application.Servers;
 
@@ -323,7 +329,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectorDefinition,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Connector Definition '{connectorName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInConnectorDefinition), connectorName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -644,17 +650,16 @@ public partial class ConnectedSystemServer
         var importRules = await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(null, SyncRuleDirection.Import);
         var objectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
         var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
-        syncRule.RuleSaveWarnings.AddRange(importRules
+        foreach (var other in importRules
             .Where(other => other.Enabled && other.ProjectToMetaverse == true && other.Id != syncRule.Id &&
                             other.ConnectedSystemId == syncRule.ConnectedSystemId &&
                             other.ConnectedSystemObjectTypeId == objectTypeId &&
                             other.MetaverseObjectTypeId != metaverseObjectTypeId)
-            .OrderBy(other => other.Name, StringComparer.Ordinal)
-            .Select(other =>
-                $"The import Synchronisation Rule '{other.Name}' also projects '{other.ConnectedSystemObjectTypeName}' objects from " +
-                $"'{other.ConnectedSystemName}', but as '{other.MetaverseObjectTypeName}'. A synchronisation projects nothing for an " +
-                "object both rules have in scope, and reports it as a Projection Type Conflict. Give the rules scopes that never " +
-                "overlap, or have them project into one Metaverse Object Type."));
+            .OrderBy(other => other.Name, StringComparer.Ordinal))
+        {
+            syncRule.AddRuleSaveWarning(Msg.Create(nameof(CsText.SaveWarningProjectionConflict),
+                other.Name, other.ConnectedSystemObjectTypeName, other.ConnectedSystemName, other.MetaverseObjectTypeName));
+        }
     }
 
     /// <param name="previewActivityId">
@@ -1641,7 +1646,7 @@ public partial class ConnectedSystemServer
             var errorMessage = GetFullExceptionMessage(ex);
 
             // Mark activity as failed
-            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage, ex);
 
             if (alreadyFenced)
             {
@@ -1791,7 +1796,7 @@ public partial class ConnectedSystemServer
             Log.Error(ex, "DeleteAsync: Failed to delete Connected System {Id}", connectedSystemId);
 
             var errorMessage = GetFullExceptionMessage(ex);
-            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage, ex);
 
             if (alreadyFenced)
             {
@@ -2216,8 +2221,8 @@ public partial class ConnectedSystemServer
                 var waiting = await Application.Repository.Sync.CountWaitingExchangeChangesAsync(connectedSystem.Id);
                 if (waiting > 0)
                     results.Add(ConnectorSettingValueValidationResult.Warning(null,
-                        $"Exchange delivery is held: {waiting} {(waiting == 1 ? "change is" : "changes are")} waiting. " +
-                        "They are delivered when this Connected System manages Exchange recipients again."));
+                        JimMessage.Counted(MessageCatalogues.SettingValidation, nameof(SettingValidationMessages.ExchangeDeliveryHeldOne), waiting,
+                            waiting.ToString(System.Globalization.CultureInfo.InvariantCulture))));
             }
         }
         finally
@@ -2251,12 +2256,12 @@ public partial class ConnectedSystemServer
 
         var problems = selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, objectTypes, Log.Logger)
             .Where(result => !result.IsValid)
-            .Select(result => result.ErrorMessage)
-            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Where(result => !string.IsNullOrWhiteSpace(result.ErrorMessage))
+            .Select(result => result.ErrorDetail ?? Msg.Create(nameof(CsText.PassThroughText), result.ErrorMessage!))
             .ToList();
 
         if (problems.Count > 0)
-            throw new InvalidSettingValuesException(string.Join(" ", problems));
+            throw new InvalidSettingValuesException(Msg.Sentences(problems));
     }
 
     /// <summary>
@@ -2313,8 +2318,7 @@ public partial class ConnectedSystemServer
         return readers.Where(reader => reader.Kind != AttributeReaderKind.ScopingCriterion).ToList();
     }
 
-    private const string DeselectionRefusal =
-        "An attribute a Scoping Criterion reads cannot be deselected: it would stop being imported, so the criterion would decide scope on values that are never refreshed, and on no value at all for objects imported afterwards. Change these first:";
+    private static JimMessage DeselectionRefusal => Msg.Create(nameof(CsText.AttributeDeselectionRefusal));
 
     /// <summary>
     /// The bulk form of <see cref="GuardAttributeDeselectionAsync"/>: a deselection a Scoping Criterion refuses is
@@ -2374,9 +2378,8 @@ public partial class ConnectedSystemServer
             return;
         }
 
-        activity.WarningMessage = "A deselected attribute is still read by: " +
-            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)) +
-            ". It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.";
+        activity.WarningMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.DeselectedAttributeStillRead),
+            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)));
         await Application.Activities.CompleteActivityWithWarningAsync(activity);
     }
 
@@ -2406,13 +2409,13 @@ public partial class ConnectedSystemServer
             return;
 
         var changed = connectedSystemTypeChanged && metaverseTypeChanged
-            ? "Connected System Object Type and Metaverse Object Type"
-            : connectedSystemTypeChanged ? "Connected System Object Type" : "Metaverse Object Type";
-        var message = $"The {changed} of Synchronisation Rule '{syncRule.Name}' cannot be changed once it is saved: its " +
-                      "Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of its Object Types. " +
-                      "Create a new Synchronisation Rule for the other Object Type instead.";
-        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+            ? Msg.Create(nameof(CsText.ChangedObjectTypesBoth))
+            : connectedSystemTypeChanged
+                ? Msg.Create(nameof(CsText.ChangedObjectTypeConnectedSystem))
+                : Msg.Create(nameof(CsText.ChangedObjectTypeMetaverse));
+        var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.SyncRuleObjectTypesCannotChange), changed, syncRule.Name));
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
+        throw refusal;
     }
 
     /// <summary>
@@ -2451,16 +2454,16 @@ public partial class ConnectedSystemServer
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToList()))
             .Where(problem => problem.SyncRuleNames.Count > 0)
-            .Select(problem => ObjectTypeDeselectionMessages.StillManaged(problem.Name, problem.SyncRuleNames))
+            .Select(problem => ObjectTypeDeselectionMessages.StillManagedMessage(problem.Name, problem.SyncRuleNames))
             .ToList();
 
         if (problems.Count == 0)
             return;
 
-        var message = string.Join(" ", problems);
+        var refusal = new InvalidSettingValuesException(Msg.Sentences(problems));
         Log.Information("ThrowIfDeselectedObjectTypesStillManagedAsync: refusing the schema selection for Connected System {ConnectedSystemId}; {Message}",
-            connectedSystemId, LogSanitiser.Sanitise(message));
-        throw new InvalidSettingValuesException(message);
+            connectedSystemId, LogSanitiser.Sanitise(refusal.Message));
+        throw refusal;
     }
 
     /// <summary>
@@ -2488,11 +2491,9 @@ public partial class ConnectedSystemServer
         if (objectType == null || objectType.Selected)
             return;
 
-        var message = $"Synchronisation Rule '{syncRule.Name}' cannot be enabled because its Object Type " +
-                      $"'{objectType.Name}' is not selected on the Connected System. Select the Object Type first, or " +
-                      "save the Synchronisation Rule disabled.";
-        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+        var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.SyncRuleEnabledOnDeselectedObjectType), syncRule.Name, objectType.Name));
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
+        throw refusal;
     }
 
     /// <summary>
@@ -2512,10 +2513,9 @@ public partial class ConnectedSystemServer
         if (connector == null || connector.SupportsDisable)
             return;
 
-        var message = $"Synchronisation Rule '{syncRule.Name}' cannot deprovision with Disable: the {connector.Name} that " +
-                      $"'{connectedSystem!.Name}' uses cannot disable an account. Choose Delete or Disconnect.";
-        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+        var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.SyncRuleDeprovisionDisableUnsupported), syncRule.Name, connector.Name, connectedSystem!.Name));
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
+        throw refusal;
     }
 
     private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)
@@ -2552,7 +2552,7 @@ public partial class ConnectedSystemServer
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorSchema schemaConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
 
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
@@ -2612,7 +2612,7 @@ public partial class ConnectedSystemServer
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorSchema schemaConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
 
         var activity = new Activity
         {
@@ -2669,7 +2669,7 @@ public partial class ConnectedSystemServer
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorSchema schemaConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
 
         var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
         var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
@@ -2784,8 +2784,7 @@ public partial class ConnectedSystemServer
 
         var readers = SchemaRefreshDependentDetector.FindRemovedAttributeReaders(previewResult, await GetAttributeReaderIndexAsync());
         if (readers.Count > 0)
-            throw new AttributeReadByConfigurationException(
-                "Apply and Remove is refused: configuration reads an attribute the Connected System no longer reports. Change these first, or apply without removing:", readers);
+            throw new AttributeReadByConfigurationException(Msg.Create(nameof(CsText.SchemaRefreshRemovalRefusal)), readers);
     }
 
     /// <summary>
@@ -3058,7 +3057,7 @@ public partial class ConnectedSystemServer
             result.AttributeValuesRemoved = await Application.Repository.ConnectedSystems.DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(task.ConnectedSystemId, task.RemovedAttributeIds);
 
         activity.TotalDeleted = result.ConnectedSystemObjectsObsoleted;
-        activity.Message = $"Marked {result.ConnectedSystemObjectsObsoleted:N0} Connected System Object(s) Obsolete, removed {result.PendingExportsRemoved:N0} Pending Export(s) and deleted {result.AttributeValuesRemoved:N0} stored attribute value(s).";
+        activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SchemaRefreshRemovalCompleted), result.ConnectedSystemObjectsObsoleted, result.PendingExportsRemoved, result.AttributeValuesRemoved);
 
         Log.Information(
             "ExecuteSchemaRefreshRemovalAsync: Connected System {ConnectedSystemId}: {ObsoletedCount} Connected System Object(s) marked Obsolete across {TypeCount} removed Object Type(s), {PendingExportCount} Pending Export(s) removed, {ValueCount} stored value(s) deleted across {AttributeCount} removed attribute(s).",
@@ -3836,11 +3835,11 @@ public partial class ConnectedSystemServer
         if (collision.Attribute == null)
             return;
 
-        var connectorName = connectedSystem.ConnectorDefinition?.Name ?? "the Connector";
-        throw new InvalidOperationException(
-            $"{connectorName} defines an attribute named '{collision.Attribute.Name}' on the '{collision.ObjectType.Name}' Object " +
-            $"Type, but '{connectedSystem.Name}' already has an attribute of that name. A Connector-defined Attribute must have a " +
-            "name the Connected System's own attributes cannot have. The schema was not changed.");
+        MessageArgument connectorName = connectedSystem.ConnectorDefinition?.Name is { } definitionName
+            ? definitionName
+            : Msg.Create(nameof(CsText.ConnectorFallbackName));
+        throw LocalisedExceptions.InvalidOperation(Msg.Create(nameof(CsText.ConnectorDefinedAttributeNameCollision),
+            connectorName, collision.Attribute.Name, collision.ObjectType.Name, connectedSystem.Name));
     }
 
     private static ConnectorSchemaAttribute? FindConnectorDefinedNameCollision(ConnectorSchemaObjectType objectType)
@@ -4076,7 +4075,7 @@ public partial class ConnectedSystemServer
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorPasswordManagement passwordConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support setting passwords, so there is no password channel to check.");
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoPasswordChannel), connectedSystem.ConnectorDefinition.Name));
 
         var containerExternalIds = connectedSystem.GetSelectedContainerExternalIds();
         Log.Debug("RunPasswordPreflightAsync: Checking the password channel for Connected System {ConnectedSystemId} against {ContainerCount} selected container(s).",
@@ -4419,14 +4418,14 @@ public partial class ConnectedSystemServer
         // Loaded without change tracking, so applying the drafts below cannot reach the database.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
             ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorDirectoryServers directoryServersConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery.");
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoDirectoryDiscovery), connectedSystem.ConnectorDefinition.Name));
 
         var discoveries = await AvailableDiscoveriesAsync(connectedSystem, directoryServersConnector);
         var discovery = targetSettingName == null
@@ -4434,9 +4433,9 @@ public partial class ConnectedSystemServer
             : discoveries.FirstOrDefault(d => d.TargetSettingName == targetSettingName);
         if (discovery == null)
         {
-            throw new NotSupportedException(targetSettingName == null
-                ? $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."
-                : $"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot discover servers for the setting '{targetSettingName}'.");
+            throw LocalisedExceptions.NotSupported(targetSettingName == null
+                ? Msg.Create(nameof(CsText.ConnectorNoDirectoryDiscovery), connectedSystem.ConnectorDefinition.Name)
+                : Msg.Create(nameof(CsText.ConnectorNoDiscoveryForSetting), connectedSystem.ConnectorDefinition.Name, targetSettingName));
         }
 
         Log.Debug("GetConnectedSystemDirectoryServersAsync: Discovering {ServerTerm} for Connected System {ConnectedSystemId}.",
@@ -4596,7 +4595,7 @@ public partial class ConnectedSystemServer
     {
         // Loaded without change tracking, so applying the drafts below cannot reach the database.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId)
-            ?? throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
+            ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
             ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
@@ -4606,7 +4605,7 @@ public partial class ConnectedSystemServer
             return (connectedSystem, connector, catalogue);
 
         (connector as IDisposable)?.Dispose();
-        throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot describe what its source contains.");
+        throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoCatalogue), connectedSystem.ConnectorDefinition.Name));
     }
     #endregion
 
@@ -4665,13 +4664,13 @@ public partial class ConnectedSystemServer
         RemovedPartitionRunProfileAction runProfileAction)
     {
         var connectedSystem = await GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true)
-            ?? throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
+            ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
 
         // resolve the connector, and confirm it supports hierarchy import, before creating the activity: an
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorPartitions partitionsConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support hierarchy import.");
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoHierarchyImport), connectedSystem.ConnectorDefinition.Name));
 
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
@@ -4961,7 +4960,7 @@ public partial class ConnectedSystemServer
             else
                 await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByUser);
 
-            activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContainersAutoSelected), ActivityMessage.Plain(containersAdded));
 
             // Container additions change the system's import scope; capture the configuration change onto this
             // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
@@ -5071,7 +5070,7 @@ public partial class ConnectedSystemServer
         if (containersAdded > 0)
         {
             await PersistConnectedSystemUpdateAsync(connectedSystem, initiatorType, initiatorId, initiatorName);
-            activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContainersAutoSelected), ActivityMessage.Plain(containersAdded));
 
             // Container additions change the system's import scope; capture the configuration change onto this
             // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
@@ -5766,7 +5765,7 @@ public partial class ConnectedSystemServer
                     result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
                     result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
             }
-            activity.Message = result.GetSummary();
+            activity.MessageDetail = ActivityMessage.HierarchyRefreshSummary(result);
         }
 
         return result;
@@ -7183,7 +7182,7 @@ public partial class ConnectedSystemServer
         Log.Error(ex, "{Caller}: could not build the change record for Connected System Object {CsoId}; " +
             "the object is errored on its Run Profile Execution Item and the run continues.", callerName, cso.Id);
         rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-        rpei.ErrorMessage = ex.Message;
+        ActivityMessage.SetError(rpei, ex);
         rpei.ErrorStackTrace = ex.ToString();
     }
 
@@ -8146,17 +8145,15 @@ public partial class ConnectedSystemServer
 
             // Reject NotSet types - indicates schema issues
             if (sourceType == AttributeDataType.NotSet)
-                throw new ArgumentException(
-                    $"Source attribute '{sourceAttrName}' has type NotSet. Attributes must have a defined type before they can be used in mappings.");
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingSourceTypeNotSet), sourceAttrName));
 
             if (targetType == AttributeDataType.NotSet)
-                throw new ArgumentException(
-                    $"Target attribute '{targetAttrName}' has type NotSet. Attributes must have a defined type before they can be used in mappings.");
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingTargetTypeNotSet), targetAttrName));
 
             // Validate type compatibility
             if (sourceType != targetType)
-                throw new ArgumentException(
-                    $"Type mismatch: source attribute '{sourceAttrName}' ({sourceType}) is not compatible with target attribute '{targetAttrName}' ({targetType}). Source and target attributes must have the same type.");
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingTypeMismatch),
+                    sourceAttrName, sourceType.ToString(), targetAttrName, targetType.ToString()));
 
             // Multi-valued to single-valued is permitted at configuration time (#435). At runtime, if a
             // source holds more than one value for a single-valued target, the attribute is skipped and a
@@ -8184,9 +8181,7 @@ public partial class ConnectedSystemServer
             return;
 
         if (mapping.TargetConnectedSystemAttribute.Writability == AttributeWritability.ReadOnly)
-            throw new ArgumentException(
-                $"Cannot create export Attribute Flow to read-only attribute '{mapping.TargetConnectedSystemAttribute.Name}'. " +
-                $"This attribute is marked as read-only by the Connected System and cannot be written to.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingTargetReadOnly), mapping.TargetConnectedSystemAttribute.Name));
     }
 
     /// <summary>
@@ -8194,17 +8189,10 @@ public partial class ConnectedSystemServer
     /// flows to (#1532). Names the sanctioned alternatives, so the administrator is told how to express the
     /// intent rather than merely refused.
     /// </summary>
-    private static string BuildDuplicateMappingTargetMessage(string? syncRuleName, string targetAttributeName)
-    {
-        var ruleDescription = string.IsNullOrWhiteSpace(syncRuleName)
-            ? "This Synchronisation Rule"
-            : $"Synchronisation Rule '{syncRuleName}'";
-        return $"{ruleDescription} already has an Attribute Flow targeting '{targetAttributeName}'; only one mapping per " +
-               "target attribute is supported, and a disabled mapping still counts. To fall back between source attributes " +
-               "within one rule, use a single expression mapping (for example attribute_1 ?? attribute_2). To arbitrate " +
-               "between sources with Attribute Priority, define the second flow on a separate, differently-scoped " +
-               "Synchronisation Rule.";
-    }
+    private static JimMessage BuildDuplicateMappingTargetMessage(string? syncRuleName, string targetAttributeName) =>
+        string.IsNullOrWhiteSpace(syncRuleName)
+            ? Msg.Create(nameof(CsText.DuplicateMappingTargetUnnamed), targetAttributeName)
+            : Msg.Create(nameof(CsText.DuplicateMappingTargetNamed), syncRuleName, targetAttributeName);
 
     /// <summary>
     /// Validates that no other mapping on the same Synchronisation Rule already targets this mapping's target
@@ -8241,9 +8229,9 @@ public partial class ConnectedSystemServer
             ?? duplicate.TargetMetaverseAttribute?.Name
             ?? duplicate.TargetConnectedSystemAttribute?.Name
             ?? $"ID {targetMetaverseAttributeId ?? targetConnectedSystemAttributeId}";
-        var message = BuildDuplicateMappingTargetMessage(mapping.SyncRule?.Name, targetAttributeName);
-        Log.Warning("ValidateNoDuplicateMappingTargetAsync: rejecting mapping; {Message}", LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+        var refusal = LocalisedExceptions.Argument(BuildDuplicateMappingTargetMessage(mapping.SyncRule?.Name, targetAttributeName));
+        Log.Warning("ValidateNoDuplicateMappingTargetAsync: rejecting mapping; {Message}", LogSanitiser.Sanitise(refusal.Message));
+        throw refusal;
     }
 
     /// <summary>
@@ -8272,9 +8260,9 @@ public partial class ConnectedSystemServer
             .Select(candidate => candidate.Mapping.TargetMetaverseAttribute?.Name ?? candidate.Mapping.TargetConnectedSystemAttribute?.Name)
             .FirstOrDefault(name => name != null)
             ?? $"ID {duplicateTargetGroup.Key.MetaverseTargetId ?? duplicateTargetGroup.Key.ConnectedSystemTargetId}";
-        var message = BuildDuplicateMappingTargetMessage(syncRule.Name, targetAttributeName);
-        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+        var refusal = LocalisedExceptions.Argument(BuildDuplicateMappingTargetMessage(syncRule.Name, targetAttributeName));
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
+        throw refusal;
     }
 
     /// <summary>
@@ -8309,7 +8297,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8369,7 +8357,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8436,7 +8424,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8500,7 +8488,7 @@ public partial class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(settings);
 
         if (!settings.HasChanges)
-            throw new ArgumentException("No settings were supplied to change.", nameof(settings));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingSettingsNoChanges)), nameof(settings));
 
         var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingForUpdateAsync(mappingId);
         if (mapping == null)
@@ -8548,7 +8536,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8600,20 +8588,19 @@ public partial class ConnectedSystemServer
         var expressionSources = mapping.Sources.Where(s => !string.IsNullOrWhiteSpace(s.Expression)).ToList();
 
         if ((settings.Expression != null || settings.MissingInputBehaviour.HasValue) && expressionSources.Count == 0)
-            throw new ArgumentException("This Attribute Flow has no Expression source, so Expression settings do not apply to it. " +
-                "Delete the mapping and create it with an Expression source instead.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingNoExpressionSource)));
 
         if (settings.Expression != null && expressionSources.Count > 1)
-            throw new ArgumentException("This Attribute Flow has more than one Expression source, so it is ambiguous which Expression to replace.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingSeveralExpressionSources)));
 
         if (!isImport && (settings.NullIsValue.HasValue || settings.InboundValueProcessing.HasValue || settings.CaseNormalisation.HasValue))
-            throw new ArgumentException("Null is a value, inbound value processing and case normalisation apply to import mappings only.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingImportOnlySettings)));
 
         if (isImport && settings.InitialExportOnly.HasValue)
-            throw new ArgumentException("Initial Export Only applies to export mappings only.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingExportOnlySettings)));
 
         if (settings.KeepUnique.HasValue && !CanKeepUnique(mapping))
-            throw new ArgumentException(KeepUniqueNotApplicableMessage);
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.KeepUniqueNotApplicable)));
 
         if (settings.Expression != null)
             expressionSources[0].Expression = settings.Expression;
@@ -8664,7 +8651,7 @@ public partial class ConnectedSystemServer
             return;
 
         if (mapping.Generation == null)
-            throw new ArgumentException("This Attribute Flow is not a generated mapping, so generation settings do not apply to it.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingNotGenerated)));
 
         var generation = mapping.Generation;
 
@@ -8789,7 +8776,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8803,8 +8790,7 @@ public partial class ConnectedSystemServer
         // the rule-level deletion's wording.
         if (keepContributedValues && result.AffectedValueCount > 0)
         {
-            activity.Message = $"Contributed attribute values were kept: {result.AffectedValueCount:N0} value(s) across " +
-                $"{result.AffectedObjectCount:N0} Metaverse Object(s) remain in place with no Synchronisation Rule provenance.";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContributedValuesKept), result.AffectedValueCount, result.AffectedObjectCount);
         }
 
         if (initiatedByApiKey != null)
@@ -9063,12 +9049,12 @@ public partial class ConnectedSystemServer
 
         var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
         if (existing.Count == 0)
-            throw new ArgumentException($"No import attribute contributions exist for Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
 
         var requestedIds = orderedContributors.Select(c => c.MappingId).ToList();
         var requestedDistinct = new HashSet<int>(requestedIds);
         if (requestedDistinct.Count != requestedIds.Count)
-            throw new ArgumentException("The attribute priority order contains duplicate mapping identifiers.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityDuplicateMappings)));
 
         var existingIds = existing.Select(m => m.Id).ToHashSet();
         var notContributors = requestedIds.Where(id => !existingIds.Contains(id)).ToList();
@@ -9077,7 +9063,7 @@ public partial class ConnectedSystemServer
         var missing = omitted.Where(m => !omittedPendingDeletion.Contains(m)).ToList();
 
         if (notContributors.Count > 0 || missing.Count > 0)
-            throw new ArgumentException(BuildAttributePriorityMismatchMessage(missing, notContributors));
+            throw LocalisedExceptions.Argument(BuildAttributePriorityMismatchMessage(missing, notContributors));
 
         var snapshot = SnapshotPriorityState(existing);
         var byId = existing.ToDictionary(m => m.Id);
@@ -9119,26 +9105,20 @@ public partial class ConnectedSystemServer
     /// The refusal for a complete-order request that does not match the attribute's contributors: the fixed rule,
     /// then what is missing and what is not a contributor, so an administrator need not diff the lists themselves.
     /// </summary>
-    private static string BuildAttributePriorityMismatchMessage(IReadOnlyCollection<SyncRuleMapping> missing, IReadOnlyCollection<int> notContributors)
+    private static JimMessage BuildAttributePriorityMismatchMessage(IReadOnlyCollection<SyncRuleMapping> missing, IReadOnlyCollection<int> notContributors)
     {
-        var message = new StringBuilder("The attribute priority order must list every contributing mapping for the attribute exactly once, and no others.");
+        var sentences = new List<JimMessage> { Msg.Create(nameof(CsText.PriorityMismatchBase)) };
         if (missing.Count > 0)
         {
-            message.Append(" Missing: ");
-            message.Append(string.Join(", ", missing.Select(m => m.SyncRule is { Name.Length: > 0 } rule
-                ? $"mapping {m.Id} (Synchronisation Rule '{rule.Name}')"
-                : $"mapping {m.Id}")));
-            message.Append('.');
+            sentences.Add(Msg.Create(nameof(CsText.PriorityMissing), Msg.List(missing.Select(m => m.SyncRule is { Name.Length: > 0 } rule
+                ? Msg.Create(nameof(CsText.PriorityMappingOfRule), m.Id, rule.Name)
+                : Msg.Create(nameof(CsText.PriorityMapping), m.Id)))));
         }
 
         if (notContributors.Count > 0)
-        {
-            message.Append(" Not contributors to this attribute: ");
-            message.Append(string.Join(", ", notContributors.Select(id => $"mapping {id}")));
-            message.Append(". Reload the current order and try again.");
-        }
+            sentences.Add(Msg.Create(nameof(CsText.PriorityNotContributors), Msg.List(notContributors.Select(id => Msg.Create(nameof(CsText.PriorityMapping), id)))));
 
-        return message.ToString();
+        return Msg.Sentences(sentences);
     }
 
     /// <summary>
@@ -9153,11 +9133,11 @@ public partial class ConnectedSystemServer
     {
         var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
         if (existing.Count == 0)
-            throw new ArgumentException($"No import attribute contributions exist for Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
 
         var moving = existing.SingleOrDefault(m => m.Id == mappingId);
         if (moving == null)
-            throw new ArgumentException($"Mapping {mappingId} is not a contributor to Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNotAContributor), mappingId, metaverseAttributeId, metaverseObjectTypeId));
 
         var snapshot = SnapshotPriorityState(existing);
 
@@ -9183,7 +9163,7 @@ public partial class ConnectedSystemServer
         var attributeName = ordered.Count > 0 ? ordered[0].TargetMetaverseAttribute?.Name ?? $"#{metaverseAttributeId}" : $"#{metaverseAttributeId}";
         return new Activity
         {
-            TargetName = $"Attribute priority order for {attributeName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetAttributePriorityOrder), attributeName),
             TargetType = ActivityTargetType.SynchronisationRule,
             TargetOperationType = ActivityTargetOperationType.Update
         };
@@ -9551,9 +9531,9 @@ public partial class ConnectedSystemServer
             throw new ArgumentException(safeguardsError);
 
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
-        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNoConnectedSystem)));
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
-            throw new ArgumentException("Run Profile is not valid for the Connector!");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNotValidForConnector)));
 
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
@@ -9588,9 +9568,9 @@ public partial class ConnectedSystemServer
             throw new ArgumentException(safeguardsError);
 
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
-        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNoConnectedSystem)));
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
-            throw new ArgumentException("Run Profile is not valid for the Connector!");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNotValidForConnector)));
 
         var activity = new Activity
         {
@@ -9667,7 +9647,7 @@ public partial class ConnectedSystemServer
 
         // SPEC-1082 D10: Verification Mode only applies to Full Import.
         if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
-            throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileVerifyFullImportOnly)));
 
         // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
@@ -9707,7 +9687,7 @@ public partial class ConnectedSystemServer
 
         // SPEC-1082 D10: Verification Mode only applies to Full Import.
         if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
-            throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileVerifyFullImportOnly)));
 
         // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
@@ -9928,17 +9908,17 @@ public partial class ConnectedSystemServer
             var unchanged = criterion.Id > 0 && stored.TryGetValue(criterion.Id, out var state) && state.IsUnchangedIn(criterion);
             if (!unchanged)
             {
-                var message = $"Scoping criterion on '{problems[0].Subject}' cannot be saved: {problems[0].Reason}";
-                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
-                throw new ArgumentException(message);
+                var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ScopingCriterionCannotBeSaved), problems[0].Subject, problems[0].Reason));
+                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
+                throw refusal;
             }
 
             foreach (var (subject, reason) in problems)
             {
-                var warning = $"Scoping criterion on '{subject}' is not valid, and was left as it was: {reason}";
-                criterion.SaveWarnings.Add(warning);
+                var warning = Msg.Create(nameof(CsText.ScopingCriterionLeftAsWas), subject, reason);
+                criterion.AddSaveWarning(warning);
                 Log.Warning("CreateOrUpdateSyncRuleAsync: Synchronisation Rule {SyncRuleId} saved with an unchanged invalid scoping criterion; {Warning}",
-                    syncRule.Id, LogSanitiser.Sanitise(warning));
+                    syncRule.Id, LogSanitiser.Sanitise(warning.ToEnglish()));
             }
         }
     }
@@ -10624,6 +10604,7 @@ public partial class ConnectedSystemServer
     private async Task StampRuleSaveWarningsAsync(SyncRule syncRule)
     {
         syncRule.RuleSaveWarnings.Clear();
+        syncRule.RuleSaveWarningDetails.Clear();
         if (syncRule.Direction == SyncRuleDirection.Import)
         {
             await StampConflictingProjectionWarningsAsync(syncRule);
@@ -10644,24 +10625,21 @@ public partial class ConnectedSystemServer
             .OrderBy(other => other.Name, StringComparer.Ordinal)
             .ToList();
 
-        syncRule.RuleSaveWarnings.AddRange(otherRulesInThisSystem
-            .Where(other => other.ConnectedSystemObjectTypeId == objectTypeId)
-            .Select(other =>
-                $"The export Synchronisation Rule '{other.Name}' also manages '{other.ConnectedSystemObjectTypeName}' objects in " +
-                $"'{other.ConnectedSystemName}' for '{other.MetaverseObjectTypeName}'. Only one export rule may manage an object: " +
-                "a synchronisation exports nothing to this Connected System for an object both rules have in scope, and reports it " +
-                "as Export Rules Overlap. Give the rules scopes that never overlap, or combine them into one rule."));
+        foreach (var other in otherRulesInThisSystem.Where(other => other.ConnectedSystemObjectTypeId == objectTypeId))
+        {
+            syncRule.AddRuleSaveWarning(Msg.Create(nameof(CsText.SaveWarningExportRulesOverlap),
+                other.Name, other.ConnectedSystemObjectTypeName, other.ConnectedSystemName, other.MetaverseObjectTypeName));
+        }
 
         var thisObjectTypeName = syncRule.ConnectedSystemObjectType?.Name;
-        var thisRuleProvisionsThemAs = thisObjectTypeName != null ? $"'{thisObjectTypeName}'" : "a different Object Type";
-        syncRule.RuleSaveWarnings.AddRange(otherRulesInThisSystem
-            .Where(other => other.ConnectedSystemObjectTypeId != objectTypeId)
-            .Select(other =>
-                $"The export Synchronisation Rule '{other.Name}' provisions '{other.MetaverseObjectTypeName}' objects to " +
-                $"'{other.ConnectedSystemName}' as '{other.ConnectedSystemObjectTypeName}', and this rule provisions them as " +
-                $"{thisRuleProvisionsThemAs}. Each can have only one object in '{other.ConnectedSystemName}', so where both " +
-                "rules' scopes cover the same one, only one rule provisions it and the other reports Synchronisation Failed for " +
-                "it on every synchronisation. Make sure the scopes never overlap."));
+        var thisRuleProvisionsThemAs = thisObjectTypeName != null
+            ? Msg.Create(nameof(CsText.SaveWarningThisObjectType), thisObjectTypeName)
+            : Msg.Create(nameof(CsText.SaveWarningADifferentObjectType));
+        foreach (var other in otherRulesInThisSystem.Where(other => other.ConnectedSystemObjectTypeId != objectTypeId))
+        {
+            syncRule.AddRuleSaveWarning(Msg.Create(nameof(CsText.SaveWarningExportObjectTypesDiffer),
+                other.Name, other.MetaverseObjectTypeName, other.ConnectedSystemName, other.ConnectedSystemObjectTypeName, thisRuleProvisionsThemAs));
+        }
     }
 
     /// <param name="previewActivityId">
@@ -10861,7 +10839,7 @@ public partial class ConnectedSystemServer
 
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             if (keepMessages.Count > 0)
-                activity.Message = string.Join(" ", keepMessages);
+                activity.MessageDetail = ActivityMessage.Spaced(keepMessages);
 
             await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
@@ -11106,7 +11084,7 @@ public partial class ConnectedSystemServer
 
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             if (keepMessages.Count > 0)
-                activity.Message = string.Join(" ", keepMessages);
+                activity.MessageDetail = ActivityMessage.Spaced(keepMessages);
 
             await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
@@ -11285,8 +11263,7 @@ public partial class ConnectedSystemServer
         // them.
         if (!recallContributedValues && result.AffectedValueCount > 0)
         {
-            activity.Message = $"Contributed attribute values were kept: {result.AffectedValueCount:N0} value(s) across " +
-                $"{result.AffectedObjectCount:N0} Metaverse Object(s) remain in place with no Synchronisation Rule provenance.";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContributedValuesKept), result.AffectedValueCount, result.AffectedObjectCount);
         }
 
         if (initiatedByApiKey != null)
@@ -11343,15 +11320,15 @@ public partial class ConnectedSystemServer
             return;
 
         if (syncRule.Id == 0)
-            throw new ArgumentException("Mapping removal choices apply to updates only: a Synchronisation Rule being created has no persisted Attribute Flow mappings to remove.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoicesUpdatesOnly)));
 
         if (mappingRemovalChoices.Select(c => c.MappingId).Distinct().Count() != mappingRemovalChoices.Count)
-            throw new ArgumentException("Mapping removal choices contain a duplicate mapping id, making the intent ambiguous.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoicesDuplicate)));
 
         var stagedMappingIds = syncRule.AttributeFlowRules.Where(m => m.Id != 0).Select(m => m.Id).ToHashSet();
         var stillPresent = mappingRemovalChoices.FirstOrDefault(c => stagedMappingIds.Contains(c.MappingId));
         if (stillPresent != null)
-            throw new ArgumentException($"Mapping removal choice for mapping {stillPresent.MappingId} names a mapping still present on the Synchronisation Rule; a choice may only describe a staged removal.");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoiceStillPresent), stillPresent.MappingId));
     }
 
     /// <summary>
@@ -11370,7 +11347,7 @@ public partial class ConnectedSystemServer
     /// the safe default (recall).
     /// </para>
     /// </summary>
-    private async Task<List<string>> ApplyStagedMappingRemovalChoicesAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices)
+    private async Task<List<JimMessage>> ApplyStagedMappingRemovalChoicesAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices)
     {
         if (mappingRemovalChoices == null || mappingRemovalChoices.Count == 0)
             return [];
@@ -11385,12 +11362,12 @@ public partial class ConnectedSystemServer
             // The database state is authoritative: the staged collection no longer holds the mapping, and only
             // the persisted row can say which Metaverse attribute it targeted.
             var removedMapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(choice.MappingId)
-                ?? throw new ArgumentException($"Mapping removal choice for mapping {choice.MappingId} names a mapping that does not exist; it may already have been deleted, in which case its choice was made then.");
+                ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoiceMissing), choice.MappingId));
             // The owner is read from the persisted foreign key: a mapping owned by a DIFFERENT rule is a caller
             // defect. On a tracking context the staged removal may have severed the loaded instance's rule
             // navigation, which is why the scalar is the authority here.
             if (removedMapping.SyncRuleId != syncRule.Id)
-                throw new ArgumentException($"Mapping removal choice for mapping {choice.MappingId} names a mapping that does not belong to Synchronisation Rule {syncRule.Id}.");
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoiceWrongRule), choice.MappingId, syncRule.Id));
 
             removedMappings.Add((choice, removedMapping));
         }
@@ -11399,7 +11376,7 @@ public partial class ConnectedSystemServer
         // deletes every severed row (and cascades its sources), and the rule save advances the configuration
         // watermark, so the #1536 orphan recall re-evaluates every object at the next synchronisation (the save records the
         // rule's Object Type as awaiting synchronisation, so a Delta processes the whole type).
-        var keepMessages = new List<string>();
+        var keepMessages = new List<JimMessage>();
         foreach (var (choice, removedMapping) in removedMappings)
         {
             var targetMetaverseAttributeId = GetTargetMetaverseAttributeId(removedMapping);
@@ -11416,9 +11393,7 @@ public partial class ConnectedSystemServer
 
             await Application.Repository.Metaverse.SeverContributedValueProvenanceAsync(syncRule.Id, severedAttributeId);
             var attributeName = removedMapping.TargetMetaverseAttribute?.Name ?? $"attribute {severedAttributeId}";
-            keepMessages.Add($"Contributed attribute values were kept for the removed {attributeName} Attribute Flow: " +
-                $"{summary.TotalValues:N0} value(s) across {summary.TotalObjects:N0} Metaverse Object(s) remain in place " +
-                "with no Synchronisation Rule provenance.");
+            keepMessages.Add(ActivityMessage.Create(nameof(ActivityMessages.ContributedValuesKeptForFlow), attributeName, summary.TotalValues, summary.TotalObjects));
             Log.Information(
                 "ApplyStagedMappingRemovalChoicesAsync: keep chosen for staged removal of mapping {MappingId} (Synchronisation Rule {SyncRuleId}, " +
                 "Metaverse attribute {AttributeId}); severed provenance on {ValueCount} value(s) across {ObjectCount} Metaverse Object(s).",
@@ -11562,6 +11537,14 @@ public partial class ConnectedSystemServer
     /// Gets the target context for an ObjectMatchingRule activity.
     /// Returns Connected System name for Mode A (rules on ConnectedSystemObjectType) or Synchronisation Rule name for Mode B.
     /// </summary>
+    /// <summary>
+    /// An Object Matching Rule Activity's target: the Object Type it matches, or the generic wording when that is unknown.
+    /// </summary>
+    private static JimMessage RuleTargetName(ObjectMatchingRule rule) =>
+        rule.ConnectedSystemObjectType?.Name is { } objectTypeName
+            ? ActivityMessage.Create(nameof(ActivityMessages.TargetRuleFor), objectTypeName)
+            : ActivityMessage.Create(nameof(ActivityMessages.TargetRuleForUnknownType));
+
     private async Task<string?> GetObjectMatchingRuleContextAsync(ObjectMatchingRule rule)
     {
         // Mode B: Rule is on a SyncRule - show the Synchronisation Rule name
@@ -11816,7 +11799,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
@@ -11838,7 +11821,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
@@ -11860,7 +11843,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Update,
@@ -11884,7 +11867,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Update,
@@ -11923,7 +11906,7 @@ public partial class ConnectedSystemServer
     {
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Delete
@@ -11941,7 +11924,7 @@ public partial class ConnectedSystemServer
     {
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Delete

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -27,7 +29,7 @@ public static class ExampleDataTemplateEditorSave
     {
         var template = await jim.ExampleData.GetTemplateAsync(templateId);
         if (template == null)
-            return new Result("This Data Generation Template no longer exists.", []);
+            return new Result(DisplayText.TemplateNoLongerExists, []);
 
         try
         {
@@ -36,24 +38,27 @@ public static class ExampleDataTemplateEditorSave
         }
         catch (ExampleDataTemplateChangedException ex)
         {
-            return new Result(ex.Message, []);
+            return new Result(ex.ToDisplayText(), []);
         }
         catch (ExampleDataTemplateException ex)
         {
             // includes a built-in template, which the server refuses; the portal hides its editing controls for
             // those, so reaching here means a stale page.
-            return new Result(ex.Message, []);
+            return new Result(ex.ToDisplayText(), []);
         }
         catch (ExampleDataTemplateAttributeException ex)
         {
-            return new Result(ex.Message, []);
+            return new Result(ex.ToDisplayText(), []);
         }
         catch (InvalidOperationException ex)
         {
             // a name another template already holds, the last Object Type, or a reference that no longer exists.
-            return new Result(ex.Message, []);
+            return new Result(ex.ToDisplayText(), []);
         }
 
-        return new Result(null, template.SaveWarnings.ToList());
+        // The warnings in the viewer's language where the server gave them as messages, else their English.
+        return new Result(null, template.SaveWarningDetails.Count == template.SaveWarnings.Count
+            ? template.SaveWarningDetails.Select(warning => warning.Show()).ToList()
+            : template.SaveWarnings.ToList());
     }
 }

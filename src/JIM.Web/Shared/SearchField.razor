@@ -124,9 +124,9 @@
     public ValueTask FocusAsync() => _textField?.FocusAsync() ?? ValueTask.CompletedTask;
 
     // The spinner is drawn by site.css over the start adornment; see .jim-search-field-loading there.
-    private string? FieldClass => Loading ? $"jim-search-field-loading {Class}".TrimEnd() : Class;
+    private string? FieldClass => Loading ? $"jim-search-field-loading {Class}".TrimEnd() : Class; // i18n: exempt - a CSS class name
 
-    private string? EffectivePlaceholder => Placeholder ?? (string.IsNullOrEmpty(Label) ? "Search" : null);
+    private string? EffectivePlaceholder => Placeholder ?? (string.IsNullOrEmpty(Label) ? CommonText.Search : null);
 
     private async Task OnValueChangedAsync(string value)
     {

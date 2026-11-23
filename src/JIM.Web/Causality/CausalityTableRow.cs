@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
+
 namespace JIM.Web.Causality;
 
 /// <summary>
@@ -69,19 +72,19 @@ public sealed record CausalityTableRow(
     /// </summary>
     public string ChangeKindLabel => ChangeKind switch
     {
-        CausalityTableChangeKind.Scope => "Scope",
-        CausalityTableChangeKind.Projection => "Projection",
-        CausalityTableChangeKind.Join => "Join",
-        CausalityTableChangeKind.Disconnect => "Disconnect",
-        CausalityTableChangeKind.Delete => "Delete",
-        CausalityTableChangeKind.Deprovision => "Deprovision",
-        CausalityTableChangeKind.Provision => "Provision",
-        CausalityTableChangeKind.ExportQueued => "Export queued",
-        CausalityTableChangeKind.ProvisioningCancelled => "Provisioning cancelled",
-        CausalityTableChangeKind.QueuedChangesWithdrawn => "Queued changes withdrawn",
-        CausalityTableChangeKind.NoContributor => "No contributor",
-        CausalityTableChangeKind.ValuesPreserved => "Values preserved",
-        CausalityTableChangeKind.AttributeChange => "Attribute change",
-        _ => ChangeKind.ToString()
+        CausalityTableChangeKind.Scope => CausalityText.TableChangeKindScope,
+        CausalityTableChangeKind.Projection => CausalityText.TableChangeKindProjection,
+        CausalityTableChangeKind.Join => CausalityText.TableChangeKindJoin,
+        CausalityTableChangeKind.Disconnect => CausalityText.TableChangeKindDisconnect,
+        CausalityTableChangeKind.Delete => CausalityText.TableChangeKindDelete,
+        CausalityTableChangeKind.Deprovision => CausalityText.TableChangeKindDeprovision,
+        CausalityTableChangeKind.Provision => CausalityText.TableChangeKindProvision,
+        CausalityTableChangeKind.ExportQueued => CausalityText.TableChangeKindExportQueued,
+        CausalityTableChangeKind.ProvisioningCancelled => CausalityText.TableChangeKindProvisioningCancelled,
+        CausalityTableChangeKind.QueuedChangesWithdrawn => CausalityText.TableChangeKindQueuedChangesWithdrawn,
+        CausalityTableChangeKind.NoContributor => CausalityText.TableChangeKindNoContributor,
+        CausalityTableChangeKind.ValuesPreserved => CausalityText.TableChangeKindValuesPreserved,
+        CausalityTableChangeKind.AttributeChange => CausalityText.TableChangeKindAttributeChange,
+        _ => ChangeKind.ForDisplay()
     };
 }

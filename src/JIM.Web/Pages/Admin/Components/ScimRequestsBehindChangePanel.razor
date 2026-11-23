@@ -1,5 +1,4 @@
 @using JIM.Models.Scim
-@using Humanizer
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -16,7 +15,7 @@
         else if (_behind == null)
         {
             <MudText Class="mud-text-secondary">
-                The import behind this change recorded no point it read up to, so the requests it read cannot be shown.
+                @ConnectedSystemText.ScimReqNoPoint
             </MudText>
         }
         else if (_behind.Entries.Count == 0)
@@ -28,11 +27,11 @@
             <MudSimpleTable Dense="true" Elevation="0" Hover="true">
                 <thead>
                     <tr>
-                        <th>When</th>
-                        <th>Request</th>
-                        <th>Attributes</th>
-                        <th>Key</th>
-                        <th>From</th>
+                        <th>@ConnectedSystemText.ScimReqColWhen</th>
+                        <th>@ConnectedSystemText.ScimReqColRequest</th>
+                        <th>@ConnectedSystemText.ScimReqColAttributes</th>
+                        <th>@ConnectedSystemText.ScimReqColKey</th>
+                        <th>@ConnectedSystemText.ScimReqColFrom</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -45,7 +44,7 @@
                                     @occurred.ToRelativeTime()
                                 </MudTooltip>
                             </td>
-                            <td>@entry.Operation.ToString().Humanize(LetterCasing.Sentence)</td>
+                            <td>@entry.Operation.ForDisplay()</td>
                             <td>
                                 @if (entry.ChangedAttributes.Count == 0 && entry.IgnoredAttributes.Count == 0)
                                 {
@@ -56,14 +55,14 @@
                                     <span class="jim-text-code">@string.Join(", ", entry.ChangedAttributes)</span>
                                     @if (entry.IgnoredAttributes.Count > 0)
                                     {
-                                        <MudTooltip Text="Sent by the identity provider but not kept, because this Connected System's SCIM definitions do not declare them."
+                                        <MudTooltip Text="@ConnectedSystemText.ScimReqIgnoredTooltip"
                                                     Arrow="true" Placement="Placement.Top">
-                                            <span class="mud-text-secondary ml-2">ignored: @string.Join(", ", entry.IgnoredAttributes)</span>
+                                            <span class="mud-text-secondary ml-2">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.ScimReqIgnored, string.Join(", ", entry.IgnoredAttributes))</span>
                                         </MudTooltip>
                                     }
                                 }
                             </td>
-                            <td>@(entry.ApiKeyName ?? "Deleted key")</td>
+                            <td>@(entry.ApiKeyName ?? ConnectedSystemText.ScimReqDeletedKey)</td>
                             <td>
                                 @if (string.IsNullOrEmpty(entry.ClientAddress))
                                 {
@@ -94,8 +93,8 @@
     private Guid? _loadedFor;
 
     private string Title => _behind is { Entries.Count: > 0 } behind
-        ? $"SCIM Requests ({behind.Entries.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)})"
-        : "SCIM Requests";
+        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.ScimReqTitleCount, behind.Entries.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
+        : ConnectedSystemText.ScimReqTitle;
 
     /// <summary>
     /// Why no requests are listed, naming what the import read so an administrator can tell an import that read
@@ -104,11 +103,11 @@
     private string EmptyText => _behind switch
     {
         { AfterSequence: { } after } behind when after >= behind.UpToSequence =>
-            $"The import behind this change read no new requests: it started and finished at change {after:N0}. The requests that made this resource were read by an earlier import.",
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.ScimReqNoNew, after.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)),
         { AfterSequence: { } after } behind =>
-            $"No requests to this resource fall in what its import read (changes {after + 1:N0} to {behind.UpToSequence:N0}). They were read by an earlier import, or the history that recorded them has been cleared.",
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.ScimReqRangeCleared, (after + 1).ToString("N0", System.Globalization.CultureInfo.CurrentCulture), behind.UpToSequence.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)),
         { } behind =>
-            $"No requests to this resource fall in what its import read (changes up to {behind.UpToSequence:N0}). The history that recorded them has been cleared.",
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.ScimReqUpToCleared, behind.UpToSequence.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)),
         _ => string.Empty
     };
 

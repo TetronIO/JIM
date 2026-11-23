@@ -19,7 +19,7 @@
          Color="Color"
          SliderColor="SliderColor"
          IconColor="IconColor"
-         Header="Header"
+         Header="@Header"
          MinimumTabWidth="120px"
          Ripple="Ripple">
     @ChildContent
@@ -50,6 +50,7 @@
     /// because MudTabs owns the toolbar element; the class also zeroes the panels' top padding, so the
     /// content lands exactly where it would have without tabs.
     /// </summary>
+    // i18n: exempt - CSS class names, not text
     private string? RootClass => _barHiddenForSinglePanel
         ? $"{Class} jim-tabs-single".TrimStart()
         : Class;

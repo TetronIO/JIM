@@ -78,6 +78,7 @@ public static class OidcSignInRecovery
         // The callback arrived without the correlation cookie its challenge set, or with none of the
         // protocol fields at all (a bookmark or history navigation straight to /signin-oidc); the round
         // trip is broken but nothing is wrong with the user or the configuration, so a new one succeeds.
+        // i18n: exempt - matches the text of the OpenID Connect handler's own exception messages; nobody reads it.
         return failure.Message.Contains("Correlation failed", StringComparison.OrdinalIgnoreCase)
                || failure.Message.Contains("message.State is null or empty", StringComparison.OrdinalIgnoreCase);
     }

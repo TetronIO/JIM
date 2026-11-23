@@ -12,7 +12,7 @@
     <td colspan="2">
         <div class="jim-schedule-group-title">
             <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Class="mud-text-secondary" />
-            <span class="jim-schedule-group-name" title="@(ScheduleName ?? "Schedule")">@(ScheduleName ?? "Schedule")</span>
+            <span class="jim-schedule-group-name" title="@(ScheduleName ?? OperationsText.SchedulesSingularName)">@(ScheduleName ?? OperationsText.SchedulesSingularName)</span>
             <span class="jim-schedule-group-summary">@Summary</span>
         </div>
     </td>
@@ -22,14 +22,14 @@
             @if (ScheduleExecutionId is { } executionId)
             {
                 <div class="jim-schedule-group-actions">
-                    <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
+                    <MudTooltip Text="@OperationsText.QueueHeaderOpenTooltip"
                                 Arrow="true" Placement="Placement.Top">
                         <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew"
-                                   Href="@($"/admin/operations/schedule-executions/{executionId}")">View execution</MudButton>
+                                   Href="@($"/admin/operations/schedule-executions/{executionId}")">@OperationsText.QueueHeaderViewExecution</MudButton>
                     </MudTooltip>
-                    <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@OperationsText.QueueHeaderCancelSchedule" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
-                                       aria-label="Cancel Schedule" OnClick="() => OnCancel.InvokeAsync(executionId)" />
+                                       aria-label="@OperationsText.QueueHeaderCancelSchedule" OnClick="() => OnCancel.InvokeAsync(executionId)" />
                     </MudTooltip>
                 </div>
             }

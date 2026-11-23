@@ -17,13 +17,13 @@
                          ExpectedItemCount="@Values.Count"
                          DefaultSortBy="received"
                          LoadWindow="LoadWindowAsync"
-                         SearchPlaceholder="@($"Search {AttributeName.ToLowerInvariant()}...")"
-                         SingularName="Value"
-                         PluralName="Values">
+                         SearchPlaceholder="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImvSearch, AttributeName.ToLowerInvariant())"
+                         SingularName="@ConnectorSpaceText.CsoColumnValue"
+                         PluralName="@ConnectorSpaceText.ImvValuesPlural">
         <Columns>
-            <TemplateColumn T="string" Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+            <TemplateColumn T="string" Title="@ConnectorSpaceText.CsoColumnValue" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Value</MudText>
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnValue</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <OneLineText Text="@context.Item" />
@@ -32,9 +32,9 @@
         </Columns>
         <EmptyContent Context="grid">
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No values match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImvNoMatch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         </EmptyContent>
     </VirtualisedDataGrid>

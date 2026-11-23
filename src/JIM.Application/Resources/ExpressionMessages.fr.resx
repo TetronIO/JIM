@@ -1,0 +1,617 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FunctionTrim" xml:space="preserve">
+    <value>Supprimer les espaces au début et à la fin</value>
+  </data>
+  <data name="ReturnsText" xml:space="preserve">
+    <value>du texte</value>
+  </data>
+  <data name="CategoryText" xml:space="preserve">
+    <value>Fonctions de texte</value>
+  </data>
+  <data name="ParamValue" xml:space="preserve">
+    <value>La valeur à utiliser ; chaque valeur d’un attribut multivalué est utilisée à tour de rôle.</value>
+  </data>
+  <data name="FunctionUpper" xml:space="preserve">
+    <value>Convertir en majuscules</value>
+  </data>
+  <data name="FunctionLower" xml:space="preserve">
+    <value>Convertir en minuscules</value>
+  </data>
+  <data name="FunctionCapitalise" xml:space="preserve">
+    <value>Mettre une majuscule à chaque mot (gère les noms composés comme « O’Brien-Smith »)</value>
+  </data>
+  <data name="FunctionLeft" xml:space="preserve">
+    <value>Prendre les N premiers caractères</value>
+  </data>
+  <data name="ParamCharacterCount" xml:space="preserve">
+    <value>Le nombre de caractères à prendre.</value>
+  </data>
+  <data name="FunctionRight" xml:space="preserve">
+    <value>Prendre les N derniers caractères</value>
+  </data>
+  <data name="FunctionSubstring" xml:space="preserve">
+    <value>Extraire une partie du texte</value>
+  </data>
+  <data name="ParamStart" xml:space="preserve">
+    <value>Où commencer, le premier caractère comptant pour 0.</value>
+  </data>
+  <data name="FunctionReplace" xml:space="preserve">
+    <value>Remplacer un morceau de texte par un autre</value>
+  </data>
+  <data name="ParamTextToFind" xml:space="preserve">
+    <value>Le texte à rechercher.</value>
+  </data>
+  <data name="ParamTextToPut" xml:space="preserve">
+    <value>Le texte à mettre à sa place.</value>
+  </data>
+  <data name="FunctionLength" xml:space="preserve">
+    <value>Compter le nombre de caractères</value>
+  </data>
+  <data name="ReturnsWholeNumber" xml:space="preserve">
+    <value>un nombre entier</value>
+  </data>
+  <data name="FunctionIsNullOrEmpty" xml:space="preserve">
+    <value>Vérifier s’il n’y a aucune valeur : absente, vide, ou attribut multivalué sans valeur</value>
+  </data>
+  <data name="ReturnsTrueOrFalse" xml:space="preserve">
+    <value>vrai ou faux</value>
+  </data>
+  <data name="FunctionIsNullOrWhitespace" xml:space="preserve">
+    <value>Vérifier s’il n’y a aucune valeur, ou seulement des espaces</value>
+  </data>
+  <data name="FunctionHasValue" xml:space="preserve">
+    <value>Vérifier s’il y a une valeur : l’inverse de `IsNullOrEmpty`</value>
+  </data>
+  <data name="FunctionStartsWith" xml:space="preserve">
+    <value>Vérifier si le texte commence par une valeur donnée, de façon exacte sauf si `ignoreCase` vaut `true`</value>
+  </data>
+  <data name="ParamPrefix" xml:space="preserve">
+    <value>Le texte par lequel il doit commencer.</value>
+  </data>
+  <data name="ParamIgnoreCase" xml:space="preserve">
+    <value>true pour ignorer la casse ; le texte se compare exactement si ce paramètre est omis.</value>
+  </data>
+  <data name="FunctionEndsWith" xml:space="preserve">
+    <value>Vérifier si le texte se termine par une valeur donnée, de façon exacte sauf si `ignoreCase` vaut `true`</value>
+  </data>
+  <data name="ParamSuffix" xml:space="preserve">
+    <value>Le texte par lequel il doit se terminer.</value>
+  </data>
+  <data name="FunctionContains" xml:space="preserve">
+    <value>Vérifier si le texte contient une valeur donnée, de façon exacte sauf si `ignoreCase` vaut `true`</value>
+  </data>
+  <data name="ParamSearch" xml:space="preserve">
+    <value>Le texte qu’il doit contenir.</value>
+  </data>
+  <data name="FunctionIsMatch" xml:space="preserve">
+    <value>Vérifier si le texte correspond à une [expression régulière](#pattern-functions), vrai lorsqu’une valeur d’un attribut multivalué y correspond</value>
+  </data>
+  <data name="CategoryPattern" xml:space="preserve">
+    <value>Fonctions de motif</value>
+  </data>
+  <data name="ParamPattern" xml:space="preserve">
+    <value>Une expression régulière .NET, évaluée avec une limite de temps.</value>
+  </data>
+  <data name="FunctionRegexReplace" xml:space="preserve">
+    <value>Remplacer chaque correspondance d’une expression régulière ; le remplacement peut utiliser `$1` pour le premier groupe</value>
+  </data>
+  <data name="ParamReplacement" xml:space="preserve">
+    <value>Le texte à mettre à la place de chaque correspondance ; $1, $2 et ainsi de suite sont ses groupes.</value>
+  </data>
+  <data name="FunctionRegexExtract" xml:space="preserve">
+    <value>La première correspondance d’une expression régulière, ou le groupe désigné par son numéro ; rien en l’absence de correspondance</value>
+  </data>
+  <data name="ParamGroup" xml:space="preserve">
+    <value>Le groupe à renvoyer : 0, la valeur par défaut, correspond à toute la correspondance.</value>
+  </data>
+  <data name="FunctionIIF" xml:space="preserve">
+    <value>Renvoyer une valeur si une condition est vraie, une autre si elle est fausse</value>
+  </data>
+  <data name="ReturnsEitherValue" xml:space="preserve">
+    <value>l’une ou l’autre des valeurs</value>
+  </data>
+  <data name="CategoryConditional" xml:space="preserve">
+    <value>Fonctions conditionnelles</value>
+  </data>
+  <data name="ParamCondition" xml:space="preserve">
+    <value>Un test dont le résultat est vrai ou faux.</value>
+  </data>
+  <data name="ParamTrueValue" xml:space="preserve">
+    <value>La valeur lorsque le test est vrai.</value>
+  </data>
+  <data name="ParamFalseValue" xml:space="preserve">
+    <value>La valeur lorsque le test est faux.</value>
+  </data>
+  <data name="FunctionCoalesce" xml:space="preserve">
+    <value>Utiliser la première valeur si elle existe (ni absente, ni vide, ni liste vide), sinon utiliser la seconde</value>
+  </data>
+  <data name="ParamFirstChoice" xml:space="preserve">
+    <value>La valeur à utiliser lorsqu’elle existe.</value>
+  </data>
+  <data name="ParamOtherwise" xml:space="preserve">
+    <value>La valeur à utiliser dans le cas contraire.</value>
+  </data>
+  <data name="FunctionEq" xml:space="preserve">
+    <value>Vérifier si deux valeurs sont égales, vrai lorsqu’une valeur d’un attribut multivalué l’est ; une date se compare par [instant](#dates-and-numbers-as-text)</value>
+  </data>
+  <data name="ParamFirstValue" xml:space="preserve">
+    <value>La première valeur.</value>
+  </data>
+  <data name="ParamCompareWith" xml:space="preserve">
+    <value>La valeur à lui comparer.</value>
+  </data>
+  <data name="FunctionToString" xml:space="preserve">
+    <value>Convertir une valeur en texte</value>
+  </data>
+  <data name="CategoryConversion" xml:space="preserve">
+    <value>Fonctions de conversion</value>
+  </data>
+  <data name="FunctionToInt" xml:space="preserve">
+    <value>Convertir du texte en nombre entier (renvoie 0 si ce n’est pas un nombre valide)</value>
+  </data>
+  <data name="FunctionToDecimal" xml:space="preserve">
+    <value>Convertir en nombre décimal exact : le texte est lu avec `.` comme séparateur décimal et accepte la notation exponentielle (`1.5E3` vaut 1500). Renvoie 0 si ce n’est pas un nombre valide</value>
+  </data>
+  <data name="ReturnsDecimal" xml:space="preserve">
+    <value>un nombre décimal</value>
+  </data>
+  <data name="FunctionNow" xml:space="preserve">
+    <value>Date et heure actuelles (UTC)</value>
+  </data>
+  <data name="ReturnsDate" xml:space="preserve">
+    <value>une date</value>
+  </data>
+  <data name="CategoryDate" xml:space="preserve">
+    <value>Fonctions de date</value>
+  </data>
+  <data name="FunctionToday" xml:space="preserve">
+    <value>Date actuelle à minuit (UTC)</value>
+  </data>
+  <data name="FunctionFormatDate" xml:space="preserve">
+    <value>Écrire une date, ou du texte ISO 8601, dans un [format de date .NET](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings) ; rien pour tout autre texte ou en l’absence de valeur</value>
+  </data>
+  <data name="ParamDateOrIso" xml:space="preserve">
+    <value>Une date, ou du texte ISO 8601.</value>
+  </data>
+  <data name="ParamDateFormatWrite" xml:space="preserve">
+    <value>Un format de date .NET, tel que « dd MMM yyyy ».</value>
+  </data>
+  <data name="FunctionParseDate" xml:space="preserve">
+    <value>Lire du texte dans un [format de date .NET](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings) comme une date, en UTC sauf si le format comporte un décalage (`zzz` ou `K`) ; rien pour un texte vide, une erreur pour un texte qui ne correspond pas</value>
+  </data>
+  <data name="ParamTextToRead" xml:space="preserve">
+    <value>Le texte à lire.</value>
+  </data>
+  <data name="ParamDateFormatRead" xml:space="preserve">
+    <value>Le format de date .NET du texte, tel que « dd/MM/yyyy ».</value>
+  </data>
+  <data name="FunctionToFileTime" xml:space="preserve">
+    <value>Convertir une date, ou du texte ISO 8601, au format FILETIME d’Active Directory</value>
+  </data>
+  <data name="ReturnsLongNumber" xml:space="preserve">
+    <value>un nombre long</value>
+  </data>
+  <data name="FunctionFromFileTime" xml:space="preserve">
+    <value>Convertir un FILETIME d’Active Directory en date</value>
+  </data>
+  <data name="ParamFileTime" xml:space="preserve">
+    <value>Un FILETIME, tel que accountExpires.</value>
+  </data>
+  <data name="FunctionEscapeDN" xml:space="preserve">
+    <value>Échapper en toute sécurité les caractères spéciaux pour les utiliser dans les noms distinctifs LDAP</value>
+  </data>
+  <data name="CategoryDistinguishedName" xml:space="preserve">
+    <value>Fonctions de nom distinctif (DN)</value>
+  </data>
+  <data name="FunctionRandomPassword" xml:space="preserve">
+    <value>Générer un mot de passe aléatoire. Définissez extendedChars sur `true` pour inclure des caractères spéciaux (!@#$%^&amp;*)</value>
+  </data>
+  <data name="CategoryPassword" xml:space="preserve">
+    <value>Génération de mots de passe</value>
+  </data>
+  <data name="ParamPasswordLength" xml:space="preserve">
+    <value>Le nombre de caractères, de 8 à 128.</value>
+  </data>
+  <data name="ParamExtendedChars" xml:space="preserve">
+    <value>true pour inclure des caractères spéciaux.</value>
+  </data>
+  <data name="FunctionRandomPassphrase" xml:space="preserve">
+    <value>Générer une phrase secrète à partir de mots aléatoires</value>
+  </data>
+  <data name="ParamWordCount" xml:space="preserve">
+    <value>Le nombre de mots, de 3 à 10.</value>
+  </data>
+  <data name="ParamWordSeparator" xml:space="preserve">
+    <value>Le texte entre les mots, tel que « - ».</value>
+  </data>
+  <data name="FunctionCount" xml:space="preserve">
+    <value>Combien de valeurs il y a : 0 s’il n’y en a aucune</value>
+  </data>
+  <data name="CategoryMultiValued" xml:space="preserve">
+    <value>Fonctions multivaluées</value>
+  </data>
+  <data name="ParamValues" xml:space="preserve">
+    <value>Les valeurs, généralement un attribut multivalué tel que cs["proxyAddresses"].</value>
+  </data>
+  <data name="FunctionMin" xml:space="preserve">
+    <value>La plus petite valeur : les nombres par valeur, les dates par instant, le texte par ordre ordinal ; rien en l’absence de valeur</value>
+  </data>
+  <data name="ReturnsOneOfTheValues" xml:space="preserve">
+    <value>l’une des valeurs</value>
+  </data>
+  <data name="FunctionMax" xml:space="preserve">
+    <value>La plus grande valeur, comparée comme `Min` compare</value>
+  </data>
+  <data name="FunctionWhere" xml:space="preserve">
+    <value>Les valeurs qui respectent un [opérateur de périmètre](../configuration/scoping-criteria.md#operators), nommé comme l’affiche l’éditeur (`"starts with"`) ou comme le nomme l’API REST (`"StartsWith"`) ; le texte se compare de façon exacte sauf si `ignoreCase` vaut `true`</value>
+  </data>
+  <data name="ReturnsValuesThatMeetIt" xml:space="preserve">
+    <value>les valeurs qui le respectent</value>
+  </data>
+  <data name="ParamOperator" xml:space="preserve">
+    <value>Un opérateur de périmètre, tel que « starts with ».</value>
+  </data>
+  <data name="ParamCompareEach" xml:space="preserve">
+    <value>La valeur à laquelle comparer chaque valeur.</value>
+  </data>
+  <data name="FunctionSplit" xml:space="preserve">
+    <value>Scinder une valeur de texte délimitée en plusieurs valeurs, dans l’ordre où elles apparaissent</value>
+  </data>
+  <data name="ReturnsSeveralValues" xml:space="preserve">
+    <value>plusieurs valeurs</value>
+  </data>
+  <data name="ParamSplitDelimiter" xml:space="preserve">
+    <value>Le texte entre les valeurs, tel que « | ».</value>
+  </data>
+  <data name="FunctionJoin" xml:space="preserve">
+    <value>Combiner des valeurs en une seule valeur de texte délimitée, dans l’ordre où elles sont lues</value>
+  </data>
+  <data name="ParamJoinDelimiter" xml:space="preserve">
+    <value>Le texte à placer entre les valeurs ; une virgule si ce paramètre est laissé vide.</value>
+  </data>
+  <data name="FunctionEnableUser" xml:space="preserve">
+    <value>Activer un compte utilisateur</value>
+  </data>
+  <data name="CategoryAccountControl" xml:space="preserve">
+    <value>Fonctions de contrôle de compte</value>
+  </data>
+  <data name="ParamUac" xml:space="preserve">
+    <value>La valeur de userAccountControl.</value>
+  </data>
+  <data name="FunctionDisableUser" xml:space="preserve">
+    <value>Désactiver un compte utilisateur</value>
+  </data>
+  <data name="FunctionSetBit" xml:space="preserve">
+    <value>Activer un indicateur donné</value>
+  </data>
+  <data name="ParamFlagsNumber" xml:space="preserve">
+    <value>Le nombre qui contient les indicateurs.</value>
+  </data>
+  <data name="ParamFlagValueLarge" xml:space="preserve">
+    <value>La valeur de l’indicateur, telle que 65536.</value>
+  </data>
+  <data name="FunctionClearBit" xml:space="preserve">
+    <value>Désactiver un indicateur donné</value>
+  </data>
+  <data name="FunctionHasBit" xml:space="preserve">
+    <value>Vérifier si un indicateur donné est activé</value>
+  </data>
+  <data name="ParamFlagValueSmall" xml:space="preserve">
+    <value>La valeur de l’indicateur, telle que 2.</value>
+  </data>
+  <data name="ListJoin" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="DataTypeNotSet" xml:space="preserve">
+    <value>non défini</value>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>texte</value>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>nombre</value>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>date et heure</value>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>binaire</value>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>référence</value>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>booléen</value>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>nombre long</value>
+  </data>
+  <data name="DataTypeDecimal" xml:space="preserve">
+    <value>décimal</value>
+  </data>
+  <data name="AttributeKindText" xml:space="preserve">
+    <value>de type texte</value>
+  </data>
+  <data name="AttributeKindNumber" xml:space="preserve">
+    <value>de type nombre</value>
+  </data>
+  <data name="AttributeKindLongNumber" xml:space="preserve">
+    <value>de type nombre long</value>
+  </data>
+  <data name="AttributeKindDecimal" xml:space="preserve">
+    <value>de type décimal</value>
+  </data>
+  <data name="AttributeKindDateTime" xml:space="preserve">
+    <value>de type date et heure</value>
+  </data>
+  <data name="AttributeKindBoolean" xml:space="preserve">
+    <value>de type booléen</value>
+  </data>
+  <data name="AttributeKindGuid" xml:space="preserve">
+    <value>de type GUID</value>
+  </data>
+  <data name="AttributeKindBinary" xml:space="preserve">
+    <value>de type binaire</value>
+  </data>
+  <data name="AttributeKindReference" xml:space="preserve">
+    <value>de type référence</value>
+  </data>
+  <data name="AttributeKindOther" xml:space="preserve">
+    <value>de ce type</value>
+  </data>
+  <data name="ProblemResultTypeMismatch" xml:space="preserve">
+    <value>{0} renvoie {1}, ce que « {2} » ne peut jamais contenir comme attribut {3}.</value>
+  </data>
+  <data name="ProblemDoesNotParse" xml:space="preserve">
+    <value>L’expression de « {0} » ne peut pas être analysée : {1}</value>
+  </data>
+  <data name="ProblemWrongSide" xml:space="preserve">
+    <value>L’expression de « {0} » lit {1}, mais un flux d’attributs d’exportation lit l’objet Metaverse ; elle n’a donc jamais de valeur. Lisez plutôt mv["..."].</value>
+  </data>
+  <data name="ProblemUnknownAttribute" xml:space="preserve">
+    <value>L’expression de « {0} » lit {1}, qui n’est pas un attribut de « {2} » ; elle n’a donc jamais de valeur.</value>
+  </data>
+  <data name="ProblemNonRepeatable" xml:space="preserve">
+    <value>L’expression de « {0} » appelle {1}, qui renvoie une valeur différente à chaque fois ; chaque synchronisation peut donc modifier la valeur qu’elle transmet.</value>
+  </data>
+  <data name="FlowKeepsValue" xml:space="preserve">
+    <value>la synchronisation enregistre une erreur et « {0} » conserve sa valeur actuelle</value>
+  </data>
+  <data name="FlowFailsObject" xml:space="preserve">
+    <value>la synchronisation enregistre une erreur et rien n’est synchronisé sur l’objet</value>
+  </data>
+  <data name="DescribeSingleValue" xml:space="preserve">
+    <value>« {0} » serait défini sur cette valeur.</value>
+  </data>
+  <data name="DescribeSeveralValues" xml:space="preserve">
+    <value>« {0} » contiendrait ces {1} valeurs.</value>
+  </data>
+  <data name="DescribeNoValueMissingInput" xml:space="preserve">
+    <value>Non évalué : l’objet n’a aucune valeur pour {1}, et le comportement en cas d’entrée manquante est « Ne contribuer aucune valeur » ; « {0} » n’obtient donc aucune valeur, selon la priorité des attributs et « Null est une valeur ».</value>
+  </data>
+  <data name="DescribeNoValueExpression" xml:space="preserve">
+    <value>L’expression n’a produit aucune valeur ; « {0} » n’obtient donc aucune valeur, selon la priorité des attributs et « Null est une valeur ».</value>
+  </data>
+  <data name="DescribeLeftAsHeld" xml:space="preserve">
+    <value>Non évalué : {1} jusqu’à la prochaine importation, car une actualisation du schéma a modifié son type de données ; « {0} » conserve donc sa valeur actuelle.</value>
+  </data>
+  <data name="HeldInput" xml:space="preserve">
+    <value>{0} (conservé comme {1})</value>
+  </data>
+  <data name="DescribeMissingFailMapping" xml:space="preserve">
+    <value>Non évalué : l’objet n’a aucune valeur pour {0}, et le comportement en cas d’entrée manquante est « Faire échouer ce mappage » ; {1}.</value>
+  </data>
+  <data name="DescribeMissingFailObject" xml:space="preserve">
+    <value>Non évalué : l’objet n’a aucune valeur pour {0}, et le comportement en cas d’entrée manquante est « Faire échouer l’objet » ; {1}.</value>
+  </data>
+  <data name="DescribeEvaluationFailed" xml:space="preserve">
+    <value>L’expression a échoué ; {0} : {1}</value>
+  </data>
+  <data name="DescribeNotConvertible" xml:space="preserve">
+    <value>L’expression a renvoyé « {0} », qu’un attribut {1} ne peut pas contenir ; {2}.</value>
+  </data>
+  <data name="DescribeMultiValuedNamed" xml:space="preserve">
+    <value>« {0} » a {1} valeurs, mais « {2} » est monovalué ; {3}. Utilisez {4}, {5}, {6}, {7} ou {8} pour indiquer quelle valeur il doit avoir.</value>
+  </data>
+  <data name="DescribeMultiValuedUnnamed" xml:space="preserve">
+    <value>L’expression a renvoyé {0} valeurs, mais « {1} » est monovalué ; {2}.</value>
+  </data>
+  <data name="GenTokenSequence" xml:space="preserve">
+    <value>le numéro suivant de sa séquence</value>
+  </data>
+  <data name="GenTokenRandom" xml:space="preserve">
+    <value>un jeton aléatoire</value>
+  </data>
+  <data name="GenTokenLetter" xml:space="preserve">
+    <value>une lettre</value>
+  </data>
+  <data name="GenTokenNumber" xml:space="preserve">
+    <value>un nombre</value>
+  </data>
+  <data name="GenNothingGenerated" xml:space="preserve">
+    <value>la synchronisation enregistre une erreur et rien n’est généré pour « {0} »</value>
+  </data>
+  <data name="GenWaits" xml:space="preserve">
+    <value>la génération attend : rien n’est encore généré, et une valeur déjà générée est conservée</value>
+  </data>
+  <data name="DescribeBaseOnlyIfTaken" xml:space="preserve">
+    <value>« {0} » serait généré à partir de la base « {1} » : la base elle-même si aucun autre objet ne la détient, sinon en y ajoutant {2}. La disponibilité de la base est vérifiée lors d’une exécution de synchronisation.</value>
+  </data>
+  <data name="DescribeBase" xml:space="preserve">
+    <value>« {0} » serait généré à partir de la base « {1} » en y ajoutant {2} lors d’une exécution de synchronisation.</value>
+  </data>
+  <data name="DescribeNoBaseExpression" xml:space="preserve">
+    <value>« {0} » n’a pas d’expression de base ; il serait donc généré uniquement avec {1} lors d’une exécution de synchronisation.</value>
+  </data>
+  <data name="DescribeGenWaitsMissing" xml:space="preserve">
+    <value>Non évalué : l’objet n’a aucune valeur pour {0}, et le comportement en cas d’entrée manquante est « Ne contribuer aucune valeur » ; {1}.</value>
+  </data>
+  <data name="DescribeGenWaitsHeld" xml:space="preserve">
+    <value>Non évalué : {0} jusqu’à la prochaine importation, car une actualisation du schéma a modifié son type de données ; {1}.</value>
+  </data>
+  <data name="DescribeGenWaitsNoValue" xml:space="preserve">
+    <value>L’expression de base n’a produit aucune valeur ; {0}.</value>
+  </data>
+  <data name="DescribeGenNotSingle" xml:space="preserve">
+    <value>L’expression de base a renvoyé {0} valeurs, mais une valeur générée est construite à partir d’une seule ; {1}.</value>
+  </data>
+  <data name="DescribeGenNotConvertible" xml:space="preserve">
+    <value>L’expression de base a renvoyé {0}, qui n’a aucun texte à partir duquel construire une valeur ; {1}.</value>
+  </data>
+  <data name="DescribeGenEvaluationFailed" xml:space="preserve">
+    <value>L’expression de base a échoué ; {0} : {1}</value>
+  </data>
+  <data name="SampleTooManyValues" xml:space="preserve">
+    <value>{0} a {1} valeurs, mais l’attribut est monovalué ; un objet n’en contient donc qu’une au plus.</value>
+  </data>
+  <data name="SampleWrongType" xml:space="preserve">
+    <value>La valeur « {0} » pour {1} n’est pas une valeur de type {2}, le type de cet attribut.</value>
+  </data>
+  <data name="SampleWrongTypeWithHint" xml:space="preserve">
+    <value>La valeur « {0} » pour {1} n’est pas une valeur de type {2}, le type de cet attribut. {3}</value>
+  </data>
+  <data name="SampleHintDate" xml:space="preserve">
+    <value>Saisissez une date au format ISO 8601, par exemple 2026-03-15 ou 2026-03-15T10:30:00Z.</value>
+  </data>
+  <data name="SampleHintReference" xml:space="preserve">
+    <value>Saisissez l’identifiant de l’objet auquel elle fait référence.</value>
+  </data>
+  <data name="SampleHintBinary" xml:space="preserve">
+    <value>Saisissez la valeur en base64.</value>
+  </data>
+  <data name="FlowExportReadsOnlyMetaverse" xml:space="preserve">
+    <value>{0} a une valeur, mais un flux d’attributs d’exportation ne lit que l’objet Metaverse ; l’expression ne la verrait donc jamais.</value>
+  </data>
+  <data name="FlowNotInSchemaNamed" xml:space="preserve">
+    <value>{0} a une valeur, mais « {1} » n’a aucun attribut nommé « {2} » ; l’expression n’en verrait donc jamais.</value>
+  </data>
+  <data name="FlowNotInSchemaUnnamed" xml:space="preserve">
+    <value>{0} a une valeur, mais le type d’objet n’a aucun attribut nommé « {1} » ; l’expression n’en verrait donc jamais.</value>
+  </data>
+  <data name="ValueBinaryOne" xml:space="preserve">
+    <value>(Valeur binaire, {0} octet)</value>
+  </data>
+  <data name="ValueBinaryOther" xml:space="preserve">
+    <value>(Valeur binaire, {0} octets)</value>
+  </data>
+  <data name="ExpressionEmpty" xml:space="preserve">
+    <value>L’expression ne peut pas être vide.</value>
+  </data>
+  <data name="ExpressionTooLong" xml:space="preserve">
+    <value>L’expression dépasse la longueur maximale autorisée de {0} caractères (longueur réelle : {1}).</value>
+  </data>
+  <data name="BinaryHasNoText" xml:space="preserve">
+    <value>Une valeur binaire n’a pas de forme textuelle ; elle ne peut donc pas être utilisée comme texte.</value>
+  </data>
+  <data name="RegexNoSuchGroup" xml:space="preserve">
+    <value>Le motif de RegexExtract n’a pas de groupe {0}.</value>
+  </data>
+  <data name="PatternTimedOut" xml:space="preserve">
+    <value>Le motif a dépassé sa limite de temps de {0} ms sur l’une des valeurs ; simplifiez le motif (une répétition imbriquée telle que (a+)+ en est la cause habituelle).</value>
+  </data>
+  <data name="ReflectionNotAvailable" xml:space="preserve">
+    <value>La réflexion n’est pas disponible dans les expressions.</value>
+  </data>
+  <data name="ExtremeMixedKinds" xml:space="preserve">
+    <value>{0} nécessite des valeurs d’un seul genre : nombres, dates ou texte.</value>
+  </data>
+  <data name="ExtremeUnsupportedKind" xml:space="preserve">
+    <value>{0} fonctionne sur des nombres, des dates ou du texte, pas sur une valeur {1}.</value>
+  </data>
+  <data name="ValueKindBoolean" xml:space="preserve">
+    <value>booléenne</value>
+  </data>
+  <data name="ValueKindGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="ValueKindBinary" xml:space="preserve">
+    <value>binaire</value>
+  </data>
+  <data name="EvalToFileTimeType" xml:space="preserve">
+    <value>ToFileTime ne peut pas convertir une valeur de type « {0} ». Une date, ou du texte ISO 8601 tel que 2026-03-15T10:30:00Z, est attendu.</value>
+  </data>
+  <data name="EvalFormatDateType" xml:space="preserve">
+    <value>FormatDate ne peut pas formater une valeur de type « {0} ». Une date, ou du texte ISO 8601 tel que 2026-03-15T10:30:00Z, est attendu.</value>
+  </data>
+  <data name="EvalParseDateNeedsFormat" xml:space="preserve">
+    <value>ParseDate a besoin du format dans lequel le texte est écrit, tel que « dd/MM/yyyy ».</value>
+  </data>
+  <data name="EvalParseDateUnreadable" xml:space="preserve">
+    <value>ParseDate n’a pas pu lire le texte comme une date au format « {0} ».</value>
+  </data>
+  <data name="EvalParseDateType" xml:space="preserve">
+    <value>ParseDate ne peut pas lire une valeur de type « {0} ». Du texte, ou une date, est attendu.</value>
+  </data>
+  <data name="EvalFromFileTimeType" xml:space="preserve">
+    <value>FromFileTime ne peut pas convertir une valeur de type « {0} ». Un long, un int ou une chaîne est attendu.</value>
+  </data>
+  <data name="WhereNeedsOneType" xml:space="preserve">
+    <value>Where nécessite des valeurs d’un seul type.</value>
+  </data>
+  <data name="WhereOperatorTestsAttribute" xml:space="preserve">
+    <value>Where conserve les valeurs qui respectent un opérateur, et « {0} » teste l’attribut plutôt qu’une valeur. Utilisez plutôt Count ou IsNullOrEmpty.</value>
+  </data>
+  <data name="WhereUnknownOperator" xml:space="preserve">
+    <value>Where ne connaît pas l’opérateur « {0} » pour des valeurs de type {1}. Utilisez l’un des suivants : {2}.</value>
+  </data>
+  <data name="WhereKindText" xml:space="preserve">
+    <value>texte</value>
+  </data>
+  <data name="WhereKindNumber" xml:space="preserve">
+    <value>nombre</value>
+  </data>
+  <data name="WhereKindLongNumber" xml:space="preserve">
+    <value>nombre long</value>
+  </data>
+  <data name="WhereKindDecimal" xml:space="preserve">
+    <value>décimal</value>
+  </data>
+  <data name="WhereKindDateTime" xml:space="preserve">
+    <value>date</value>
+  </data>
+  <data name="WhereKindGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="WhereKindBoolean" xml:space="preserve">
+    <value>booléen</value>
+  </data>
+  <data name="WhereKindBinary" xml:space="preserve">
+    <value>binaire</value>
+  </data>
+  <data name="WhereKindReference" xml:space="preserve">
+    <value>référence</value>
+  </data>
+  <data name="WhereKindNotSet" xml:space="preserve">
+    <value>non défini</value>
+  </data>
+  <data name="WhereNeedsValue" xml:space="preserve">
+    <value>Where a besoin d’une valeur à comparer.</value>
+  </data>
+  <data name="WhereCouldNotCompare" xml:space="preserve">
+    <value>Where n’a pas pu comparer : {0}</value>
+  </data>
+  <data name="WhereUnsupportedType" xml:space="preserve">
+    <value>Where fonctionne sur des valeurs de texte, de nombre, de date, booléennes ou GUID.</value>
+  </data>
+  <data name="RefusalsJoin" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+</root>

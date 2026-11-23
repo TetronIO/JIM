@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application.Utilities;
 using JIM.Connectors;
 using JIM.Models.Activities;
@@ -104,7 +106,7 @@ public class SecurityServer
             var result = await Application.Repository.Security.CreateRoleAsync(role);
 
             await CaptureRoleConfigurationChangeAsync(activity, result.Id, changeReason);
-            activity.Message = $"Created Role '{role.Name}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleCreated), role.Name);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -160,7 +162,7 @@ public class SecurityServer
             if (role != null)
                 await CaptureRoleConfigurationChangeAsync(activity, role.Id, changeReason);
 
-            activity.Message = $"Added '{memberName}' to Role '{roleName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleMemberAdded), memberName, roleName);
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)
@@ -208,7 +210,7 @@ public class SecurityServer
             await Application.Repository.Security.AddObjectToRoleByIdAsync(objectId, roleId);
 
             await CaptureRoleConfigurationChangeAsync(activity, roleId, changeReason);
-            activity.Message = $"Added '{memberName}' to Role '{roleName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleMemberAdded), memberName, roleName);
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)
@@ -256,7 +258,7 @@ public class SecurityServer
             await Application.Repository.Security.RemoveObjectFromRoleAsync(objectId, roleId);
 
             await CaptureRoleConfigurationChangeAsync(activity, roleId, changeReason);
-            activity.Message = $"Removed '{memberName}' from Role '{roleName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleMemberRemoved), memberName, roleName);
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)
@@ -345,7 +347,7 @@ public class SecurityServer
             TargetType = ActivityTargetType.Role,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Role '{roleName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInRole), roleName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -628,7 +630,7 @@ public class SecurityServer
             var result = await Application.Repository.ApiKeys.CreateAsync(apiKey);
 
             await CaptureConfigurationChangeAsync(activity, result.Id, changeReason);
-            activity.Message = $"Created API key '{apiKey.Name}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ApiKeyCreated), apiKey.Name);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -681,7 +683,7 @@ public class SecurityServer
             var result = await Application.Repository.ApiKeys.UpdateAsync(apiKey);
 
             await CaptureConfigurationChangeAsync(activity, result.Id, changeReason);
-            activity.Message = $"Updated API key '{apiKey.Name}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ApiKeyUpdated), apiKey.Name);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -735,7 +737,7 @@ public class SecurityServer
 
             await Application.Repository.ApiKeys.DeleteAsync(id);
 
-            activity.Message = $"Deleted API key '{apiKeyName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ApiKeyDeleted), apiKeyName);
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)

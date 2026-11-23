@@ -2,6 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Expressions;
 
@@ -112,25 +115,31 @@ public sealed class AttributeReaderIndex
         SyncRuleName = candidate.SyncRuleName,
         ExampleDataTemplateId = candidate.ExampleDataTemplateId,
         ExampleDataTemplateName = candidate.ExampleDataTemplateName,
-        Description = Describe(candidate, viaExpression)
+        Description = Describe(candidate, viaExpression).ToEnglish(),
+        DescriptionDetail = Describe(candidate, viaExpression)
     };
 
-    private static string Describe(AttributeReaderCandidate candidate, bool viaExpression)
+    private static JimMessage Describe(AttributeReaderCandidate candidate, bool viaExpression)
     {
         var owner = candidate.SyncRuleName != null
-            ? $"Synchronisation Rule '{candidate.SyncRuleName}'"
+            ? ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderOwnerSyncRule), candidate.SyncRuleName)
             : candidate.ExampleDataTemplateName != null
-                ? $"Example Data Template '{candidate.ExampleDataTemplateName}'"
-                : $"Connected System Object Type '{candidate.ConnectedSystemObjectTypeName}'";
+                ? ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderOwnerExampleDataTemplate), candidate.ExampleDataTemplateName)
+                : ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderOwnerObjectType), candidate.ConnectedSystemObjectTypeName);
 
         return candidate.Kind switch
         {
-            AttributeReaderKind.ScopingCriterion when viaExpression => $"Scoping Criterion Expression {candidate.Expression} in {owner}",
-            AttributeReaderKind.ScopingCriterion => $"Scoping Criterion on '{candidate.AttributeName}' in {owner}",
-            AttributeReaderKind.AttributeFlowExpression => $"Attribute Flow Expression into '{candidate.TargetName}' in {owner}",
-            AttributeReaderKind.ObjectMatchingRuleExpression => $"Object Matching Rule Expression {candidate.Expression} in {owner}",
-            AttributeReaderKind.ExampleDataTemplateExpression => $"Expression for '{candidate.TargetName}' in {owner}",
-            _ => $"{candidate.Kind} in {owner}"
+            AttributeReaderKind.ScopingCriterion when viaExpression =>
+                ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderScopingCriterionExpression), candidate.Expression, owner),
+            AttributeReaderKind.ScopingCriterion =>
+                ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderScopingCriterionAttribute), candidate.AttributeName, owner),
+            AttributeReaderKind.AttributeFlowExpression =>
+                ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderAttributeFlowExpression), candidate.TargetName, owner),
+            AttributeReaderKind.ObjectMatchingRuleExpression =>
+                ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderObjectMatchingRuleExpression), candidate.Expression, owner),
+            AttributeReaderKind.ExampleDataTemplateExpression =>
+                ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderExampleDataExpression), candidate.TargetName, owner),
+            _ => ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ReaderOther), candidate.Kind.ToString(), owner)
         };
     }
 }

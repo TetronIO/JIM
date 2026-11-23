@@ -2,6 +2,7 @@
 @page "/admin/schema/attributes"
 @page "/admin/schema/data-flow"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
@@ -16,10 +17,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Schema</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Schema:</span> <span class="mud-primary-text">@TabTitle</span>
-    <PageInfo Title="Schema" DocsPage="configuration/metaverse.md" Term="Term.Metaverse">
-        Manage Metaverse Object Types and their attributes, and see how data flows into and out of them.
+<PageTitle>@AdminText.SchemaPageTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@AdminText.SchemaHeading</span> <span class="mud-primary-text">@TabTitle</span>
+    <PageInfo Title="@AdminText.SchemaPageTitle" DocsPage="configuration/metaverse.md" Term="Term.Metaverse">
+        @AdminText.SchemaPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -28,7 +29,7 @@
    own mt-5 (see the tab content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content
    margin). *@
 <NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" TabPanelsClass="pa-0" Class="mt-2">
-    <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
+    <MudTabPanel Text="@AdminText.SchemaTabObjectTypes" Icon="@Icons.Material.Filled.Category">
         @* Same shared grid as the Attributes tab, but windowed in memory: Object Types are a small configuration
            list, loaded whole once, so search and sort are applied in the page rather than each becoming a
            database range read. The URL parameters are prefixed so this grid's state cannot collide with the
@@ -39,25 +40,25 @@
         {
             <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
                 <MudItem Class="flex-grow-1">
-                    <MudSelect T="MetaverseObjectDeletionRule?" Label="Deletion Rule" Variant="Variant.Outlined"
+                    <MudSelect T="MetaverseObjectDeletionRule?" Label="@AdminText.SchemaDeletionRule" Variant="Variant.Outlined"
                                Dense="true" Clearable="true" Value="_deletionRuleFilter" ValueChanged="OnDeletionRuleFilterChangedAsync">
-                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.Manual">Manual</MudSelectItem>
-                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">Auto</MudSelectItem>
-                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">Authoritative Source</MudSelectItem>
+                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.Manual">@AdminText.SchemaDeletionRuleManual</MudSelectItem>
+                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">@AdminText.SchemaDeletionRuleAuto</MudSelectItem>
+                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">@AdminText.SchemaDeletionRuleAuthoritativeSource</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem Class="flex-grow-1">
-                    <MudSelect T="bool?" Label="Predefined Searches?" Variant="Variant.Outlined"
+                    <MudSelect T="bool?" Label="@AdminText.SchemaPredefinedSearches" Variant="Variant.Outlined"
                                Dense="true" Clearable="true" Value="_predefinedSearchesFilter" ValueChanged="OnPredefinedSearchesFilterChangedAsync">
-                        <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
-                        <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="true">@CommonText.Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">@CommonText.No</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem Class="flex-grow-1">
-                    <MudSelect T="bool?" Label="Built-in?" Variant="Variant.Outlined"
+                    <MudSelect T="bool?" Label="@AdminText.SchemaBuiltIn" Variant="Variant.Outlined"
                                Dense="true" Clearable="true" Value="_objectTypeBuiltInFilter" ValueChanged="OnObjectTypeBuiltInFilterChangedAsync">
-                        <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
-                        <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="true">@CommonText.Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">@CommonText.No</MudSelectItem>
                     </MudSelect>
                 </MudItem>
             </MudStack>
@@ -67,34 +68,34 @@
                              UrlParameterPrefix="ot-"
                              DefaultSortBy="name"
                              LoadWindow="LoadObjectTypeWindowAsync"
-                             SingularName="Metaverse Object Type"
-                             PluralName="Metaverse Object Types"
-                             SearchPlaceholder="Search by name">
+                             SingularName="@AdminText.SchemaNounObjectTypeSingular"
+                             PluralName="@AdminText.SchemaNounObjectTypePlural"
+                             SearchPlaceholder="@AdminText.SchemaSearchByName">
             <ToolBarExtras>
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           DropShadow="false" OnClick="OpenCreateObjectTypeDialogAsync">New Object Type</MudButton>
+                           DropShadow="false" OnClick="OpenCreateObjectTypeDialogAsync">@AdminText.SchemaNewObjectType</MudButton>
             </ToolBarExtras>
             <Columns>
-                <TemplateColumn Title="Name" Sortable="false">
+                <TemplateColumn Title="@CommonText.ColumnName" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Name" Name="name" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(context.Item.Icon)" Class="mr-1" Style="vertical-align: middle;" />
                         <MudLink Href="@("/admin/schema/object-types/"+context.Item.Id)">@context.Item.Name</MudLink>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Attributes" Sortable="false">
+                <TemplateColumn Title="@AdminText.SchemaTabAttributes" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Attributes" Name="attributes" />
+                        <VirtualisedSortHeader Title="@AdminText.SchemaTabAttributes" Name="attributes" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @context.Item.AttributesCount
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Deletion Rule" Sortable="false">
+                <TemplateColumn Title="@AdminText.SchemaDeletionRule" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Deletion Rule" Name="deletionrule" />
+                        <VirtualisedSortHeader Title="@AdminText.SchemaDeletionRule" Name="deletionrule" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @{
@@ -105,25 +106,25 @@
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Predefined Searches?" Sortable="false">
+                <TemplateColumn Title="@AdminText.SchemaPredefinedSearches" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Predefined Searches?" Name="predefinedsearches" />
+                        <VirtualisedSortHeader Title="@AdminText.SchemaPredefinedSearches" Name="predefinedsearches" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        @(context.Item.HasPredefinedSearches ? "Yes" : "No")
+                        @(context.Item.HasPredefinedSearches ? CommonText.Yes : CommonText.No)
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Built-in?" Sortable="false">
+                <TemplateColumn Title="@AdminText.SchemaBuiltIn" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+                        <VirtualisedSortHeader Title="@AdminText.SchemaBuiltIn" Name="builtin" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        @(context.Item.BuiltIn ? "Yes" : "No")
+                        @(context.Item.BuiltIn ? CommonText.Yes : CommonText.No)
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Created" Sortable="false">
+                <TemplateColumn Title="@CommonText.ColumnCreated" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Created" Name="created" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -137,20 +138,20 @@
                         <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
                             @if (!context.Item.BuiltIn)
                             {
-                                <MudTooltip Text="Edit Object Type" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@AdminText.SchemaEditObjectType" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" OnClick="@(() => OpenEditObjectTypeDialogAsync(context.Item))" />
                                 </MudTooltip>
-                                <MudTooltip Text="Delete Object Type" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@AdminText.SchemaDeleteObjectType" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => OpenDeleteObjectTypeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
                             else
                             {
-                                <MudTooltip Text="Built-in Object Types cannot be renamed or deleted." Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@AdminText.SchemaBuiltInObjectTypeLocked" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Disabled="true" />
                                 </MudTooltip>
                             }
-                            <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@AdminText.SchemaChangeHistory" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.History" Size="Size.Small" OnClick="@(() => ShowObjectTypeHistoryDialogAsync(context.Item))" />
                             </MudTooltip>
                         </MudStack>
@@ -161,59 +162,59 @@
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No Metaverse Object Types match \"{grid.SearchText}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
+                                     PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.SchemaNoObjectTypesMatchSearch, grid.SearchText)"
+                                     SecondaryText="@CommonText.TrySearchAgain"
+                                     ActionText="@CommonText.ClearSearch"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
                 else if (IsObjectTypeFilterActive)
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                                     PrimaryText="No Metaverse Object Types match the current filters"
-                                     SecondaryText="Try different filters, or clear them."
-                                     ActionText="Clear Filters"
+                                     PrimaryText="@AdminText.SchemaNoObjectTypesMatchFilters"
+                                     SecondaryText="@AdminText.SchemaTryDifferentFilters"
+                                     ActionText="@AdminText.SchemaClearFilters"
                                      OnAction="@(() => ClearObjectTypeFiltersAsync())" />
                 }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.Category"
-                                     PrimaryText="No Metaverse Object Types yet"
-                                     SecondaryText="Use the New Object Type button to create one." />
+                                     PrimaryText="@AdminText.SchemaNoObjectTypesYet"
+                                     SecondaryText="@AdminText.SchemaUseNewObjectTypeButton" />
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
     </MudTabPanel>
-    <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
+    <MudTabPanel Text="@AdminText.SchemaTabAttributes" Icon="@Icons.Material.Filled.ListAlt">
         @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
            shared grid; this tab supplies the columns, the window loader and the empty states. The tab itself already
            says "Attributes", so there is no toolbar title and the count carries the nouns. *@
         @* ─── Filters ─── *@
         <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
             <MudItem Class="flex-grow-1">
-                <MudSelect T="AttributeDataType?" Label="Type" Variant="Variant.Outlined"
+                <MudSelect T="AttributeDataType?" Label="@CommonText.ColumnType" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" Value="_attributeTypeFilter" ValueChanged="OnAttributeTypeFilterChangedAsync">
                     @foreach (var type in Enum.GetValues<AttributeDataType>().Where(t => t != AttributeDataType.NotSet))
                     {
-                        <MudSelectItem T="AttributeDataType?" Value="@type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                        <MudSelectItem T="AttributeDataType?" Value="@type">@type.ForDisplay()</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudSelect T="AttributePlurality?" Label="Plurality" Variant="Variant.Outlined"
+                <MudSelect T="AttributePlurality?" Label="@AdminText.SchemaPlurality" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" Value="_attributePluralityFilter" ValueChanged="OnAttributePluralityFilterChangedAsync">
-                    <MudSelectItem T="AttributePlurality?" Value="AttributePlurality.SingleValued">Single-Valued</MudSelectItem>
-                    <MudSelectItem T="AttributePlurality?" Value="AttributePlurality.MultiValued">Multi-Valued</MudSelectItem>
+                    <MudSelectItem T="AttributePlurality?" Value="AttributePlurality.SingleValued">@AdminText.SchemaSingleValued</MudSelectItem>
+                    <MudSelectItem T="AttributePlurality?" Value="AttributePlurality.MultiValued">@AdminText.SchemaMultiValued</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudSelect T="bool?" Label="Built-in?" Variant="Variant.Outlined"
+                <MudSelect T="bool?" Label="@AdminText.SchemaBuiltIn" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" Value="_attributeBuiltInFilter" ValueChanged="OnAttributeBuiltInFilterChangedAsync">
-                    <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
-                    <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                    <MudSelectItem T="bool?" Value="true">@CommonText.Yes</MudSelectItem>
+                    <MudSelectItem T="bool?" Value="false">@CommonText.No</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudSelect T="int?" Label="Object Type" Variant="Variant.Outlined"
+                <MudSelect T="int?" Label="@AdminText.SchemaObjectTypeFilter" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" Value="_attributeObjectTypeFilter" ValueChanged="OnAttributeObjectTypeFilterChangedAsync">
                     @if (_metaverseObjectTypeHeaders != null)
                     {
@@ -229,62 +230,62 @@
                              ContainerId="metaverse-attribute-list"
                              DefaultSortBy="name"
                              LoadWindow="LoadAttributeWindowAsync"
-                             SingularName="Metaverse Attribute"
-                             PluralName="Metaverse Attributes"
-                             SearchPlaceholder="Search">
+                             SingularName="@AdminText.SchemaNounAttributeSingular"
+                             PluralName="@AdminText.SchemaNounAttributePlural"
+                             SearchPlaceholder="@CommonText.Search">
             <ToolBarExtras>
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           DropShadow="false" OnClick="OpenCreateAttributeDialogAsync">New Attribute</MudButton>
+                           DropShadow="false" OnClick="OpenCreateAttributeDialogAsync">@AdminText.SchemaNewAttribute</MudButton>
             </ToolBarExtras>
             <Columns>
-                <TemplateColumn Title="Name" Sortable="false">
+                <TemplateColumn Title="@CommonText.ColumnName" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Name" Name="name" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @context.Item.Name
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Type" Sortable="false">
+                <TemplateColumn Title="@CommonText.ColumnType" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Type" Name="type" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" />
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
-                            @context.Item.Type.ToString().SplitOnCapitalLetters()
+                            @context.Item.Type.ForDisplay()
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Plurality" Sortable="false">
+                <TemplateColumn Title="@AdminText.SchemaPlurality" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Plurality" Name="plurality" />
+                        <VirtualisedSortHeader Title="@AdminText.SchemaPlurality" Name="plurality" />
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.Item.AttributePlurality)" Variant="Variant.Text">
-                            @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                            @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? AdminText.SchemaSingleValued : AdminText.SchemaMultiValued)
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Built-in?" Sortable="false">
+                <TemplateColumn Title="@AdminText.SchemaBuiltIn" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+                        <VirtualisedSortHeader Title="@AdminText.SchemaBuiltIn" Name="builtin" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (context.Item.BuiltIn)
                         {
-                            <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@AdminText.SchemaBuiltInAttribute" Arrow="true" Placement="Placement.Top">
                                 <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
                             </MudTooltip>
                         }
                         else
                         {
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.SchemaCustom</MudText>
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Created" Sortable="false">
+                <TemplateColumn Title="@CommonText.ColumnCreated" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Created" Name="created" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -292,9 +293,9 @@
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Object Types" Sortable="false">
+                <TemplateColumn Title="@AdminText.SchemaObjectTypes" Sortable="false">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Object Types</MudText>
+                        <MudText Typo="Typo.button">@AdminText.SchemaObjectTypes</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @* A row in a virtualised grid is one line, so a chip per bound Object Type is a row that
@@ -303,14 +304,14 @@
                         @{
                             var boundTypes = context.Item.MetaverseObjectTypes?.ToList() ?? new List<KeyValuePair<int, string>>();
                         }
-                        <OverflowList TItem="KeyValuePair<int, string>" Items="@boundTypes" Title="Object Types" MaxVisible="4">
+                        <OverflowList TItem="KeyValuePair<int, string>" Items="@boundTypes" Title="@AdminText.SchemaObjectTypes" MaxVisible="4">
                             <ItemTemplate Context="stub">
                                 <MudChip T="string" Color="@_objectTypeChipColors.GetColor(stub.Value)" Variant="Variant.Filled"
                                          Href="@($"/admin/schema/object-types/{stub.Key}")">@stub.Value</MudChip>
                             </ItemTemplate>
                             <EmptyContent>
-                                <MudTooltip Text="This custom attribute is not bound to any Object Type, so it is not collecting data." Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RemoveCircleOutline">Not assigned</MudChip>
+                                <MudTooltip Text="@AdminText.SchemaNotAssignedTooltip" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RemoveCircleOutline">@AdminText.SchemaNotAssigned</MudChip>
                                 </MudTooltip>
                             </EmptyContent>
                         </OverflowList>
@@ -322,20 +323,20 @@
                         <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
                             @if (!context.Item.BuiltIn)
                             {
-                                <MudTooltip Text="Edit attribute" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@AdminText.SchemaEditAttribute" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" OnClick="@(() => OpenEditAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
-                                <MudTooltip Text="Delete attribute" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@AdminText.SchemaDeleteAttribute" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" OnClick="@(() => OpenDeleteAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
                             else
                             {
-                                <MudTooltip Text="View attribute and Standard Mappings" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@AdminText.SchemaViewAttributeAndMappings" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Size="Size.Small" OnClick="@(() => OpenViewAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
-                            <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@AdminText.SchemaChangeHistory" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.History" Size="Size.Small" OnClick="@(() => ShowAttributeHistoryDialogAsync(context.Item))" />
                             </MudTooltip>
                         </MudStack>
@@ -346,29 +347,29 @@
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No Metaverse Attributes match \"{grid.SearchText}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
+                                     PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.SchemaNoAttributesMatchSearch, grid.SearchText)"
+                                     SecondaryText="@CommonText.TrySearchAgain"
+                                     ActionText="@CommonText.ClearSearch"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
                 else if (IsAttributeFilterActive)
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                                     PrimaryText="No Metaverse Attributes match the current filters"
-                                     SecondaryText="Try different filters, or clear them."
-                                     ActionText="Clear Filters"
+                                     PrimaryText="@AdminText.SchemaNoAttributesMatchFilters"
+                                     SecondaryText="@AdminText.SchemaTryDifferentFilters"
+                                     ActionText="@AdminText.SchemaClearFilters"
                                      OnAction="@(() => ClearAttributeFiltersAsync())" />
                 }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                                     PrimaryText="No Metaverse Attributes yet"
-                                     SecondaryText="Use the New Attribute button to create one." />
+                                     PrimaryText="@AdminText.SchemaNoAttributesYet"
+                                     SecondaryText="@AdminText.SchemaUseNewAttributeButton" />
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
     </MudTabPanel>
-    <MudTabPanel Text="Data Flow" Icon="@Icons.Material.Filled.SwapHoriz">
+    <MudTabPanel Text="@AdminText.SchemaTabDataFlow" Icon="@Icons.Material.Filled.SwapHoriz">
         <DataFlowTab />
     </MudTabPanel>
 </NavigableMudTabs>
@@ -382,9 +383,9 @@
     /// </summary>
     private string TabTitle => _activeTabIndex switch
     {
-        0 => "Object Types",
-        1 => "Attributes",
-        _ => "Data Flow"
+        0 => AdminText.SchemaTabObjectTypes,
+        1 => AdminText.SchemaTabAttributes,
+        _ => AdminText.SchemaTabDataFlow
     };
     private IList<MetaverseObjectTypeHeader>? _metaverseObjectTypeHeaders;
     private VirtualisedDataGrid<MetaverseObjectTypeHeader>? _objectTypeGrid;
@@ -406,9 +407,9 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Schema", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavAdministration, href: "/admin"),
+        new(AdminText.SchemaPageTitle, href: null, disabled: true)
     };
 
     protected override async Task OnInitializedAsync()
@@ -588,7 +589,7 @@
     private async Task ShowAttributeHistoryDialogAsync(MetaverseAttributeHeader attribute)
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseAttribute,
-            attribute.Id, "Metaverse Attribute", attribute.Name);
+            attribute.Id, AdminText.SchemaNounAttributeSingular, attribute.Name);
     }
 
     private async Task OpenCreateAttributeDialogAsync()
@@ -660,7 +661,7 @@
     private async Task ShowObjectTypeHistoryDialogAsync(MetaverseObjectTypeHeader header)
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseObjectType,
-            header.Id, "Metaverse Object Type", header.Name);
+            header.Id, AdminText.SchemaNounObjectTypeSingular, header.Name);
     }
 
     /// <summary>
@@ -680,38 +681,41 @@
     {
         return rule switch
         {
-            MetaverseObjectDeletionRule.Manual => ("Manual", Color.Default, Icons.Material.Filled.Block),
-            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => ("Auto", Color.Warning, Icons.Material.Filled.LinkOff),
-            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => ("Authoritative Source", Color.Error, Icons.Material.Filled.Star),
-            _ => ("Unknown", Color.Default, Icons.Material.Filled.Help)
+            MetaverseObjectDeletionRule.Manual => (AdminText.SchemaDeletionRuleManual, Color.Default, Icons.Material.Filled.Block),
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => (AdminText.SchemaDeletionRuleAuto, Color.Warning, Icons.Material.Filled.LinkOff),
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => (AdminText.SchemaDeletionRuleAuthoritativeSource, Color.Error, Icons.Material.Filled.Star),
+            _ => (CommonText.Unknown, Color.Default, Icons.Material.Filled.Help)
         };
     }
+
+    private static string FormatGracePeriodPart(int count, string one, string other) =>
+        string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, one, other), count);
 
     private static string FormatGracePeriod(TimeSpan period)
     {
         var parts = new List<string>();
-        if (period.Days > 0) parts.Add($"{period.Days} day{(period.Days != 1 ? "s" : "")}");
-        if (period.Hours > 0) parts.Add($"{period.Hours} hour{(period.Hours != 1 ? "s" : "")}");
-        if (period.Minutes > 0) parts.Add($"{period.Minutes} minute{(period.Minutes != 1 ? "s" : "")}");
-        return parts.Count > 0 ? string.Join(", ", parts) : "0";
+        if (period.Days > 0) parts.Add(FormatGracePeriodPart(period.Days, AdminText.SchemaGracePeriodDayOne, AdminText.SchemaGracePeriodDayOther));
+        if (period.Hours > 0) parts.Add(FormatGracePeriodPart(period.Hours, AdminText.SchemaGracePeriodHourOne, AdminText.SchemaGracePeriodHourOther));
+        if (period.Minutes > 0) parts.Add(FormatGracePeriodPart(period.Minutes, AdminText.SchemaGracePeriodMinuteOne, AdminText.SchemaGracePeriodMinuteOther));
+        return parts.Count > 0 ? string.Join(AdminText.SchemaGracePeriodSeparator, parts) : "0";
     }
 
     private string GetDeletionRuleTooltip(MetaverseObjectTypeHeader header)
     {
         var gracePeriod = header.DeletionGracePeriod.HasValue && header.DeletionGracePeriod.Value > TimeSpan.Zero
-            ? $" ({FormatGracePeriod(header.DeletionGracePeriod.Value)} grace period)"
-            : " (immediate)";
+            ? string.Format(CultureInfo.CurrentCulture, AdminText.SchemaGracePeriodWithDelay, FormatGracePeriod(header.DeletionGracePeriod.Value))
+            : AdminText.SchemaGracePeriodImmediate;
 
         return header.DeletionRule switch
         {
-            MetaverseObjectDeletionRule.Manual => "Manual deletion only - objects are never automatically deleted",
-            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => $"Delete when all connectors disconnect{gracePeriod}",
+            MetaverseObjectDeletionRule.Manual => AdminText.SchemaTooltipManualDeletion,
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => string.Format(CultureInfo.CurrentCulture, AdminText.SchemaTooltipDeleteWhenAllDisconnect, gracePeriod),
             // Include the trigger mode (#119) so the list reads the same as the detail page's radio options
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected =>
                 header.DeletionTriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
-                    ? $"All sources disconnect: delete only once every selected authoritative source has disconnected{gracePeriod}"
-                    : $"Specific source(s) disconnect: delete when any one of the selected authoritative sources disconnects{gracePeriod}",
-            _ => "Unknown deletion rule"
+                    ? string.Format(CultureInfo.CurrentCulture, AdminText.SchemaTooltipAllSourcesDisconnect, gracePeriod)
+                    : string.Format(CultureInfo.CurrentCulture, AdminText.SchemaTooltipSpecificSourceDisconnect, gracePeriod),
+            _ => AdminText.SchemaTooltipUnknownRule
         };
     }
 }

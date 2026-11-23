@@ -10,7 +10,7 @@
 
 <MudPaper Outlined="true" Class="pa-3 jim-causality-focus">
     <div class="jim-causality-focus-what">
-        <span class="jim-causality-focus-label">Focused on</span>
+        <span class="jim-causality-focus-label">@CausalityText.FocusHeaderFocusedOn</span>
         @if (Labels == null)
         {
             <span>@CausalityFocusLabel.For(Focus, null)</span>
@@ -19,20 +19,20 @@
         {
             @if (Labels.Items.TryGetValue(Focus.Id, out var entry))
             {
-                <strong>@(entry.ActivityTargetName ?? "A run")</strong>
-                <span>of</span>
+                <strong>@(entry.ActivityTargetName ?? CausalityText.SummaryRun)</strong>
+                <span>@CausalityText.FocusHeaderOf</span>
                 <ObjectChip Kind="@(IsMetaverseObjectItem(entry) ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject)"
                             TypeName="@entry.ObjectType" Name="@ObjectDescription.ChipName(entry.DisplayName, entry.ExternalId)" />
                 @if (!string.IsNullOrWhiteSpace(entry.ActivityTargetContext))
                 {
-                    <span>in @entry.ActivityTargetContext</span>
+                    <span>@string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.FocusHeaderIn, entry.ActivityTargetContext)</span>
                 }
                 var executedLocal = entry.Executed.ToLocalTime();
                 <span class="jim-causality-focus-when" title="@executedLocal.ToFriendlyDate()">&middot; @executedLocal.ToRelativeTime()</span>
             }
             else
             {
-                <span>This execution item is no longer retained: history retention has removed it.</span>
+                <span>@CausalityText.FocusHeaderItemNotRetained</span>
             }
         }
         else if (Focus.Subject is { } subject && Labels.Objects.TryGetValue(subject, out var header))
@@ -45,16 +45,16 @@
             @if (header is { IsDeleted: true, DeletedAt: { } deletedAt })
             {
                 var deletedLocal = deletedAt.ToLocalTime();
-                <span class="jim-causality-focus-when" title="@deletedLocal.ToFriendlyDate()">&middot; deleted @deletedLocal.ToRelativeTime()</span>
+                <span class="jim-causality-focus-when" title="@deletedLocal.ToFriendlyDate()">&middot; @string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.FocusHeaderDeletedAgo, deletedLocal.ToRelativeTime())</span>
             }
             else if (header.IsDeleted)
             {
-                <span class="jim-causality-focus-when">&middot; deleted</span>
+                <span class="jim-causality-focus-when">&middot; @CausalityText.FocusHeaderDeleted</span>
             }
         }
         else
         {
-            <span>This object is no longer retained: neither it nor a record of its deletion remains.</span>
+            <span>@CausalityText.FocusHeaderObjectNotRetained</span>
         }
     </div>
     <div class="jim-causality-focus-acts">
@@ -94,14 +94,14 @@
             return null;
 
         if (Focus.Kind == CausalityFocusKind.Item)
-            return Labels.Items.ContainsKey(Focus.Id) ? ("Open activity item", $"/activity/item/{Focus.Id}") : null;
+            return Labels.Items.ContainsKey(Focus.Id) ? (CausalityText.FocusHeaderOpenActivityItem, $"/activity/item/{Focus.Id}") : null;
 
         if (Focus.Subject is not { } subject || !Labels.Objects.TryGetValue(subject, out var header))
             return null;
 
         if (header.IsDeleted)
         {
-            return ("View deletion record", Focus.Kind == CausalityFocusKind.MetaverseObject
+            return (CausalityText.EventViewDeletionRecord, Focus.Kind == CausalityFocusKind.MetaverseObject
                 ? CausalityModelBuilder.GetDeletedMvoHref(Focus.Id)
                 : CausalityModelBuilder.GetDeletedCsoHref(Focus.Id));
         }
@@ -109,12 +109,12 @@
         if (Focus.Kind == CausalityFocusKind.MetaverseObject)
         {
             return CausalityPageLinks.Instance.MetaverseObjectHref(Focus.Id, header.ObjectTypePluralName) is { } mvoHref
-                ? ("Open Metaverse Object", mvoHref)
+                ? (CausalityText.FocusHeaderOpenMetaverseObject, mvoHref)
                 : null;
         }
 
         return header.ConnectedSystemId is { } connectedSystemId
-            ? ("Open Connected System Object", JimUtilities.GetConnectedSystemObjectHref(connectedSystemId, Focus.Id))
+            ? (CausalityText.FocusHeaderOpenConnectedSystemObject, JimUtilities.GetConnectedSystemObjectHref(connectedSystemId, Focus.Id))
             : null;
     }
 }

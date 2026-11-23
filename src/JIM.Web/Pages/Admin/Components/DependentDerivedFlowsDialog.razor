@@ -22,9 +22,9 @@
         <MudSimpleTable Outlined="true" Class="mt-3">
             <thead>
                 <tr>
-                    <th>Derived Attribute Flow</th>
-                    <th>Synchronisation Rule</th>
-                    <th>Reads</th>
+                    <th>@SyncRuleText.DependentFlowsColumnFlow</th>
+                    <th>@SyncRuleText.DependentFlowsColumnRule</th>
+                    <th>@SyncRuleText.DependentFlowsColumnReads</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,17 +33,17 @@
                     <tr @key="dependant.MappingId" data-testid="jim-dependent-derived-flow-row">
                         <td>→ @dependant.TargetMetaverseAttributeName</td>
                         <td>@dependant.SyncRuleName</td>
-                        <td>@string.Join(", ", dependant.MissingInputs.Select(DerivedFlowWording.DescribeReads))</td>
+                        <td>@string.Join(SyncRuleText.ListSeparator, dependant.MissingInputs.Select(DerivedFlowWording.DescribeReads))</td>
                     </tr>
                 }
             </tbody>
         </MudSimpleTable>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-            Each one then follows its Missing Input Behaviour at the next synchronisation. Values already on Metaverse Objects stay until then.
+            @SyncRuleText.DependentFlowsAfterwards
         </MudText>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" data-testid="jim-dependent-derived-flows-cancel">Cancel</MudButton>
+        <MudButton OnClick="Cancel" data-testid="jim-dependent-derived-flows-cancel">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Error" Variant="Variant.Filled" DropShadow="false" OnClick="Confirm"
                    data-testid="jim-dependent-derived-flows-confirm">@ConfirmText</MudButton>
     </DialogActions>

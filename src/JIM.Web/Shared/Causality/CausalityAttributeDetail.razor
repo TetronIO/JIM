@@ -22,21 +22,21 @@
                      Embedded="true"
                      DefaultSortBy="@SourceOrderSort"
                      LoadWindow="LoadRowWindowAsync"
-                     SearchPlaceholder="Filter attributes..."
-                     SingularName="Attribute"
-                     PluralName="Attributes">
+                     SearchPlaceholder="@CausalityText.AttributeDetailFilterPlaceholder"
+                     SingularName="@CausalityText.AttributeDetailSingular"
+                     PluralName="@CausalityText.AttributeDetailPlural">
     <ToolBarExtras>
         @if (ShowOperations)
         {
-            <div class="filter-chips" role="group" aria-label="Filter by operation">
+            <div class="filter-chips" role="group" aria-label="@CausalityText.AttributeDetailFilterByOperation">
                 <button type="button" class="@(_operationFilter == null ? "on" : null)"
                         aria-pressed="@(_operationFilter == null ? "true" : "false")"
-                        @onclick="() => SetOperationFilterAsync(null)">All</button>
+                        @onclick="() => SetOperationFilterAsync(null)">@CausalityText.AttributeDetailAll</button>
                 @foreach (var (operation, count) in GetOperationCounts())
                 {
                     <button type="button" class="@(_operationFilter == operation ? "on" : null)"
                             aria-pressed="@(_operationFilter == operation ? "true" : "false")"
-                            @onclick="() => SetOperationFilterAsync(operation)">@operation · @count.ToString("N0", CultureInfo.InvariantCulture)</button>
+                            @onclick="() => SetOperationFilterAsync(operation)">@OperationLabel(operation) · @count.ToString("N0", CultureInfo.InvariantCulture)</button>
                 }
             </div>
         }
@@ -44,20 +44,20 @@
     <Columns>
         @if (ShowOperations)
         {
-            <TemplateColumn Title="Change" Sortable="false" HeaderClass="attr-col-shrink" CellClass="attr-col-shrink">
+            <TemplateColumn Title="@CausalityText.AttributeDetailChange" Sortable="false" HeaderClass="attr-col-shrink" CellClass="attr-col-shrink">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Change" Name="change" />
+                    <VirtualisedSortHeader Title="@CausalityText.AttributeDetailChange" Name="change" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="@GetOperationColor(context.Item.Operation)" Class="ml-0">
-                        @context.Item.Operation
+                        @OperationLabel(context.Item.Operation)
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>
         }
-        <TemplateColumn Title="Attribute" Sortable="false" HeaderClass="attr-col-shrink" CellClass="attr-col-shrink">
+        <TemplateColumn Title="@CausalityText.AttributeDetailAttribute" Sortable="false" HeaderClass="attr-col-shrink" CellClass="attr-col-shrink">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                <VirtualisedSortHeader Title="@CausalityText.AttributeDetailAttribute" Name="attribute" />
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line, and a MudText renders a paragraph, so the type and
@@ -66,9 +66,9 @@
                 <OneLineText Text="@context.Item.Name" Secondary="@context.Item.TypeAndPlurality" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Value" Sortable="false">
+        <TemplateColumn Title="@CausalityText.AttributeDetailValue" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Value" Name="value" />
+                <VirtualisedSortHeader Title="@CausalityText.AttributeDetailValue" Name="value" />
             </HeaderTemplate>
             <CellTemplate>
                 @* Same one-line rule: an attribute value is unbounded text, and a struck-through previous value
@@ -87,25 +87,25 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the filters."
-                             ActionText="Clear Filters"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, CausalityText.AttributeDetailNoMatch, grid.SearchText)"
+                             SecondaryText="@CausalityText.AttributeDetailTryDifferent"
+                             ActionText="@CausalityText.AttributeDetailClearFilters"
                              OnAction="@(() => ClearFiltersAsync(grid))" />
         }
         else if (_operationFilter.HasValue)
         {
             var operation = _operationFilter.Value;
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                             PrimaryText="@($"No attributes were {operation.ToString().ToLowerInvariant()}")"
-                             SecondaryText="Choose All to see every attribute this event touched."
-                             ActionText="Clear Filters"
+                             PrimaryText="@NoAttributesText(operation)"
+                             SecondaryText="@CausalityText.AttributeDetailChooseAll"
+                             ActionText="@CausalityText.AttributeDetailClearFilters"
                              OnAction="@(() => ClearFiltersAsync(grid))" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.List"
-                             PrimaryText="This event carries no attribute values"
-                             SecondaryText="Attribute values appear here when a change writes them, or when a Pending Export carries the values identifying its target." />
+                             PrimaryText="@CausalityText.AttributeDetailNoValues"
+                             SecondaryText="@CausalityText.AttributeDetailNoValuesText" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -289,6 +289,22 @@
     /// Chip colour per operation: Set is neutral (Info), Add and Remove are visually distinct
     /// (Success/Error) to preserve the semantics the previous bespoke CSS conveyed.
     /// </summary>
+    private static string OperationLabel(CausalityAttributeOperation operation) => operation switch
+    {
+        CausalityAttributeOperation.Set => CausalityText.AttributeOperationSet,
+        CausalityAttributeOperation.Add => CausalityText.AttributeOperationAdd,
+        CausalityAttributeOperation.Remove => CausalityText.AttributeOperationRemove,
+        _ => operation.ForDisplay()
+    };
+
+    private static string NoAttributesText(CausalityAttributeOperation operation) => operation switch
+    {
+        CausalityAttributeOperation.Set => CausalityText.AttributeDetailNoneSet,
+        CausalityAttributeOperation.Add => CausalityText.AttributeDetailNoneAdd,
+        CausalityAttributeOperation.Remove => CausalityText.AttributeDetailNoneRemove,
+        _ => operation.ForDisplay()
+    };
+
     private static Color GetOperationColor(CausalityAttributeOperation operation)
     {
         return operation switch

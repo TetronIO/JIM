@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
@@ -25,7 +26,7 @@
 <div class="d-flex align-center flex-wrap gap-3 mt-5 mb-4">
     <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => _filtersOpen = !_filtersOpen)"
                aria-expanded="@(_filtersOpen ? "true" : "false")" aria-controls="activity-filters" data-testid="toggle-filters">
-        Filters
+        @OperationsText.OpsFilters
     </MudButton>
     @foreach (var chip in activeChips)
     {
@@ -34,11 +35,11 @@
     }
     @if (activeChips.Count > 0)
     {
-        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearFiltersAsync" data-testid="clear-filters">Clear</MudButton>
+        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearFiltersAsync" data-testid="clear-filters">@OperationsText.OpsClear</MudButton>
     }
     <MudSpacer />
     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistAdd"
-               OnClick="QueueRunProfileAsync">Queue a Run Profile</MudButton>
+               OnClick="QueueRunProfileAsync">@OperationsText.OpsQueueRunProfile</MudButton>
 </div>
 
 @* ─── Filters ─── *@
@@ -49,7 +50,7 @@
     <MudPaper Outlined="true" Class="pa-4 mb-6" id="activity-filters" data-testid="activity-filters">
         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap">
             <MudItem Class="flex-grow-1">
-                <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
+                <MudSelect T="string" Label="@OperationsText.CompletedColConnectedSystem" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filters.ConnectedSystems"
                            SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { ConnectedSystems = values.ToList() }))"
@@ -64,7 +65,7 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
+                <MudSelect T="string" Label="@OperationsText.CompletedColRunProfile" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filters.RunProfiles"
                            SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { RunProfiles = values.ToList() }))"
@@ -79,7 +80,7 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
+                <MudSelect T="Guid" Label="@OperationsText.SchedulesSingularName" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filters.Schedules"
                            SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Schedules = values.ToList() }))"
@@ -94,27 +95,27 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudSelect T="ActivityStatus" Label="Result" Variant="Variant.Outlined"
+                <MudSelect T="ActivityStatus" Label="@OperationsText.CompletedColResult" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filters.Results"
                            SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Results = values.ToList() }))"
                            MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">@OperationsText.CompletedStatusComplete</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">@OperationsText.CompletedStatusCompleteWithWarning</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">@OperationsText.CompletedStatusCompleteWithError</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">@OperationsText.CompletedStatusFailedWithError</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">@OperationsText.CompletedStatusCancelled</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem Class="d-flex align-end">
                 <MudCheckBox T="bool" Value="_filters.HasChildActivities"
                              ValueChanged="@(value => SetFiltersAsync(_filters with { HasChildActivities = value }))"
-                             Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
+                             Label="@OperationsText.OpsHasChildren" Dense="true" Class="mb-1 mud-typography-nowrap" />
             </MudItem>
             <MudItem Class="d-flex align-end">
                 <MudCheckBox T="bool" Value="_filters.ScheduledOnly"
                              ValueChanged="@(value => SetFiltersAsync(_filters with { ScheduledOnly = value }))"
-                             Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
+                             Label="@OperationsText.OpsScheduledOnly" Dense="true" Class="mb-1 mud-typography-nowrap" />
             </MudItem>
         </MudStack>
     </MudPaper>
@@ -202,7 +203,7 @@
     {
         0 => string.Empty,
         1 => selectedValues[0],
-        _ => $"{selectedValues.Count} selected"
+        _ => string.Format(CultureInfo.CurrentCulture, OperationsText.OpsSelectedCount, selectedValues.Count)
     };
 
     /// <summary>
@@ -216,7 +217,7 @@
             return string.Empty;
 
         if (selectedValues.Count > 1)
-            return $"{selectedValues.Count} selected";
+            return string.Format(CultureInfo.CurrentCulture, OperationsText.OpsSelectedCount, selectedValues.Count);
 
         var schedule = _filterOptions?.Schedules.FirstOrDefault(s => s.Id.ToString() == selectedValues[0]);
         return schedule?.Name ?? selectedValues[0];

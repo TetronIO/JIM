@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SettingsCategorySynchronisation" xml:space="preserve">
+    <value>Synchronization</value>
+  </data>
+  <data name="SettingsEmptyNoneHint" xml:space="preserve">
+    <value>Service Settings are seeded when JIM starts; if none are listed, the service has not finished initializing.</value>
+  </data>
+  <data name="FactoryResetRemovesSynchronisation" xml:space="preserve">
+    <value>All Synchronization Rules, Schedules, Run Profiles and Pending Exports</value>
+  </data>
+  <data name="AttrEditorStandardMappingsIntro" xml:space="preserve">
+    <value>How this attribute corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, to guide you when designing Attribute Flows. For reference only: what synchronizes is always determined by your Attribute Flows, never by these mappings.</value>
+  </data>
+  <data name="ClaimsPageInfo" xml:space="preserve">
+    <value>Claims are what your identity provider asserted about you when you signed in. JIM uses them to establish who you are, show your name and decide what you may do. This page lists every claim on your session, which helps when diagnosing sign-in, authorization or identity mapping problems.</value>
+  </data>
+  <data name="AdminSectionSyncConfig" xml:space="preserve">
+    <value>Synchronization Configuration</value>
+  </data>
+  <data name="AdminTileLogsDesc" xml:space="preserve">
+    <value>View application and synchronization logs</value>
+  </data>
+  <data name="AdminTilePendingDeletionsDesc" xml:space="preserve">
+    <value>Review Metaverse Objects awaiting deletion before it is finalized</value>
+  </data>
+  <data name="DeleteObjectTypeSafe" xml:space="preserve">
+    <value>No Metaverse Objects of this type exist and no Synchronization Rule targets it. Safe to delete.</value>
+  </data>
+  <data name="DeleteObjectTypeRulesHeadline" xml:space="preserve">
+    <value>{0} Synchronization Rule(s) target this type</value>
+  </data>
+  <data name="DeleteObjectTypeRulesBody" xml:space="preserve">
+    <value>Remove these Synchronization Rules first; deleting the type would otherwise remove the whole rule.</value>
+  </data>
+  <data name="DeleteAttributeReadersBody" xml:space="preserve">
+    <value>Change or remove each one first, then delete. JIM does not remove them for you: a Scoping Criterion removed from a Synchronization Rule changes which objects the rule manages.</value>
+  </data>
+</root>

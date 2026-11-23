@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Logic
 @using JIM.Models.Logic.DTOs
 @using JIM.Web.Models
@@ -10,8 +11,7 @@
 @* here, rows link to the surface that owns the change. *@
 
 <MudText Typo="Typo.body1" Class="mud-text-secondary">
-    Every attribute data flow configured across all Connected Systems, in both directions. Use it to answer "where
-    does this attribute's value come from, and what writes it out?" without opening each Synchronisation Rule.
+    @SchemaText.DataFlowIntro
 </MudText>
 
 @* ─── Filters ─── *@
@@ -20,14 +20,14 @@
 @* to it and name the one that does, instead of a catch-all header over two unrelated concepts. *@
 <MudStack Row="true" Spacing="3" Class="mt-6 flex-wrap" AlignItems="AlignItems.Center">
     <MudItem Class="flex-grow-1">
-        <MudSelect T="SyncRuleDirection?" Label="Direction" Variant="Variant.Outlined" Dense="true" Clearable="true"
+        <MudSelect T="SyncRuleDirection?" Label="@SchemaText.DataFlowDirectionLabel" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_direction" ValueChanged="OnDirectionChangedAsync">
-            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Import)">Inbound</MudSelectItem>
-            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Export)">Outbound</MudSelectItem>
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Import)">@SchemaText.DataFlowDirectionInbound</MudSelectItem>
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Export)">@SchemaText.DataFlowDirectionOutbound</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudSelect T="int?" Label="Connected System" Variant="Variant.Outlined" Dense="true" Clearable="true"
+        <MudSelect T="int?" Label="@SchemaText.ConnectedSystemTermName" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_connectedSystemId" ValueChanged="OnConnectedSystemChangedAsync">
             @foreach (var option in _connectedSystemOptions)
             {
@@ -36,7 +36,7 @@
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudSelect T="int?" Label="Metaverse Object Type" Variant="Variant.Outlined" Dense="true" Clearable="true"
+        <MudSelect T="int?" Label="@SchemaText.DataFlowMetaverseObjectType" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_metaverseObjectTypeId" ValueChanged="OnMetaverseObjectTypeChangedAsync">
             @foreach (var option in _metaverseObjectTypeOptions)
             {
@@ -45,7 +45,7 @@
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudSelect T="int?" Label="Metaverse Attribute" Variant="Variant.Outlined" Dense="true" Clearable="true"
+        <MudSelect T="int?" Label="@SchemaText.DataFlowMetaverseAttribute" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_metaverseAttributeId" ValueChanged="OnMetaverseAttributeChangedAsync">
             @foreach (var option in _metaverseAttributeOptions)
             {
@@ -54,8 +54,8 @@
         </MudSelect>
     </MudItem>
     <MudItem>
-        <MudTooltip Text="Show only Inbound flows whose Metaverse Attribute is fed by more than one Synchronisation Rule. This is a normal arrangement; it is simply where the priority order decides which value wins." Arrow="true" Placement="Placement.Top">
-            <MudSwitch T="bool" Value="_multipleContributorsOnly" ValueChanged="OnMultipleContributorsOnlyChangedAsync" Color="Color.Primary">Multiple contributors</MudSwitch>
+        <MudTooltip Text="@SchemaText.MultipleContributorsTooltip" Arrow="true" Placement="Placement.Top">
+            <MudSwitch T="bool" Value="_multipleContributorsOnly" ValueChanged="OnMultipleContributorsOnlyChangedAsync" Color="Color.Primary">@SchemaText.MultipleContributors</MudSwitch>
         </MudTooltip>
     </MudItem>
 </MudStack>
@@ -63,9 +63,7 @@
 @* Search scope lives here rather than as helper text under the toolbar box, which would overflow the toolbar's *@
 @* fixed height and sit on the header row beneath it. *@
 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-    Search matches Synchronisation Rules, Connected Systems, object types, attribute names on either side, and
-    expression text. The attribute filters cannot match a flow whose relevant side is an expression, because an
-    expression's attribute references live in its text; search finds those.
+    @SchemaText.SearchScopeText
 </MudText>
 
 @* Columns are anchored to sides, not to source and target: those two swap sides between directions, so a Source
@@ -79,13 +77,13 @@
                      UrlParameterPrefix="df-"
                      DefaultSortBy="system"
                      LoadWindow="LoadFlowWindowAsync"
-                     SingularName="Data Flow"
-                     PluralName="Data Flows"
-                     SearchPlaceholder="Search data flows">
+                     SingularName="@SchemaText.DataFlowSingular"
+                     PluralName="@SchemaText.DataFlowPlural"
+                     SearchPlaceholder="@SchemaText.SearchDataFlows">
     <Columns>
-        <TemplateColumn Title="Connected System" Sortable="false">
+        <TemplateColumn Title="@SchemaText.ConnectedSystemTermName" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Connected System" Name="system" />
+                <VirtualisedSortHeader Title="@SchemaText.ConnectedSystemTermName" Name="system" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudLink Href="@($"/admin/connected-systems/{context.Item.ConnectedSystemId}")">@context.Item.ConnectedSystemName</MudLink>
@@ -93,24 +91,24 @@
         </TemplateColumn>
         @* Object type names are verbatim schema identifiers, not prose, so they take the inline code style
            wherever JIM shows them (see SyncRuleScopeTab, which does the same for both sides). *@
-        <TemplateColumn Title="Connected System Object Type" Sortable="false">
+        <TemplateColumn Title="@SchemaText.DataFlowCsObjectType" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Connected System Object Type" Name="csobjecttype" />
+                <VirtualisedSortHeader Title="@SchemaText.DataFlowCsObjectType" Name="csobjecttype" />
             </HeaderTemplate>
             <CellTemplate>
                 <code class="jim-code-inline">@context.Item.ConnectedSystemObjectTypeName</code>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Connected System Attribute" Sortable="false">
+        <TemplateColumn Title="@SchemaText.DataFlowCsAttribute" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Connected System Attribute" Name="csattribute" />
+                <VirtualisedSortHeader Title="@SchemaText.DataFlowCsAttribute" Name="csattribute" />
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line, and a flow can have several sources, so the sources
                    show their first and open the rest in a dialog drawn with the same chips. *@
                 @if (context.Item.Direction == SyncRuleDirection.Import)
                 {
-                    <OverflowList TItem="DataFlowSource" Items="@context.Item.Sources.OrderBy(s => s.Order).ToList()" Title="Sources">
+                    <OverflowList TItem="DataFlowSource" Items="@context.Item.Sources.OrderBy(s => s.Order).ToList()" Title="@SchemaText.DataFlowSources">
                         <ItemTemplate Context="source">
                             <AttributeChip Kind="@SourceKind(source)"
                                            Name="@source.DisplayName"
@@ -129,22 +127,22 @@
         <TemplateColumn Sortable="false">
             <HeaderTemplate></HeaderTemplate>
             <CellTemplate>
-                <MudTooltip Text="@($"{DataFlowDisplay.DirectionLabel(context.Item.Direction)}: the value moves this way")" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@string.Format(CultureInfo.CurrentCulture, SchemaText.DirectionTooltip, DataFlowDisplay.DirectionLabel(context.Item.Direction))" Arrow="true" Placement="Placement.Top">
                     <span class="mud-text-secondary">@DataFlowDisplay.DirectionArrow(context.Item.Direction)</span>
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Metaverse Object Type" Sortable="false">
+        <TemplateColumn Title="@SchemaText.DataFlowMetaverseObjectType" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Metaverse Object Type" Name="mvobjecttype" />
+                <VirtualisedSortHeader Title="@SchemaText.DataFlowMetaverseObjectType" Name="mvobjecttype" />
             </HeaderTemplate>
             <CellTemplate>
                 <code class="jim-code-inline">@context.Item.MetaverseObjectTypeName</code>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Metaverse Attribute" Sortable="false">
+        <TemplateColumn Title="@SchemaText.DataFlowMetaverseAttribute" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Metaverse Attribute" Name="mvattribute" />
+                <VirtualisedSortHeader Title="@SchemaText.DataFlowMetaverseAttribute" Name="mvattribute" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.Direction == SyncRuleDirection.Import)
@@ -155,7 +153,7 @@
                 }
                 else
                 {
-                    <OverflowList TItem="DataFlowSource" Items="@context.Item.Sources.OrderBy(s => s.Order).ToList()" Title="Sources">
+                    <OverflowList TItem="DataFlowSource" Items="@context.Item.Sources.OrderBy(s => s.Order).ToList()" Title="@SchemaText.DataFlowSources">
                         <ItemTemplate Context="source">
                             <AttributeChip Kind="@SourceKind(source)"
                                            Name="@source.DisplayName"
@@ -167,10 +165,10 @@
         </TemplateColumn>
         @if (ShowPriorityColumn)
         {
-            <TemplateColumn Title="Priority" Sortable="false">
+            <TemplateColumn Title="@SchemaText.DataFlowPriority" Sortable="false">
                 <HeaderTemplate>
-                    <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
-                        <VirtualisedSortHeader Title="Priority" Name="priority" />
+                    <MudTooltip Text="@SchemaText.PriorityColumnTooltip" Arrow="true" Placement="Placement.Top">
+                        <VirtualisedSortHeader Title="@SchemaText.DataFlowPriority" Name="priority" />
                     </MudTooltip>
                 </HeaderTemplate>
                 <CellTemplate>
@@ -200,14 +198,14 @@
             <CellTemplate>
                 @if (context.Item.NullIsValue == true)
                 {
-                    <MudTooltip Text="This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor." Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Null is a value</MudChip>
+                    <MudTooltip Text="@SchemaText.NullIsValueTooltip" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">@SchemaText.DataFlowNullIsValue</MudChip>
                     </MudTooltip>
                 }
                 else if (context.Item.EnforceState == true)
                 {
-                    <MudTooltip Text="Drift Correction is on for this rule: a value changed in the Connected System is corrected back to the Metaverse's value." Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Enforce State</MudChip>
+                    <MudTooltip Text="@SchemaText.DriftCorrectionTooltip" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">@SchemaText.DataFlowEnforceState</MudChip>
                     </MudTooltip>
                 }
                 else
@@ -216,16 +214,16 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Synchronisation Rule" Sortable="false">
+        <TemplateColumn Title="@SchemaText.PreviewSyncRuleWord" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Synchronisation Rule" Name="rule" />
+                <VirtualisedSortHeader Title="@SchemaText.PreviewSyncRuleWord" Name="rule" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudLink Href="@DataFlowDisplay.RuleHref(context.Item)">@context.Item.SyncRuleName</MudLink>
                 @if (!context.Item.SyncRuleEnabled)
                 {
-                    <MudTooltip Text="This Synchronisation Rule is disabled, so this flow is configured but moves no data." Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.PauseCircleOutline">Disabled</MudChip>
+                    <MudTooltip Text="@SchemaText.DisabledRuleTooltip" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.PauseCircleOutline">@CommonText.Disabled</MudChip>
                     </MudTooltip>
                 }
             </CellTemplate>
@@ -235,22 +233,22 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No data flows match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, SchemaText.DataFlowNoMatchSearch, grid.SearchText)"
+                             SecondaryText="@SchemaText.TryDifferentSearch"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else if (AnyFilterIsActive)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                             PrimaryText="No data flows match these filters"
-                             SecondaryText="Clear one of the filters above to widen the list." />
+                             PrimaryText="@SchemaText.DataFlowNoMatchFilters"
+                             SecondaryText="@SchemaText.DataFlowClearFilter" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SwapHoriz"
-                             PrimaryText="No data flows are configured"
-                             SecondaryText="Add Attribute Flows to a Synchronisation Rule and they will appear here." />
+                             PrimaryText="@SchemaText.DataFlowNoneConfigured"
+                             SecondaryText="@SchemaText.DataFlowNoneHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -372,9 +370,9 @@
     /// </summary>
     private string OptionsColumnHeader => _direction switch
     {
-        SyncRuleDirection.Import => "Null is a value",
-        SyncRuleDirection.Export => "Enforce State",
-        _ => "Options"
+        SyncRuleDirection.Import => SchemaText.DataFlowNullIsValue,
+        SyncRuleDirection.Export => SchemaText.DataFlowEnforceState,
+        _ => SchemaText.DataFlowOptions
     };
 
     /// <summary>

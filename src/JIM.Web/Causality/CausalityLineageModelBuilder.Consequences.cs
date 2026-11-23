@@ -1,17 +1,24 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
 
 public static partial class CausalityLineageModelBuilder
 {
+    private static string Format(string template, params object[] arguments) =>
+        string.Format(CultureInfo.CurrentCulture, template, arguments);
+
     /// <summary>
     /// Places the downward walk (#1811) on the Lineage's objects: each cohort's representative item is built into events
     /// exactly as its own page would build them, and each event lands on the object it happened to.
@@ -39,6 +46,7 @@ public static partial class CausalityLineageModelBuilder
         private int _sequence;
         private bool _furtherThanShown;
         private readonly List<CausalityLineageConsequence> _placed = [];
+        private readonly Dictionary<CausalityLineageConsequence, string> _waitingOn = new(ReferenceEqualityComparer.Instance);
         private HashSet<Guid> _livePendingExportIds = [];
 
         public CausalityLineageConsequenceSummary Place(CausalConsequences consequences)
@@ -76,7 +84,8 @@ public static partial class CausalityLineageModelBuilder
             {
                 case CausalConsequenceHopKind.OutstandingPendingExport:
                     cohortObject = ObjectFor(scope, cohort.ConnectedSystemId, cohort.ConnectedSystemName, isSourceSide: false);
-                    Add(cohortObject, OutstandingCard(cohort));
+                    var outstandingCard = OutstandingCard(cohort, out var outstandingWaitingOn);
+                    Add(cohortObject, outstandingCard, outstandingWaitingOn);
                     break;
 
                 case CausalConsequenceHopKind.ScheduledDeletion:
@@ -84,12 +93,12 @@ public static partial class CausalityLineageModelBuilder
                     Add(cohortObject, new CausalityLineageConsequence
                     {
                         Kind = CausalityLineageConsequenceKind.Waiting,
-                        Title = "Deletion scheduled",
-                        Text = "Its grace period is running. It will be deleted when the grace period ends, unless it joins a Connected System Object again first.",
+                        Title = CausalityText.LineageDeletionScheduledTitle,
+                        Text = CausalityText.LineageDeletionScheduledText,
                         DueAt = cohort.DueAt,
-                        PillLabel = "Deletion scheduled",
+                        PillLabel = CausalityText.LineageDeletionScheduledTitle,
                         PillTone = CausalityTone.Warning
-                    });
+                    }, CausalityText.LineageWaitingOnScheduledDeletion);
                     break;
 
                 default:
@@ -122,10 +131,10 @@ public static partial class CausalityLineageModelBuilder
                 Add(cohortObject, new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.FurtherThanShown,
-                    Title = "This goes further than shown",
+                    Title = CausalityText.LineageFurtherThanShownTitle,
                     Text = farthestItemId != null
-                        ? "The walk stopped at the item above. Carry on from there to see what followed."
-                        : "The walk stopped at the items above. Carry on from any of them by its own link.",
+                        ? CausalityText.LineageWalkStoppedAtItem
+                        : CausalityText.LineageWalkStoppedAtItems,
                     LinkText = farthestItemId != null ? ContinueFromText(farthestName) : null,
                     LinkHref = farthestItemId is { } itemId ? context.Links.ItemHref(itemId) : null
                 });
@@ -179,7 +188,7 @@ public static partial class CausalityLineageModelBuilder
                     var subjectName = ObjectDescription.ChipName(representative.DisplayNameSnapshot, representative.ExternalIdSnapshot);
                     target.ConsequenceHead = recordLink != null
                         ? new ColumnHead(recordLink.Label, IsRoleHead: false, recordLink.Href, recordLink.ObjectTypeName)
-                        : new ColumnHead(subjectName ?? target.SystemName ?? "Connected System Object", IsRoleHead: false, Href: null, ObjectTypeName: null);
+                        : new ColumnHead(subjectName ?? target.SystemName ?? CausalityText.LineageConnectedSystemObjectFallback, IsRoleHead: false, Href: null, ObjectTypeName: null);
                 }
 
                 var isReferenceRemoval = first && removalObject != null;
@@ -227,8 +236,8 @@ public static partial class CausalityLineageModelBuilder
                 Add(disconnected, new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.Settled,
-                    Title = "Nothing more follows for this Connected System Object",
-                    Text = $"It stays in {disconnected.SystemName ?? "its Connected System"}, and JIM no longer manages it."
+                    Title = CausalityText.LineageNothingMoreFollows,
+                    Text = Format(CausalityText.LineageStaysInSystem, disconnected.SystemName ?? CausalityText.LineageItsConnectedSystem)
                 });
             }
 
@@ -237,23 +246,23 @@ public static partial class CausalityLineageModelBuilder
 
         private void PlaceEnding(CausalConsequenceEndingCount ending, ColumnState target)
         {
-            var systemName = ending.ConnectedSystemName ?? "its Connected System";
+            var systemName = ending.ConnectedSystemName ?? CausalityText.LineageItsConnectedSystem;
             var card = ending.Ending switch
             {
                 CausalConsequenceEnding.WaitingForSynchronisation => new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.Waiting,
-                    Title = $"Waiting for the next Synchronisation of {systemName}",
-                    Text = $"No Synchronisation of {systemName} has run since this import, so nothing has acted on the change yet.",
-                    PillLabel = "Waiting for a Synchronisation",
+                    Title = Format(CausalityText.LineageWaitingForSynchronisationTitle, systemName),
+                    Text = Format(CausalityText.LineageWaitingForSynchronisationText, systemName),
+                    PillLabel = CausalityText.LineageWaitingForSynchronisationPill,
                     PillTone = CausalityTone.Warning
                 },
                 CausalConsequenceEnding.NothingFollowed => new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.Settled,
-                    Title = "Nothing followed",
-                    Text = $"A Synchronisation of {systemName} has run since this import and changed nothing as a result.",
-                    PillLabel = "Nothing followed",
+                    Title = CausalityText.LineageNothingFollowed,
+                    Text = Format(CausalityText.LineageNothingFollowedText, systemName),
+                    PillLabel = CausalityText.LineageNothingFollowed,
                     PillTone = CausalityTone.Secondary
                 },
                 // Nothing the item's kind could cause was recorded: there is nothing to say, and saying nothing is right.
@@ -261,59 +270,67 @@ public static partial class CausalityLineageModelBuilder
             };
 
             if (card != null)
-                Add(target, card);
+                Add(target, card, ending.Ending == CausalConsequenceEnding.WaitingForSynchronisation
+                    ? Format(CausalityText.LineageWaitingOnSynchronisation, systemName)
+                    : null);
         }
 
-        private static CausalityLineageConsequence OutstandingCard(CausalConsequenceCohort cohort)
+        private static CausalityLineageConsequence OutstandingCard(CausalConsequenceCohort cohort, out string? waitingOn)
         {
             var count = cohort.MemberCount;
-            var systemName = cohort.ConnectedSystemName ?? "its Connected System";
-            var exports = count == 1 ? "1 Pending Export" : $"{count} Pending Exports";
+            var systemName = cohort.ConnectedSystemName ?? CausalityText.LineageItsConnectedSystem;
             var (linkText, linkHref) = PendingExportLink(cohort);
+            waitingOn = cohort.Ending switch
+            {
+                CausalConsequenceEnding.NeedsAttention => null,
+                CausalConsequenceEnding.WaitingForRetry => CausalityText.LineageWaitingOnRetry,
+                CausalConsequenceEnding.WaitingForConfirmingImport => Format(CausalityText.LineageWaitingOnImport, systemName),
+                _ => Format(CausalityText.LineageWaitingOnExport, systemName)
+            };
             return cohort.Ending switch
             {
                 CausalConsequenceEnding.NeedsAttention => new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.NeedsAttention,
-                    Title = "Needs attention",
-                    Text = $"{exports} {(count == 1 ? "has" : "have")} stopped, and nothing more will happen until someone acts on {(count == 1 ? "it" : "them")}.",
+                    Title = CausalityText.LineageNeedsAttention,
+                    Text = Format(count == 1 ? CausalityText.LineageNeedsAttentionTextOne : CausalityText.LineageNeedsAttentionTextOther, count),
                     LinkText = linkText,
                     LinkHref = linkHref,
-                    PillLabel = "Needs attention",
+                    PillLabel = CausalityText.LineageNeedsAttention,
                     PillTone = CausalityTone.Error,
                     MemberCount = count
                 },
                 CausalConsequenceEnding.WaitingForRetry => new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.Waiting,
-                    Title = "Waiting for a retry",
-                    Text = $"{exports} will be retried on the next Export of {systemName}.",
+                    Title = CausalityText.LineageWaitingForRetryTitle,
+                    Text = Format(count == 1 ? CausalityText.LineageWaitingForRetryTextOne : CausalityText.LineageWaitingForRetryTextOther, count, systemName),
                     LinkText = linkText,
                     LinkHref = linkHref,
                     DueAt = cohort.DueAt,
-                    PillLabel = "Retry pending",
+                    PillLabel = CausalityText.LineageRetryPending,
                     PillTone = CausalityTone.Warning,
                     MemberCount = count
                 },
                 CausalConsequenceEnding.WaitingForConfirmingImport => new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.Waiting,
-                    Title = $"Waiting for the next import of {systemName}",
-                    Text = $"Exported, and waiting for an import to confirm the change landed.",
+                    Title = Format(CausalityText.LineageWaitingForImportTitle, systemName),
+                    Text = CausalityText.LineageWaitingForImportText,
                     LinkText = linkText,
                     LinkHref = linkHref,
-                    PillLabel = "Waiting for a confirming import",
+                    PillLabel = CausalityText.LineageWaitingForImportPill,
                     PillTone = CausalityTone.Warning,
                     MemberCount = count
                 },
                 _ => new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.Waiting,
-                    Title = $"Waiting for the next Export of {systemName}",
-                    Text = count == 1 ? "The change is queued as a Pending Export." : $"{exports} are queued.",
+                    Title = Format(CausalityText.LineageWaitingForExportTitle, systemName),
+                    Text = count == 1 ? CausalityText.LineageQueuedAsPendingExport : Format(CausalityText.LineageQueuedPendingExports, count),
                     LinkText = linkText,
                     LinkHref = linkHref,
-                    PillLabel = "Waiting for an Export",
+                    PillLabel = CausalityText.LineageWaitingForExportPill,
                     PillTone = CausalityTone.Warning,
                     MemberCount = count
                 }
@@ -330,8 +347,8 @@ public static partial class CausalityLineageModelBuilder
 
             var queueHref = $"/admin/connected-systems/{systemId}/pending-exports";
             return cohort.MemberCount == 1 && cohort.Members.FirstOrDefault()?.PendingExportId is { } pendingExportId
-                ? ("View Pending Export", $"{queueHref}/{pendingExportId}")
-                : ("View Pending Exports", queueHref);
+                ? (CausalityText.LineageViewPendingExport, $"{queueHref}/{pendingExportId}")
+                : (CausalityText.LineageViewPendingExports, queueHref);
         }
 
         /// <summary>
@@ -342,9 +359,9 @@ public static partial class CausalityLineageModelBuilder
         {
             Kind = CausalityLineageConsequenceKind.Outcome,
             Title = cohort.MemberCount == 1
-                ? "A later run acted on this object"
-                : $"A later run acted on {cohort.MemberCount} {noun.For(cohort.MemberCount)}",
-            Text = "The items it recorded are no longer retained.",
+                ? CausalityText.LineageLaterRunActedOnObject
+                : Format(CausalityText.LineageLaterRunActedOnObjects, cohort.MemberCount, noun.For(cohort.MemberCount)),
+            Text = CausalityText.LineageItemsNoLongerRetained,
             Occurred = cohort.FirstOccurred,
             Cohort = cohort.MemberCount > 1 ? cohort : null,
             MembersNoun = noun.For(cohort.MemberCount),
@@ -398,7 +415,7 @@ public static partial class CausalityLineageModelBuilder
                 // of its own.
                 if (target.ConsequenceHead is not { IsRoleHead: true })
                 {
-                    var title = noun.Type == null && noun.Plural == null ? "Connected System Objects" : noun.For(cohort.MemberCount);
+                    var title = noun.Type == null && noun.Plural == null ? CausalityText.LineageConnectedSystemObjectsFallback : noun.For(cohort.MemberCount);
                     target.ConsequenceHead = new ColumnHead(title, IsRoleHead: true, Href: null, ObjectTypeName: null);
                 }
                 target.MemberCount = Math.Max(target.MemberCount ?? 0, cohort.MemberCount);
@@ -451,8 +468,15 @@ public static partial class CausalityLineageModelBuilder
             return created;
         }
 
-        private void Add(ColumnState target, CausalityLineageConsequence card)
+        /// <summary>
+        /// Places a card. A waiting card also records what it is waiting on, in words, for the footer's sentences; the
+        /// footer never reads that back out of the card's own (translated) title.
+        /// </summary>
+        private void Add(ColumnState target, CausalityLineageConsequence card, string? waitingOn = null)
         {
+            if (waitingOn != null)
+                _waitingOn[card] = waitingOn;
+
             target.Consequences.Add((card, _sequence++));
             _placed.Add(card);
         }
@@ -492,15 +516,15 @@ public static partial class CausalityLineageModelBuilder
 
             var sentences = waiting
                 .GroupBy(WaitingOn)
-                .Select(g => $"{g.Count()} {(g.Count() == 1 ? "branch is" : "branches are")} waiting on {g.Key}.")
+                .Select(g => Format(g.Count() == 1 ? CausalityText.LineageBranchesWaitingOne : CausalityText.LineageBranchesWaitingOther, g.Count(), g.Key))
                 .ToList();
             if (needsAttention > 0)
-                sentences.Add($"{needsAttention} {(needsAttention == 1 ? "branch needs" : "branches need")} attention.");
+                sentences.Add(Format(needsAttention == 1 ? CausalityText.LineageBranchNeedsAttentionOne : CausalityText.LineageBranchNeedsAttentionOther, needsAttention));
             if (sentences.Count == 0 && _placed.Count > 0)
             {
                 var nothingFollowed = consequences.Cohorts.Count == 0
                     && _placed.All(c => c.Kind == CausalityLineageConsequenceKind.Settled);
-                sentences.Add(nothingFollowed ? "Nothing followed from this run." : "Every branch has run to its end.");
+                sentences.Add(nothingFollowed ? CausalityText.LineageNothingFollowedFromRun : CausalityText.LineageEveryBranchEnded);
             }
 
             var pills = _placed
@@ -509,7 +533,7 @@ public static partial class CausalityLineageModelBuilder
                 .Select(g =>
                 {
                     var count = g.Sum(c => c.MemberCount);
-                    return new CausalityPill(count > 1 ? $"{g.Key.Item1} · {count}" : g.Key.Item1, g.Key.PillTone);
+                    return new CausalityPill(count > 1 ? Format(CausalityText.LineagePillWithCount, g.Key.Item1, count) : g.Key.Item1, g.Key.PillTone);
                 })
                 .ToList();
 
@@ -527,20 +551,8 @@ public static partial class CausalityLineageModelBuilder
         /// <summary>
         /// What a waiting card is waiting on, as the footer phrases it.
         /// </summary>
-        private static string WaitingOn(CausalityLineageConsequence card)
-        {
-            const string synchronisationPrefix = "Waiting for the next Synchronisation of ";
-            const string exportPrefix = "Waiting for the next Export of ";
-            const string importPrefix = "Waiting for the next import of ";
-            var title = card.DisplayTitle;
-            if (title.StartsWith(synchronisationPrefix, StringComparison.Ordinal))
-                return $"a Synchronisation of {title[synchronisationPrefix.Length..]}";
-            if (title.StartsWith(exportPrefix, StringComparison.Ordinal))
-                return $"an Export of {title[exportPrefix.Length..]}";
-            if (title.StartsWith(importPrefix, StringComparison.Ordinal))
-                return $"an import of {title[importPrefix.Length..]}";
-            return card.PillLabel == "Retry pending" ? "a retry" : "a scheduled deletion";
-        }
+        private string WaitingOn(CausalityLineageConsequence card) =>
+            _waitingOn.TryGetValue(card, out var waitingOn) ? waitingOn : CausalityText.LineageWaitingOnScheduledDeletion;
 
         private static IEnumerable<(CausalityEvent Event, CausalityEvent? Parent)> Flatten(IEnumerable<CausalityEvent> events, CausalityEvent? parent)
         {
@@ -569,7 +581,15 @@ public static partial class CausalityLineageModelBuilder
                 return null;
 
             return activity.ConnectedSystemRunType is { } runType and not ConnectedSystemRunType.NotSet
-                ? runType.ToString().SplitOnCapitalLetters()
+                ? runType switch
+                {
+                    ConnectedSystemRunType.FullImport => CausalityText.LineageRunTypeFullImport,
+                    ConnectedSystemRunType.DeltaImport => CausalityText.LineageRunTypeDeltaImport,
+                    ConnectedSystemRunType.FullSynchronisation => CausalityText.LineageRunTypeFullSynchronisation,
+                    ConnectedSystemRunType.DeltaSynchronisation => CausalityText.LineageRunTypeDeltaSynchronisation,
+                    ConnectedSystemRunType.Export => CausalityText.LineageRunTypeExport,
+                    _ => runType.ForDisplay()
+                }
                 : Helpers.GetActivityTargetTypeName(activity.TargetType);
         }
 
@@ -585,20 +605,20 @@ public static partial class CausalityLineageModelBuilder
                 {
                     case CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval:
                         return cohort.MemberCount == 1
-                            ? "The Metaverse Object it referenced was deleted."
-                            : "The Metaverse Object they referenced was deleted.";
+                            ? CausalityText.LineageWhyReferencedDeletedOne
+                            : CausalityText.LineageWhyReferencedDeletedOther;
                     case CausalEdgeType.MetaverseObjectDeletionCausedDeprovision:
-                        return "Its Metaverse Object was deleted.";
+                        return CausalityText.LineageWhyMetaverseObjectDeleted;
                     case CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion:
-                        return "The grace period its Deletion Rule allowed had ended.";
+                        return CausalityText.LineageWhyGracePeriodEnded;
                     case CausalEdgeType.ExportRejectionCausedGeneratedValueRevision:
-                        return "The export of its generated value was rejected.";
+                        return CausalityText.LineageWhyExportRejected;
                 }
             }
 
             return parent?.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
                    && causalityEvent.Lane != CausalityLane.Identity
-                ? "Its Metaverse Object was deleted."
+                ? CausalityText.LineageWhyMetaverseObjectDeleted
                 : null;
         }
 
@@ -614,22 +634,28 @@ public static partial class CausalityLineageModelBuilder
             switch (causalityEvent.OutcomeType)
             {
                 case ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued:
-                    return ("Deprovisioning Action", "Delete", "This rule removes the objects it deprovisions rather than leaving them in place.");
+                    return (CausalityText.LineageSettingDeprovisioningAction, CausalityText.LineageSettingDelete, CausalityText.LineageSettingDeleteText);
                 case ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected:
-                    return ("Deprovisioning Action", "Disconnect", "This rule leaves the objects it deprovisions in place, so nothing was exported.");
+                    return (CausalityText.LineageSettingDeprovisioningAction, CausalityText.LineageSettingDisconnect, CausalityText.LineageSettingDisconnectText);
                 case ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted:
                 case ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled:
                     if (MvoDeletionPolicySnapshot.FromJson(representative.DeletionPolicySnapshotJson) is not { } policy)
                         return null;
 
-                    var rule = policy.DeletionRule.ToString().SplitOnCapitalLetters();
+                    var rule = policy.DeletionRule switch
+                    {
+                        MetaverseObjectDeletionRule.Manual => CausalityText.LineageDeletionRuleManual,
+                        MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => CausalityText.LineageDeletionRuleWhenLastConnectorDisconnected,
+                        MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => CausalityText.LineageDeletionRuleWhenAuthoritativeSourceDisconnected,
+                        _ => policy.DeletionRule.ForDisplay()
+                    };
                     var gracePeriod = policy.GracePeriod is { } period && period > TimeSpan.Zero ? period : (TimeSpan?)null;
                     var text = causalityEvent.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled
-                        ? $"Grace period: {gracePeriod?.ToFriendlyDuration() ?? "none"}, so it was scheduled for deletion rather than deleted in the same run."
+                        ? Format(CausalityText.LineageGracePeriodScheduled, gracePeriod?.ToFriendlyDuration() ?? CausalityText.LineageGracePeriodNone)
                         : gracePeriod is { } grace
-                            ? $"Deleted once its {grace.ToFriendlyDuration()} grace period had ended."
-                            : "No grace period, so it was deleted in the same run.";
-                    return ("Deletion Rule", rule, text);
+                            ? Format(CausalityText.LineageGracePeriodEnded, grace.ToFriendlyDuration())
+                            : CausalityText.LineageNoGracePeriod;
+                    return (CausalityText.LineageSettingDeletionRule, rule, text);
                 default:
                     return null;
             }
@@ -637,20 +663,20 @@ public static partial class CausalityLineageModelBuilder
 
         private static string ReferenceRemovalTitle(CausalConsequenceCohort cohort, string? deletedName, CohortNoun noun)
         {
-            var removed = string.IsNullOrWhiteSpace(deletedName) ? "a deleted Metaverse Object" : deletedName;
-            var attribute = string.IsNullOrWhiteSpace(cohort.AttributeName) ? "a reference" : cohort.AttributeName;
+            var removed = string.IsNullOrWhiteSpace(deletedName) ? CausalityText.LineageDeletedMetaverseObjectFallback : deletedName;
+            var attribute = string.IsNullOrWhiteSpace(cohort.AttributeName) ? CausalityText.LineageReferenceFallback : cohort.AttributeName;
             return cohort.MemberCount == 1
-                ? $"Removed {removed} from {attribute}"
-                : $"Removed {removed} from {attribute} on {cohort.MemberCount} {noun.For(cohort.MemberCount)}";
+                ? Format(CausalityText.LineageRemovedFrom, removed, attribute)
+                : Format(CausalityText.LineageRemovedFromOnObjects, removed, attribute, cohort.MemberCount, noun.For(cohort.MemberCount));
         }
 
         private static string ReferenceRemovalPill(CausalConsequenceCohort cohort) =>
-            string.IsNullOrWhiteSpace(cohort.AttributeName) ? "Reference removed" : $"Removed from {cohort.AttributeName}";
+            string.IsNullOrWhiteSpace(cohort.AttributeName) ? CausalityText.LineageReferenceRemoved : Format(CausalityText.LineageRemovedFromAttribute, cohort.AttributeName);
 
         private static string ConfirmationTitle(CausalConsequenceCohort cohort, CohortNoun noun) =>
             cohort.MemberCount == 1
-                ? "Confirmed by the next import"
-                : $"Confirmed by the next import, on {cohort.MemberCount} {noun.For(cohort.MemberCount)}";
+                ? CausalityText.LineageConfirmedByNextImport
+                : Format(CausalityText.LineageConfirmedByNextImportOnObjects, cohort.MemberCount, noun.For(cohort.MemberCount));
 
         private static IEnumerable<CausalConsequenceCohort> AllCohorts(IEnumerable<CausalConsequenceCohort> cohorts) =>
             cohorts.SelectMany(c => AllCohorts(c.Consequences).Prepend(c));
@@ -691,12 +717,12 @@ public static partial class CausalityLineageModelBuilder
         public string For(int count)
         {
             if (count == 1)
-                return string.IsNullOrWhiteSpace(Type) ? "object" : Type;
+                return string.IsNullOrWhiteSpace(Type) ? CausalityText.LineageNounObject : Type;
 
             if (!string.IsNullOrWhiteSpace(Plural))
                 return Plural;
 
-            return string.IsNullOrWhiteSpace(Type) ? "objects" : $"{Type} objects";
+            return string.IsNullOrWhiteSpace(Type) ? CausalityText.LineageNounObjects : Format(CausalityText.LineageNounTypeObjects, Type);
         }
     }
 }

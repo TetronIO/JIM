@@ -1,0 +1,613 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExampleData" xml:space="preserve">
+    <value>Example Data</value>
+    <comment>Breadcrumb and heading term for the Example Data area.</comment>
+  </data>
+  <data name="ExampleDataHeading" xml:space="preserve">
+    <value>Example Data:</value>
+    <comment>Heading label before the page name on the Example Data list pages.</comment>
+  </data>
+  <data name="ExampleDataSet" xml:space="preserve">
+    <value>Example Data Set</value>
+    <comment>Singular noun for a Data Set: the grid count, the page tab title and the change history label.</comment>
+  </data>
+  <data name="ExampleDataSets" xml:space="preserve">
+    <value>Example Data Sets</value>
+    <comment>Plural noun for Data Sets: the list page title and help title, the grid count, and a section heading.</comment>
+  </data>
+  <data name="ExampleDataSetsLabel" xml:space="preserve">
+    <value>Example Data Sets:</value>
+    <comment>Heading label before the Data Set name on the Data Set detail page.</comment>
+  </data>
+  <data name="ExampleDataSetPageTitle" xml:space="preserve">
+    <value>Example Data Set: {0}</value>
+    <comment>Browser tab title. {0} is the Data Set name.</comment>
+  </data>
+  <data name="ExampleDataTemplate" xml:space="preserve">
+    <value>Example Data Template</value>
+    <comment>Singular noun for a template: help title and change history label.</comment>
+  </data>
+  <data name="ExampleDataTemplates" xml:space="preserve">
+    <value>Example Data Templates</value>
+    <comment>Plural noun for templates: list page title, help title and the grid count.</comment>
+  </data>
+  <data name="DataGenerationTemplateTitle" xml:space="preserve">
+    <value>Data Generation Template: {0}</value>
+    <comment>Browser tab title on the template detail page. {0} is the template name.</comment>
+  </data>
+  <data name="DataGenerationTemplateLabel" xml:space="preserve">
+    <value>Data Generation Template:</value>
+    <comment>Heading label before the template name on the template detail page.</comment>
+  </data>
+  <data name="NewDataGenerationTemplateTitle" xml:space="preserve">
+    <value>New Data Generation Template</value>
+    <comment>Title of the dialog that creates a template.</comment>
+  </data>
+  <data name="RenameDataGenerationTemplateTitle" xml:space="preserve">
+    <value>Rename Data Generation Template</value>
+    <comment>Title of the dialog that renames a template.</comment>
+  </data>
+  <data name="DeleteDataGenerationTemplateTitle" xml:space="preserve">
+    <value>Delete Data Generation Template?</value>
+    <comment>Title of the confirmation before a template is deleted.</comment>
+  </data>
+  <data name="DeleteDataGenerationTemplateMessage" xml:space="preserve">
+    <value>"{0}" will be deleted. Metaverse Objects already generated from it are not affected.</value>
+    <comment>Confirmation message. {0} is the template name.</comment>
+  </data>
+  <data name="DataSetsTitle" xml:space="preserve">
+    <value>Data Sets</value>
+    <comment>Heading word and breadcrumb for the Data Sets list.</comment>
+  </data>
+  <data name="DatasetsBreadcrumb" xml:space="preserve">
+    <value>Datasets</value>
+    <comment>Breadcrumb on the Data Set detail page (spelled as one word in English).</comment>
+  </data>
+  <data name="TemplatesTitle" xml:space="preserve">
+    <value>Templates</value>
+    <comment>Heading word for the Templates list.</comment>
+  </data>
+  <data name="TemplatesOrDataSets" xml:space="preserve">
+    <value>Templates or Data Sets</value>
+    <comment>Accessible name for the switch between the Templates and Data Sets lists.</comment>
+  </data>
+  <data name="StartFrom" xml:space="preserve">
+    <value>Start from</value>
+    <comment>Accessible name for the choice between a blank template and a copy.</comment>
+  </data>
+  <data name="DataSetListInfo" xml:space="preserve">
+    <value>You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fully configure JIM with Connected Systems, Synchronisation Rules and wait for data to be imported and synchronised. Example Data Sets provide the raw values that are used to construct example data in Example Data Templates.</value>
+    <comment>Help text on the Data Sets list page.</comment>
+  </data>
+  <data name="TemplateListInfo" xml:space="preserve">
+    <value>You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fully configure JIM with Connected Systems, Synchronisation Rules and wait for data to be imported and synchronised. Templates define example data to be created in JIM. They consist of one or more object types, with data sets being used to generate values for the object attributes.</value>
+    <comment>Help text on the templates list page.</comment>
+  </data>
+  <data name="DataSetDetailInfo" xml:space="preserve">
+    <value>An Example Data Set is a named list of values, such as first names or job titles, that Example Data Templates draw on to generate attribute values. A built-in set cannot be changed.</value>
+    <comment>Help text on the Data Set detail page.</comment>
+  </data>
+  <data name="TemplateDetailInfo" xml:space="preserve">
+    <value>A template describes the Metaverse Objects to generate: how many of each Object Type, and how each attribute's values are made. Executing it adds those objects to the Metaverse, where JIM never deletes them automatically.</value>
+    <comment>Help text on the template detail page.</comment>
+  </data>
+  <data name="NoDataSetsMatch" xml:space="preserve">
+    <value>No Example Data Sets match "{0}"</value>
+    <comment>Empty-list message after a search. {0} is the search text.</comment>
+  </data>
+  <data name="NoDataSetsYet" xml:space="preserve">
+    <value>No Example Data Sets yet</value>
+    <comment>Empty-list message when there are no Data Sets.</comment>
+  </data>
+  <data name="NoDataSetsYetHint" xml:space="preserve">
+    <value>Example Data Sets provide the raw values used to construct example data in Example Data Templates.</value>
+    <comment>Hint under the empty Data Set list message.</comment>
+  </data>
+  <data name="NoTemplatesMatch" xml:space="preserve">
+    <value>No Example Data Templates match "{0}"</value>
+    <comment>Empty-list message after a search. {0} is the search text.</comment>
+  </data>
+  <data name="NoTemplatesYet" xml:space="preserve">
+    <value>No Example Data Templates yet</value>
+    <comment>Empty-list message when there are no templates.</comment>
+  </data>
+  <data name="NoTemplatesYetHint" xml:space="preserve">
+    <value>Templates define the example data that can be created in JIM.</value>
+    <comment>Hint under the empty template list message.</comment>
+  </data>
+  <data name="BuiltIn" xml:space="preserve">
+    <value>Built-in?</value>
+    <comment>Column heading and field label: whether the item ships with JIM.</comment>
+  </data>
+  <data name="CultureColumn" xml:space="preserve">
+    <value>Culture</value>
+    <comment>Column heading and field label: the language and region of a Data Set.</comment>
+  </data>
+  <data name="Values" xml:space="preserve">
+    <value>Values</value>
+    <comment>Column heading, field label and section heading: the values in a Data Set.</comment>
+  </data>
+  <data name="Attribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading and field label for a Metaverse Attribute in a template.</comment>
+  </data>
+  <data name="PopulationPercentage" xml:space="preserve">
+    <value>Population %</value>
+    <comment>Column heading: the percentage of objects given a value for an attribute.</comment>
+  </data>
+  <data name="Rules" xml:space="preserve">
+    <value>Rules</value>
+    <comment>Column heading: the generation rules of an attribute.</comment>
+  </data>
+  <data name="Details" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab title and section heading.</comment>
+  </data>
+  <data name="Changes" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab title for the configuration change history.</comment>
+  </data>
+  <data name="Duplicate" xml:space="preserve">
+    <value>Duplicate</value>
+    <comment>Button, and tooltip, that copies a template.</comment>
+  </data>
+  <data name="DuplicateNamed" xml:space="preserve">
+    <value>Duplicate {0}</value>
+    <comment>Accessible name for the duplicate button of one template, and the title of the duplicate dialog. {0} is the template name.</comment>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Rename</value>
+    <comment>Button that renames a template, and the confirm button of the change reason dialog for a rename.</comment>
+  </data>
+  <data name="NewTemplate" xml:space="preserve">
+    <value>New Template</value>
+    <comment>Button that creates a template.</comment>
+  </data>
+  <data name="CreateTemplate" xml:space="preserve">
+    <value>Create Template</value>
+    <comment>Button that creates a template in the dialog.</comment>
+  </data>
+  <data name="BuiltInTemplatesCannotBeDeleted" xml:space="preserve">
+    <value>Built-in templates cannot be deleted</value>
+    <comment>Tooltip on a disabled delete button for a built-in template.</comment>
+  </data>
+  <data name="DeleteNamed" xml:space="preserve">
+    <value>Delete {0}</value>
+    <comment>Accessible name for the delete button of one template. {0} is the template name.</comment>
+  </data>
+  <data name="TemplateToCopy" xml:space="preserve">
+    <value>Template to copy</value>
+    <comment>Field label for the template a copy is made from.</comment>
+  </data>
+  <data name="CopyHelp" xml:space="preserve">
+    <value>The new template starts with the same Metaverse Object Types and rules, and can then be changed.</value>
+    <comment>Help text under the template to copy.</comment>
+  </data>
+  <data name="MetaverseObjectType" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Field label for a Metaverse Object Type.</comment>
+  </data>
+  <data name="FirstTypeHelp" xml:space="preserve">
+    <value>The first Metaverse Object Type to generate. You can add attributes and more types next.</value>
+    <comment>Help text under the first Metaverse Object Type of a new template.</comment>
+  </data>
+  <data name="ObjectsToCreate" xml:space="preserve">
+    <value>Objects to create</value>
+    <comment>Field label for how many objects of a type to create.</comment>
+  </data>
+  <data name="StartBlank" xml:space="preserve">
+    <value>Start blank</value>
+    <comment>Option to start a new template with nothing copied.</comment>
+  </data>
+  <data name="CopyExistingTemplate" xml:space="preserve">
+    <value>Copy an existing template</value>
+    <comment>Option to start a new template by copying another.</comment>
+  </data>
+  <data name="TemplateToCopyMissing" xml:space="preserve">
+    <value>The template to copy no longer exists.</value>
+    <comment>Error when the template being copied has been deleted.</comment>
+  </data>
+  <data name="CopyOfName" xml:space="preserve">
+    <value>{0} (copy)</value>
+    <comment>Default name for a copied template. {0} is the original name.</comment>
+  </data>
+  <data name="TemplateDeleted" xml:space="preserve">
+    <value>Deleted "{0}".</value>
+    <comment>Snackbar after a template is deleted. {0} is the template name.</comment>
+  </data>
+  <data name="AddObjectType" xml:space="preserve">
+    <value>Add Object Type</value>
+    <comment>Button that adds a Metaverse Object Type to a template.</comment>
+  </data>
+  <data name="AddMetaverseObjectType" xml:space="preserve">
+    <value>Add Metaverse Object Type</value>
+    <comment>Title of the dialog that adds a Metaverse Object Type.</comment>
+  </data>
+  <data name="ObjectsToCreateTitle" xml:space="preserve">
+    <value>Objects to Create: {0}</value>
+    <comment>Title of the dialog that changes how many objects of a type to create. {0} is the type name.</comment>
+  </data>
+  <data name="ObjectsToCreateChip" xml:space="preserve">
+    <value>{0} to create</value>
+    <comment>Count chip for a type in a template. {0} is the number, already formatted.</comment>
+  </data>
+  <data name="ChangeHowManyToCreate" xml:space="preserve">
+    <value>Change how many to create</value>
+    <comment>Tooltip on the button that changes a type's count.</comment>
+  </data>
+  <data name="ChangeHowManyNamedToCreate" xml:space="preserve">
+    <value>Change how many {0} to create</value>
+    <comment>Accessible name for the button that changes a type's count. {0} is the plural type name.</comment>
+  </data>
+  <data name="AllObjectTypesInTemplate" xml:space="preserve">
+    <value>Every Metaverse Object Type is already in this template.</value>
+    <comment>Help text when no Metaverse Object Type can be added.</comment>
+  </data>
+  <data name="NeedsAtLeastOneType" xml:space="preserve">
+    <value>A template needs at least one Metaverse Object Type</value>
+    <comment>Tooltip on a disabled remove button for the only type in a template.</comment>
+  </data>
+  <data name="RemoveFromTemplate" xml:space="preserve">
+    <value>Remove from template</value>
+    <comment>Tooltip on the button that removes a type from a template.</comment>
+  </data>
+  <data name="RemoveNamedFromTemplate" xml:space="preserve">
+    <value>Remove {0} from template</value>
+    <comment>Accessible name for the button that removes a type from a template. {0} is the type name.</comment>
+  </data>
+  <data name="RemoveNamed" xml:space="preserve">
+    <value>Remove {0}</value>
+    <comment>Accessible name for a remove button. {0} is the name of the item being removed.</comment>
+  </data>
+  <data name="RemoveNamedTitle" xml:space="preserve">
+    <value>Remove {0}?</value>
+    <comment>Title of the confirmation before removing a type or attribute. {0} is its name.</comment>
+  </data>
+  <data name="RemoveObjectTypeMessage" xml:space="preserve">
+    <value>{0} and all {1} of their Template Attributes will be removed from this template.</value>
+    <comment>Confirmation message. {0} is the plural type name; {1} is the count, already formatted.</comment>
+  </data>
+  <data name="ThisAttribute" xml:space="preserve">
+    <value>this attribute</value>
+    <comment>Stands in for an attribute's name when it has no Metaverse Attribute.</comment>
+  </data>
+  <data name="RemoveAttributeMessage" xml:space="preserve">
+    <value>{0} will no longer be generated for {1}.</value>
+    <comment>Confirmation message. {0} is the attribute name; {1} is the plural type name.</comment>
+  </data>
+  <data name="AttributeReadersOne" xml:space="preserve">
+    <value>{0} reads its value in a pattern or a condition, so check it afterwards.</value>
+    <comment>Appended to the removal message when one other attribute reads the attribute being removed. {0} is that attribute's name.</comment>
+  </data>
+  <data name="AttributeReadersOther" xml:space="preserve">
+    <value>{0} read its value in a pattern or a condition, so check them afterwards.</value>
+    <comment>Appended to the removal message when several other attributes read the attribute being removed. {0} is the list of names.</comment>
+  </data>
+  <data name="AddAttribute" xml:space="preserve">
+    <value>Add Attribute</value>
+    <comment>Button that adds an attribute to an object type in a template.</comment>
+  </data>
+  <data name="SaveAttribute" xml:space="preserve">
+    <value>Save Attribute</value>
+    <comment>Button that saves an attribute in the dialog.</comment>
+  </data>
+  <data name="AddAttributeTo" xml:space="preserve">
+    <value>Add Attribute to {0}</value>
+    <comment>Title of the dialog that adds an attribute. {0} is the type name.</comment>
+  </data>
+  <data name="EditNamed" xml:space="preserve">
+    <value>Edit {0}</value>
+    <comment>Accessible name and dialog title for editing one item. {0} is its name.</comment>
+  </data>
+  <data name="SearchAttributes" xml:space="preserve">
+    <value>Search attributes</value>
+    <comment>Placeholder of the attribute search box.</comment>
+  </data>
+  <data name="NoTemplateAttributesMatch" xml:space="preserve">
+    <value>No Template Attributes match "{0}"</value>
+    <comment>Empty-list message after a search. {0} is the search text.</comment>
+  </data>
+  <data name="NoTemplateAttributesForType" xml:space="preserve">
+    <value>No Template Attributes are configured for this Metaverse Object Type</value>
+    <comment>Empty-list message for an object type with no attributes.</comment>
+  </data>
+  <data name="NoAttributesBuiltInHint" xml:space="preserve">
+    <value>Objects of this type are created with no attribute values.</value>
+    <comment>Hint under the empty attribute list of a built-in template.</comment>
+  </data>
+  <data name="NoAttributesHint" xml:space="preserve">
+    <value>Objects of this type are created with no attribute values until you add an attribute.</value>
+    <comment>Hint under the empty attribute list of a custom template.</comment>
+  </data>
+  <data name="TemplateAttribute" xml:space="preserve">
+    <value>Template Attribute</value>
+    <comment>Singular noun for an attribute in a template: the grid count.</comment>
+  </data>
+  <data name="TemplateAttributes" xml:space="preserve">
+    <value>Template Attributes</value>
+    <comment>Plural noun for attributes in a template: the grid count.</comment>
+  </data>
+  <data name="Warning" xml:space="preserve">
+    <value>Warning</value>
+    <comment>Heading of the warning before a template is executed.</comment>
+  </data>
+  <data name="TemplateWarning" xml:space="preserve">
+    <value>Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised. This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.</value>
+    <comment>Warning shown before a template is executed.</comment>
+  </data>
+  <data name="ProcessingEllipsis" xml:space="preserve">
+    <value>Processing...</value>
+    <comment>Button label while a template is being executed.</comment>
+  </data>
+  <data name="QueuedEllipsis" xml:space="preserve">
+    <value>Queued...</value>
+    <comment>Button label while a template's run waits in the queue.</comment>
+  </data>
+  <data name="ExecuteTemplate" xml:space="preserve">
+    <value>Execute Template</value>
+    <comment>Button that executes a template.</comment>
+  </data>
+  <data name="DataGenerationProgress" xml:space="preserve">
+    <value>Data generation progress</value>
+    <comment>Heading of the panel showing a template run.</comment>
+  </data>
+  <data name="GenerationComplete" xml:space="preserve">
+    <value>Generation complete: {0} objects created.</value>
+    <comment>Outcome of a run. {0} is the number, already formatted.</comment>
+  </data>
+  <data name="GenerationCancelled" xml:space="preserve">
+    <value>Generation was cancelled.</value>
+    <comment>Outcome of a run that was cancelled.</comment>
+  </data>
+  <data name="GenerationFailed" xml:space="preserve">
+    <value>Generation failed.</value>
+    <comment>Outcome of a run that failed without a message.</comment>
+  </data>
+  <data name="GenerationFailedWithMessage" xml:space="preserve">
+    <value>Generation failed: {0}</value>
+    <comment>Outcome of a run that failed. {0} is the error message.</comment>
+  </data>
+  <data name="ViewDetails" xml:space="preserve">
+    <value>View details</value>
+    <comment>Link to the Activity of a run.</comment>
+  </data>
+  <data name="RuleOnlyWhen" xml:space="preserve">
+    <value>Only when</value>
+    <comment>Label of a generation rule: the condition on another attribute.</comment>
+  </data>
+  <data name="RuleLabelFormat" xml:space="preserve">
+    <value>{0}:</value>
+    <comment>Puts a colon after a rule label. {0} is the label.</comment>
+  </data>
+  <data name="RuleDataSets" xml:space="preserve">
+    <value>Data set(s)</value>
+    <comment>Label of a generation rule: the Data Sets used.</comment>
+  </data>
+  <data name="RuleMin" xml:space="preserve">
+    <value>Min</value>
+    <comment>Label of a generation rule: the minimum.</comment>
+  </data>
+  <data name="RuleMax" xml:space="preserve">
+    <value>Max</value>
+    <comment>Label of a generation rule: the maximum.</comment>
+  </data>
+  <data name="RuleWeightedValues" xml:space="preserve">
+    <value>Weighted Values</value>
+    <comment>Label of a generation rule: weighted values.</comment>
+  </data>
+  <data name="RuleSequential" xml:space="preserve">
+    <value>Sequential</value>
+    <comment>Label of a generation rule: numbers counting up.</comment>
+  </data>
+  <data name="RuleRandomNumbers" xml:space="preserve">
+    <value>Random numbers</value>
+    <comment>Label of a generation rule: random numbers.</comment>
+  </data>
+  <data name="RuleGivenTrue" xml:space="preserve">
+    <value>Given true</value>
+    <comment>Label of a generation rule: the share of objects given true.</comment>
+  </data>
+  <data name="RuleMvaMin" xml:space="preserve">
+    <value>MVA min assignments</value>
+    <comment>Label of a generation rule: fewest references for a multi-valued reference attribute (MVA).</comment>
+  </data>
+  <data name="RuleMvaMax" xml:space="preserve">
+    <value>MVA max assignments</value>
+    <comment>Label of a generation rule: most references for a multi-valued reference attribute (MVA).</comment>
+  </data>
+  <data name="RuleReferenceTypes" xml:space="preserve">
+    <value>Reference type(s)</value>
+    <comment>Label of a generation rule: the Metaverse Object Types referred to.</comment>
+  </data>
+  <data name="RuleManagerDepth" xml:space="preserve">
+    <value>Manager depth</value>
+    <comment>Label of a generation rule: the share of users who manage other users.</comment>
+  </data>
+  <data name="Percentage" xml:space="preserve">
+    <value>{0}%</value>
+    <comment>A percentage. {0} is the number.</comment>
+  </data>
+  <data name="WeightedValueEntry" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>One weighted value in a rule summary. {0} is the value; {1} is its weight.</comment>
+  </data>
+  <data name="Pattern" xml:space="preserve">
+    <value>Pattern</value>
+    <comment>Field label for a pattern, and the rule label for one.</comment>
+  </data>
+  <data name="APattern" xml:space="preserve">
+    <value>A pattern</value>
+    <comment>Option that generates text from a pattern.</comment>
+  </data>
+  <data name="WeightedValues" xml:space="preserve">
+    <value>Weighted values</value>
+    <comment>Option that picks values by weight; also a section heading.</comment>
+  </data>
+  <data name="AnExpression" xml:space="preserve">
+    <value>An expression</value>
+    <comment>Option that generates text from an expression.</comment>
+  </data>
+  <data name="ANumber" xml:space="preserve">
+    <value>A number</value>
+    <comment>Option that generates numbers.</comment>
+  </data>
+  <data name="ValuesComeFrom" xml:space="preserve">
+    <value>Values come from</value>
+    <comment>Field label for where generated values come from.</comment>
+  </data>
+  <data name="PatternHelp" xml:space="preserve">
+    <value>Literal text, other attributes as {First Name}, Example Data Sets as {0}, {1} in the order below, and [UniqueInt] to add a number only where a value would repeat.</value>
+    <comment>Help text for a pattern. Plain text, not a format string: {0} and {1} are shown as written, and {First Name} is an attribute reference.</comment>
+  </data>
+  <data name="EachValuePickedFromSets" xml:space="preserve">
+    <value>Each value is picked at random from these sets.</value>
+    <comment>Help text for a value drawn from Data Sets.</comment>
+  </data>
+  <data name="AddExampleDataSet" xml:space="preserve">
+    <value>Add an Example Data Set</value>
+    <comment>Field label for adding a Data Set to an attribute.</comment>
+  </data>
+  <data name="RemoveValue" xml:space="preserve">
+    <value>Remove value</value>
+    <comment>Accessible name for removing one weighted value.</comment>
+  </data>
+  <data name="Value" xml:space="preserve">
+    <value>Value</value>
+    <comment>Field label for a value, in a weighted list or a condition.</comment>
+  </data>
+  <data name="Weight" xml:space="preserve">
+    <value>Weight</value>
+    <comment>Field label for the weight of a weighted value.</comment>
+  </data>
+  <data name="EachValuePickedByWeight" xml:space="preserve">
+    <value>Each value is picked in proportion to its weight.</value>
+    <comment>Help text for weighted values.</comment>
+  </data>
+  <data name="AddValue" xml:space="preserve">
+    <value>Add Value</value>
+    <comment>Button that adds a weighted value.</comment>
+  </data>
+  <data name="Expression" xml:space="preserve">
+    <value>Expression</value>
+    <comment>Field label for an expression, and the rule label for one.</comment>
+  </data>
+  <data name="ExpressionHelp" xml:space="preserve">
+    <value>Read the object's other generated values with mv["Attribute Name"].</value>
+    <comment>Help text for an expression. The code in it is shown as written.</comment>
+  </data>
+  <data name="CountUpFromMinimum" xml:space="preserve">
+    <value>Count up from the minimum</value>
+    <comment>Option: numbers count up from the minimum.</comment>
+  </data>
+  <data name="RandomWithinRange" xml:space="preserve">
+    <value>Random within the range</value>
+    <comment>Option: numbers are random within the range.</comment>
+  </data>
+  <data name="Minimum" xml:space="preserve">
+    <value>Minimum</value>
+    <comment>Field label for a minimum.</comment>
+  </data>
+  <data name="Maximum" xml:space="preserve">
+    <value>Maximum</value>
+    <comment>Field label for a maximum.</comment>
+  </data>
+  <data name="Earliest" xml:space="preserve">
+    <value>Earliest</value>
+    <comment>Field label for the earliest date.</comment>
+  </data>
+  <data name="Latest" xml:space="preserve">
+    <value>Latest</value>
+    <comment>Field label for the latest date.</comment>
+  </data>
+  <data name="RefersTo" xml:space="preserve">
+    <value>Refers to</value>
+    <comment>Field label for the Metaverse Object Types a reference points at.</comment>
+  </data>
+  <data name="ReferenceHelp" xml:space="preserve">
+    <value>Each reference points at an object of one of these Metaverse Object Types.</value>
+    <comment>Help text for reference targets.</comment>
+  </data>
+  <data name="FewestReferences" xml:space="preserve">
+    <value>Fewest references</value>
+    <comment>Field label for the fewest references a multi-valued reference attribute gets.</comment>
+  </data>
+  <data name="MostReferences" xml:space="preserve">
+    <value>Most references</value>
+    <comment>Field label for the most references a multi-valued reference attribute gets.</comment>
+  </data>
+  <data name="ManagerDepthPercent" xml:space="preserve">
+    <value>Manager depth (%)</value>
+    <comment>Field label for the percentage of users who manage other users.</comment>
+  </data>
+  <data name="ManagerDepthHelp" xml:space="preserve">
+    <value>The percentage of Users who manage other Users. Every other User is given one of them as a manager.</value>
+    <comment>Help text for manager depth.</comment>
+  </data>
+  <data name="ObjectsGivenTrue" xml:space="preserve">
+    <value>Objects given true (%)</value>
+    <comment>Field label for the percentage of objects given true.</comment>
+  </data>
+  <data name="BoolDistributionExact" xml:space="preserve">
+    <value>Exactly this share of the objects given a value are given true, rounded to the nearest object; the rest are given false.</value>
+    <comment>Help text when a percentage is set for true.</comment>
+  </data>
+  <data name="BoolDistributionRandom" xml:space="preserve">
+    <value>Leave empty to give each object true or false at random.</value>
+    <comment>Help text when the percentage is empty.</comment>
+  </data>
+  <data name="NewIdentifierEachObject" xml:space="preserve">
+    <value>Each object is given a new identifier.</value>
+    <comment>Help text for a generated identifier attribute.</comment>
+  </data>
+  <data name="OnlyWhenAttributeHasValue" xml:space="preserve">
+    <value>Only generate a value when another attribute has a given value</value>
+    <comment>Switch label for a condition on another attribute.</comment>
+  </data>
+  <data name="AddAnotherAttributeFirst" xml:space="preserve">
+    <value>Add another attribute to this Metaverse Object Type first; a condition reads one of its values.</value>
+    <comment>Help text when a condition has no other attribute to read.</comment>
+  </data>
+  <data name="Condition" xml:space="preserve">
+    <value>Condition</value>
+    <comment>Field label for the operator of a condition.</comment>
+  </data>
+  <data name="AttributeHelperText" xml:space="preserve">
+    <value>Every attribute of this Metaverse Object Type that can be generated already has rules in this template.</value>
+    <comment>Help text when every attribute already has rules.</comment>
+  </data>
+  <data name="ObjectsGivenValuePercent" xml:space="preserve">
+    <value>Objects given a value (%)</value>
+    <comment>Field label for the percentage of objects given a value.</comment>
+  </data>
+  <data name="RestOfObjectsNoValue" xml:space="preserve">
+    <value>The rest of the objects are left without a value for this attribute.</value>
+    <comment>Help text under the population percentage.</comment>
+  </data>
+  <data name="MetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Field label for a Metaverse Attribute.</comment>
+  </data>
+  <data name="NumberOrder" xml:space="preserve">
+    <value>Number order</value>
+    <comment>Accessible name for the choice between counting up and random numbers.</comment>
+  </data>
+  <data name="BuiltInTemplateNotice" xml:space="preserve">
+    <value>This is a built-in template, so it cannot be changed or deleted. Duplicate it to make a version you can change.</value>
+    <comment>Notice on a built-in template, shown above its Duplicate button.</comment>
+  </data>
+</root>

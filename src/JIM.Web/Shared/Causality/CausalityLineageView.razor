@@ -20,7 +20,7 @@
 <div class="ln-scroller">
     @if (Model.IsTruncatedByDepth)
     {
-        <div class="ln-truncated">Some branches go further back than shown</div>
+        <div class="ln-truncated">@CausalityText.LineageViewTruncated</div>
     }
     <div class="ln-canvas" style="grid-template-columns: @GridTemplateColumns">
         @for (var i = 0; i < Model.Columns.Count; i++)
@@ -55,7 +55,7 @@
                             {
                                 <span class="glyph @(column.Kind == CausalityLineageColumnKind.Identity ? "mvo" : "cso")"
                                       aria-hidden="true"
-                                      title="@(column.Kind == CausalityLineageColumnKind.Identity ? "Metaverse Object" : "Connected System Object")">@(column.Kind == CausalityLineageColumnKind.Identity ? "MVO" : "CSO")</span>
+                                      title="@(column.Kind == CausalityLineageColumnKind.Identity ? CausalityText.LineageMetaverseObjectFallback : CausalityText.LineageConnectedSystemObjectFallback)">@(column.Kind == CausalityLineageColumnKind.Identity ? "MVO" : "CSO")</span>
                             }
                             @if (lineageObject.Href != null)
                             {
@@ -77,14 +77,15 @@
                                  && !string.IsNullOrWhiteSpace(lineageObject.SystemName))
                             {
                                 <span class="ln-obj-sub">
-                                    in @if (lineageObject.SystemId is { } systemId)
+                                    @{ var inSystem = CausalityText.FocusHeaderIn.Split("{0}", 2); }
+                                    @inSystem[0]@if (lineageObject.SystemId is { } systemId)
                                        {
                                            <a href="@Utilities.GetConnectedSystemHref(systemId)">@lineageObject.SystemName</a>
                                        }
                                        else
                                        {
                                            @lineageObject.SystemName
-                                       }
+                                       }@inSystem[1]
                                 </span>
                             }
                             else if (GetObjectSub(column, lineageObject) is { } objectSub)
@@ -128,7 +129,7 @@
                                                card's run chip and time do, so every card on the panel
                                                says which run it belongs to and when. *@
                                             <div class="ln-when ln-now-when">
-                                                <span class="ln-now-badge">This run</span>
+                                                <span class="ln-now-badge">@CausalityText.LineageViewThisRun</span>
                                                 @if (Timestamp is { } timestamp)
                                                 {
                                                     var timestampLocal = timestamp.ToLocalTime();
@@ -156,15 +157,15 @@
                                 @if (lineageObject.DeletedAfterThisRunHref is { } deletedAfterThisRunHref)
                                 {
                                     <div class="ln-since">
-                                        <span>@GetObjectNoun(column) was deleted after this run.</span>
-                                        <a class="ln-link" href="@deletedAfterThisRunHref">View deletion record</a>
+                                        <span>@GetDeletedAfterRunText(column)</span>
+                                        <a class="ln-link" href="@deletedAfterThisRunHref">@CausalityText.EventViewDeletionRecord</a>
                                     </div>
                                 }
                                 @* What later runs did to the object (#1811), below a rule because no run on this page did
                                    it: the column carries on downwards as time passing, past this run. *@
                                 @if (lineageObject.Consequences.Count > 0)
                                 {
-                                    <div class="ln-after">After this run</div>
+                                    <div class="ln-after">@CausalityText.SummaryBandAfterThisRun</div>
                                     @foreach (var consequence in lineageObject.Consequences)
                                     {
                                         <CausalityLineageConsequenceCard @key="consequence" Consequence="consequence"
@@ -190,26 +191,26 @@
     <div class="ln-footer">
         @if (consequenceSummary.IsFurtherThanShown)
         {
-            <div class="ln-footer-note">Some consequences go further than shown. Open the last item in a branch to carry on from there.</div>
+            <div class="ln-footer-note">@CausalityText.LineageViewFurtherThanShown</div>
         }
         <div class="ln-state @(consequenceSummary.HasWaitingBranches ? "waiting" : "done")">
             <MudIcon Icon="@(consequenceSummary.HasWaitingBranches ? Icons.Material.Filled.HourglassTop : Icons.Material.Filled.Check)"
                      aria-hidden="true" />
             <span class="ln-state-text">@string.Join(" ", consequenceSummary.StateSentences)</span>
-            <span class="ln-checked" title="@checkedAtLocal.ToFriendlyDate()">Checked at @checkedAtLocal.ToString("HH:mm").</span>
+            <span class="ln-checked" title="@checkedAtLocal.ToFriendlyDate()">@string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.LineageViewCheckedAt, checkedAtLocal.ToString("HH:mm"))</span>
             @* Only while a branch waits on something that will happen by itself: offered at any other time, it would
                hint at events that cannot come. *@
             @if (consequenceSummary.HasWaitingBranches && OnCheckAgain.HasDelegate)
             {
                 <MudButton Variant="Variant.Text" Class="ln-check-again"
-                           StartIcon="@Icons.Material.Filled.Refresh" OnClick="CheckAgainAsync">Check again</MudButton>
+                           StartIcon="@Icons.Material.Filled.Refresh" OnClick="CheckAgainAsync">@CausalityText.LineageViewCheckAgain</MudButton>
             }
         </div>
     </div>
 }
 else if (Model.Consequences == null && ConsequencesLoading)
 {
-    <div class="ln-consequences-loading">Reading what this run went on to cause&hellip;</div>
+    <div class="ln-consequences-loading">@CausalityText.LineageViewReadingConsequences</div>
 }
 
 @code {
@@ -292,16 +293,18 @@ else if (Model.Consequences == null && ConsequencesLoading)
                || lineageObject.IsRoleHead
                || column.Kind == CausalityLineageColumnKind.Unassigned
             ? null
-            : "JIM cannot open a page for this object.";
+            : CausalityText.LineageViewCannotOpen;
     }
 
     /// <summary>
     /// How a note refers to the object it sits under. The head already names it, so repeating the name
     /// would read as though a second object were being introduced.
     /// </summary>
-    private static string GetObjectNoun(CausalityLineageColumn column)
+    private static string GetDeletedAfterRunText(CausalityLineageColumn column)
     {
-        return column.Kind == CausalityLineageColumnKind.Identity ? "This Metaverse Object" : "This Connected System Object";
+        return column.Kind == CausalityLineageColumnKind.Identity
+            ? CausalityText.LineageViewMetaverseObjectDeleted
+            : CausalityText.LineageViewConnectedSystemObjectDeleted;
     }
 
     /// <summary>
@@ -340,7 +343,7 @@ else if (Model.Consequences == null && ConsequencesLoading)
     {
         @if (GetObjectTypePrefix(column, lineageObject) is { } typePrefix)
         {
-            <span class="type">@($"{typePrefix}: ")</span>
+            <span class="type">@string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.LineageViewTypePrefix, typePrefix)</span>
         }
         @lineageObject.Title
     };
@@ -358,8 +361,8 @@ else if (Model.Consequences == null && ConsequencesLoading)
             CausalityLineageColumnKind.Record => null,
             // The type now leads the title itself, as a record's does, so the sub-line says only where
             // the object lives, in the same "in ..." form as a record's Connected System sub-line.
-            CausalityLineageColumnKind.Identity => "in the Metaverse",
-            _ => "causes this view could not place"
+            CausalityLineageColumnKind.Identity => CausalityText.LineageViewInMetaverse,
+            _ => CausalityText.LineageViewUnplaceable
         };
     }
 

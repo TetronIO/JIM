@@ -20,7 +20,7 @@
 <div class="evt-card @(IsClickable ? "clickable" : null) @(Selected ? "selected" : null)"
      style="--tone: @CausalityToneCss.CssVar(Event.Tone)"
      role="@(IsClickable ? "button" : null)" tabindex="@(IsClickable ? "0" : null)"
-     aria-label="@(IsClickable ? $"{Title}: show attribute detail" : null)"
+     aria-label="@(IsClickable ? string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.EventCardShowAttributeDetail, Title) : null)"
      @onclick="HandleActivationAsync" @onkeydown="HandleKeyDownAsync">
     @if (Operation is { } operation)
     {
@@ -89,8 +89,7 @@
                    they are instead of counting them; see CausalityEvent.AttributeRowsCaption. *@
                 <span class="attr-count">
                     <MudIcon Icon="@Icons.Material.Filled.TableChart" aria-hidden="true" />
-                    @(Event.AttributeRowsCaption
-                      ?? $"{Event.AttributeRowCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} attribute{(Event.AttributeRowCount == 1 ? "" : "s")}")
+                    @Event.AttributeRowsText
                 </span>
             }
             <span class="spacer"></span>

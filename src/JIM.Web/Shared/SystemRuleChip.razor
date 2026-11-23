@@ -8,10 +8,11 @@
 @* Each half links on its own where an href is given, and each hovers on its own, so it is always clear which  *@
 @* of the two a click will open. When space runs short the rule's name gives way first.                       *@
 
+@using System.Globalization
 <span class="jim-object-chip jim-system-rule-chip @Class" title="@Title">
     @if (!string.IsNullOrEmpty(ConnectedSystemHref))
     {
-        <a href="@ConnectedSystemHref" class="jim-system-rule-chip-part jim-system-rule-chip-system" aria-label="@($"Connected System {ConnectedSystemName}")">@SystemPart</a>
+        <a href="@ConnectedSystemHref" class="jim-system-rule-chip-part jim-system-rule-chip-system" aria-label="@string.Format(CultureInfo.CurrentCulture, MetaverseText.SrcAriaSystem, ConnectedSystemName)">@SystemPart</a>
     }
     else
     {
@@ -19,13 +20,13 @@
     }
     @if (SyncRuleDeleted)
     {
-        <span class="jim-system-rule-chip-part jim-system-rule-chip-rule jim-system-rule-chip-deleted">@RulePart("rule deleted")</span>
+        <span class="jim-system-rule-chip-part jim-system-rule-chip-rule jim-system-rule-chip-deleted">@RulePart(MetaverseText.VogRuleDeleted)</span>
     }
     else if (!string.IsNullOrEmpty(SyncRuleName))
     {
         @if (!string.IsNullOrEmpty(SyncRuleHref))
         {
-            <a href="@SyncRuleHref" class="jim-system-rule-chip-part jim-system-rule-chip-rule" aria-label="@($"Synchronisation Rule {SyncRuleName}")">@RulePart(SyncRuleName)</a>
+            <a href="@SyncRuleHref" class="jim-system-rule-chip-part jim-system-rule-chip-rule" aria-label="@string.Format(CultureInfo.CurrentCulture, MetaverseText.SrcAriaRule, SyncRuleName)">@RulePart(SyncRuleName)</a>
         }
         else
         {
@@ -66,20 +67,22 @@
     {
         get
         {
-            var system = $"Connected System: {ConnectedSystemName}";
+            var system = string.Format(CultureInfo.CurrentCulture, MetaverseText.SrcTitleSystem, ConnectedSystemName);
             if (SyncRuleDeleted)
-                return $"{system}. Synchronisation Rule: deleted";
-            return string.IsNullOrEmpty(SyncRuleName) ? system : $"{system}. Synchronisation Rule: {SyncRuleName}";
+                return string.Format(CultureInfo.CurrentCulture, MetaverseText.SrcTitleRuleDeleted, system);
+            return string.IsNullOrEmpty(SyncRuleName)
+                ? system
+                : string.Format(CultureInfo.CurrentCulture, MetaverseText.SrcTitleRule, system, SyncRuleName);
         }
     }
 
     private RenderFragment SystemPart => @<text>
-        <span class="jim-object-chip-glyph sys" aria-hidden="true" title="Connected System">CS</span>
+        <span class="jim-object-chip-glyph sys" aria-hidden="true" title="@MetaverseText.MvcConnectedSystem">CS</span>
         <span class="jim-object-chip-name">@ConnectedSystemName</span>
     </text>;
 
     private RenderFragment RulePart(string name) => @<text>
-        <span class="jim-object-chip-glyph rule" aria-hidden="true" title="Synchronisation Rule">SR</span>
+        <span class="jim-object-chip-glyph rule" aria-hidden="true" title="@MetaverseText.MncSyncRuleHeader">SR</span>
         <span class="jim-object-chip-name">@name</span>
     </text>;
 }

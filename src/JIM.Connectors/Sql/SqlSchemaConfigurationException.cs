@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Exceptions;
+using JIM.Models.Localisation;
 
 namespace JIM.Connectors.Sql;
 
@@ -22,6 +23,14 @@ internal class SqlSchemaConfigurationException : InvalidSettingValuesException
     }
 
     internal SqlSchemaConfigurationException(string message, Exception? innerException) : base(message, innerException)
+    {
+    }
+
+    /// <summary>
+    /// A problem whose words are held as a message, so the portal can show them in the viewer's language (#3030);
+    /// <see cref="Exception.Message"/> is its British English, which the REST API, PowerShell and logs keep reading.
+    /// </summary>
+    internal SqlSchemaConfigurationException(JimMessage detail, Exception? innerException = null) : base(detail, innerException)
     {
     }
 

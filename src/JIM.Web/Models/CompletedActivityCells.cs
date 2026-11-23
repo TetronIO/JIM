@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -30,10 +31,10 @@ public static class CompletedActivityCells
 
         return activity.TargetOperationType switch
         {
-            ActivityTargetOperationType.Clear => "Clear Connected System Objects",
-            ActivityTargetOperationType.Delete => "Delete Connected System",
-            ActivityTargetOperationType.Deprovision => "Deprovision Connected System",
-            var other => $"{other} Connected System"
+            ActivityTargetOperationType.Clear => ActivityText.ActivityOperationClearConnectedSystemObjects,
+            ActivityTargetOperationType.Delete => ActivityText.ActivityOperationDeleteConnectedSystem,
+            ActivityTargetOperationType.Deprovision => ActivityText.ActivityOperationDeprovisionConnectedSystem,
+            var other => string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityOperationOther, other)
         };
     }
 
@@ -48,9 +49,9 @@ public static class CompletedActivityCells
 
         var outcomes = new List<CompletedActivityOutcome>
         {
-            new("Connected System Objects removed", activity.ClearedConnectedSystemObjectCount ?? 0, IsRemoval: true),
-            new("Pending Exports removed", activity.ClearedPendingExportCount ?? 0, IsRemoval: true),
-            new("Joins tracked for reconciliation", activity.ClearedJoinRecordCount ?? 0, IsRemoval: false)
+            new(ActivityText.ActivityOutcomeConnectedSystemObjectsRemoved, activity.ClearedConnectedSystemObjectCount ?? 0, IsRemoval: true),
+            new(ActivityText.ActivityOutcomePendingExportsRemoved, activity.ClearedPendingExportCount ?? 0, IsRemoval: true),
+            new(ActivityText.ActivityOutcomeJoinsTracked, activity.ClearedJoinRecordCount ?? 0, IsRemoval: false)
         };
         return outcomes.Where(o => o.Count > 0).ToList();
     }

@@ -101,9 +101,9 @@ public static class Helpers
     /// </remarks>
     public static string DescribeAttribute(AttributeChipKind kind, AttributeDataType type, AttributePlurality plurality)
     {
-        var side = kind == AttributeChipKind.Metaverse ? "Metaverse" : "Connected System";
-        var valued = plurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued";
-        return $"{side}: {type.ToString().SplitOnCapitalLetters()}, {valued}";
+        var side = kind == AttributeChipKind.Metaverse ? DisplayText.AttributeSideMetaverse : DisplayText.AttributeSideConnectedSystem;
+        var valued = plurality == AttributePlurality.SingleValued ? DisplayText.AttributeSingleValued : DisplayText.AttributeMultiValued;
+        return string.Format(CultureInfo.CurrentCulture, DisplayText.AttributeDescription, side, type.ForDisplay(), valued);
     }
 
     /// <summary>
@@ -252,9 +252,9 @@ public static class Helpers
         var day = localDateTime.Date;
         var today = localToday.Date;
         if (day == today)
-            return "Today";
+            return DisplayText.DayToday;
         if (day == today.AddDays(-1))
-            return "Yesterday";
+            return DisplayText.DayYesterday;
         return day.ToFriendlyDay();
     }
 
@@ -310,17 +310,17 @@ public static class Helpers
         var parts = new List<string>();
 
         if (timeSpan.Days > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Days} day{(timeSpan.Days == 1 ? "" : "s")}");
+            parts.Add(CountOf(timeSpan.Days, DisplayText.DurationDayOne, DisplayText.DurationDayOther));
         if (timeSpan.Hours > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Hours} hr{(timeSpan.Hours == 1 ? "" : "s")}");
+            parts.Add(CountOf(timeSpan.Hours, DisplayText.DurationHourOne, DisplayText.DurationHourOther));
         if (timeSpan.Minutes > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Minutes} min");
+            parts.Add(Format(DisplayText.DurationMinute, timeSpan.Minutes));
         if (timeSpan.Seconds > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Seconds} sec");
+            parts.Add(Format(DisplayText.DurationSecond, timeSpan.Seconds));
         if (timeSpan.Milliseconds > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Milliseconds} ms");
+            parts.Add(Format(DisplayText.DurationMillisecond, timeSpan.Milliseconds));
 
-        return parts.Count > 0 ? string.Join(", ", parts) : "0 ms";
+        return parts.Count > 0 ? string.Join(", ", parts) : Format(DisplayText.DurationMillisecond, 0);
     }
 
     /// <summary>
@@ -333,19 +333,19 @@ public static class Helpers
         if (timeSpan.TotalDays >= 1)
         {
             var days = Math.Round(timeSpan.TotalDays);
-            return $"~{days} day{(days == 1 ? "" : "s")}";
+            return Format(PluralRules.Choose((long)days, DisplayText.DurationApproxDayOne, DisplayText.DurationApproxDayOther), days);
         }
         if (timeSpan.TotalHours >= 1)
         {
             var hours = Math.Round(timeSpan.TotalHours);
-            return $"~{hours} hr{(hours == 1 ? "" : "s")}";
+            return Format(PluralRules.Choose((long)hours, DisplayText.DurationApproxHourOne, DisplayText.DurationApproxHourOther), hours);
         }
         if (timeSpan.TotalMinutes >= 1)
-            return $"~{Math.Round(timeSpan.TotalMinutes)} min";
+            return Format(DisplayText.DurationApproxMinute, Math.Round(timeSpan.TotalMinutes));
         if (timeSpan.TotalSeconds >= 1)
-            return $"~{Math.Round(timeSpan.TotalSeconds)} sec";
+            return Format(DisplayText.DurationApproxSecond, Math.Round(timeSpan.TotalSeconds));
 
-        return $"{Math.Round(timeSpan.TotalMilliseconds)} ms";
+        return Format(DisplayText.DurationMillisecond, Math.Round(timeSpan.TotalMilliseconds));
     }
 
     /// <summary>
@@ -354,93 +354,93 @@ public static class Helpers
     /// as a confident statement about the wrong phase rather than as an obvious omission, so
     /// ErrorPhaseTitleTests asserts the coverage.
     /// </summary>
-    public static readonly IReadOnlyDictionary<ActivityRunProfileExecutionItemErrorType, string> ErrorPhaseTitles =
+    public static IReadOnlyDictionary<ActivityRunProfileExecutionItemErrorType, string> ErrorPhaseTitles =>
         new Dictionary<ActivityRunProfileExecutionItemErrorType, string>
         {
             // No error at all.
-            [ActivityRunProfileExecutionItemErrorType.NotSet] = "No Error",
+            [ActivityRunProfileExecutionItemErrorType.NotSet] = DisplayText.ErrorHeadingNoError,
 
             // Import-phase errors: the object was rejected before its Connected System Object was created.
-            [ActivityRunProfileExecutionItemErrorType.DuplicateObject] = "Import Rejected",
-            [ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue] = "Import Rejected",
-            [ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes] = "Import Rejected",
-            [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
-            [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
-            [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
-            [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.DuplicateObject] = DisplayText.ErrorHeadingImportRejected,
+            [ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue] = DisplayText.ErrorHeadingImportRejected,
+            [ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes] = DisplayText.ErrorHeadingImportRejected,
+            [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = DisplayText.ErrorHeadingImportRejected,
+            [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = DisplayText.ErrorHeadingImportRejected,
+            [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = DisplayText.ErrorHeadingImportRejected,
+            [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = DisplayText.ErrorHeadingImportRejected,
 
             // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
             // true here, and saying either sends an administrator hunting for a problem that does not exist.
-            [ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError] = "Attribute Not Imported",
+            [ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError] = DisplayText.ErrorHeadingAttributeNotImported,
 
             // Raised on an object that otherwise imported or exported (#959): only the reference values that could not
             // be linked are affected, so "Failed" would overstate it. Raised by import and export alike (#1398), so
             // the heading names the condition rather than a phase.
-            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Reference Unresolved",
+            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = DisplayText.ErrorHeadingReferenceUnresolved,
 
             // Import-phase diagnostics: the object imported and its changes were applied.
-            [ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed] = "Import Verification",
-            [ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport] = "Import Fell Back",
+            [ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed] = DisplayText.ErrorHeadingImportVerification,
+            [ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport] = DisplayText.ErrorHeadingImportFellBack,
 
             // Synchronisation-phase errors: the Connected System Object exists but synchronisation failed.
-            [ActivityRunProfileExecutionItemErrorType.AmbiguousMatch] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.AmbiguousMatch] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = DisplayText.ErrorHeadingSynchronisationFailed,
             // In-scope import rules would project the object into different Metaverse Object Types (#2823).
-            [ActivityRunProfileExecutionItemErrorType.ProjectionTypeConflict] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.ProjectionTypeConflict] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = DisplayText.ErrorHeadingSynchronisationFailed,
             // One error type covering two outcomes: Fail this mapping costs the object one attribute and nothing
             // else, Fail the object costs it the whole synchronisation. "Failed" would overstate the first and
             // "Attribute Not Flowed" would understate the second, so the heading names what actually happened and
             // the message says which behaviour was configured.
-            [ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput] = "Expression Not Evaluated",
+            [ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput] = DisplayText.ErrorHeadingExpressionNotEvaluated,
             // Raised while evaluating outbound exports during synchronisation, before anything is exported,
             // so it belongs with the synchronisation phase rather than "Export Failed".
-            [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = DisplayText.ErrorHeadingSynchronisationFailed,
+            [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = DisplayText.ErrorHeadingSynchronisationFailed,
             // The attribute still exports; only the merging of dates the Connected System cannot hold apart is reported.
-            [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = "Dates Merged",
+            [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = DisplayText.ErrorHeadingDatesMerged,
             // Raised while evaluating exports, before anything is sent; the rest of the object still exports.
-            [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = "Credential Not Exported",
+            [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = DisplayText.ErrorHeadingCredentialNotExported,
             // Raised while evaluating exports: two or more export rules cover the object in one Connected System (#2820).
-            [ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap] = "Export Rules Overlap",
+            [ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap] = DisplayText.ErrorHeadingExportRulesOverlap,
 
             // Export-phase errors.
-            [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
-            [ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed] = "Export Failed",
-            [ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId] = "Export Failed",
+            [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = DisplayText.ErrorHeadingExportPending,
+            [ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed] = DisplayText.ErrorHeadingExportFailed,
+            [ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId] = DisplayText.ErrorHeadingExportFailed,
             // "Refused" rather than "Failed": JIM declined to send the change, naming the configuration to
             // fix, which is a different message from an export the Connected System rejected (#492).
-            [ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet] = "Export Refused",
+            [ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet] = DisplayText.ErrorHeadingExportRefused,
             // The Connected System refused the export because another object there holds the value; the heading
             // names the conflict, since that is what an administrator has to resolve.
-            [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = "Value Already in Use",
+            [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = DisplayText.ErrorHeadingValueAlreadyInUse,
             // Active Directory will not enable an account with no password (#2039); the heading names what the
             // account is missing, since that is what the message's remedies supply.
-            [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = "Password Required",
+            [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = DisplayText.ErrorHeadingPasswordRequired,
             // #2118: JIM declined to write where it could not read the object back; "Refused", as for #492.
-            [ActivityRunProfileExecutionItemErrorType.OutsideManagedScope] = "Export Refused",
+            [ActivityRunProfileExecutionItemErrorType.OutsideManagedScope] = DisplayText.ErrorHeadingExportRefused,
             // The Connected System said no. Each heading names what an administrator has to put right, rather than
             // "Operation Failed", which these used to read as and which says JIM is at fault.
-            [ActivityRunProfileExecutionItemErrorType.AccessDenied] = "Access Denied",
-            [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = "Export Rejected",
-            [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = "Placeholder Member Rejected",
-            [ActivityRunProfileExecutionItemErrorType.MissingDependency] = "Dependency Not Yet Exported",
-            [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = "Changed Since Last Import",
+            [ActivityRunProfileExecutionItemErrorType.AccessDenied] = DisplayText.ErrorHeadingAccessDenied,
+            [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = DisplayText.ErrorHeadingExportRejected,
+            [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = DisplayText.ErrorHeadingPlaceholderMemberRejected,
+            [ActivityRunProfileExecutionItemErrorType.MissingDependency] = DisplayText.ErrorHeadingDependencyNotYetExported,
+            [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = DisplayText.ErrorHeadingChangedSinceLastImport,
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened
             // rather than the phase, since neither "Synchronisation Failed" nor "Export Failed" is true here.
-            [ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted] = "No Free Value Found",
-            [ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded] = "Sequence Width Exceeded",
-            [ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved] = "Needs a Decision",
+            [ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted] = DisplayText.ErrorHeadingNoFreeValueFound,
+            [ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded] = DisplayText.ErrorHeadingSequenceWidthExceeded,
+            [ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved] = DisplayText.ErrorHeadingNeedsADecision,
 
             // Generic.
-            [ActivityRunProfileExecutionItemErrorType.UnhandledError] = "Operation Failed"
+            [ActivityRunProfileExecutionItemErrorType.UnhandledError] = DisplayText.ErrorHeadingOperationFailed
         };
 
     /// <summary>
@@ -450,8 +450,8 @@ public static class Helpers
     /// </summary>
     public static string GetErrorTypeChipLabel(ActivityRunProfileExecutionItemErrorType errorType) => errorType switch
     {
-        ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved => "Needs a decision",
-        _ => errorType.ToString().SplitOnCapitalLetters()
+        ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved => DisplayText.ErrorChipNeedsADecision,
+        _ => errorType.ForDisplay()
     };
 
     /// <summary>
@@ -463,7 +463,7 @@ public static class Helpers
             return title;
 
         // Unreachable while ErrorPhaseTitleTests passes; a neutral fallback beats an empty heading.
-        return "Operation Failed";
+        return DisplayText.ErrorHeadingOperationFailed;
     }
 
     #region mudblazor related
@@ -547,8 +547,8 @@ public static class Helpers
     /// </summary>
     public static string GetActivityTargetTypeName(ActivityTargetType targetType) => targetType switch
     {
-        ActivityTargetType.ScimRequests => "SCIM Requests",
-        _ => targetType.ToString().SplitOnCapitalLetters()
+        ActivityTargetType.ScimRequests => DisplayText.ActivityTargetScimRequests,
+        _ => targetType.ForDisplay()
     };
 
     public static Color GetActivityMudBlazorColorForOperation(ActivityTargetOperationType operation)
@@ -614,12 +614,12 @@ public static class Helpers
         return status switch
         {
             ExternalIdStatus.Rejected =>
-                "This object was not created due to an import error. The external ID shown is from the source data.",
+                DisplayText.ExternalIdStatusRejected,
             ExternalIdStatus.PendingRemoval =>
-                "This object has been detected as deleted from the source system. It is pending removal during the next synchronisation.",
+                DisplayText.ExternalIdStatusPendingRemoval,
             ExternalIdStatus.Deleted =>
-                "This object has been deleted. The external ID shown is preserved from when this operation was recorded.",
-            _ => "The external ID shown is preserved from when this operation was recorded."
+                DisplayText.ExternalIdStatusDeleted,
+            _ => DisplayText.ExternalIdStatusOther
         };
     }
 
@@ -634,54 +634,54 @@ public static class Helpers
         {
             // Import operations
             ObjectChangeType.Added =>
-                "A new Connected System Object was discovered in the source system and added to the connector space.",
+                DisplayText.OperationAdded,
             ObjectChangeType.Updated =>
-                "An existing Connected System Object was updated with changed attribute values from the source system.",
+                DisplayText.OperationUpdated,
             ObjectChangeType.Deleted when !isSyncContext =>
-                "The object was detected as deleted from the source system. It is now pending removal during the next synchronisation.",
+                DisplayText.OperationDeletedImport,
             ObjectChangeType.Deleted when isSyncContext =>
-                "The deletion of this object has been processed during synchronisation. Associated metaverse links and data have been updated.",
+                DisplayText.OperationDeletedSync,
 
             // Sync operations
             ObjectChangeType.Projected =>
-                "A new Metaverse Object was created because no existing match was found. The Connected System Object's attributes were projected into the metaverse.",
+                DisplayText.OperationProjected,
             ObjectChangeType.Joined =>
-                "The Connected System Object was matched to an existing Metaverse Object using the configured join rules.",
+                DisplayText.OperationJoined,
             ObjectChangeType.AttributeFlow =>
-                "Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Synchronisation Rule mappings.",
+                DisplayText.OperationAttributeFlow,
             ObjectChangeType.Disconnected =>
-                "The Connected System Object was disconnected from its Metaverse Object. Attribute Flow has stopped.",
+                DisplayText.OperationDisconnected,
             ObjectChangeType.DisconnectedOutOfScope =>
-                "The object fell out of scope of the import Synchronisation Rule scoping criteria and was disconnected from the metaverse.",
+                DisplayText.OperationDisconnectedOutOfScope,
             ObjectChangeType.OutOfScopeRetainJoin =>
-                "The object fell out of scope but the join was retained. Attribute Flow has stopped, but the link is preserved for future re-scoping.",
+                DisplayText.OperationOutOfScopeRetainJoin,
             ObjectChangeType.DriftCorrection =>
-                "Drift was detected: the target system's values differed from the expected metaverse values. A corrective Pending Export was created to restore the expected state.",
+                DisplayText.OperationDriftCorrection,
 
             // Export operations
             ObjectChangeType.Exported =>
-                "The pending attribute changes were successfully exported to the target Connected System.",
+                DisplayText.OperationExported,
             ObjectChangeType.Deprovisioned =>
-                "The object was deleted from the target Connected System as part of deprovisioning.",
+                DisplayText.OperationDeprovisioned,
 
             // Pending Export visibility
             ObjectChangeType.PendingExport =>
-                "A Pending Export is staged and waiting for the next export run to apply changes to the target system.",
+                DisplayText.OperationPendingExport,
             ObjectChangeType.PendingExportConfirmed =>
-                "The Pending Export was confirmed during the confirming import. The exported values matched the imported values.",
+                DisplayText.OperationPendingExportConfirmed,
 
             // Direct creation
             ObjectChangeType.Created =>
-                "The Metaverse Object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.",
+                DisplayText.OperationCreated,
 
             // Export Review
             ObjectChangeType.ExportScopeReview =>
-                "This Metaverse Object was reviewed against the export Synchronisation Rules, because an export rule changed or the object was created or changed outside synchronisation. It was provisioned or deprovisioned as the rules now require, or had values changed outside synchronisation delivered to its accounts.",
+                DisplayText.OperationExportScopeReview,
 
             // Other
             ObjectChangeType.NoChange =>
-                "The object was evaluated but no changes were necessary. The existing values already match the expected state.",
-            _ => "An operation was performed on this object."
+                DisplayText.OperationNoChange,
+            _ => DisplayText.OperationOther
         };
     }
 
@@ -833,10 +833,10 @@ public static class Helpers
     {
         return writability switch
         {
-            AttributeWritability.Writable => "Writable",
-            AttributeWritability.ReadOnly => "Read-Only",
-            AttributeWritability.WritableOnCreate => "Set on creation only",
-            _ => writability.ToString().SplitOnCapitalLetters()
+            AttributeWritability.Writable => DisplayText.WritabilityWritable,
+            AttributeWritability.ReadOnly => DisplayText.WritabilityReadOnly,
+            AttributeWritability.WritableOnCreate => DisplayText.WritabilityWritableOnCreate,
+            _ => writability.ForDisplay()
         };
     }
 
@@ -849,11 +849,11 @@ public static class Helpers
         return writability switch
         {
             AttributeWritability.Writable =>
-                "The Connected System accepts writes to this attribute, so an export Attribute Flow can keep it up to date.",
+                DisplayText.WritabilityWritableDescription,
             AttributeWritability.ReadOnly =>
-                "The Connected System will not accept writes to this attribute. It can be imported, but no export Attribute Flow may target it.",
+                DisplayText.WritabilityReadOnlyDescription,
             AttributeWritability.WritableOnCreate =>
-                "The Connected System accepts a value for this attribute only when the object is created. An export Attribute Flow may target it: the value is sent with the Create Pending Export, and JIM never sends it again, because changing it would break the link to the object.",
+                DisplayText.WritabilityWritableOnCreateDescription,
             _ => string.Empty
         };
     }
@@ -1566,10 +1566,10 @@ public static class Helpers
     {
         return runType switch
         {
-            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import Results",
-            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "Synchronisation Results",
-            ConnectedSystemRunType.Export => "Export Results",
-            _ => "Results"
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => DisplayText.RunTypeResultsImport,
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => DisplayText.RunTypeResultsSynchronisation,
+            ConnectedSystemRunType.Export => DisplayText.RunTypeResultsExport,
+            _ => DisplayText.RunTypeResultsOther
         };
     }
 

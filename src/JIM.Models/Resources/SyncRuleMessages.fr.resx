@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NameMustBeSet" xml:space="preserve">
+    <value>Le nom doit être défini</value>
+  </data>
+  <data name="ConnectedSystemMustBeSet" xml:space="preserve">
+    <value>Le système connecté doit être défini</value>
+  </data>
+  <data name="ConnectedSystemObjectTypeMustBeSet" xml:space="preserve">
+    <value>Le type d’objets de système connecté doit être défini</value>
+  </data>
+  <data name="MetaverseObjectTypeMustBeSet" xml:space="preserve">
+    <value>Le type d’objets Metaverse doit être défini</value>
+  </data>
+  <data name="DirectionMustBeSet" xml:space="preserve">
+    <value>La direction doit être définie</value>
+  </data>
+  <data name="NoObjectMatchingRules" xml:space="preserve">
+    <value>Aucune règle de correspondance d’objets n’a été définie. Bien que valide, cette configuration n’est pas recommandée. Les règles de correspondance d’objets aident à réduire les erreurs de synchronisation dans des scénarios peu courants mais importants</value>
+  </data>
+  <data name="NoAttributeFlowRules" xml:space="preserve">
+    <value>Aucune règle de flux d’attributs n’a été définie. Bien que valide, cela signifie qu’aucune donnée ne circulera entre les deux systèmes</value>
+  </data>
+  <data name="CredentialAttributeFlow" xml:space="preserve">
+    <value>Le flux d’attributs utilisant « {0} » doit être supprimé : il contient des identifiants, que JIM n’importe ni n’exporte jamais par un flux d’attributs. JIM ne remet les mots de passe que par la synchronisation des mots de passe, sur les systèmes connectés dont le connecteur la prend en charge.</value>
+  </data>
+  <data name="CredentialLikeAttributeFlow" xml:space="preserve">
+    <value>Le flux d’attributs ciblant « {0} » semble pouvoir transporter un mot de passe. Si c’est le cas, utilisez plutôt la synchronisation des mots de passe sur le système connecté : un mot de passe transmis comme attribut est stocké dans les valeurs d’attribut des objets Metaverse et des objets de systèmes connectés, l’historique des modifications, les exportations en attente, les aperçus d’exportation, les résultats de recherche et les sauvegardes de la base de données. Si cet attribut n’est pas un mot de passe, aucune action n’est nécessaire.</value>
+  </data>
+</root>

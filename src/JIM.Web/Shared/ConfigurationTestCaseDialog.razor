@@ -14,34 +14,33 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">@(TestCase.Id > 0 ? "Edit test case" : "Save test case")</MudText>
+        <MudText Typo="Typo.h6">@(TestCase.Id > 0 ? SyncRuleText.EditTestCaseTitle : SyncRuleText.SaveTestCaseTitle)</MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary">@CoverageLabel</MudText>
     </TitleContent>
     <DialogContent>
         <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" data-testid="jim-test-case-personal-data">
-            Test inputs are saved as configuration, unencrypted. If you copied them from a real object, replace any personal
-            data with made-up values before you save.
+            @SyncRuleText.TestCasePersonalData
         </MudAlert>
 
-        <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" MaxLength="@ConfigurationTestCase.MaxNameLength"
-                      HelperText="What the case checks, in your own words. It is recorded in Configuration History, so keep values out of it."
+        <MudTextField @bind-Value="_name" Label="@CommonText.ColumnName" Variant="Variant.Outlined" Required="true" MaxLength="@ConfigurationTestCase.MaxNameLength"
+                      HelperText="@SyncRuleText.TestCaseNameHelp"
                       data-testid="jim-test-case-name" />
-        <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Lines="2" Sizing="InputSizing.Auto" Class="mt-3" />
+        <MudTextField @bind-Value="_description" Label="@CommonText.ColumnDescription" Variant="Variant.Outlined" Lines="2" Sizing="InputSizing.Auto" Class="mt-3" />
 
-        <MudText Typo="Typo.subtitle2" Class="mt-5">Inputs</MudText>
+        <MudText Typo="Typo.subtitle2" Class="mt-5">@SyncRuleText.InputsHeading</MudText>
         @if (_rows.Count == 0)
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 @(Connections.Count > 0
-                    ? "What this case tests reads no attributes, only the connections below."
-                    : "What this case tests reads no attributes, so it gives the same result for every object.")
+                    ? SyncRuleText.NoAttributesReadWithConnections
+                    : SyncRuleText.NoAttributesReadAtAll)
             </MudText>
         }
         else
         {
             <MudSimpleTable Dense="true" Outlined="true" Class="mt-2" Style="overflow-x: auto">
                 <thead>
-                    <tr><th>Input</th><th>Value</th><th>No value</th><th></th></tr>
+                    <tr><th>@SyncRuleText.TryItColumnInput</th><th>@SyncRuleText.TryItColumnValue</th><th>@SyncRuleText.TryItColumnNoValue</th><th></th></tr>
                 </thead>
                 <tbody>
                     @foreach (var row in _rows)
@@ -67,7 +66,7 @@
                                 else
                                 {
                                     <MudText Typo="Typo.body2" class="mud-text-secondary">
-                                        No longer read: @string.Join(", ", current.State.Values)
+                                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.NoLongerRead, string.Join(SyncRuleText.ListSeparator, current.State.Values))
                                     </MudText>
                                 }
                             </td>
@@ -75,15 +74,15 @@
                                 @if (current.IsRead)
                                 {
                                     <MudCheckBox T="bool" Value="current.State.NoValue" ValueChanged="@(v => current.State.NoValue = v)" Dense="true"
-                                                 aria-label="@($"{current.AttributeName} has no value")" />
+                                                 aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.HasNoValueAria, current.AttributeName)" />
                                 }
                             </td>
                             <td>
                                 @if (!current.IsRead)
                                 {
-                                    <MudTooltip Text="Remove this input" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="@SyncRuleText.RemoveInputTooltip" Arrow="true" Placement="Placement.Top">
                                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => _rows.Remove(current))"
-                                                       aria-label="@($"Remove {current.AttributeName}")" />
+                                                       aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveInputAria, current.AttributeName)" />
                                     </MudTooltip>
                                 }
                             </td>
@@ -96,21 +95,21 @@
         @if (Connections.Count > 0)
         {
             @* A Scope case records what its sample is joined to, for an export rule's connection criteria (#2787) *@
-            <MudText Typo="Typo.subtitle2" Class="mt-5">Connections</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mt-5">@SyncRuleText.ConnectionsLabel</MudText>
             <div class="d-flex flex-column" data-testid="jim-test-case-connections">
                 @foreach (var connection in Connections)
                 {
                     var typeId = connection.ConnectedObjectTypeId;
                     <MudCheckBox T="bool" @key="typeId" Value="_connected.Contains(typeId)" ValueChanged="@(v => SetConnected(typeId, v))" Dense="true"
-                                 Label="@($"Has {connection.Description}")" />
+                                 Label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.HasConnection, connection.Description)" />
                 }
             </div>
         }
 
         <RunAsOfPicker @bind-Value="_runAsOf" Class="mt-4" />
 
-        <MudText Typo="Typo.subtitle2" Class="mt-5">Expects</MudText>
-        <MudSelect T="ConfigurationTestExpectationKind" @bind-Value="_expect" Label="Result" Variant="Variant.Outlined" Dense="true" Class="mt-2"
+        <MudText Typo="Typo.subtitle2" Class="mt-5">@SyncRuleText.ExpectsHeading</MudText>
+        <MudSelect T="ConfigurationTestExpectationKind" @bind-Value="_expect" Label="@SyncRuleText.ResultLabel" Variant="Variant.Outlined" Dense="true" Class="mt-2"
                    data-testid="jim-test-case-expect">
             @foreach (var kind in ConfigurationTestCase.ExpectationsFor(TestCase.Kind))
             {
@@ -126,13 +125,13 @@
                     <MudChip T="string" Text="@value" OnClose="@(() => _expectedValues.Remove(value))" Size="Size.Small" />
                 }
             </div>
-            <MudTextField @bind-Value="_pendingValue" Label="Add a value" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+            <MudTextField @bind-Value="_pendingValue" Label="@SyncRuleText.AddValueLabel" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
                           OnKeyDown="AddValueOnEnter" Immediate="true"
-                          HelperText="Press Enter to add. A date can be written as 2026-03-02; each value is compared as the type the configuration gives."
-                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddValue" AdornmentAriaLabel="Add value" />
+                          HelperText="@SyncRuleText.AddValueHelp"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddValue" AdornmentAriaLabel="@SyncRuleText.AddValueAria" />
             @if (_expectedValues.Count > 1)
             {
-                <MudCheckBox T="bool" @bind-Value="_inOrder" Label="In this order" Dense="true" Class="mt-1" />
+                <MudCheckBox T="bool" @bind-Value="_inOrder" Label="@SyncRuleText.InOrderLabel" Dense="true" Class="mt-1" />
             }
         }
 
@@ -142,9 +141,9 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="SaveAsync" Disabled="@(!CanSave() || _saving)"
-                   data-testid="jim-test-case-save">Save</MudButton>
+                   data-testid="jim-test-case-save">@CommonText.Save</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -270,7 +269,7 @@
             else
                 await jim.ConfigurationTests.CreateTestCaseAsync(testCase, user);
 
-            Snackbar.Add($"Saved test case '{testCase.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.TestCaseSaved, testCase.Name), Severity.Success);
             MudDialog.Close(DialogResult.Ok(testCase));
         }
         catch (ArgumentException ex)

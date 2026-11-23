@@ -27,7 +27,7 @@ public partial class SyncRepository
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = @"UPDATE ""Activities"" SET ""ObjectsProcessed"" = @processed, ""ObjectsToProcess"" = @toProcess, ""Message"" = @message WHERE ""Id"" = @id";
+        command.CommandText = @"UPDATE ""Activities"" SET ""ObjectsProcessed"" = @processed, ""ObjectsToProcess"" = @toProcess, ""Message"" = @message, ""MessageDetailJson"" = NULL WHERE ""Id"" = @id";
         command.Parameters.AddWithValue("processed", activity.ObjectsProcessed);
         command.Parameters.AddWithValue("toProcess", activity.ObjectsToProcess);
         command.Parameters.AddWithValue("message", (object?)activity.Message ?? DBNull.Value);
@@ -721,7 +721,7 @@ public partial class SyncRepository
                    rpei."ConnectedSystemObjectId", rpei."ExternalIdSnapshot", rpei."DisplayNameSnapshot",
                    rpei."ObjectTypeSnapshot", rpei."ErrorType", rpei."ErrorMessage", rpei."ErrorStackTrace",
                    rpei."AttributeFlowCount", rpei."OutcomeSummary",
-                   mvoc."Id" AS "MvoChangeId"
+                   mvoc."Id" AS "MvoChangeId", rpei."ErrorMessageDetailJson"
             FROM "ActivityRunProfileExecutionItems" rpei
             LEFT JOIN "MetaverseObjectChanges" mvoc
                 ON mvoc."ActivityRunProfileExecutionItemId" = rpei."Id"
@@ -772,7 +772,9 @@ public partial class SyncRepository
                 ErrorMessage = reader.IsDBNull(9) ? null : reader.GetString(9),
                 ErrorStackTrace = reader.IsDBNull(10) ? null : reader.GetString(10),
                 AttributeFlowCount = reader.IsDBNull(11) ? null : reader.GetInt32(11),
-                OutcomeSummary = reader.IsDBNull(12) ? null : reader.GetString(12)
+                OutcomeSummary = reader.IsDBNull(12) ? null : reader.GetString(12),
+                // Read so the bulk field update, which writes it with the other error columns, cannot null it.
+                ErrorMessageDetailJson = reader.IsDBNull(14) ? null : reader.GetString(14)
             };
             var existingMvoChangeId = reader.IsDBNull(13) ? (Guid?)null : reader.GetGuid(13);
 
@@ -1160,6 +1162,7 @@ public partial class SyncRepository
                         "ErrorType" int,
                         "ErrorMessage" text,
                         "ErrorStackTrace" text,
+                        "ErrorMessageDetailJson" text,
                         "AttributeFlowCount" int,
                         "DeletionPolicySnapshotJson" text
                     ) ON COMMIT DROP
@@ -1195,10 +1198,14 @@ public partial class SyncRepository
                         await writer.WriteAsync(rpei.ErrorMessage, NpgsqlTypes.NpgsqlDbType.Text);
                     else
                         await writer.WriteNullAsync();
-                    // ErrorStackTrace is co-mutated with ErrorType/ErrorMessage at every worker error
-                    // site; the three must be written together as a unit.
+                    // ErrorStackTrace and ErrorMessageDetailJson are co-mutated with ErrorType/ErrorMessage at
+                    // every worker error site; the four must be written together as a unit.
                     if (rpei.ErrorStackTrace is not null)
                         await writer.WriteAsync(rpei.ErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text);
+                    else
+                        await writer.WriteNullAsync();
+                    if (rpei.ErrorMessageDetailJson is not null)
+                        await writer.WriteAsync(rpei.ErrorMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
                     else
                         await writer.WriteNullAsync();
                     if (rpei.AttributeFlowCount.HasValue)
@@ -1451,6 +1458,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (rpei.ErrorStackTrace is not null)
                 await writer.WriteAsync(rpei.ErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.ErrorMessageDetailJson is not null)
+                await writer.WriteAsync(rpei.ErrorMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
             if (rpei.AttributeFlowCount.HasValue)

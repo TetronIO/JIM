@@ -1,0 +1,536 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LdapConnectivityMissingValues" xml:space="preserve">
+    <value>Impossible de tester la connectivité : le serveur d’annuaire, le port, le nom d’utilisateur ou le mot de passe est manquant.</value>
+  </data>
+  <data name="LdapConnectivityFailed" xml:space="preserve">
+    <value>Connexion impossible. Message : {0}</value>
+  </data>
+  <data name="LdapExchangeDirectoryTypeRefusal" xml:space="preserve">
+    <value>Les destinataires Exchange ne peuvent être gérés que sur Active Directory, et cet annuaire est {0}. Désactivez {1}, ou connectez-vous à un contrôleur de domaine Active Directory.</value>
+  </data>
+  <data name="LdapDirectoryKindSambaAD" xml:space="preserve">
+    <value>Samba AD</value>
+  </data>
+  <data name="LdapDirectoryKindOpenLDAP" xml:space="preserve">
+    <value>OpenLDAP</value>
+  </data>
+  <data name="LdapDirectoryKindDirectoryServer389" xml:space="preserve">
+    <value>389 Directory Server</value>
+  </data>
+  <data name="LdapDirectoryKindUnrecognised" xml:space="preserve">
+    <value>un annuaire que JIM ne reconnaît pas</value>
+  </data>
+  <data name="LdapExchangeRefusedRemotePowerShell" xml:space="preserve">
+    <value>Exchange a refusé {0} : {1} Le compte s’est connecté au domaine, mais Exchange ne l’autorise pas à utiliser PowerShell distant. Ajoutez-le au groupe de rôles Recipient Management d’Exchange, et vérifiez que son accès à PowerShell distant n’est pas désactivé.</value>
+  </data>
+  <data name="LdapExchangeUnreachable" xml:space="preserve">
+    <value>JIM n’a pas pu joindre Exchange à l’adresse {0} : {1} Vérifiez le nom du serveur Exchange, et que ce serveur peut l’atteindre sur le port {2}.</value>
+  </data>
+  <data name="LdapExchangeTimedOut" xml:space="preserve">
+    <value>Exchange à l’adresse {0} n’a pas répondu : {1} Vérifiez que le serveur est en cours d’exécution, et que rien entre ce serveur et lui ne retient la connexion.</value>
+  </data>
+  <data name="LdapExchangeCertificateUntrusted" xml:space="preserve">
+    <value>JIM ne fait pas confiance au certificat d’Exchange à l’adresse {0} : {1} Ajoutez dans Certificats l’autorité de certification qui l’a émis, et utilisez le nom du serveur tel que son certificat le donne.</value>
+  </data>
+  <data name="LdapExchangeSessionRefused" xml:space="preserve">
+    <value>Exchange à l’adresse {0} a refusé la session : {1}</value>
+  </data>
+  <data name="LdapKerberosClockSkew" xml:space="preserve">
+    <value>L’horloge de ce serveur diffère de celle du domaine de plus de cinq minutes : Kerberos a donc refusé la connexion. Corrigez l’heure de ce serveur, ou du contrôleur de domaine {0}, puis enregistrez de nouveau.</value>
+  </data>
+  <data name="LdapKerberosPasswordRefused" xml:space="preserve">
+    <value>Le domaine a refusé le mot de passe de {0}. Vérifiez le mot de passe ci-dessus : JIM se connecte à Exchange avec le compte de l’annuaire.</value>
+  </data>
+  <data name="LdapKerberosAccountUnknown" xml:space="preserve">
+    <value>Le contrôleur de domaine {0} ne connaît pas le compte {1} : il ne peut donc pas se connecter à Exchange.</value>
+  </data>
+  <data name="LdapKerberosServiceUnknown" xml:space="preserve">
+    <value>Le domaine n’a pas de nom de principal de service HTTP/{0} : Kerberos ne peut donc pas s’y connecter. Utilisez le nom DNS propre du serveur Exchange, et non un alias ou une adresse IP, comme serveur Exchange.</value>
+  </data>
+  <data name="LdapKerberosAccountDisabled" xml:space="preserve">
+    <value>Le compte {0} est désactivé ou verrouillé : le domaine a donc refusé la connexion.</value>
+  </data>
+  <data name="LdapKerberosPasswordExpired" xml:space="preserve">
+    <value>Le compte {0} ne peut pas se connecter, car son mot de passe a expiré. Définissez-en un nouveau, et saisissez-le comme mot de passe ci-dessus.</value>
+  </data>
+  <data name="LdapKerberosDomainControllerUnreachable" xml:space="preserve">
+    <value>JIM n’a pas pu joindre le contrôleur de domaine {0} sur le port 88 pour se connecter à Exchange avec Kerberos. Vérifiez que ce serveur peut l’atteindre.</value>
+  </data>
+  <data name="LdapKerberosRefused" xml:space="preserve">
+    <value>Kerberos a refusé la connexion de {0} via {1} : {2}</value>
+  </data>
+  <data name="LdapExchangeCommandsMissing" xml:space="preserve">
+    <value>Le compte {0} ne peut pas exécuter {1} dans Exchange : JIM ne peut donc pas gérer ces types de destinataires : {2}. Leurs modifications échoueront faute d’autorisations suffisantes tant qu’il ne le pourra pas. Ajoutez le compte au groupe de rôles Recipient Management d’Exchange, ou attribuez-lui un rôle qui inclut ces commandes.</value>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value>{0} ou {1}</value>
+  </data>
+  <data name="LdapExchangeGetCommandFailed" xml:space="preserve">
+    <value>JIM s’est connecté à Exchange en tant que {0}, mais n’a pas pu déterminer quelles commandes le compte peut exécuter, car Get-Command a échoué : {1}</value>
+  </data>
+  <data name="GraphTenantAlias" xml:space="preserve">
+    <value>« {0} » est un alias de connexion multilocataire, et non un locataire. Indiquez l’ID du locataire (un GUID) ou l’un de ses noms de domaine vérifiés, affiché sous le nom Directory (tenant) ID sur la page Vue d’ensemble de l’inscription d’application.</value>
+  </data>
+  <data name="GraphTenantInvalid" xml:space="preserve">
+    <value>Le paramètre {0} doit être l’ID du locataire (un GUID) ou l’un de ses noms de domaine vérifiés, par exemple contoso.onmicrosoft.com. Indiquez la valeur seule, et non une URL de connexion.</value>
+  </data>
+  <data name="GraphClientIdInvalid" xml:space="preserve">
+    <value>Le paramètre {0} doit être l’ID d’application (client) de l’inscription d’application, un GUID tel que 00000000-0000-0000-0000-000000000000, affiché sur sa page Vue d’ensemble.</value>
+  </data>
+  <data name="GraphCloudUnknown" xml:space="preserve">
+    <value>« {0} » n’est pas un cloud que ce connecteur connaît. Choisissez parmi : {1}.</value>
+  </data>
+  <data name="GraphNumberOutOfRange" xml:space="preserve">
+    <value>Le paramètre {0} doit être compris entre {1} et {2}.</value>
+  </data>
+  <data name="GraphManagedIdentityIdInvalid" xml:space="preserve">
+    <value>Le paramètre {0} doit être l’ID client de l’identité managée, un GUID affiché sur sa page Vue d’ensemble dans le portail Azure.</value>
+  </data>
+  <data name="GraphSettingNotDecrypted" xml:space="preserve">
+    <value>Le paramètre {0} n’a pas pu être déchiffré.</value>
+  </data>
+  <data name="GraphTestRequestRefused" xml:space="preserve">
+    <value>Authentification réussie, mais Microsoft Graph a refusé la requête de test : {0}</value>
+  </data>
+  <data name="GraphCouldNotConnect" xml:space="preserve">
+    <value>Impossible de se connecter à Microsoft Entra ID ou à Microsoft Graph. Vérifiez que JIM peut les joindre en HTTPS (port 443). Si un proxy inspecte le trafic TLS, ajoutez son certificat d’autorité de certification au magasin de certificats de JIM, dans Admin &gt; Certificats.</value>
+  </data>
+  <data name="EntraRefusedKnown" xml:space="preserve">
+    <value>Microsoft Entra ID a refusé la demande de jeton (AADSTS{0}). {1}</value>
+  </data>
+  <data name="EntraRefusedWithDetail" xml:space="preserve">
+    <value>Microsoft Entra ID a refusé la demande de jeton avec le code HTTP {0} ({1}). Vérifiez les paramètres {2} et {3} ainsi que ceux des identifiants.</value>
+  </data>
+  <data name="EntraRefusedWithStatus" xml:space="preserve">
+    <value>Microsoft Entra ID a refusé la demande de jeton avec le code HTTP {0}. Vérifiez les paramètres {1} et {2} ainsi que ceux des identifiants.</value>
+  </data>
+  <data name="EntraSecretInvalid" xml:space="preserve">
+    <value>Le paramètre {0} n’est pas valide. Indiquez la valeur (Value) du secret, sous Certificats et secrets sur l’inscription d’application, et non son ID de secret.</value>
+  </data>
+  <data name="EntraSecretExpired" xml:space="preserve">
+    <value>Le paramètre {0} a expiré. Créez un nouveau secret client sur l’inscription d’application et indiquez-le ici.</value>
+  </data>
+  <data name="EntraApplicationNotFound" xml:space="preserve">
+    <value>Aucune application correspondant au paramètre {0} n’a été trouvée dans le locataire. Vérifiez le paramètre {0}, et que l’inscription d’application appartient au locataire indiqué dans le paramètre {1}.</value>
+  </data>
+  <data name="EntraTenantNotFound" xml:space="preserve">
+    <value>Le locataire indiqué dans le paramètre {0} est introuvable. Vérifiez-le, et vérifiez le paramètre {1} : un locataire d’un cloud national est introuvable sur les points de terminaison globaux, et inversement.</value>
+  </data>
+  <data name="EntraTenantIdInvalid" xml:space="preserve">
+    <value>Le paramètre {0} n’est pas un identifiant de locataire valide. Indiquez l’ID du locataire (un GUID) ou l’un de ses noms de domaine vérifiés.</value>
+  </data>
+  <data name="EntraAssertionNotVerified" xml:space="preserve">
+    <value>Microsoft Entra ID n’a pas pu vérifier l’assertion signée avec le paramètre {0}. Vérifiez que le même certificat est téléversé sous Certificats et secrets sur l’inscription d’application. Un certificat téléversé depuis quelques minutes peut encore être refusé le temps qu’Entra ID l’applique ; dans ce cas, réessayez dans un instant.</value>
+  </data>
+  <data name="EntraAssertionOutOfTime" xml:space="preserve">
+    <value>L’assertion client était en dehors de sa plage de validité. Vérifiez que l’horloge du serveur JIM est correcte.</value>
+  </data>
+  <data name="EntraApplicationDisabled" xml:space="preserve">
+    <value>L’application est désactivée dans le locataire. Activez son application d’entreprise (principal de service) et réessayez.</value>
+  </data>
+  <data name="EntraFederatedMismatch" xml:space="preserve">
+    <value>Le jeton de l’identité de charge de travail ne correspond à aucune information d’identification fédérée de l’inscription d’application. Sous Certificats et secrets &gt; Informations d’identification fédérées, ajoutez-en une pour l’identité managée indiquée dans le paramètre {0}, pour ce cloud.</value>
+  </data>
+  <data name="EntraGraphNotFound" xml:space="preserve">
+    <value>Microsoft Graph est introuvable dans le locataire. Vérifiez que le paramètre {0} correspond au cloud dans lequel se trouve le locataire.</value>
+  </data>
+  <data name="ScimUrlInvalid" xml:space="preserve">
+    <value>Le paramètre « {0} » n’est pas une URL absolue valide.</value>
+  </data>
+  <data name="ScimUrlInvalidWithExample" xml:space="preserve">
+    <value>Le paramètre « {0} » n’est pas une URL absolue valide. Indiquez l’adresse complète, par exemple {1}.</value>
+  </data>
+  <data name="ScimUrlNotHttps" xml:space="preserve">
+    <value>Le paramètre « {0} » doit utiliser HTTPS. HTTP n’est autorisé que pour les adresses de bouclage lors de tests en local, car {1} est envoyé à cette adresse.</value>
+  </data>
+  <data name="ScimPayloadIdentityData" xml:space="preserve">
+    <value>les données d’identité</value>
+  </data>
+  <data name="ScimPayloadClientSecret" xml:space="preserve">
+    <value>le secret client</value>
+  </data>
+  <data name="ScimNoDiscoveryAnswer" xml:space="preserve">
+    <value>Connexion établie à « {0} », mais aucun point de découverte SCIM n’a répondu ({1}, {2} ou {3}). Vérifiez que l’URL de base pointe vers la racine du service SCIM, et non vers un point de terminaison de ressource tel que /Users.</value>
+  </data>
+  <data name="ScimCouldNotAuthenticate" xml:space="preserve">
+    <value>Impossible de s’authentifier auprès du fournisseur de services SCIM : {0}</value>
+  </data>
+  <data name="ScimCouldNotConnect" xml:space="preserve">
+    <value>Impossible de se connecter au fournisseur de services SCIM : {0}</value>
+  </data>
+  <data name="SqlTimeZoneUnknown" xml:space="preserve">
+    <value>{0} « {1} » n’est pas un fuseau horaire reconnu par ce déploiement. Saisissez UTC, ou un nom de fuseau horaire IANA tel que Europe/London ou America/New_York.</value>
+  </data>
+  <data name="SqlChooseDatabaseType" xml:space="preserve">
+    <value>Choisissez un {0} avant de tester la connectivité.</value>
+  </data>
+  <data name="SqlMissingConnectionValues" xml:space="preserve">
+    <value>Impossible de tester la connectivité tant que {0}, {1} et {2} n’ont pas été renseignés.</value>
+  </data>
+  <data name="SqlConnectFailed" xml:space="preserve">
+    <value>Connexion impossible. Message : {0}</value>
+  </data>
+  <data name="FileNotFound" xml:space="preserve">
+    <value>Fichier introuvable : « {0} ». En mode {1}, le fichier doit exister. Vérifiez le chemin et assurez-vous qu’il correspond à un volume Docker.</value>
+  </data>
+  <data name="FileExportDirectoryNotCreated" xml:space="preserve">
+    <value>Le répertoire d’exportation n’a pas pu être créé : « {0} ». Erreur : {1}</value>
+  </data>
+  <data name="CertServerScimServiceProvider" xml:space="preserve">
+    <value>fournisseur de services SCIM</value>
+  </data>
+  <data name="CertServerDirectoryServer" xml:space="preserve">
+    <value>serveur d’annuaire</value>
+  </data>
+  <data name="CertServerDatabaseServer" xml:space="preserve">
+    <value>serveur de base de données</value>
+  </data>
+  <data name="CertNoCertificate" xml:space="preserve">
+    <value>Le {0} n’a présenté aucun certificat. Vérifiez qu’il est configuré pour {1} sur ce port.</value>
+  </data>
+  <data name="CertExpired" xml:space="preserve">
+    <value>Le certificat a expiré. Renouvelez-le sur le {0} ; faire confiance à son émetteur n’annule pas la date d’expiration.</value>
+  </data>
+  <data name="CertNotYetValid" xml:space="preserve">
+    <value>Le certificat n’est pas encore valide, ce qui signifie généralement que les horloges de JIM et du {0} ne concordent pas.</value>
+  </data>
+  <data name="CertNameMismatch" xml:space="preserve">
+    <value>Le certificat n’a pas été émis pour « {0} ». L’ajouter au magasin de certificats de JIM n’y changera rien ; connectez-vous avec un nom que porte le certificat, en donnant aux conteneurs de JIM une entrée d’hôte pour ce nom s’il ne peut pas être résolu.</value>
+  </data>
+  <data name="CertChainProblem" xml:space="preserve">
+    <value>{0} Faire confiance à un certificat dans JIM n’y change rien ; la chaîne de certificats doit être corrigée sur le {1}.</value>
+  </data>
+  <data name="CertSelfSigned" xml:space="preserve">
+    <value>Le certificat est auto-signé et n’est pas approuvé. Ajoutez ce certificat au magasin de certificats de JIM (Admin &gt; Certificats) pour approuver ce {0}.</value>
+  </data>
+  <data name="CertNothingTrustedWithRoot" xml:space="preserve">
+    <value>Rien dans la chaîne de certificats n’est approuvé. Ajoutez « {0} », la racine de la chaîne, au magasin de certificats de JIM (Admin &gt; Certificats) afin que les renouvellements de tout ce qui se trouve en dessous soient eux aussi approuvés. Tout autre certificat de la chaîne fonctionne également, jusqu’à son renouvellement.</value>
+  </data>
+  <data name="CertNothingTrustedIssuerMissing" xml:space="preserve">
+    <value>Rien dans la chaîne de certificats n’est approuvé, et JIM n’a pas trouvé « {0} », l’autorité de certification qui a émis « {1} ». Approuvez un certificat que JIM a trouvé, ou ajoutez « {0} » au magasin de certificats de JIM (Admin &gt; Certificats) afin que les renouvellements soient eux aussi approuvés.</value>
+  </data>
+  <data name="CertRootNotTrusted" xml:space="preserve">
+    <value>La racine de la chaîne n’est pas approuvée. Ajoutez « {0} » au magasin de certificats de JIM (Admin &gt; Certificats). Cette connexion n’accepte que la racine : un certificat intermédiaire, ou celui du {1}, dans le magasin ne la fait pas fonctionner.</value>
+  </data>
+  <data name="CertRootNotTrustedIssuerMissing" xml:space="preserve">
+    <value>La racine de la chaîne n’est pas approuvée, et JIM n’a pas trouvé « {0} », l’autorité de certification au-dessus de « {1} ». Obtenez le certificat racine auprès de la personne qui gère votre PKI et ajoutez-le au magasin de certificats de JIM (Admin &gt; Certificats). Cette connexion n’accepte que la racine.</value>
+  </data>
+  <data name="CertChainExpired" xml:space="preserve">
+    <value>{0} a expiré le {1}. Une chaîne qui passe par une autorité de certification expirée n’est jamais valide ; elle doit être renouvelée.</value>
+  </data>
+  <data name="CertChainNotYetValid" xml:space="preserve">
+    <value>{0} n’est pas valide avant le {1}.</value>
+  </data>
+  <data name="CertChainNotAuthority" xml:space="preserve">
+    <value>{0} n’est pas marqué comme autorité de certification : il ne peut donc pas se porter garant du certificat situé en dessous.</value>
+  </data>
+  <data name="CertChainBadSignature" xml:space="preserve">
+    <value>La signature que {0} a apposée sur le certificat situé en dessous n’est pas vérifiable.</value>
+  </data>
+  <data name="CertRejected" xml:space="preserve">
+    <value>Le certificat du {0} a été rejeté : {1}</value>
+  </data>
+  <data name="SqlDocObjectTypeNamed" xml:space="preserve">
+    <value>le type d’objet « {0} »</value>
+  </data>
+  <data name="SqlDocObjectTypeNamedCapital" xml:space="preserve">
+    <value>Le type d’objet « {0} »</value>
+  </data>
+  <data name="SqlDocObjectTypeByPosition" xml:space="preserve">
+    <value>le type d’objet en position {0}</value>
+  </data>
+  <data name="SqlDocObjectTypeByPositionCapital" xml:space="preserve">
+    <value>Le type d’objet en position {0}</value>
+  </data>
+  <data name="SqlDocLevelColumn" xml:space="preserve">
+    <value>Une colonne configurée pour {0}</value>
+  </data>
+  <data name="SqlDocLevelRelatedTable" xml:space="preserve">
+    <value>Une table associée pour {0}</value>
+  </data>
+  <data name="SqlDocLevelChangeLog" xml:space="preserve">
+    <value>Le journal des modifications pour {0}</value>
+  </data>
+  <data name="SqlDocLevelDocument" xml:space="preserve">
+    <value>Le document {0}</value>
+  </data>
+  <data name="SqlDocUnrecognisedField" xml:space="preserve">
+    <value>{0} contient un champ non reconnu « {1} ».{2} Les champs non reconnus sont refusés plutôt qu’ignorés, car en ignorer un laisserait le système connecté configuré autrement que ne le dit le document.</value>
+  </data>
+  <data name="SqlDocDidYouMean" xml:space="preserve">
+    <value> Vouliez-vous dire « {0} » ?</value>
+  </data>
+  <data name="SqlDocJsonUnreadable" xml:space="preserve">
+    <value>{0} n’a pas pu être lu comme du JSON : {1}</value>
+  </data>
+  <data name="SqlDocEmpty" xml:space="preserve">
+    <value>{0} est vide. Un système connecté a besoin d’au moins un type d’objet avant que JIM puisse découvrir son schéma ; consultez la description du paramètre pour un exemple de départ.</value>
+  </data>
+  <data name="SqlDocNoObjectTypes" xml:space="preserve">
+    <value>{0} doit déclarer au moins un type d’objet dans sa liste « objectTypes ».</value>
+  </data>
+  <data name="SqlDocDuplicateName" xml:space="preserve">
+    <value>Le type d’objet « {0} » est déclaré plusieurs fois. Les noms de types d’objets les identifient pour JIM : chacun doit donc être unique.</value>
+  </data>
+  <data name="SqlDocPositionEmpty" xml:space="preserve">
+    <value>Le type d’objet en position {0} de « objectTypes » est vide.</value>
+  </data>
+  <data name="SqlDocPositionNoName" xml:space="preserve">
+    <value>Le type d’objet en position {0} de « objectTypes » n’a pas de « name ». Chaque type d’objet doit en avoir un, car c’est ainsi que JIM le désigne.</value>
+  </data>
+  <data name="SqlDocOneSource" xml:space="preserve">
+    <value>Le type d’objet « {0} » doit indiquer exactement une source : soit une « table » (une table ou une vue), soit une instruction « select », mais pas les deux.</value>
+  </data>
+  <data name="SqlDocSchemaWithSelect" xml:space="preserve">
+    <value>Le type d’objet « {0} » fournit à la fois un « schema » et une instruction « select ». Un schéma qualifie le nom d’une table ; une instruction qualifie ses propres tables : supprimez donc le « schema ».</value>
+  </data>
+  <data name="SqlDocChangeLogAnchorCount" xml:space="preserve">
+    <value>Le type d’objet « {0} » identifie les lignes de son journal des modifications par {1} colonne(s), mais l’ancre du type d’objet en compte {2}. Une modification attribuée par une partie d’une ancre appartient à un autre objet : « changeLog.anchorColumns » doit donc nommer une colonne par colonne d’ancre, dans le même ordre.</value>
+  </data>
+  <data name="SqlDocChangeLogAnchorDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » mentionne plusieurs fois la colonne d’ancre « {1} » du journal des modifications.</value>
+  </data>
+  <data name="SqlDocChangeLogNoDelete" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un journal des modifications sans « deleteValues ». Observer les suppressions est la raison d’être d’une table de journal des modifications ; si cette base de données ne peut pas les enregistrer, utilisez plutôt le mode Watermark Column.</value>
+  </data>
+  <data name="SqlDocChangeLogNoCreateOrUpdate" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un journal des modifications sans « createValues » ni « updateValues » : rien d’autre que des suppressions ne pourrait donc en être importé.</value>
+  </data>
+  <data name="SqlDocChangeLogEmptyValue" xml:space="preserve">
+    <value>Le type d’objet « {0} » a une valeur vide dans « changeLog.{1} ». Le type de modification d’une ligne du journal est comparé exactement à ces valeurs : une valeur vide ne pourrait donc jamais correspondre.</value>
+  </data>
+  <data name="SqlDocChangeLogValueAmbiguous" xml:space="preserve">
+    <value>Le type d’objet « {0} » a la valeur de journal « {1} » qui signifie à la fois {2} et {3}. Chaque valeur ne peut désigner qu’un seul type de modification.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsChangeLog" xml:space="preserve">
+    <value>{0} est « {1} », mais le type d’objet « {2} » est sélectionné pour la synchronisation et n’a pas de « changeLog ». Une importation delta qui ignorerait un type d’objet signalerait un succès tout en laissant ses objets dériver : chaque type d’objet sélectionné doit donc en avoir un. Donnez-lui un « changeLog », ou désélectionnez-le si JIM n’en importe jamais.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsWatermark" xml:space="preserve">
+    <value>{0} est « {1} », mais le type d’objet « {2} » est sélectionné pour la synchronisation et n’a pas de « watermarkColumn ». Une importation delta qui ignorerait un type d’objet signalerait un succès tout en laissant ses objets dériver : chaque type d’objet sélectionné doit donc en avoir un. Donnez-lui un « watermarkColumn », ou désélectionnez-le si JIM n’en importe jamais.</value>
+  </data>
+  <data name="SqlDocRelatedNeedsWatermark" xml:space="preserve">
+    <value>{0} est « {1} », mais le type d’objet « {2} » a l’attribut de table associée « {3} » sans « watermarkColumn ». Une ligne ajoutée à « {4} » ou supprimée de cette table modifie l’objet sans toucher à sa propre ligne : sans colonne de filigrane sur la table associée, cette modification ne pourrait jamais être détectée.</value>
+  </data>
+  <data name="SqlDocNoAnchorColumns" xml:space="preserve">
+    <value>Le type d’objet « {0} » n’a pas de « anchorColumns ». JIM identifie un objet par son ancre : au moins une colonne doit donc être nommée.</value>
+  </data>
+  <data name="SqlDocAnchorDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » mentionne plusieurs fois la colonne d’ancre « {1} ».</value>
+  </data>
+  <data name="SqlDocColumnNoReference" xml:space="preserve">
+    <value>Le type d’objet « {0} » configure la colonne « {1} » sans « referencesObjectType ». Une colonne n’est configurée que pour dire ce que son type ne peut pas dire, ce qui signifie aujourd’hui nommer le type d’objet vers lequel elle pointe.</value>
+  </data>
+  <data name="SqlDocColumnDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » configure plusieurs fois la colonne « {1} ».</value>
+  </data>
+  <data name="SqlDocRelatedNoAttributeName" xml:space="preserve">
+    <value>Le type d’objet « {0} » a une table associée sans « attributeName ». Le nom d’attribut est le nom que porte l’attribut multivalué sur le type d’objet.</value>
+  </data>
+  <data name="SqlDocRelatedDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » déclare plusieurs fois l’attribut de table associée « {1} ».</value>
+  </data>
+  <data name="SqlDocJoinColumnCount" xml:space="preserve">
+    <value>Le type d’objet « {0} » joint l’attribut de table associée « {1} » sur {2} colonne(s), mais l’ancre du type d’objet en compte {3}. Joindre sur une partie d’une ancre rassemble les valeurs d’un autre objet sur celui-ci : « joinColumns » doit donc nommer une colonne par colonne d’ancre, dans le même ordre.</value>
+  </data>
+  <data name="SqlDocColumnReferenceUnknown" xml:space="preserve">
+    <value>Le type d’objet « {0} » indique que la colonne « {1} » référence le type d’objet « {2} », que ce document ne déclare pas. Une référence ne peut pointer que vers un type d’objet que JIM synchronise également.</value>
+  </data>
+  <data name="SqlDocRelatedReferenceUnknown" xml:space="preserve">
+    <value>Le type d’objet « {0} » indique que l’attribut de table associée « {1} » référence le type d’objet « {2} », que ce document ne déclare pas.</value>
+  </data>
+  <data name="SqlDocNoValueForField" xml:space="preserve">
+    <value>Le type d’objet « {0} » n’a pas de valeur pour « {1} ».</value>
+  </data>
+  <data name="SqlDocIdentifierWhitespace" xml:space="preserve">
+    <value>Le type d’objet « {0} » a « {1} » défini à « {2} », qui commence ou se termine par un espace. Les identifiants de base de données sont utilisés exactement tels qu’ils sont écrits : les espaces désigneraient donc un autre objet.</value>
+  </data>
+  <data name="SqlDocIdentifierInvalid" xml:space="preserve">
+    <value>Le type d’objet « {0} » a « {1} » défini à une valeur qui ne peut pas nommer un objet de base de données : {2}</value>
+  </data>
+  <data name="SqlDocSelectNotQuery" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un « select » qui ne commence pas par SELECT ou WITH. JIM lit les objets avec lui : il doit donc s’agir d’une requête.</value>
+  </data>
+  <data name="SqlDocSelectSemicolon" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un « select » qui contient un point-virgule. Il doit s’agir d’une seule instruction, sans terminateur.</value>
+  </data>
+  <data name="PfEncrypted" xml:space="preserve">
+    <value>La connexion est chiffrée : les mots de passe sont donc protégés pendant leur transport.</value>
+  </data>
+  <data name="PfEnableSecureConnection" xml:space="preserve">
+    <value>Activez le paramètre « Utiliser une connexion sécurisée » de ce système connecté, et définissez le port sur celui sur lequel l’annuaire sert LDAPS.</value>
+  </data>
+  <data name="PfAdRefusesUnencrypted" xml:space="preserve">
+    <value>Active Directory refuse d’accepter un mot de passe sur une connexion qui n’est ni chiffrée ni signée et scellée : la définition d’un mot de passe sera probablement rejetée tant que ce point n’est pas traité.</value>
+  </data>
+  <data name="PfNotEncrypted" xml:space="preserve">
+    <value>La connexion n’est pas chiffrée. Les mots de passe seraient envoyés là où toute personne présente sur le chemin réseau peut les lire.</value>
+  </data>
+  <data name="PfMechanismAd" xml:space="preserve">
+    <value>JIM définirait les mots de passe en écrivant l’attribut « {0} », ce qui est la manière dont Active Directory les accepte.</value>
+  </data>
+  <data name="PfMechanismPasswordModify" xml:space="preserve">
+    <value>JIM définirait les mots de passe à l’aide de l’opération étendue LDAP Password Modify, dont cet annuaire annonce la prise en charge.</value>
+  </data>
+  <data name="PfMechanismUnsupported" xml:space="preserve">
+    <value>Cet annuaire n’annonce pas l’opération étendue LDAP Password Modify, qui est le seul mécanisme que JIM utilisera pour définir un mot de passe sur un annuaire autre qu’Active Directory.</value>
+  </data>
+  <data name="PfMechanismLooksFor" xml:space="preserve">
+    <value>JIM recherche l’opération étendue « {0} » sur le rootDSE de l’annuaire.</value>
+  </data>
+  <data name="PfMechanismNoDirectWrite" xml:space="preserve">
+    <value>JIM n’écrira pas non plus directement un attribut de mot de passe, car un annuaire stocke une valeur écrite directement exactement telle qu’elle est fournie, sans la hacher, ce qui laisserait des mots de passe en clair dans l’annuaire.</value>
+  </data>
+  <data name="PfRightsNotCheckable" xml:space="preserve">
+    <value>JIM ne peut pas vérifier si le compte avec lequel il se connecte est autorisé à réinitialiser les mots de passe sur cet annuaire.</value>
+  </data>
+  <data name="PfRightsNotCheckableDetail" xml:space="preserve">
+    <value>Cet annuaire ne publie aucun moyen pour un client de demander ce qu’il est autorisé à faire : les droits du compte doivent donc être confirmés sur l’annuaire lui-même.</value>
+  </data>
+  <data name="PfRightsNoContainers" xml:space="preserve">
+    <value>JIM ne peut pas vérifier si le compte avec lequel il se connecte est autorisé à réinitialiser les mots de passe, car il ne sait pas encore où il provisionnerait.</value>
+  </data>
+  <data name="PfRightsSelectContainers" xml:space="preserve">
+    <value>Sélectionnez les conteneurs à gérer sous l’onglet Périmètre, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfRightsFinding" xml:space="preserve">
+    <value>{0} {1} : {2}</value>
+  </data>
+  <data name="PfOutcomeAllowed" xml:space="preserve">
+    <value>Autorisé dans</value>
+  </data>
+  <data name="PfOutcomeDenied" xml:space="preserve">
+    <value>Non autorisé dans</value>
+  </data>
+  <data name="PfOutcomeUnknown" xml:space="preserve">
+    <value>Impossible de déterminer pour</value>
+  </data>
+  <data name="PfRightsCheckedFirst" xml:space="preserve">
+    <value>JIM a vérifié les {0} premiers des {1} conteneurs gérés de ce système connecté.</value>
+  </data>
+  <data name="PfRightsDenied" xml:space="preserve">
+    <value>Le compte avec lequel JIM se connecte ne peut pas réinitialiser les mots de passe partout où il provisionnerait.</value>
+  </data>
+  <data name="PfRightsUnconfirmed" xml:space="preserve">
+    <value>JIM n’a pas pu confirmer partout que le compte avec lequel il se connecte est autorisé à réinitialiser les mots de passe.</value>
+  </data>
+  <data name="PfRightsAllowed" xml:space="preserve">
+    <value>Le compte avec lequel JIM se connecte peut réinitialiser les mots de passe partout où il provisionnerait.</value>
+  </data>
+  <data name="PfPolicyNounDomain" xml:space="preserve">
+    <value>la stratégie de mots de passe du domaine</value>
+  </data>
+  <data name="PfPolicyNounDirectory" xml:space="preserve">
+    <value>la stratégie de mots de passe de l’annuaire</value>
+  </data>
+  <data name="PfPolicyUnreadable" xml:space="preserve">
+    <value>JIM n’a pas pu lire {0} ; il ne peut donc pas préremplir le générateur de mots de passe à partir de celle-ci.</value>
+  </data>
+  <data name="PfPolicyRead" xml:space="preserve">
+    <value>JIM a lu {0} et peut préremplir le générateur de mots de passe à partir de celle-ci.</value>
+  </data>
+  <data name="PfPolicyRemedyActiveDirectory" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire l’objet racine du domaine.</value>
+  </data>
+  <data name="PfPolicyRemedyOpenLdap" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire l’entrée de stratégie que la surcouche ppolicy applique par défaut.</value>
+  </data>
+  <data name="PfPolicyRemedyDirectoryServer389" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire les attributs de mot de passe sur cn=config.</value>
+  </data>
+  <data name="PfPolicyRemedyOther" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire l’emplacement où cet annuaire conserve sa stratégie de mots de passe.</value>
+  </data>
+  <data name="PfPolicyNotPublished" xml:space="preserve">
+    <value>Cet annuaire ne publie pas de stratégie de mots de passe qu’un client puisse lire : JIM ne peut donc pas préremplir le générateur de mots de passe à partir de celle-ci.</value>
+  </data>
+  <data name="PfPolicyConfigNotReadable" xml:space="preserve">
+    <value>JIM n’a pas pu lire la stratégie de mots de passe de l’annuaire : le compte avec lequel il se connecte ne peut pas lire la configuration du serveur qui la contient.</value>
+  </data>
+  <data name="PfConfigRemedyOpenLdap" xml:space="preserve">
+    <value>Accordez au compte avec lequel JIM se connecte un accès en lecture à la configuration de la surcouche ppolicy sous cn=config et à l’entrée de stratégie qu’elle désigne, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfConfigRemedyDirectoryServer389" xml:space="preserve">
+    <value>Accordez au compte avec lequel JIM se connecte un accès en lecture aux attributs de mot de passe sur cn=config, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfConfigRemedyOther" xml:space="preserve">
+    <value>Accordez au compte avec lequel JIM se connecte un accès en lecture à la configuration du serveur qui contient la stratégie de mots de passe, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfPolicyNoneConfigured" xml:space="preserve">
+    <value>JIM a lu la configuration de la stratégie de mots de passe de l’annuaire : aucune stratégie n’est configurée, donc aucune règle ne s’applique à un mot de passe généré.</value>
+  </data>
+  <data name="PfMinimumLength" xml:space="preserve">
+    <value>Longueur minimale : {0}.</value>
+  </data>
+  <data name="PfComplexityRequired" xml:space="preserve">
+    <value>La complexité est exigée : un mot de passe doit utiliser au moins {0} des 5 catégories de caractères.</value>
+  </data>
+  <data name="PfComplexityNotRequired" xml:space="preserve">
+    <value>La complexité n’est pas exigée.</value>
+  </data>
+  <data name="PfPpolicyNotLoaded" xml:space="preserve">
+    <value>L’annuaire n’annonce pas le contrôle de stratégie de mots de passe : la surcouche ppolicy n’est donc pas chargée.</value>
+  </data>
+  <data name="PfSetByHand" xml:space="preserve">
+    <value>Définissez à la main les exigences de mot de passe de la règle de synchronisation pour qu’elles correspondent à la stratégie de la cible, et attendez-vous à ce qu’un écart se manifeste par un rejet.</value>
+  </data>
+  <data name="PfFgppPresent" xml:space="preserve">
+    <value>Ce domaine possède des stratégies de mots de passe affinées (Fine-Grained Password Policies), qui appliquent des règles plus strictes à certains comptes. Ce que JIM a lu n’est qu’un minimum, pas la réalité complète.</value>
+  </data>
+  <data name="PfOverridePresent" xml:space="preserve">
+    <value>Certains objets de cet annuaire sont régis par une stratégie de mots de passe autre que celle que JIM a lue, qui peut être plus stricte. Ce que JIM a lu n’est qu’un minimum, pas la réalité complète.</value>
+  </data>
+  <data name="PfFgppUnknown" xml:space="preserve">
+    <value>JIM n’a pas pu établir si ce domaine possède des stratégies de mots de passe affinées (Fine-Grained Password Policies), qui appliqueraient des règles plus strictes à certains comptes. Considérez ce qu’il a lu comme un minimum.</value>
+  </data>
+  <data name="PfOverrideUnknown" xml:space="preserve">
+    <value>JIM n’a pas pu établir si certains objets de cet annuaire sont régis par une stratégie de mots de passe autre que celle qu’il a lue, qui pourrait être plus stricte. Considérez ce qu’il a lu comme un minimum.</value>
+  </data>
+  <data name="PfFurtherChecks" xml:space="preserve">
+    <value>L’annuaire applique d’autres contrôles que JIM ne peut pas voir : un mot de passe satisfaisant tout ce qui précède peut donc encore être refusé.</value>
+  </data>
+  <data name="PfGraphNoToken" xml:space="preserve">
+    <value>Aucun jeton d’accès n’a pu être obtenu auprès de Microsoft Entra ID : {0}</value>
+  </data>
+  <data name="PfGraphHttps" xml:space="preserve">
+    <value>Microsoft Graph est joint en HTTPS, avec TLS 1.2 ou version ultérieure.</value>
+  </data>
+  <data name="PfNotChecked" xml:space="preserve">
+    <value>Non vérifié : aucune connexion.</value>
+  </data>
+  <data name="PfGraphPolicySame" xml:space="preserve">
+    <value>Les règles de mot de passe de Microsoft Entra ID sont les mêmes dans tous les locataires.</value>
+  </data>
+  <data name="PfGraphToken" xml:space="preserve">
+    <value>Un jeton d’accès a été obtenu auprès de Microsoft Entra ID.</value>
+  </data>
+  <data name="PfGraphMechanism" xml:space="preserve">
+    <value>Les mots de passe sont définis via Microsoft Graph, sur le passwordProfile de l’utilisateur.</value>
+  </data>
+  <data name="PfGraphPolicySameBanned" xml:space="preserve">
+    <value>Les règles de mot de passe de Microsoft Entra ID sont les mêmes dans tous les locataires ; sa liste de mots de passe interdits ne peut pas être lue.</value>
+  </data>
+  <data name="PfGraphLacksPermission" xml:space="preserve">
+    <value>L’inscription d’application ne dispose pas de l’autorisation d’application {0}. Accordez-la avec le consentement de l’administrateur.</value>
+  </data>
+  <data name="PfGraphHoldsRole" xml:space="preserve">
+    <value>L’application détient l’autorisation et le rôle d’annuaire {0} dans tout le locataire.</value>
+  </data>
+  <data name="PfGraphNoRole" xml:space="preserve">
+    <value>L’application détient l’autorisation, mais son jeton n’indique aucun rôle d’annuaire permettant de réinitialiser les mots de passe. Graph exige aussi que l’application détienne User Administrator dans tout le locataire : exécutez Register-JIMEntraIdConnector -PasswordManagement, ou attribuez-le dans le centre d’administration Entra. Un rôle attribué dans la dernière heure peut manquer dans le jeton tant qu’il n’est pas renouvelé.</value>
+  </data>
+</root>

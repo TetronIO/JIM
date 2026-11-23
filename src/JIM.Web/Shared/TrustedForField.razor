@@ -6,14 +6,14 @@
    this only says so. *@
 
 <div class="@Class">
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">Trusted for</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">@ConnectedSystemText.TrustedForLabel</MudText>
     <MudCheckBox T="bool" Value="Connectors" ValueChanged="OnConnectorsChanged" Color="Color.Primary" Dense="true"
-                 Label="Connectors: the servers Connected Systems connect to (LDAPS, HTTPS, SQL Server)" />
+                 Label="@ConnectedSystemText.TrustedForConnectors" />
     <MudCheckBox T="bool" Value="SignIn" ValueChanged="OnSignInChanged" Color="Color.Primary" Dense="true"
-                 Label="Sign-in: your identity provider (AD FS, Keycloak and the like)" />
+                 Label="@ConnectedSystemText.TrustedForSignIn" />
     @if (!SignIn && !Connectors)
     {
-        <MudText Typo="Typo.caption" Color="Color.Error">Choose at least one.</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Error">@ConnectedSystemText.TrustedForChooseMessage</MudText>
     }
 </div>
 

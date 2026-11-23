@@ -9,7 +9,7 @@
     <TextValueDisplay Value="@Value" />
     @if (!string.IsNullOrEmpty(Value) && !string.IsNullOrEmpty(Contributor))
     {
-        <span class="jim-one-line-secondary">from @Contributor</span>
+        <span class="jim-one-line-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewValueFromContributor, Contributor)</span>
     }
 </span>
 
@@ -22,5 +22,7 @@
     [Parameter]
     public string? Contributor { get; set; }
 
-    private string? Title => string.IsNullOrEmpty(Value) || string.IsNullOrEmpty(Contributor) ? Value : $"{Value} (from {Contributor})";
+    private string? Title => string.IsNullOrEmpty(Value) || string.IsNullOrEmpty(Contributor)
+        ? Value
+        : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewValueTooltip, Value, Contributor);
 }

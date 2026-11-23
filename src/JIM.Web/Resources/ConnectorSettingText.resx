@@ -1,0 +1,949 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="JIM_LDAP_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory, OpenLDAP, and Samba AD.</value>
+    <comment>The description of the JIM LDAP Connector, shown in the Connector pickers.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Directory_Server_Label" xml:space="preserve">
+    <value>Directory Server</value>
+    <comment>The label of the "Directory Server" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Directory_Server_Info_Label" xml:space="preserve">
+    <value>Directory Server Info</value>
+    <comment>The label of the "Directory Server Info" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Directory_Server_Info_Description" xml:space="preserve">
+    <value>Enter Active Directory domain controller, or LDAP server details below.</value>
+    <comment>The description of the "Directory Server Info" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Host_Label" xml:space="preserve">
+    <value>Host</value>
+    <comment>The label of the "Host" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Host_Description" xml:space="preserve">
+    <value>Supply a directory server/domain controller hostname or IP address. IP address is fastest.</value>
+    <comment>The description of the "Host" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Preferred_Domain_Controller_Label" xml:space="preserve">
+    <value>Preferred Domain Controller</value>
+    <comment>The label of the "Preferred Domain Controller" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Preferred_Domain_Controller_Description" xml:space="preserve">
+    <value>Applies to Active Directory and Samba AD. A specific domain controller FQDN to always connect to. When left blank, JIM automatically discovers and pins the domain controller it reaches via the Host value. For LDAPS, use a name present in the domain controller's certificate.</value>
+    <comment>The description of the "Preferred Domain Controller" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Port_Label" xml:space="preserve">
+    <value>Port</value>
+    <comment>The label of the "Port" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Port_Description" xml:space="preserve">
+    <value>The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.</value>
+    <comment>The description of the "Port" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Use_Secure_Connection_LDAPS_Label" xml:space="preserve">
+    <value>Use Secure Connection (LDAPS)?</value>
+    <comment>The label of the "Use Secure Connection (LDAPS)?" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Use_Secure_Connection_LDAPS_Description" xml:space="preserve">
+    <value>Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).</value>
+    <comment>The description of the "Use Secure Connection (LDAPS)?" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Connection Timeout</value>
+    <comment>The label of the "Connection Timeout" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>How long to wait, in seconds, before giving up on trying to connect</value>
+    <comment>The description of the "Connection Timeout" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Global_Catalog_Server_Label" xml:space="preserve">
+    <value>Global Catalog Server</value>
+    <comment>The label of the "Global Catalog Server" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Global_Catalog_Server_Description" xml:space="preserve">
+    <value>Applies to Active Directory. The Global Catalog server JIM searches when it probes for a value already in use that must be unique across the whole forest (userPrincipalName, servicePrincipalName, mail and proxyAddresses), so a value held in another domain is found. JIM connects on port 3268, or 3269 with LDAPS, with the credentials below. When left blank, JIM uses the domain controller it connects to, if that is a Global Catalog and the forest has more than one domain. For LDAPS, use a name present in the server's certificate.</value>
+    <comment>The description of the "Global Catalog Server" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Credentials_Label" xml:space="preserve">
+    <value>Credentials</value>
+    <comment>The label of the "Credentials" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Username_Label" xml:space="preserve">
+    <value>Username</value>
+    <comment>The label of the "Username" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Username_Description" xml:space="preserve">
+    <value>What's the username for the service account you want to use to connect to the directory service using? i.e. corp\svc-jim-adc</value>
+    <comment>The description of the "Username" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Password_Label" xml:space="preserve">
+    <value>Password</value>
+    <comment>The label of the "Password" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Password_Description" xml:space="preserve">
+    <value>What's the password for the service account you want to use to connect to the directory service with?</value>
+    <comment>The description of the "Password" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Label" xml:space="preserve">
+    <value>Authentication Type</value>
+    <comment>The label of the "Authentication Type" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Description" xml:space="preserve">
+    <value>What type of authentication is required for this credential?</value>
+    <comment>The description of the "Authentication Type" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Option_Simple" xml:space="preserve">
+    <value>Simple</value>
+    <comment>A choice of the "Authentication Type" setting of the JIM LDAP Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Option_NTLM" xml:space="preserve">
+    <value>NTLM</value>
+    <comment>A choice of the "Authentication Type" setting of the JIM LDAP Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Import_Settings_Label" xml:space="preserve">
+    <value>Import Settings</value>
+    <comment>The label of the "Import Settings" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Search_Timeout_Label" xml:space="preserve">
+    <value>Search Timeout</value>
+    <comment>The label of the "Search Timeout" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Search_Timeout_Description" xml:space="preserve">
+    <value>Maximum time in seconds to wait for LDAP search results. Default is 300 (5 minutes).</value>
+    <comment>The description of the "Search Timeout" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Import_Concurrency_Label" xml:space="preserve">
+    <value>Import Concurrency</value>
+    <comment>The label of the "Import Concurrency" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Import_Concurrency_Description" xml:space="preserve">
+    <value>Maximum number of parallel LDAP connections used during full imports from OpenLDAP, 389 Directory Server and Generic directories. Each connection handles one container and object type combination independently, avoiding RFC 2696 paging cookie limitations. Not used for Active Directory. Default is 4. Recommended range: 2-8.</value>
+    <comment>The description of the "Import Concurrency" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Retry_Settings_Label" xml:space="preserve">
+    <value>Retry Settings</value>
+    <comment>The label of the "Retry Settings" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Maximum_Retries_Label" xml:space="preserve">
+    <value>Maximum Retries</value>
+    <comment>The label of the "Maximum Retries" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Maximum_Retries_Description" xml:space="preserve">
+    <value>Maximum number of retry attempts for transient failures. Default is 3.</value>
+    <comment>The description of the "Maximum Retries" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Retry_Delay_ms_Label" xml:space="preserve">
+    <value>Retry Delay (ms)</value>
+    <comment>The label of the "Retry Delay (ms)" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Retry_Delay_ms_Description" xml:space="preserve">
+    <value>Initial delay between retries in milliseconds. Uses exponential backoff. Default is 1000ms.</value>
+    <comment>The description of the "Retry Delay (ms)" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Schema_Discovery_Label" xml:space="preserve">
+    <value>Schema Discovery</value>
+    <comment>The label of the "Schema Discovery" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Include_Auxiliary_Classes_Label" xml:space="preserve">
+    <value>Include Auxiliary Classes</value>
+    <comment>The label of the "Include Auxiliary Classes" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Include_Auxiliary_Classes_Description" xml:space="preserve">
+    <value>Applies to Active Directory only. When enabled, auxiliary object classes are included in schema discovery alongside structural classes. Enable this if you need to import or export objects whose primary class is declared as auxiliary in the directory schema. RFC 4512 directories (OpenLDAP, 389 Directory Server) always discover auxiliary classes, because JIM merges the ones an administrator selects into the structural Object Type they extend.</value>
+    <comment>The description of the "Include Auxiliary Classes" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Container_Provisioning_Label" xml:space="preserve">
+    <value>Container Provisioning</value>
+    <comment>The label of the "Container Provisioning" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Create_containers_as_needed_Label" xml:space="preserve">
+    <value>Create containers as needed?</value>
+    <comment>The label of the "Create containers as needed?" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Create_containers_as_needed_Description" xml:space="preserve">
+    <value>i.e. create OUs as needed when provisioning new objects.</value>
+    <comment>The description of the "Create containers as needed?" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Hierarchy_Settings_Label" xml:space="preserve">
+    <value>Hierarchy Settings</value>
+    <comment>The label of the "Hierarchy Settings" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Skip_Hidden_Partitions_Label" xml:space="preserve">
+    <value>Skip Hidden Partitions</value>
+    <comment>The label of the "Skip Hidden Partitions" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Skip_Hidden_Partitions_Description" xml:space="preserve">
+    <value>Skip hidden partitions (Configuration, Schema, DNS zones) when refreshing hierarchy. Improves performance significantly.</value>
+    <comment>The description of the "Skip Hidden Partitions" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Export_Settings_Label" xml:space="preserve">
+    <value>Export Settings</value>
+    <comment>The label of the "Export Settings" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Export_Concurrency_Label" xml:space="preserve">
+    <value>Export Concurrency</value>
+    <comment>The label of the "Export Concurrency" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Export_Concurrency_Description" xml:space="preserve">
+    <value>Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Left at the default of 4, JIM raises it on schema import: to 16 for Active Directory and 389 Directory Server, and to 8 for OpenLDAP, which then sends 4 batches at once rather than 2. Samba AD and other directories stay at 4.</value>
+    <comment>The description of the "Export Concurrency" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Modify_Batch_Size_Label" xml:space="preserve">
+    <value>Modify Batch Size</value>
+    <comment>The label of the "Modify Batch Size" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Modify_Batch_Size_Description" xml:space="preserve">
+    <value>Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput, especially for very large groups. Default is 1000. Recommended range: 100-2000.</value>
+    <comment>The description of the "Modify Batch Size" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Exchange_Label" xml:space="preserve">
+    <value>Exchange</value>
+    <comment>The label of the "Exchange" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Manage_Exchange_recipients_Label" xml:space="preserve">
+    <value>Manage Exchange recipients</value>
+    <comment>The label of the "Manage Exchange recipients" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Manage_Exchange_recipients_Description" xml:space="preserve">
+    <value>Active Directory only. Makes the objects this Connected System provisions Exchange recipients (mailboxes, mail users, mail contacts and mail-enabled groups), as declared by the Exchange attributes their Synchronisation Rules flow.</value>
+    <comment>The description of the "Manage Exchange recipients" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Exchange_server_Label" xml:space="preserve">
+    <value>Exchange server</value>
+    <comment>The label of the "Exchange server" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Exchange_server_Description" xml:space="preserve">
+    <value>The Exchange server JIM signs in to, as the account above, to create and update recipients: its host name, such as ex1.panoply.local, or its full remote PowerShell address. A host name uses http, where Kerberos encrypts the session; for an https:// address, add the certificate authority that issued the server's certificate in Certificates. JIM works out the Kerberos sign-in from the directory settings.</value>
+    <comment>The description of the "Exchange server" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Group_Membership_Label" xml:space="preserve">
+    <value>Group Membership</value>
+    <comment>The label of the "Group Membership" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Group_Placeholder_Member_DN_Label" xml:space="preserve">
+    <value>Group Placeholder Member DN</value>
+    <comment>The label of the "Group Placeholder Member DN" setting of the JIM LDAP Connector.</comment>
+  </data>
+  <data name="JIM_LDAP_Connector_Group_Placeholder_Member_DN_Description" xml:space="preserve">
+    <value>Placeholder member DN used for group object classes that require at least one member (e.g. groupOfNames). When a group has no real members, this value is added to satisfy the schema constraint. It is automatically filtered out during import. Only applies to non-AD directories. Default: cn=placeholder. If your directory has referential integrity enabled, set this to an existing entry's DN.</value>
+    <comment>The description of the "Group Placeholder Member DN" setting of the JIM LDAP Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronisation with files, i.e. CSV.</value>
+    <comment>The description of the JIM File Connector, shown in the Connector pickers.</comment>
+  </data>
+  <data name="JIM_File_Connector_File_Path_Label" xml:space="preserve">
+    <value>File Path</value>
+    <comment>The label of the "File Path" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_File_Path_Description" xml:space="preserve">
+    <value>Path to the CSV file. Used for import, export, or both depending on mode. e.g. /connector-files/Users.csv</value>
+    <comment>The description of the "File Path" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Mode_Label" xml:space="preserve">
+    <value>Mode</value>
+    <comment>The label of the "Mode" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_Mode_Description" xml:space="preserve">
+    <value>Import Only: Read from file. Export Only: Write to file (auto-confirmed). Bidirectional: Export then confirming import from same file.</value>
+    <comment>The description of the "Mode" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Mode_Option_Import_Only" xml:space="preserve">
+    <value>Import Only</value>
+    <comment>A choice of the "Mode" setting of the JIM File Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_File_Connector_Mode_Option_Export_Only" xml:space="preserve">
+    <value>Export Only</value>
+    <comment>A choice of the "Mode" setting of the JIM File Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_File_Connector_Mode_Option_Bidirectional" xml:space="preserve">
+    <value>Bidirectional</value>
+    <comment>A choice of the "Mode" setting of the JIM File Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Column_Label" xml:space="preserve">
+    <value>Object Type Column</value>
+    <comment>The label of the "Object Type Column" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Column_Description" xml:space="preserve">
+    <value>The column that contains the object type. Use when the file contains more than one type of object.</value>
+    <comment>The description of the "Object Type Column" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Label" xml:space="preserve">
+    <value>Object Type</value>
+    <comment>The label of the "Object Type" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Description" xml:space="preserve">
+    <value>A fixed object type for when the file only contains one type of object, e.g. user.</value>
+    <comment>The description of the "Object Type" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Stop_On_First_Error_Label" xml:space="preserve">
+    <value>Stop On First Error</value>
+    <comment>The label of the "Stop On First Error" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_Stop_On_First_Error_Description" xml:space="preserve">
+    <value>Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.</value>
+    <comment>The description of the "Stop On First Error" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Delimiter_Label" xml:space="preserve">
+    <value>Delimiter</value>
+    <comment>The label of the "Delimiter" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_Delimiter_Description" xml:space="preserve">
+    <value>What character to use as the delimiter?</value>
+    <comment>The description of the "Delimiter" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Culture_Label" xml:space="preserve">
+    <value>Culture</value>
+    <comment>The label of the "Culture" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_Culture_Description" xml:space="preserve">
+    <value>Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).</value>
+    <comment>The description of the "Culture" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Multi_Value_Delimiter_Label" xml:space="preserve">
+    <value>Multi-Value Delimiter</value>
+    <comment>The label of the "Multi-Value Delimiter" setting of the JIM File Connector.</comment>
+  </data>
+  <data name="JIM_File_Connector_Multi_Value_Delimiter_Description" xml:space="preserve">
+    <value>Character used to separate multiple values within a single field. Defaults to pipe (|).</value>
+    <comment>The description of the "Multi-Value Delimiter" setting of the JIM File Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronisation with any system that exposes a SCIM 2.0 service provider interface. JIM acts as the SCIM client, connecting out to the service provider.</value>
+    <comment>The description of the JIM SCIM 2.0 Client Connector, shown in the Connector pickers.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_SCIM_Service_Provider_Label" xml:space="preserve">
+    <value>SCIM Service Provider</value>
+    <comment>The label of the "SCIM Service Provider" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_SCIM_Service_Provider_Info_Label" xml:space="preserve">
+    <value>SCIM Service Provider Info</value>
+    <comment>The label of the "SCIM Service Provider Info" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_SCIM_Service_Provider_Info_Description" xml:space="preserve">
+    <value>Enter the details of the SCIM 2.0 service provider to connect to.</value>
+    <comment>The description of the "SCIM Service Provider Info" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Base_URL_Label" xml:space="preserve">
+    <value>Base URL</value>
+    <comment>The label of the "Base URL" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Base_URL_Description" xml:space="preserve">
+    <value>The base URL of the SCIM 2.0 service provider, i.e. https://example.com/scim/v2. HTTPS is required, except for loopback addresses when testing locally.</value>
+    <comment>The description of the "Base URL" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Label" xml:space="preserve">
+    <value>Authentication</value>
+    <comment>The label of the "Authentication" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Label" xml:space="preserve">
+    <value>Authentication Method</value>
+    <comment>The label of the "Authentication Method" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Description" xml:space="preserve">
+    <value>How to authenticate with the SCIM service provider. OAuth 2.0 Client Credentials is most common for cloud providers; Static Bearer Token suits providers that issue long-lived tokens; Custom Header suits providers with non-standard authentication headers.</value>
+    <comment>The description of the "Authentication Method" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_OAuth_2_0_Client_Credentials" xml:space="preserve">
+    <value>OAuth 2.0 Client Credentials</value>
+    <comment>A choice of the "Authentication Method" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_HTTP_Basic" xml:space="preserve">
+    <value>HTTP Basic</value>
+    <comment>A choice of the "Authentication Method" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_Static_Bearer_Token" xml:space="preserve">
+    <value>Static Bearer Token</value>
+    <comment>A choice of the "Authentication Method" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_Custom_Header" xml:space="preserve">
+    <value>Custom Header</value>
+    <comment>A choice of the "Authentication Method" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Token_Endpoint_URL_Label" xml:space="preserve">
+    <value>Token Endpoint URL</value>
+    <comment>The label of the "Token Endpoint URL" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Token_Endpoint_URL_Description" xml:space="preserve">
+    <value>The OAuth 2.0 token endpoint URL used to acquire access tokens via the Client Credentials flow. HTTPS is required, except for loopback addresses when testing locally, because the Client Secret is sent to this address.</value>
+    <comment>The description of the "Token Endpoint URL" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_ID_Label" xml:space="preserve">
+    <value>Client ID</value>
+    <comment>The label of the "Client ID" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_ID_Description" xml:space="preserve">
+    <value>The OAuth 2.0 client identifier.</value>
+    <comment>The description of the "Client ID" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_Secret_Label" xml:space="preserve">
+    <value>Client Secret</value>
+    <comment>The label of the "Client Secret" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_Secret_Description" xml:space="preserve">
+    <value>The OAuth 2.0 client secret.</value>
+    <comment>The description of the "Client Secret" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_OAuth_Scope_Label" xml:space="preserve">
+    <value>OAuth Scope</value>
+    <comment>The label of the "OAuth Scope" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_OAuth_Scope_Description" xml:space="preserve">
+    <value>Optional OAuth 2.0 scope(s) to request, space-separated. Only used with the OAuth 2.0 Client Credentials authentication method.</value>
+    <comment>The description of the "OAuth Scope" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Username_Label" xml:space="preserve">
+    <value>Username</value>
+    <comment>The label of the "Username" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Username_Description" xml:space="preserve">
+    <value>The username to authenticate with when using HTTP Basic authentication.</value>
+    <comment>The description of the "Username" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Password_Label" xml:space="preserve">
+    <value>Password</value>
+    <comment>The label of the "Password" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Password_Description" xml:space="preserve">
+    <value>The password to authenticate with when using HTTP Basic authentication.</value>
+    <comment>The description of the "Password" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Bearer_Token_Label" xml:space="preserve">
+    <value>Bearer Token</value>
+    <comment>The label of the "Bearer Token" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Bearer_Token_Description" xml:space="preserve">
+    <value>A pre-generated, long-lived bearer token issued by the SCIM service provider.</value>
+    <comment>The description of the "Bearer Token" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Name_Label" xml:space="preserve">
+    <value>Authentication Header Name</value>
+    <comment>The label of the "Authentication Header Name" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Name_Description" xml:space="preserve">
+    <value>The name of the HTTP header the SCIM service provider uses for authentication, i.e. X-Api-Key.</value>
+    <comment>The description of the "Authentication Header Name" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Value_Label" xml:space="preserve">
+    <value>Authentication Header Value</value>
+    <comment>The label of the "Authentication Header Value" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Value_Description" xml:space="preserve">
+    <value>The value to send in the authentication header.</value>
+    <comment>The description of the "Authentication Header Value" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Transport_Security_Label" xml:space="preserve">
+    <value>Transport Security</value>
+    <comment>The label of the "Transport Security" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Label" xml:space="preserve">
+    <value>Certificate Validation</value>
+    <comment>The label of the "Certificate Validation" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Description" xml:space="preserve">
+    <value>How to validate the service provider's TLS certificate. Full Validation uses the system CA store plus any certificates added in Admin &gt; Certificates. When a connection test fails on trust, JIM shows you the certificate the provider presented so you can add it there: that trusts one specific certificate, and stops trusting it if the provider ever presents a different one. Skip Validation trusts whatever is presented, now and in future, and should be a last resort.</value>
+    <comment>The description of the "Certificate Validation" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Option_Full_Validation" xml:space="preserve">
+    <value>Full Validation</value>
+    <comment>A choice of the "Certificate Validation" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Option_Skip_Validation_Insecure" xml:space="preserve">
+    <value>Skip Validation (Insecure)</value>
+    <comment>A choice of the "Certificate Validation" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Label" xml:space="preserve">
+    <value>Minimum TLS Version</value>
+    <comment>The label of the "Minimum TLS Version" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Description" xml:space="preserve">
+    <value>The minimum TLS protocol version to accept when connecting to the SCIM service provider.</value>
+    <comment>The description of the "Minimum TLS Version" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Option_TLS_1_2" xml:space="preserve">
+    <value>TLS 1.2</value>
+    <comment>A choice of the "Minimum TLS Version" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Option_TLS_1_3" xml:space="preserve">
+    <value>TLS 1.3</value>
+    <comment>A choice of the "Minimum TLS Version" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Connection Timeout</value>
+    <comment>The label of the "Connection Timeout" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>How long to wait, in seconds, for a response from the SCIM service provider before giving up.</value>
+    <comment>The description of the "Connection Timeout" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Import_Label" xml:space="preserve">
+    <value>Import</value>
+    <comment>The label of the "Import" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Label" xml:space="preserve">
+    <value>Pagination Mode</value>
+    <comment>The label of the "Pagination Mode" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Description" xml:space="preserve">
+    <value>How to page through resources. Auto-detect starts with index-based paging (which every SCIM 2.0 service provider supports) and switches to cursors if the provider offers one. Choose Cursor-based for large or frequently-changing providers: index-based paging can miss or repeat objects when the data changes during an import.</value>
+    <comment>The description of the "Pagination Mode" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Option_Auto_detect" xml:space="preserve">
+    <value>Auto-detect</value>
+    <comment>A choice of the "Pagination Mode" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Option_Index_based" xml:space="preserve">
+    <value>Index-based</value>
+    <comment>A choice of the "Pagination Mode" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Option_Cursor_based" xml:space="preserve">
+    <value>Cursor-based</value>
+    <comment>A choice of the "Pagination Mode" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Excluded_Attributes_Label" xml:space="preserve">
+    <value>Excluded Attributes</value>
+    <comment>The label of the "Excluded Attributes" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Excluded_Attributes_Description" xml:space="preserve">
+    <value>Optional comma-separated list of SCIM attributes to ask the service provider not to return, i.e. photos, x509Certificates. Useful for large attributes JIM does not need. The id and meta attributes are always requested, because import cannot work without them.</value>
+    <comment>The description of the "Excluded Attributes" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Label" xml:space="preserve">
+    <value>Change Detection</value>
+    <comment>The label of the "Change Detection" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Description" xml:space="preserve">
+    <value>How a Delta Import finds what changed. SCIM 2.0 has no change feed, so JIM asks the service provider for the resources modified since the last completed import, which needs the provider to support filtering. Auto-detect uses filtering where the provider advertises it; choose Last Modified Filter to use it anyway (some providers support filtering without advertising it), or Full Scan to read every resource every time. Deletions are only detected by a Full Import.</value>
+    <comment>The description of the "Change Detection" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Option_Auto_detect" xml:space="preserve">
+    <value>Auto-detect</value>
+    <comment>A choice of the "Change Detection" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Option_Last_Modified_Filter" xml:space="preserve">
+    <value>Last Modified Filter</value>
+    <comment>A choice of the "Change Detection" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Option_Full_Scan" xml:space="preserve">
+    <value>Full Scan</value>
+    <comment>A choice of the "Change Detection" setting of the JIM SCIM 2.0 Client Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Retry_Settings_Label" xml:space="preserve">
+    <value>Retry Settings</value>
+    <comment>The label of the "Retry Settings" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Maximum_Retries_Label" xml:space="preserve">
+    <value>Maximum Retries</value>
+    <comment>The label of the "Maximum Retries" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Maximum_Retries_Description" xml:space="preserve">
+    <value>Maximum number of retry attempts for transient failures (i.e. HTTP 429, 503, 504). Default is 3.</value>
+    <comment>The description of the "Maximum Retries" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Retry_Delay_ms_Label" xml:space="preserve">
+    <value>Retry Delay (ms)</value>
+    <comment>The label of the "Retry Delay (ms)" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Retry_Delay_ms_Description" xml:space="preserve">
+    <value>Initial delay between retries in milliseconds. Uses exponential backoff with jitter, and honours Retry-After response headers. Default is 1000ms.</value>
+    <comment>The description of the "Retry Delay (ms)" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Export_Settings_Label" xml:space="preserve">
+    <value>Export Settings</value>
+    <comment>The label of the "Export Settings" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Use_Bulk_Operations_Label" xml:space="preserve">
+    <value>Use Bulk Operations</value>
+    <comment>The label of the "Use Bulk Operations" setting of the JIM SCIM 2.0 Client Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Use_Bulk_Operations_Description" xml:space="preserve">
+    <value>Send exports in batches through the service provider's Bulk endpoint instead of one request per object, which is considerably faster over a high-latency connection. Only used where the service provider advertises bulk support, and only within the limits it states. Off by default: per-object exports are always correct, whereas a provider whose Bulk implementation reports outcomes inaccurately would have JIM record changes as applied that were not. Turn it on once you have seen an export succeed against your provider.</value>
+    <comment>The description of the "Use Bulk Operations" setting of the JIM SCIM 2.0 Client Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronisation with relational databases, including Microsoft SQL Server and Oracle Database.</value>
+    <comment>The description of the JIM SQL Connector, shown in the Connector pickers.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Server_Label" xml:space="preserve">
+    <value>Database Server</value>
+    <comment>The label of the "Database Server" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Server_Info_Label" xml:space="preserve">
+    <value>Database Server Info</value>
+    <comment>The label of the "Database Server Info" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Server_Info_Description" xml:space="preserve">
+    <value>Enter the details of the database server to connect to. JIM builds the connection string itself from these values.</value>
+    <comment>The description of the "Database Server Info" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Label" xml:space="preserve">
+    <value>Database Type</value>
+    <comment>The label of the "Database Type" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Description" xml:space="preserve">
+    <value>Which database server this Connected System runs on. It decides which details are asked for below, and which dialect JIM speaks.</value>
+    <comment>The description of the "Database Type" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Option_Microsoft_SQL_Server" xml:space="preserve">
+    <value>Microsoft SQL Server</value>
+    <comment>A choice of the "Database Type" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Option_Oracle_Database" xml:space="preserve">
+    <value>Oracle Database</value>
+    <comment>A choice of the "Database Type" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Host_Label" xml:space="preserve">
+    <value>Host</value>
+    <comment>The label of the "Host" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Host_Description" xml:space="preserve">
+    <value>The database server's hostname or IP address. For a named Microsoft SQL Server instance, use the SERVER\INSTANCE form.</value>
+    <comment>The description of the "Host" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Port_Label" xml:space="preserve">
+    <value>Port</value>
+    <comment>The label of the "Port" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Port_Description" xml:space="preserve">
+    <value>The port the database server listens on. Leave blank to use the default for the database type: 1433 for Microsoft SQL Server, 1521 for Oracle Database, or 2484 for Oracle Database with encryption enabled.</value>
+    <comment>The description of the "Port" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Name_Label" xml:space="preserve">
+    <value>Database Name</value>
+    <comment>The label of the "Database Name" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Name_Description" xml:space="preserve">
+    <value>The database to connect to on this server.</value>
+    <comment>The description of the "Database Name" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Label" xml:space="preserve">
+    <value>Oracle Database Identified By</value>
+    <comment>The label of the "Oracle Database Identified By" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Description" xml:space="preserve">
+    <value>How this Oracle Database is addressed. Service Name is the modern form and the one to use unless the estate still addresses the database by its System Identifier (SID).</value>
+    <comment>The description of the "Oracle Database Identified By" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Option_Service_Name" xml:space="preserve">
+    <value>Service Name</value>
+    <comment>A choice of the "Oracle Database Identified By" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Option_SID" xml:space="preserve">
+    <value>SID</value>
+    <comment>A choice of the "Oracle Database Identified By" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Service_Name_Label" xml:space="preserve">
+    <value>Oracle Service Name</value>
+    <comment>The label of the "Oracle Service Name" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Service_Name_Description" xml:space="preserve">
+    <value>The Oracle service name, i.e. HRPROD.example.com.</value>
+    <comment>The description of the "Oracle Service Name" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_SID_Label" xml:space="preserve">
+    <value>Oracle SID</value>
+    <comment>The label of the "Oracle SID" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_SID_Description" xml:space="preserve">
+    <value>The Oracle System Identifier (SID), i.e. HRPROD.</value>
+    <comment>The description of the "Oracle SID" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Credentials_Label" xml:space="preserve">
+    <value>Credentials</value>
+    <comment>The label of the "Credentials" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Username_Label" xml:space="preserve">
+    <value>Username</value>
+    <comment>The label of the "Username" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Username_Description" xml:space="preserve">
+    <value>The database account JIM connects as. Give it the least privilege the Run Profiles need: read-only on an import-only Connected System.</value>
+    <comment>The description of the "Username" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Password_Label" xml:space="preserve">
+    <value>Password</value>
+    <comment>The label of the "Password" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Password_Description" xml:space="preserve">
+    <value>The password for that database account. Stored encrypted, and never written to a log or a configuration snapshot.</value>
+    <comment>The description of the "Password" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Transport_Security_Label" xml:space="preserve">
+    <value>Transport Security</value>
+    <comment>The label of the "Transport Security" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Encrypt_Connection_Label" xml:space="preserve">
+    <value>Encrypt Connection</value>
+    <comment>The label of the "Encrypt Connection" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Encrypt_Connection_Description" xml:space="preserve">
+    <value>Encrypt the connection to the database server. On by default, which is what a current SQL Server estate already does. The server's certificate is always validated: against the operating system's certificate bundle, and against any certificates added in Admin &gt; Certificates. When a connection test fails on trust, JIM shows you the certificate the server presented so you can add it there.</value>
+    <comment>The description of the "Encrypt Connection" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Label" xml:space="preserve">
+    <value>Oracle Encryption</value>
+    <comment>The label of the "Oracle Encryption" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Description" xml:space="preserve">
+    <value>How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate. One from your own certificate authority works once the root of its chain is trusted in Admin &gt; Certificates: the Oracle driver accepts only the root, not an intermediate or the server's own certificate.</value>
+    <comment>The description of the "Oracle Encryption" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Option_Native_Network_Encryption" xml:space="preserve">
+    <value>Native Network Encryption</value>
+    <comment>A choice of the "Oracle Encryption" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Option_TCPS_TLS" xml:space="preserve">
+    <value>TCPS (TLS)</value>
+    <comment>A choice of the "Oracle Encryption" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Option_None" xml:space="preserve">
+    <value>None</value>
+    <comment>A choice of the "Oracle Encryption" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Connection Timeout</value>
+    <comment>The label of the "Connection Timeout" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>How long to wait, in seconds, before giving up on trying to connect.</value>
+    <comment>The description of the "Connection Timeout" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Date_and_Time_Label" xml:space="preserve">
+    <value>Date and Time</value>
+    <comment>The label of the "Date and Time" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Time_Zone_Label" xml:space="preserve">
+    <value>Database Time Zone</value>
+    <comment>The label of the "Database Time Zone" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Time_Zone_Description" xml:space="preserve">
+    <value>The time zone that date and time columns carrying no offset are recorded in. JIM stores every date and time in UTC, so this is what it interprets those columns with on import, and inverts on export. Columns that do carry an offset are unaffected. Enter UTC, or an IANA time zone name such as Europe/London.</value>
+    <comment>The description of the "Database Time Zone" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Type_Mapping_Label" xml:space="preserve">
+    <value>Type Mapping</value>
+    <comment>The label of the "Type Mapping" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_NUMBER_1_Columns_as_Boolean_Label" xml:space="preserve">
+    <value>Treat NUMBER(1) Columns as Boolean</value>
+    <comment>The label of the "Treat NUMBER(1) Columns as Boolean" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_NUMBER_1_Columns_as_Boolean_Description" xml:space="preserve">
+    <value>Oracle Database has no boolean column type, so flags are usually held as NUMBER(1). Turn this on if that is what NUMBER(1) columns mean in this database; leave it off and they import as numbers. It applies to every NUMBER(1) column in the schema, so only turn it on where that is true of all of them.</value>
+    <comment>The description of the "Treat NUMBER(1) Columns as Boolean" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_RAW_16_Columns_as_Guid_Label" xml:space="preserve">
+    <value>Treat RAW(16) Columns as Guid</value>
+    <comment>The label of the "Treat RAW(16) Columns as Guid" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_RAW_16_Columns_as_Guid_Description" xml:space="preserve">
+    <value>Oracle Database holds GUIDs in RAW(16) columns, but so it does digests and other binary values, and the catalogue cannot tell them apart. Turn this on if RAW(16) columns in this database hold GUIDs; leave it off and they import as binary values.</value>
+    <comment>The description of the "Treat RAW(16) Columns as Guid" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Object_Type_Configuration_Label" xml:space="preserve">
+    <value>Object Type Configuration</value>
+    <comment>The label of the "Object Type Configuration" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Object_Types_Label" xml:space="preserve">
+    <value>Object Types</value>
+    <comment>The label of the "Object Types" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Object_Types_Description" xml:space="preserve">
+    <value>Which Connected System Object Types this database holds, and where each one's objects come from, as a JSON document. Each object type needs a 'name' and 'anchorColumns' (the column or columns whose values identify a row), and exactly one source: a 'table' (a table or a view, optionally qualified with a 'schema') or a 'select' statement where a view cannot be created. 'columns' declares what a column's type cannot say, which today means naming the object type a column's values point at ('referencesObjectType'); JIM never guesses that from a foreign key, but it does suggest one where the database declares it. 'relatedTables' turns a table of one row per value into a multi-valued attribute: name the attribute, its 'valueColumn', and the 'joinColumns' that join a row back to its parent (one per anchor column, in the same order), plus 'referencesObjectType' where those values are references, as group membership is. Every other column is discovered and typed automatically. The example below is a complete document to start from.</value>
+    <comment>The description of the "Object Types" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Label" xml:space="preserve">
+    <value>Delta Import</value>
+    <comment>The label of the "Delta Import" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Label" xml:space="preserve">
+    <value>Delta Import Mode</value>
+    <comment>The label of the "Delta Import Mode" setting of the JIM SQL Connector.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Description" xml:space="preserve">
+    <value>How a Delta Import finds out what has changed. Leave it unset where this Connected System only runs Full Imports. 'Change-Log Table' reads a table or view your database keeps, with one row per change. It is the recommended mode, and the only one that sees a deletion. 'Watermark Column' reads a last-modified or version column on each table. It needs nothing added to the database, but sees only creates and updates, so deletions are found by a Full Import. Each Object Type then names its change-log table or its watermark columns, on its card above (in the Object Types document, 'changeLog' or 'watermarkColumn').</value>
+    <comment>The description of the "Delta Import Mode" setting of the JIM SQL Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Option_Change_Log_Table" xml:space="preserve">
+    <value>Change-Log Table</value>
+    <comment>A choice of the "Delta Import Mode" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Option_Watermark_Column" xml:space="preserve">
+    <value>Watermark Column</value>
+    <comment>A choice of the "Delta Import Mode" setting of the JIM SQL Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronisation of users and groups with Microsoft Entra ID, through the Microsoft Graph API.</value>
+    <comment>The description of the JIM Microsoft Entra ID Connector, shown in the Connector pickers.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Microsoft_Entra_ID_Tenant_Label" xml:space="preserve">
+    <value>Microsoft Entra ID Tenant</value>
+    <comment>The label of the "Microsoft Entra ID Tenant" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Microsoft_Entra_ID_Tenant_Info_Label" xml:space="preserve">
+    <value>Microsoft Entra ID Tenant Info</value>
+    <comment>The label of the "Microsoft Entra ID Tenant Info" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Microsoft_Entra_ID_Tenant_Info_Description" xml:space="preserve">
+    <value>Enter the details of the tenant to synchronise with, and of the app registration JIM authenticates as. The app registration needs Microsoft Graph application permissions, granted with admin consent.</value>
+    <comment>The description of the "Microsoft Entra ID Tenant Info" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Tenant_ID_Label" xml:space="preserve">
+    <value>Tenant ID</value>
+    <comment>The label of the "Tenant ID" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Tenant_ID_Description" xml:space="preserve">
+    <value>The tenant's ID (a GUID), or one of its verified domain names, i.e. contoso.onmicrosoft.com. Shown as Directory (tenant) ID on the app registration's Overview page.</value>
+    <comment>The description of the "Tenant ID" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Label" xml:space="preserve">
+    <value>Cloud</value>
+    <comment>The label of the "Cloud" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Description" xml:space="preserve">
+    <value>The Microsoft cloud the tenant is in. Choose Global for Microsoft 365 GCC (Moderate) tenants too, which use the global endpoints.</value>
+    <comment>The description of the "Cloud" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_Global" xml:space="preserve">
+    <value>Global</value>
+    <comment>A choice of the "Cloud" setting of the JIM Microsoft Entra ID Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_US_Government_L4_GCC_High" xml:space="preserve">
+    <value>US Government L4 (GCC High)</value>
+    <comment>A choice of the "Cloud" setting of the JIM Microsoft Entra ID Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_US_Government_L5_DoD" xml:space="preserve">
+    <value>US Government L5 (DoD)</value>
+    <comment>A choice of the "Cloud" setting of the JIM Microsoft Entra ID Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_China_operated_by_21Vianet" xml:space="preserve">
+    <value>China (operated by 21Vianet)</value>
+    <comment>A choice of the "Cloud" setting of the JIM Microsoft Entra ID Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Label" xml:space="preserve">
+    <value>Authentication</value>
+    <comment>The label of the "Authentication" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_ID_Label" xml:space="preserve">
+    <value>Client ID</value>
+    <comment>The label of the "Client ID" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_ID_Description" xml:space="preserve">
+    <value>The app registration's Application (client) ID, a GUID shown on its Overview page.</value>
+    <comment>The description of the "Client ID" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Label" xml:space="preserve">
+    <value>Authentication Method</value>
+    <comment>The label of the "Authentication Method" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Description" xml:space="preserve">
+    <value>How JIM proves it is the app registration. A certificate, as Microsoft Entra Connect now uses, is recommended: its private key never leaves JIM, whereas a client secret is sent with every token request. A federated credential holds no secret at all: where JIM runs on an Azure virtual machine with a user-assigned managed identity, the app registration trusts that identity's token instead. Use a client secret for a quick trial.</value>
+    <comment>The description of the "Authentication Method" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Option_Certificate" xml:space="preserve">
+    <value>Certificate</value>
+    <comment>A choice of the "Authentication Method" setting of the JIM Microsoft Entra ID Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Option_Federated_Credential" xml:space="preserve">
+    <value>Federated Credential</value>
+    <comment>A choice of the "Authentication Method" setting of the JIM Microsoft Entra ID Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Option_Client_Secret" xml:space="preserve">
+    <value>Client Secret</value>
+    <comment>A choice of the "Authentication Method" setting of the JIM Microsoft Entra ID Connector. The English text is what is stored; this is only how it reads.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_Secret_Label" xml:space="preserve">
+    <value>Client Secret</value>
+    <comment>The label of the "Client Secret" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_Secret_Description" xml:space="preserve">
+    <value>A client secret created under Certificates &amp; secrets on the app registration. Supply the secret's Value, not its Secret ID.</value>
+    <comment>The description of the "Client Secret" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Label" xml:space="preserve">
+    <value>Certificate</value>
+    <comment>The label of the "Certificate" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Description" xml:space="preserve">
+    <value>The certificate and its private key, as a PFX file's contents Base64-encoded, i.e. the output of [Convert]::ToBase64String([IO.File]::ReadAllBytes('app.pfx')) in PowerShell. Upload the same certificate (without its private key) under Certificates &amp; secrets on the app registration. It needs an RSA key of at least 2048 bits.</value>
+    <comment>The description of the "Certificate" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Managed_Identity_Client_ID_Label" xml:space="preserve">
+    <value>Managed Identity Client ID</value>
+    <comment>The label of the "Managed Identity Client ID" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Managed_Identity_Client_ID_Description" xml:space="preserve">
+    <value>The client id (a GUID) of the user-assigned managed identity attached to the Azure virtual machine JIM runs on. A system-assigned identity cannot be a federated credential. Add a federated credential for this identity under Certificates &amp; secrets on the app registration.</value>
+    <comment>The description of the "Managed Identity Client ID" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Password_Label" xml:space="preserve">
+    <value>Certificate Password</value>
+    <comment>The label of the "Certificate Password" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Password_Description" xml:space="preserve">
+    <value>The password protecting the PFX, if it has one. Only used with the Certificate authentication method.</value>
+    <comment>The description of the "Certificate Password" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Connection Timeout</value>
+    <comment>The label of the "Connection Timeout" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>How long to wait, in seconds, for Microsoft Graph or the token service to answer a request before giving up. Up to 600.</value>
+    <comment>The description of the "Connection Timeout" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Rate_Limiting_Label" xml:space="preserve">
+    <value>Rate Limiting</value>
+    <comment>The label of the "Rate Limiting" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Writes_Per_Second_Label" xml:space="preserve">
+    <value>Maximum Writes Per Second</value>
+    <comment>The label of the "Maximum Writes Per Second" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Writes_Per_Second_Description" xml:space="preserve">
+    <value>The most writes JIM sends to the tenant each second, from 1 to 20. Microsoft Graph allows each application 20 writes a second in a tenant, and every application in the tenant shares a wider limit, so the default of 10 leaves room for the tenant's other applications. JIM slows down further by itself while Graph reports the tenant is near its limit. Reads are not limited here; JIM waits whenever Graph asks it to.</value>
+    <comment>The description of the "Maximum Writes Per Second" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Retries_Label" xml:space="preserve">
+    <value>Maximum Retries</value>
+    <comment>The label of the "Maximum Retries" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Retries_Description" xml:space="preserve">
+    <value>How many times to retry a request that failed for a temporary reason, such as throttling (HTTP 429) or Graph being briefly unavailable, from 0 to 10. JIM waits as long as Graph asks before each retry.</value>
+    <comment>The description of the "Maximum Retries" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Source_of_Authority_Label" xml:space="preserve">
+    <value>Source of Authority</value>
+    <comment>The label of the "Source of Authority" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Track_Source_of_Authority_Changes_Label" xml:space="preserve">
+    <value>Track Source of Authority Changes</value>
+    <comment>The label of the "Track Source of Authority Changes" setting of the JIM Microsoft Entra ID Connector.</comment>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Track_Source_of_Authority_Changes_Description" xml:space="preserve">
+    <value>Whether to read, for each object synchronised from Active Directory, whether its Source of Authority has been switched to Entra ID, or switched back, so sourceOfAuthority shows where it is managed now. Turn it on in a hybrid tenant whose objects have their Source of Authority switched. It needs the User-OnPremisesSyncBehavior.ReadWrite.All and Group-OnPremisesSyncBehavior.ReadWrite.All permissions, the only ones Microsoft offers for reading it, which also allow changing it. Off, an object synchronised from Active Directory always reads as onPremisesDirectory.</value>
+    <comment>The description of the "Track Source of Authority Changes" setting of the JIM Microsoft Entra ID Connector, shown under the field. Setting names it mentions stay in English: they are the names the REST API and PowerShell use.</comment>
+  </data>
+  <data name="JIM_File_Connector_Group_Object_Type" xml:space="preserve">
+    <value>Object Type</value>
+    <comment>The heading above settings of which exactly one must be filled in (the File Connector's Object Type group). The English text is the group's name in the Connector.</comment>
+  </data>
+  <data name="JIM_SCIM_2_0_Service_Provider_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Lets SCIM 2.0 clients provision into JIM. JIM acts as the SCIM service provider: clients write Users and Groups to JIM's own SCIM endpoint, and this Connector imports what they wrote.</value>
+    <comment>The description of the SCIM 2.0 Service Provider Connector, on the Connectors page. Users and Groups are SCIM resource types.</comment>
+  </data>
+</root>

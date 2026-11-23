@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DataFlowPriorityTooltipSoleContributorRanked" xml:space="preserve">
+    <value>This is the only contributor to this Metaverse Attribute, so its position decides nothing until another Synchronization Rule contributes to it.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipOrdered" xml:space="preserve">
+    <value>{0} Synchronization Rules contribute to this Metaverse Attribute; the lowest-numbered contribution with a value wins.</value>
+  </data>
+  <data name="CredentialAttributesExplain" xml:space="preserve">
+    <value>These hold credential material and are never managed by JIM. Passwords are synchronized through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.</value>
+  </data>
+  <data name="ActionRequiredText" xml:space="preserve">
+    <value>Some attributes that were removed are still referenced by Synchronization Rules. Please update your Synchronization Rules to remove references to these attributes.</value>
+  </data>
+  <data name="DataTypeLockedPlural" xml:space="preserve">
+    <value>The data type and plurality of this Connected System attribute cannot be changed as it is being referenced by either a Synchronization Rule, or has values already populated.</value>
+  </data>
+  <data name="DataTypeLocked" xml:space="preserve">
+    <value>The data type of this Connected System attribute cannot be changed as it is being referenced by either a Synchronization Rule, or has values already populated.</value>
+  </data>
+  <data name="ChooseObjectTypesHelp" xml:space="preserve">
+    <value>Each type you select gets its own tab above, where you choose the attributes to import or export. To maximize system performance, select only the types you actually need.</value>
+  </data>
+  <data name="AttributeSelectionHelp" xml:space="preserve">
+    <value>Select which attributes you would like JIM to import, or export for this object type. To maximize system performance, only select those you actually need.</value>
+  </data>
+  <data name="CredentialAttributeTooltip" xml:space="preserve">
+    <value>This attribute holds credential material and cannot be managed by JIM. Passwords are synchronized through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow.</value>
+  </data>
+  <data name="SkippedCredentialAttributes" xml:space="preserve">
+    <value>Skipped {0}: credential attributes cannot be managed by JIM. Passwords are synchronized through JIM's dedicated password channel, not through Attribute Flow.</value>
+  </data>
+  <data name="RefreshCancelled" xml:space="preserve">
+    <value>Hierarchy refresh canceled. Nothing was changed.</value>
+  </data>
+  <data name="PreviewReclassifiedBody" xml:space="preserve">
+    <value>Applying this refresh can change {0}. By default, each object that would change Object Type is refused at the next import and reported as an {1} error; JIM keeps it exactly as it is, so nothing is deprovisioned. If the change is intended, run a Full Import Run Profile with {2} enabled to carry it out. Canceling keeps the current classification.</value>
+  </data>
+  <data name="PreviewSyncRuleWord" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="PreviewActionRequiredText" xml:space="preserve">
+    <value>Some attributes that are no longer reported are still referenced by Synchronization Rules. Please update your Synchronization Rules to remove references to these attributes.</value>
+  </data>
+  <data name="PreviewObsoletedBody" xml:space="preserve">
+    <value>Obsoleted objects flow through the standard deprovisioning pipeline on the next synchronization run: disconnection, attribute recall, grace periods and Metaverse Deletion Rules all apply as configured.</value>
+  </data>
+  <data name="PreviewCancelBody" xml:space="preserve">
+    <value>Canceling does not preserve the status quo. The next Full Import will find no objects of a removed Object Type and obsolete them regardless, and the source now sends redefined attributes in their new form, so mappings validated against the old definition may misbehave. You can re-run the refresh at any time to decide.</value>
+  </data>
+  <data name="MatchingRulesSharedIntro" xml:space="preserve">
+    <value>Matching Rules are defined here per object type and shared across all Synchronization Rules.</value>
+  </data>
+  <data name="MatchingRulesPerRuleIntro" xml:space="preserve">
+    <value>Matching Rules are configured on each individual Synchronization Rule.</value>
+  </data>
+  <data name="AdvancedModeInfo" xml:space="preserve">
+    <value>In Advanced Mode, matching rules are configured on each individual Synchronization Rule. This allows different matching logic for different scenarios.</value>
+  </data>
+  <data name="GoToSyncRules" xml:space="preserve">
+    <value>Go to Synchronization Rules</value>
+  </data>
+  <data name="SwitchingToAdvancedBody" xml:space="preserve">
+    <value>Switching to {0} will allow you to configure different matching rules for each Synchronization Rule.</value>
+  </data>
+  <data name="MatchingRulesCopiedNote" xml:space="preserve">
+    <value>The current matching rules will be copied to all existing import Synchronization Rules for this Connected System, giving you a starting point to customize.</value>
+  </data>
+  <data name="SwitchingToSimpleBody" xml:space="preserve">
+    <value>Switching to {0} will configure matching rules here, shared across all Synchronization Rules.</value>
+  </data>
+  <data name="MigrationBody" xml:space="preserve">
+    <value>Matching rules from Synchronization Rules will be analyzed and migrated to the object type level:</value>
+  </data>
+  <data name="MigrationSame" xml:space="preserve">
+    <value>If all Synchronization Rules have the same matching rules, they will be used directly.</value>
+  </data>
+  <data name="MigrationDifferent" xml:space="preserve">
+    <value>If Synchronization Rules have different matching rules, the most common configuration will be selected.</value>
+  </data>
+  <data name="MigrationCleared" xml:space="preserve">
+    <value>Matching rules will be cleared from all Synchronization Rules after migration.</value>
+  </data>
+  <data name="SwitchedToAdvancedOne" xml:space="preserve">
+    <value>Switched to Advanced Mode. Matching rules copied to {0} Synchronization Rule.</value>
+  </data>
+  <data name="SwitchedToAdvancedOther" xml:space="preserve">
+    <value>Switched to Advanced Mode. Matching rules copied to {0} Synchronization Rules.</value>
+  </data>
+  <data name="DataFlowIntro" xml:space="preserve">
+    <value>Every attribute data flow configured across all Connected Systems, in both directions. Use it to answer "where does this attribute's value come from, and what writes it out?" without opening each Synchronization Rule.</value>
+  </data>
+  <data name="MultipleContributorsTooltip" xml:space="preserve">
+    <value>Show only Inbound flows whose Metaverse Attribute is fed by more than one Synchronization Rule. This is a normal arrangement; it is simply where the priority order decides which value wins.</value>
+  </data>
+  <data name="SearchScopeText" xml:space="preserve">
+    <value>Search matches Synchronization Rules, Connected Systems, object types, attribute names on either side, and expression text. The attribute filters cannot match a flow whose relevant side is an expression, because an expression's attribute references live in its text; search finds those.</value>
+  </data>
+  <data name="PriorityColumnTooltip" xml:space="preserve">
+    <value>Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronization Rule contributes, which is what the emphasized rows are.</value>
+  </data>
+  <data name="DisabledRuleTooltip" xml:space="preserve">
+    <value>This Synchronization Rule is disabled, so this flow is configured but moves no data.</value>
+  </data>
+  <data name="DataFlowNoneHint" xml:space="preserve">
+    <value>Add Attribute Flows to a Synchronization Rule and they will appear here.</value>
+  </data>
+  <data name="AuxStatusCancelled" xml:space="preserve">
+    <value>Canceled, partial</value>
+  </data>
+  <data name="AuxCancelledRunNote" xml:space="preserve">
+    <value>A canceled run keeps what it found. Those classes are genuinely in use; the ones it never reached are simply unknown.</value>
+  </data>
+  <data name="AuxCancelRequested" xml:space="preserve">
+    <value>Cancelation requested. What the run has already found is kept.</value>
+  </data>
+</root>

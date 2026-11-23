@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Search;
@@ -216,43 +217,43 @@ public class ExampleDataTemplateAttributeDraft
         var errors = new List<string>();
         if (Attribute == null)
         {
-            errors.Add("Choose a Metaverse Attribute to generate values for.");
+            errors.Add(DisplayText.TemplateAttributeChooseAttribute);
             return errors;
         }
 
         if (ShowsPopulation && PopulatedValuesPercentage is < 1 or > 100)
-            errors.Add("The percentage of objects given a value must be between 1 and 100.");
+            errors.Add(DisplayText.TemplateAttributePopulationRange);
 
         if (ShowsTextSources)
             ValidateTextSource(errors);
 
         if (ShowsNumberRange && MinNumber.HasValue && MaxNumber.HasValue && MinNumber.Value >= MaxNumber.Value)
-            errors.Add("Maximum must be greater than Minimum.");
+            errors.Add(DisplayText.TemplateAttributeNumberRange);
 
         if (ShowsDateRange && MinDate.HasValue && MaxDate.HasValue && MinDate.Value >= MaxDate.Value)
-            errors.Add("The latest date must be after the earliest date.");
+            errors.Add(DisplayText.TemplateAttributeDateRange);
 
         if (ShowsReferenceTargets && ReferenceObjectTypes.Count == 0)
-            errors.Add("Choose at least one Metaverse Object Type for the references to point at.");
+            errors.Add(DisplayText.TemplateAttributeChooseReferenceTypes);
 
         if (ShowsReferenceCountRange)
         {
             if (MvaMin is < 0)
-                errors.Add("The fewest references cannot be negative.");
+                errors.Add(DisplayText.TemplateAttributeFewestReferencesNegative);
             if (MvaMin.HasValue && MvaMax.HasValue && MvaMin.Value >= MvaMax.Value)
-                errors.Add("The most references must be more than the fewest.");
+                errors.Add(DisplayText.TemplateAttributeMostReferences);
         }
 
         if (ShowsManagerDepth)
         {
             if (!ManagerDepthPercentage.HasValue)
-                errors.Add("Set the manager depth: the percentage of Users who manage other Users.");
+                errors.Add(DisplayText.TemplateAttributeManagerDepthRequired);
             else if (ManagerDepthPercentage.Value is < 1 or > 99)
-                errors.Add("The manager depth must be between 1 and 99.");
+                errors.Add(DisplayText.TemplateAttributeManagerDepthRange);
         }
 
         if (ShowsBooleanDistribution && BoolTrueDistribution is < 0 or > 100)
-            errors.Add("The percentage of objects given true must be between 0 and 100.");
+            errors.Add(DisplayText.TemplateAttributeBooleanPercentage);
 
         if (HasCondition)
             ValidateCondition(errors);
@@ -265,22 +266,22 @@ public class ExampleDataTemplateAttributeDraft
         switch (TextSource)
         {
             case ExampleDataTextSource.DataSets when DataSets.Count == 0:
-                errors.Add("Choose at least one Example Data Set to pick values from.");
+                errors.Add(DisplayText.TemplateAttributeChooseDataSets);
                 break;
             case ExampleDataTextSource.Pattern when string.IsNullOrWhiteSpace(Pattern):
-                errors.Add("Enter the pattern values are built from.");
+                errors.Add(DisplayText.TemplateAttributeEnterPattern);
                 break;
             case ExampleDataTextSource.Expression when string.IsNullOrWhiteSpace(Expression):
-                errors.Add("Enter the expression that builds each value.");
+                errors.Add(DisplayText.TemplateAttributeEnterExpression);
                 break;
             case ExampleDataTextSource.WeightedValues when WeightedValues.Count == 0:
-                errors.Add("Add at least one value to pick from.");
+                errors.Add(DisplayText.TemplateAttributeAddWeightedValue);
                 break;
             case ExampleDataTextSource.WeightedValues:
                 if (WeightedValues.Any(v => string.IsNullOrEmpty(v.Value)))
-                    errors.Add("Every weighted value needs some text.");
+                    errors.Add(DisplayText.TemplateAttributeWeightedValueText);
                 if (WeightedValues.Any(v => v.Weight <= 0))
-                    errors.Add("Every weighted value needs a weight greater than 0.");
+                    errors.Add(DisplayText.TemplateAttributeWeightedValueWeight);
                 break;
         }
     }
@@ -289,7 +290,7 @@ public class ExampleDataTemplateAttributeDraft
     {
         if (ConditionAttribute == null)
         {
-            errors.Add("Choose the attribute for the condition, or turn the condition off.");
+            errors.Add(DisplayText.TemplateAttributeChooseConditionAttribute);
             return;
         }
 

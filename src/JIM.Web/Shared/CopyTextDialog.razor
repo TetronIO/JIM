@@ -8,14 +8,13 @@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="mb-3">
-            Your browser did not let JIM copy this to the clipboard. It is selected below; press Ctrl+C (Cmd+C on a
-            Mac) to copy it.
+            @SharedText.CopyTextExplanation
         </MudText>
-        <textarea @ref="_textArea" class="jim-copy-text-fallback" readonly rows="@Rows" aria-label="Text to copy"
+        <textarea @ref="_textArea" class="jim-copy-text-fallback" readonly rows="@Rows" aria-label="@SharedText.CopyTextAriaLabel"
                   data-testid="jim-copy-text-fallback" value="@Text"></textarea>
     </DialogContent>
     <DialogActions>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="Close">Done</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="Close">@SharedText.CopyTextDone</MudButton>
     </DialogActions>
 </MudDialog>
 

@@ -5,10 +5,6 @@ type: concept
 audience: administrator
 ---
 
-<!-- Draft of docs/administration/portal-language.md, kept here until the first language beyond en-GB is released
-     (engineering/LOCALISATION.md > Adding a language, step 6). Publishing it earlier would describe a picker that
-     production does not show. Add it to mkdocs.yml and the Administration landing page when it moves. -->
-
 # Portal Language
 
 The JIM portal can be shown in more than one language, and each person sees it in their own. JIM picks a language from the browser's preferred languages the first time someone signs in, and anyone can choose another from the user menu; the choice is remembered in that browser. Only the portal's own wording changes: the data JIM synchronises, the names you give to Connected Systems, Synchronisation Rules and Schedules, and the REST API and PowerShell module are the same whichever language a person reads the portal in.
@@ -32,32 +28,35 @@ answers:
   - { from: browser, to: fallback, label: "no" }
 ```
 
-## Languages
+## :material-translate: Languages
 
 | Language | Shown in the picker as | Notes |
 |----------|------------------------|-------|
 | English (United Kingdom) | English (UK) | The default, and what any other English-speaking region sees (Australia, Ireland, India and so on). |
-| English (United States) | English (US) | American spelling: "Synchronization Rule", "authorization", "color". |
+| English (United States) | English (US) | American spelling: "Synchronization Rule", "authorization", "color" <!-- conformance: allow LANG-2 "examples of the American spelling this language uses" -->. |
+| French | Français | One French for every French-speaking region (France, Belgium, Canada, Switzerland and so on). |
+| German | Deutsch | One German for every German-speaking region (Germany, Austria, Switzerland and so on), in the formal *Sie*. |
 
 JIM offers a language only once every part of the portal has been translated into it, so nobody is shown a page that is partly in one language and partly in another.
 
-## Change your language
+## :material-account-cog-outline: Change your language
 
 Select your name at the bottom of the navigation menu, then **Language**, and the language you want. The page reloads in the language you chose. The choice is stored in a cookie in that browser, so it applies to every page and lasts a year; another browser or computer starts from its own preferred languages again.
 
-## What stays in English
+## :material-lock-outline: What stays in English
 
 Some text is not part of the portal's wording, and reads the same in every language:
 
 - **Your own data and configuration.** Object names and attribute values, and the names and descriptions you give to Connected Systems, Synchronisation Rules, Schedules and everything else you create.
-- **Activity messages,** which JIM records as they happen.
+- **Activity messages recorded by JIM 1.0.** JIM records the messages and names it writes to an Activity so they can be shown in each reader's language. Activities recorded by JIM 1.0 releases were stored as English and stay that way.
+- **Other systems' own words.** An error a directory, a database or an identity provider returns is shown as that system worded it.
 - **The REST API and the PowerShell module.** Their field names, values and messages are a fixed contract that scripts and integrations depend on, so they do not change with anyone's language. A client's `Accept-Language` header has no effect on them.
 - **This documentation site,** which is written in British English.
 
-## Dates and numbers
+## :material-calendar-clock: Dates and numbers
 
 Dates and numbers are written the way the chosen language writes them, with month names in that language. Times are shown in each person's local time, whatever their language.
 
-## Related
+## :material-link-variant: Related
 
 - [Working with Lists](portal-lists.md): how the portal's lists behave, in every language.

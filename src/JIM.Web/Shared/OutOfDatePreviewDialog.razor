@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Preview
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -10,24 +11,27 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
+            @* The sentence has a chip in it, so it is formatted around a marker and split there; the words stay in one resource. *@
+            @{
+                var cause = string.Format(CultureInfo.CurrentCulture, SharedText.OutOfDateCause, StaleReason, "\u0001", WhenSuffix).Split('\u0001');
+            }
             <MudAlert Severity="Severity.Warning" Dense="true" data-testid="jim-out-of-date-preview-cause">
-                @StaleReason since this preview started: <PreviewOvertakenBy Staleness="@Staleness" />@WhenSuffix.
+                @cause[0]<PreviewOvertakenBy Staleness="@Staleness" />@cause[1]
             </MudAlert>
             <MudText>
-                The preview may no longer describe what the run would do. Preview again for a current answer, or run
-                anyway; the run's Activity records that the preview informing it was out of date.
+                @SharedText.OutOfDateExplanation
             </MudText>
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" DropShadow="false">Cancel</MudButton>
+        <MudButton OnClick="Cancel" DropShadow="false">@CommonText.Cancel</MudButton>
         <MudButton Variant="Variant.Filled" DropShadow="false"
                    OnClick="@(() => Choose(OutOfDatePreviewChoice.RunAnyway))" data-testid="jim-out-of-date-preview-run-anyway">
-            Run anyway
+            @SharedText.OutOfDateRunAnyway
         </MudButton>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
                    OnClick="@(() => Choose(OutOfDatePreviewChoice.PreviewAgain))" data-testid="jim-out-of-date-preview-again">
-            Preview again
+            @SharedText.OutOfDatePreviewAgain
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -46,7 +50,7 @@
 
     /// <summary>When the latest of it happened, relative to now, so the administrator can judge whether it matters.</summary>
     private string WhenSuffix => Staleness?.OvertakenAt is { } overtakenAt
-        ? $" ({overtakenAt.ToLocalTime().ToRelativeTime()})"
+        ? string.Format(CultureInfo.CurrentCulture, SharedText.OutOfDateWhen, overtakenAt.ToLocalTime().ToRelativeTime())
         : string.Empty;
 
     private void Choose(OutOfDatePreviewChoice choice) => MudDialog.Close(DialogResult.Ok(choice));

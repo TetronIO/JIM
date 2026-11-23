@@ -19,12 +19,16 @@ public static class OperationsHealthDemoData
         List<ServiceHealth> services =
         [
             Service(JimService.WorkerSync, ServiceHealthStatus.Healthy, ServiceHealthCondition.Heartbeating, now,
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 "Heartbeat received 4 seconds ago.", work: "Full Sync: Yellowstone APAC", workStarted: now.AddMinutes(-12), memory: 9.6),
             Service(JimService.WorkerDelivery, ServiceHealthStatus.Degraded, ServiceHealthCondition.MemoryLow, now,
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 "Available memory is below 10% of the host's.", memory: 14.1),
             Service(JimService.Scheduler, ServiceHealthStatus.Healthy, ServiceHealthCondition.Heartbeating, now,
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 "Heartbeat received 9 seconds ago."),
             Service(JimService.WorkerExchange, ServiceHealthStatus.Unhealthy, ServiceHealthCondition.NoHeartbeat, now,
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 "No heartbeat for 6 minutes.", lastSeen: now.AddMinutes(-6)),
         ];
 

@@ -1,5 +1,6 @@
 @using JIM.Models.Activities
 @using JIM.Web.Models
+@using System.Globalization
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -13,16 +14,17 @@
     <div class="jim-attribute-values-not-imported-head">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" />
-            <MudText Typo="Typo.h6">Attribute Values Not Imported</MudText>
+            <MudText Typo="Typo.h6">@MetaverseText.AvniTitle</MudText>
             <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ma-0">@Errors.Total.ToString("N0")</MudChip>
         </MudStack>
     </div>
 
     <div class="pa-4">
         <MudText Typo="Typo.body1" Class="mb-2">
-            JIM could not import @(Errors.Total == 1 ? "this value" : "these values"), so it left
-            @(AttributeCount == 1 ? "the attribute" : "each attribute") as it already held it and imported the rest of the object.
-            The Found By column says whether the Connector could not read a value, or JIM could not hold it as read.
+            @string.Format(CultureInfo.CurrentCulture, MetaverseText.AvniCouldNotImport,
+                PluralRules.Choose(Errors.Total, MetaverseText.AvniThisValue, MetaverseText.AvniTheseValues),
+                PluralRules.Choose(AttributeCount, MetaverseText.AvniTheAttribute, MetaverseText.AvniEachAttribute))
+            @MetaverseText.AvniFoundByIntro
         </MudText>
 
         <VirtualisedDataGrid T="ImportedAttributeValueError"
@@ -33,21 +35,21 @@
                              ExpectedItemCount="@Errors.Values.Count"
                              MaxHeight="480px"
                              GridClass="mt-3"
-                             SingularName="Value"
-                             PluralName="Values"
-                             SearchPlaceholder="Search attribute or value">
+                             SingularName="@MetaverseText.AvniValue"
+                             PluralName="@MetaverseText.AvniValues"
+                             SearchPlaceholder="@MetaverseText.AvniSearchPlaceholder">
             <Columns>
-                <TemplateColumn T="ImportedAttributeValueError" Title="Attribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn T="ImportedAttributeValueError" Title="@MetaverseText.AvniAttribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Attribute</MudText>
+                        <MudText Typo="Typo.button">@MetaverseText.AvniAttribute</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @context.Item.AttributeName
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn T="ImportedAttributeValueError" Title="Value Received" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-column-cap">
+                <TemplateColumn T="ImportedAttributeValueError" Title="@MetaverseText.AvniValueReceived" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-column-cap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Value Received</MudText>
+                        <MudText Typo="Typo.button">@MetaverseText.AvniValueReceived</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (context.Item.Value is { } value)
@@ -60,9 +62,9 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn T="ImportedAttributeValueError" Title="Expected" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn T="ImportedAttributeValueError" Title="@MetaverseText.AvniExpected" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Expected</MudText>
+                        <MudText Typo="Typo.button">@MetaverseText.AvniExpected</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (AttributeValueErrorDisplay.Expected(context.Item.AttributeType) is { } expected)
@@ -75,17 +77,17 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn T="ImportedAttributeValueError" Title="Found By" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn T="ImportedAttributeValueError" Title="@MetaverseText.AvniFoundBy" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Found By</MudText>
+                        <MudText Typo="Typo.button">@MetaverseText.AvniFoundBy</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @AttributeValueErrorDisplay.FoundBy(context.Item.Source)
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn T="ImportedAttributeValueError" Title="Why It Could Not Be Imported" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                <TemplateColumn T="ImportedAttributeValueError" Title="@MetaverseText.AvniWhyNotImported" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Why It Could Not Be Imported</MudText>
+                        <MudText Typo="Typo.button">@MetaverseText.AvniWhyNotImported</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         <OneLineText Text="@context.Item.Reason" />
@@ -94,9 +96,9 @@
             </Columns>
             <EmptyContent Context="grid">
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No values match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.AvniNoValuesMatch, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             </EmptyContent>
         </VirtualisedDataGrid>
@@ -104,27 +106,20 @@
         @if (Errors.Total > Errors.Values.Count)
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2" data-testid="jim-attribute-values-kept-note">
-                The first @Errors.Values.Count.ToString("N0") of @Errors.Total.ToString("N0") values are kept with the item.
+                @string.Format(CultureInfo.CurrentCulture, MetaverseText.AvniKeptNote, Errors.Values.Count.ToString("N0"), Errors.Total.ToString("N0"))
             </MudText>
         }
 
         <div class="jim-attribute-values-next-step mt-4">
             <MudIcon Icon="@Icons.Material.Outlined.Lightbulb" Class="mud-text-secondary" />
             <MudText Typo="Typo.body1">
-                Correct @(Errors.Total == 1 ? "the value" : "the values") in
-                @if (string.IsNullOrEmpty(SourceLocation))
-                {
-                    @:the Connected System
-                }
-                else
-                {
-                    <span class="jim-text-code" data-testid="jim-attribute-values-source">@SourceLocation</span>
-                }
-                and run the import again. If @(Errors.Total == 1 ? "the value is" : "the values are") right and an
-                attribute's type is wrong, change it on the Schema tab.
+                @((MarkupString)string.Format(CultureInfo.CurrentCulture, MetaverseText.AvniNextStep,
+                    PluralRules.Choose(Errors.Total, MetaverseText.AvniTheValue, MetaverseText.AvniTheValues),
+                    NextStepSourceHtml,
+                    PluralRules.Choose(Errors.Total, MetaverseText.AvniTheValueIs, MetaverseText.AvniTheValuesAre)))
                 @if (SchemaHref is { } schemaHref)
                 {
-                    <MudLink Href="@schemaHref" Class="ml-1" data-testid="jim-attribute-values-schema-link">Open Schema<span aria-hidden="true">&nbsp;&rarr;</span></MudLink>
+                    <MudLink Href="@schemaHref" Class="ml-1" data-testid="jim-attribute-values-schema-link">@MetaverseText.AvniOpenSchema<span aria-hidden="true">&nbsp;&rarr;</span></MudLink>
                 }
             </MudText>
         </div>
@@ -152,6 +147,14 @@
     [Parameter]
     public string? Class { get; set; }
 
+    /// <summary>
+    /// The place the value was read from, in the next-step sentence: the Connected System's name when no location is
+    /// known, otherwise the location in its own styled span. The location is HTML-encoded before it is inserted.
+    /// </summary>
+    private string NextStepSourceHtml => string.IsNullOrEmpty(SourceLocation)
+        ? MetaverseText.AvniTheConnectedSystem
+        : $"<span class=\"jim-text-code\" data-testid=\"jim-attribute-values-source\">{System.Net.WebUtility.HtmlEncode(SourceLocation)}</span>";
+
     private int AttributeCount => Errors.Values.Select(v => v.AttributeName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
     private string? SchemaHref => ConnectedSystemId is { } connectedSystemId
@@ -160,7 +163,7 @@
 
     private string PaperClass => string.IsNullOrEmpty(Class)
         ? "jim-attribute-values-not-imported"
-        : $"jim-attribute-values-not-imported {Class}";
+        : $"jim-attribute-values-not-imported {Class}"; // i18n: exempt - CSS class names, not text
 
     private Task<VirtualisedWindow<ImportedAttributeValueError>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(AttributeValueErrorDisplay.Matching(Errors.Values, request.SearchText).ToWindow(request));

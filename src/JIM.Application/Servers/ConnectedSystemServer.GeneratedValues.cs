@@ -2,6 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Exceptions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.UniqueValues;
@@ -15,6 +18,8 @@ using JIM.Models.Security;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
+using CsText = JIM.Application.Resources.ConnectedSystemMessages;
+using Msg = JIM.Application.Localisation.ConnectedSystemMessage;
 
 namespace JIM.Application.Servers;
 
@@ -66,10 +71,10 @@ public partial class ConnectedSystemServer
     private async Task<GeneratedValueRestartResult> RestartGeneratedValuesCoreAsync(int mappingId, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
     {
         var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(mappingId)
-            ?? throw new ArgumentException($"No Attribute Flow mapping was found with ID {mappingId}.", nameof(mappingId));
+            ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RestartMappingNotFound), mappingId), nameof(mappingId));
 
         if (mapping.Generation == null)
-            throw new ArgumentException("This Attribute Flow is not a generated mapping; \"Start again\" only applies to generated mappings.", nameof(mappingId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RestartNotGenerated)), nameof(mappingId));
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
 
@@ -77,7 +82,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -264,9 +269,9 @@ public partial class ConnectedSystemServer
         ThrowIfExclusionErrors(errors, "CreateOrUpdateSyncRuleAsync");
     }
 
-    private async Task<List<string>> GetGeneratedValueExclusionErrorsAsync(IEnumerable<SyncRuleMapping> mappings, Lazy<Task<List<SyncRule>>> exportRules)
+    private async Task<List<JimMessage>> GetGeneratedValueExclusionErrorsAsync(IEnumerable<SyncRuleMapping> mappings, Lazy<Task<List<SyncRule>>> exportRules)
     {
-        var errors = new List<string>();
+        var errors = new List<JimMessage>();
         Dictionary<int, string>? names = null;
 
         foreach (var mapping in mappings.Where(m => m.Generation is { Exclusions.Count: > 0 }))
@@ -274,8 +279,10 @@ public partial class ConnectedSystemServer
             var metaverseAttributeId = mapping.ResolveTargetMetaverseAttributeId();
             if (!metaverseAttributeId.HasValue)
             {
-                var targetName = mapping.TargetConnectedSystemAttribute?.Name ?? "this attribute";
-                errors.Add($"A value generated for {targetName} is checked only in its own Connected System, so it cannot exclude Connected Systems; remove the exclusions.");
+                MessageArgument targetName = mapping.TargetConnectedSystemAttribute?.Name is { } connectedSystemAttributeName
+                    ? connectedSystemAttributeName
+                    : Msg.Create(nameof(CsText.ExclusionThisAttribute));
+                errors.Add(Msg.Create(nameof(CsText.ExclusionNoMetaverseTarget), targetName));
                 continue;
             }
 
@@ -285,23 +292,25 @@ public partial class ConnectedSystemServer
                 continue;
 
             names ??= await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync();
-            var attributeName = mapping.TargetMetaverseAttribute?.Name ?? "the generated attribute";
+            MessageArgument attributeName = mapping.TargetMetaverseAttribute?.Name is { } metaverseAttributeName
+                ? metaverseAttributeName
+                : Msg.Create(nameof(CsText.ExclusionTheGeneratedAttribute));
             errors.AddRange(refused.Select(id => names.TryGetValue(id, out var name)
-                ? $"Connected System \"{name}\" cannot be excluded from {attributeName}'s availability checks: no export Attribute Flow sends {attributeName} to it unchanged."
-                : $"Connected System {id} cannot be excluded from {attributeName}'s availability checks: it does not exist."));
+                ? Msg.Create(nameof(CsText.ExclusionNotExcludable), name, attributeName)
+                : Msg.Create(nameof(CsText.ExclusionMissingSystem), id, attributeName)));
         }
 
         return errors;
     }
 
-    private static void ThrowIfExclusionErrors(List<string> errors, string caller)
+    private static void ThrowIfExclusionErrors(List<JimMessage> errors, string caller)
     {
         if (errors.Count == 0)
             return;
 
-        var message = string.Join(" ", errors);
-        Log.Warning("{Caller}: rejecting generated value exclusions; {Message}", caller, LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+        var refusal = LocalisedExceptions.Argument(Msg.Sentences(errors));
+        Log.Warning("{Caller}: rejecting generated value exclusions; {Message}", caller, LogSanitiser.Sanitise(refusal.Message));
+        throw refusal;
     }
 
     /// <summary>
@@ -743,7 +752,7 @@ public partial class ConnectedSystemServer
         if (!mapping.KeepUnique && !CanKeepUnique(mapping))
         {
             var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
-            throw new ArgumentException($"{targetName}: {KeepUniqueNotApplicableMessage}");
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.TargetPrefixed), targetName, Msg.Create(nameof(CsText.KeepUniqueNotApplicable))));
         }
     }
 

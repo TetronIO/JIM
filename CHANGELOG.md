@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ The portal is now available in French, German and American English: it follows each browser's preferred language, anyone can choose another from the user menu, and the REST API and PowerShell module stay unchanged (#3030).
 - ✨ The JIM Microsoft Entra ID Connector synchronises users and groups with Microsoft Entra ID through Microsoft Graph, passwords included; `Register-JIMEntraIdConnector` sets up its app registration, permissions and certificate in one command. (#361)
 - ✨ The REST API and `Get-JIMConnectedSystem -Id` now return a Connected System's setting values, so a script can check a configuration before changing it; an encrypted setting reports only whether a value is held.
 - ✨ Export Synchronisation Rules can deprovision leavers with **Disable**: the account is disabled and kept for audit, and re-enabled if the person returns. Works with Active Directory, Samba AD, 389 Directory Server, OpenLDAP and Microsoft Entra ID. (#2085)

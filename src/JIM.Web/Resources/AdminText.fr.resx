@@ -1,0 +1,1391 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SchemaPageTitle" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="SchemaHeading" xml:space="preserve">
+    <value>Schéma :</value>
+  </data>
+  <data name="SchemaPageInfo" xml:space="preserve">
+    <value>Gérez les types d’objets Metaverse et leurs attributs, et consultez comment les données entrent dans ces objets et en sortent.</value>
+  </data>
+  <data name="SchemaTabObjectTypes" xml:space="preserve">
+    <value>Types d’objets</value>
+  </data>
+  <data name="SchemaTabAttributes" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="SchemaTabDataFlow" xml:space="preserve">
+    <value>Flux de données</value>
+  </data>
+  <data name="SchemaDeletionRule" xml:space="preserve">
+    <value>Règle de suppression</value>
+  </data>
+  <data name="SchemaDeletionRuleManual" xml:space="preserve">
+    <value>Manuelle</value>
+  </data>
+  <data name="SchemaDeletionRuleAuto" xml:space="preserve">
+    <value>Automatique</value>
+  </data>
+  <data name="SchemaDeletionRuleAuthoritativeSource" xml:space="preserve">
+    <value>Source faisant autorité</value>
+  </data>
+  <data name="SchemaPredefinedSearches" xml:space="preserve">
+    <value>Recherches prédéfinies ?</value>
+  </data>
+  <data name="SchemaBuiltIn" xml:space="preserve">
+    <value>Intégré ?</value>
+  </data>
+  <data name="SchemaNewObjectType" xml:space="preserve">
+    <value>Nouveau type d’objets</value>
+  </data>
+  <data name="SchemaNewAttribute" xml:space="preserve">
+    <value>Nouvel attribut</value>
+  </data>
+  <data name="SchemaEditObjectType" xml:space="preserve">
+    <value>Modifier le type d’objets</value>
+  </data>
+  <data name="SchemaDeleteObjectType" xml:space="preserve">
+    <value>Supprimer le type d’objets</value>
+  </data>
+  <data name="SchemaBuiltInObjectTypeLocked" xml:space="preserve">
+    <value>Les types d’objets intégrés ne peuvent pas être renommés ni supprimés.</value>
+  </data>
+  <data name="SchemaChangeHistory" xml:space="preserve">
+    <value>Historique des modifications</value>
+  </data>
+  <data name="SchemaSearchByName" xml:space="preserve">
+    <value>Rechercher par nom</value>
+  </data>
+  <data name="SchemaNoObjectTypesMatchSearch" xml:space="preserve">
+    <value>Aucun type d’objets Metaverse ne correspond à « {0} ».</value>
+  </data>
+  <data name="SchemaNoObjectTypesMatchFilters" xml:space="preserve">
+    <value>Aucun type d’objets Metaverse ne correspond aux filtres actuels.</value>
+  </data>
+  <data name="SchemaTryDifferentFilters" xml:space="preserve">
+    <value>Essayez d’autres filtres, ou effacez-les.</value>
+  </data>
+  <data name="SchemaClearFilters" xml:space="preserve">
+    <value>Effacer les filtres</value>
+  </data>
+  <data name="SchemaNoObjectTypesYet" xml:space="preserve">
+    <value>Aucun type d’objets Metaverse pour le moment</value>
+  </data>
+  <data name="SchemaUseNewObjectTypeButton" xml:space="preserve">
+    <value>Utilisez le bouton « Nouveau type d’objets » pour en créer un.</value>
+  </data>
+  <data name="SchemaNoAttributesMatchSearch" xml:space="preserve">
+    <value>Aucun attribut Metaverse ne correspond à « {0} ».</value>
+  </data>
+  <data name="SchemaNoAttributesMatchFilters" xml:space="preserve">
+    <value>Aucun attribut Metaverse ne correspond aux filtres actuels.</value>
+  </data>
+  <data name="SchemaNoAttributesYet" xml:space="preserve">
+    <value>Aucun attribut Metaverse pour le moment</value>
+  </data>
+  <data name="SchemaUseNewAttributeButton" xml:space="preserve">
+    <value>Utilisez le bouton « Nouvel attribut » pour en créer un.</value>
+  </data>
+  <data name="SchemaSingleValued" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="SchemaMultiValued" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="SchemaPlurality" xml:space="preserve">
+    <value>Pluralité</value>
+  </data>
+  <data name="SchemaCustom" xml:space="preserve">
+    <value>Personnalisé</value>
+  </data>
+  <data name="SchemaBuiltInAttribute" xml:space="preserve">
+    <value>Attribut intégré</value>
+  </data>
+  <data name="SchemaObjectTypes" xml:space="preserve">
+    <value>Types d’objets</value>
+  </data>
+  <data name="SchemaNotAssigned" xml:space="preserve">
+    <value>Non affecté</value>
+  </data>
+  <data name="SchemaNotAssignedTooltip" xml:space="preserve">
+    <value>Cet attribut personnalisé n’est lié à aucun type d’objets ; il ne collecte donc aucune donnée.</value>
+  </data>
+  <data name="SchemaEditAttribute" xml:space="preserve">
+    <value>Modifier l’attribut</value>
+  </data>
+  <data name="SchemaDeleteAttribute" xml:space="preserve">
+    <value>Supprimer l’attribut</value>
+  </data>
+  <data name="SchemaViewAttributeAndMappings" xml:space="preserve">
+    <value>Afficher l’attribut et les mappages standard</value>
+  </data>
+  <data name="SchemaObjectTypeFilter" xml:space="preserve">
+    <value>Type d’objets</value>
+  </data>
+  <data name="SchemaNounObjectTypeSingular" xml:space="preserve">
+    <value>Type d’objets Metaverse</value>
+  </data>
+  <data name="SchemaNounObjectTypePlural" xml:space="preserve">
+    <value>Types d’objets Metaverse</value>
+  </data>
+  <data name="SchemaNounAttributeSingular" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="SchemaNounAttributePlural" xml:space="preserve">
+    <value>Attributs Metaverse</value>
+  </data>
+  <data name="SchemaGracePeriodDayOne" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="SchemaGracePeriodDayOther" xml:space="preserve">
+    <value>{0} jours</value>
+  </data>
+  <data name="SchemaGracePeriodHourOne" xml:space="preserve">
+    <value>{0} heure</value>
+  </data>
+  <data name="SchemaGracePeriodHourOther" xml:space="preserve">
+    <value>{0} heures</value>
+  </data>
+  <data name="SchemaGracePeriodMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+  </data>
+  <data name="SchemaGracePeriodMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+  </data>
+  <data name="SchemaGracePeriodSeparator" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="SchemaGracePeriodWithDelay" xml:space="preserve">
+    <value>({0} de délai de grâce)</value>
+  </data>
+  <data name="SchemaGracePeriodImmediate" xml:space="preserve">
+    <value>(immédiat)</value>
+  </data>
+  <data name="SchemaTooltipManualDeletion" xml:space="preserve">
+    <value>Suppression manuelle uniquement : les objets ne sont jamais supprimés automatiquement</value>
+  </data>
+  <data name="SchemaTooltipDeleteWhenAllDisconnect" xml:space="preserve">
+    <value>Suppression lorsque tous les connecteurs se déconnectent {0}</value>
+  </data>
+  <data name="SchemaTooltipAllSourcesDisconnect" xml:space="preserve">
+    <value>Toutes les sources se déconnectent : suppression uniquement une fois que chaque source faisant autorité sélectionnée s’est déconnectée {0}</value>
+  </data>
+  <data name="SchemaTooltipSpecificSourceDisconnect" xml:space="preserve">
+    <value>Une ou plusieurs sources précises se déconnectent : suppression lorsque l’une des sources faisant autorité sélectionnées se déconnecte {0}</value>
+  </data>
+  <data name="SchemaTooltipUnknownRule" xml:space="preserve">
+    <value>Règle de suppression inconnue</value>
+  </data>
+  <data name="CertificatePageTitle" xml:space="preserve">
+    <value>Certificats approuvés</value>
+  </data>
+  <data name="CertificatePageInfo" xml:space="preserve">
+    <value>Gérez les certificats approuvés par JIM : pour les connexions sécurisées des connecteurs (LDAPS, HTTPS, SQL Server), pour la connexion via votre fournisseur d’identité, ou pour les deux. Les certificats peuvent être importés directement ou référencés depuis le point de montage des fichiers de connecteur.</value>
+  </data>
+  <data name="CertificateBreadcrumb" xml:space="preserve">
+    <value>Certificats</value>
+  </data>
+  <data name="CertificateNounSingular" xml:space="preserve">
+    <value>Certificat approuvé</value>
+  </data>
+  <data name="CertificateNounPlural" xml:space="preserve">
+    <value>Certificats approuvés</value>
+  </data>
+  <data name="CertificateUploadButton" xml:space="preserve">
+    <value>Importer un certificat</value>
+  </data>
+  <data name="CertificateReferenceFileButton" xml:space="preserve">
+    <value>Référencer un chemin de fichier</value>
+  </data>
+  <data name="CertificateMenuViewDetails" xml:space="preserve">
+    <value>Afficher les détails</value>
+  </data>
+  <data name="CertificateMenuChangeHistory" xml:space="preserve">
+    <value>Historique des modifications</value>
+  </data>
+  <data name="CertificateTrustedFor" xml:space="preserve">
+    <value>Approuvé pour</value>
+  </data>
+  <data name="CertificateSubject" xml:space="preserve">
+    <value>Objet</value>
+  </data>
+  <data name="CertificateSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="CertificateExpires" xml:space="preserve">
+    <value>Expiration</value>
+  </data>
+  <data name="CertificateUploaded" xml:space="preserve">
+    <value>Importé</value>
+  </data>
+  <data name="CertificateFilePath" xml:space="preserve">
+    <value>Chemin d’accès au fichier</value>
+  </data>
+  <data name="CertificatePurposeSignIn" xml:space="preserve">
+    <value>Connexion</value>
+  </data>
+  <data name="CertificatePurposeConnectors" xml:space="preserve">
+    <value>Connecteurs</value>
+  </data>
+  <data name="CertificatePurposeBoth" xml:space="preserve">
+    <value>Connexion et connecteurs</value>
+  </data>
+  <data name="CertificateDaysUntilExpiryOne" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="CertificateDaysUntilExpiryOther" xml:space="preserve">
+    <value>{0} jours</value>
+  </data>
+  <data name="CertificateExpired" xml:space="preserve">
+    <value>Expiré</value>
+  </data>
+  <data name="CertificateInUseBySignIn" xml:space="preserve">
+    <value>Utilisé pour la connexion</value>
+  </data>
+  <data name="CertificateInUseBySignInTooltip" xml:space="preserve">
+    <value>Le certificat de votre fournisseur d’identité remonte jusqu’à celui-ci ; la connexion en dépend. Vérifié : {0}.</value>
+  </data>
+  <data name="CertificateEmptySearch" xml:space="preserve">
+    <value>Aucun certificat approuvé ne correspond à « {0} ».</value>
+  </data>
+  <data name="CertificateEmptyNone" xml:space="preserve">
+    <value>Aucun certificat approuvé n’a encore été ajouté.</value>
+  </data>
+  <data name="CertificateEmptyNoneHint" xml:space="preserve">
+    <value>Utilisez les boutons « Importer un certificat » ou « Référencer un chemin de fichier » pour en ajouter un.</value>
+  </data>
+  <data name="CertificateNameHelper" xml:space="preserve">
+    <value>Nom convivial de ce certificat (par exemple, « Corp Root CA »).</value>
+  </data>
+  <data name="CertificateNameRequired" xml:space="preserve">
+    <value>Un nom est requis.</value>
+  </data>
+  <data name="CertificateSelectFile" xml:space="preserve">
+    <value>Sélectionner le fichier de certificat</value>
+  </data>
+  <data name="CertificateFormats" xml:space="preserve">
+    <value>Formats pris en charge : PEM (.pem, .crt) ou DER (.cer, .der)</value>
+  </data>
+  <data name="CertificateNotes" xml:space="preserve">
+    <value>Remarques</value>
+  </data>
+  <data name="CertificateNotesHelper" xml:space="preserve">
+    <value>Remarques facultatives sur ce certificat</value>
+  </data>
+  <data name="CertificateUploading" xml:space="preserve">
+    <value>Importation en cours</value>
+  </data>
+  <data name="CertificateReferenceDialogTitle" xml:space="preserve">
+    <value>Référencer un fichier de certificat</value>
+  </data>
+  <data name="CertificateFilePathRequired" xml:space="preserve">
+    <value>Un chemin d’accès au fichier est requis.</value>
+  </data>
+  <data name="CertificateReferenceNameHelper" xml:space="preserve">
+    <value>Nom convivial de ce certificat.</value>
+  </data>
+  <data name="CertificateFilePathHelper" xml:space="preserve">
+    <value>Chemin complet du fichier de certificat (par exemple, /connector-files/certs/root-ca.pem).</value>
+  </data>
+  <data name="CertificateAddButton" xml:space="preserve">
+    <value>Ajouter un certificat</value>
+  </data>
+  <data name="CertificateAdding" xml:space="preserve">
+    <value>Ajout en cours</value>
+  </data>
+  <data name="CertificateDetailsTitle" xml:space="preserve">
+    <value>Détails du certificat</value>
+  </data>
+  <data name="CertificateIssuer" xml:space="preserve">
+    <value>Émetteur</value>
+  </data>
+  <data name="CertificateValidFrom" xml:space="preserve">
+    <value>Valide à partir du</value>
+  </data>
+  <data name="CertificateValidTo" xml:space="preserve">
+    <value>Valide jusqu’au</value>
+  </data>
+  <data name="CertificateThumbprint" xml:space="preserve">
+    <value>Empreinte</value>
+  </data>
+  <data name="CertificateSerialNumber" xml:space="preserve">
+    <value>Numéro de série</value>
+  </data>
+  <data name="CertificateSourceType" xml:space="preserve">
+    <value>Type de source</value>
+  </data>
+  <data name="CertificateEditTitle" xml:space="preserve">
+    <value>Modifier le certificat</value>
+  </data>
+  <data name="CertificateSaving" xml:space="preserve">
+    <value>Enregistrement en cours</value>
+  </data>
+  <data name="CertificateUploadedSuccess" xml:space="preserve">
+    <value>Certificat importé avec succès.</value>
+  </data>
+  <data name="CertificateAddedSuccess" xml:space="preserve">
+    <value>Certificat ajouté avec succès.</value>
+  </data>
+  <data name="CertificateUpdatedSuccess" xml:space="preserve">
+    <value>Certificat mis à jour avec succès.</value>
+  </data>
+  <data name="CertificateDeletedSuccess" xml:space="preserve">
+    <value>Certificat supprimé avec succès.</value>
+  </data>
+  <data name="CertificateUploadFailed" xml:space="preserve">
+    <value>Échec de l’importation du certificat : {0}</value>
+  </data>
+  <data name="CertificateAddFailed" xml:space="preserve">
+    <value>Échec de l’ajout du certificat : {0}</value>
+  </data>
+  <data name="CertificateUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour du certificat : {0}</value>
+  </data>
+  <data name="CertificateDeleteFailed" xml:space="preserve">
+    <value>Échec de la suppression du certificat : {0}</value>
+  </data>
+  <data name="CertificateDeleteTitle" xml:space="preserve">
+    <value>Supprimer le certificat</value>
+  </data>
+  <data name="CertificateDeleteMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer le certificat « {0} » ? Cette action est irréversible.</value>
+  </data>
+  <data name="CertificateStopSignInTitle" xml:space="preserve">
+    <value>Interrompre la connexion par « {0} » ?</value>
+  </data>
+  <data name="CertificateUploadVerb" xml:space="preserve">
+    <value>Importer</value>
+  </data>
+  <data name="ApiKeyPageTitle" xml:space="preserve">
+    <value>Clés d’API</value>
+  </data>
+  <data name="ApiKeyPageInfo" xml:space="preserve">
+    <value>Gérez les clés d’API pour l’authentification non interactive. Les clés d’API peuvent servir aux pipelines CI/CD, aux tests d’intégration et aux scripts d’automatisation. Les clés qu’un fournisseur d’identité utilise pour appeler un point de terminaison SCIM figurent aussi ici, marquées SCIM ; elles sont créées et gérées dans l’onglet SCIM du système connecté.</value>
+  </data>
+  <data name="ApiKeyNounSingular" xml:space="preserve">
+    <value>Clé d’API</value>
+  </data>
+  <data name="ApiKeyNounPlural" xml:space="preserve">
+    <value>Clés d’API</value>
+  </data>
+  <data name="ApiKeyCreateButton" xml:space="preserve">
+    <value>Créer une clé d’API</value>
+  </data>
+  <data name="ApiKeyPrefix" xml:space="preserve">
+    <value>Préfixe de clé</value>
+  </data>
+  <data name="ApiKeyRoles" xml:space="preserve">
+    <value>Rôles</value>
+  </data>
+  <data name="ApiKeyInfrastructureTooltip" xml:space="preserve">
+    <value>Clé d’infrastructure créée automatiquement à partir de la variable d’environnement JIM_INFRASTRUCTURE_API_KEY.</value>
+  </data>
+  <data name="ApiKeyInfrastructure" xml:space="preserve">
+    <value>Infrastructure</value>
+  </data>
+  <data name="ApiKeyScopedTooltip" xml:space="preserve">
+    <value>Fonctionne uniquement sur le point de terminaison SCIM d’un seul système connecté. Gérez-la dans l’onglet SCIM de ce système connecté.</value>
+  </data>
+  <data name="ApiKeyNoRoles" xml:space="preserve">
+    <value>Aucun rôle</value>
+  </data>
+  <data name="ApiKeyLastUsed" xml:space="preserve">
+    <value>Dernière utilisation</value>
+  </data>
+  <data name="ApiKeyLastUsedTooltip" xml:space="preserve">
+    <value>{0} depuis l’adresse IP : {1}</value>
+  </data>
+  <data name="ApiKeyExpires" xml:space="preserve">
+    <value>Expiration</value>
+  </data>
+  <data name="ApiKeyEditOnScimTab" xml:space="preserve">
+    <value>Modifiez cette clé dans l’onglet SCIM de son système connecté</value>
+  </data>
+  <data name="ApiKeyEmptySearch" xml:space="preserve">
+    <value>Aucune clé d’API ne correspond à « {0} ».</value>
+  </data>
+  <data name="ApiKeyEmptyNone" xml:space="preserve">
+    <value>Aucune clé d’API n’a encore été créée.</value>
+  </data>
+  <data name="ApiKeyEmptyNoneHint" xml:space="preserve">
+    <value>Utilisez le bouton « Créer une clé d’API » pour en créer une.</value>
+  </data>
+  <data name="ApiKeyNameRequired" xml:space="preserve">
+    <value>Un nom est requis.</value>
+  </data>
+  <data name="ApiKeyNameHelper" xml:space="preserve">
+    <value>Nom convivial de cette clé d’API (par exemple, « CI/CD Pipeline »).</value>
+  </data>
+  <data name="ApiKeyDescriptionHelper" xml:space="preserve">
+    <value>Description facultative de l’usage de cette clé.</value>
+  </data>
+  <data name="ApiKeyRolesHint" xml:space="preserve">
+    <value>Sélectionnez les rôles à attribuer à cette clé d’API. Les rôles déterminent les actions que la clé peut effectuer.</value>
+  </data>
+  <data name="ApiKeyExpiresOptional" xml:space="preserve">
+    <value>Expiration (facultative)</value>
+  </data>
+  <data name="ApiKeyNoExpiryHint" xml:space="preserve">
+    <value>Laissez vide pour qu’elle n’expire pas</value>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>Création en cours</value>
+  </data>
+  <data name="ApiKeyCreatedTitle" xml:space="preserve">
+    <value>Clé d’API créée</value>
+  </data>
+  <data name="ApiKeyCopyNowWarning" xml:space="preserve">
+    <value>Copiez cette clé d’API maintenant. Il ne sera plus possible de l’afficher.</value>
+  </data>
+  <data name="ApiKeyBearerHint" xml:space="preserve">
+    <value>Envoyez cette clé comme jeton porteur dans l’en-tête Authorization de vos requêtes à l’API.</value>
+  </data>
+  <data name="ApiKeyExampleUsage" xml:space="preserve">
+    <value>Exemple d’utilisation :</value>
+  </data>
+  <data name="ApiKeyDone" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="ApiKeyEditTitle" xml:space="preserve">
+    <value>Modifier la clé d’API</value>
+  </data>
+  <data name="ApiKeyCreatedSuccess" xml:space="preserve">
+    <value>Clé d’API créée avec succès.</value>
+  </data>
+  <data name="ApiKeyCopiedSuccess" xml:space="preserve">
+    <value>Clé d’API copiée dans le presse-papiers.</value>
+  </data>
+  <data name="ApiKeyCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers. Copiez la clé manuellement.</value>
+  </data>
+  <data name="ApiKeyUpdatedSuccess" xml:space="preserve">
+    <value>Clé d’API mise à jour avec succès.</value>
+  </data>
+  <data name="ApiKeyDeletedSuccess" xml:space="preserve">
+    <value>Clé d’API supprimée avec succès.</value>
+  </data>
+  <data name="ApiKeyCreateFailed" xml:space="preserve">
+    <value>Échec de la création de la clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour de la clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyDeleteFailed" xml:space="preserve">
+    <value>Échec de la suppression de la clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyDeleteTitle" xml:space="preserve">
+    <value>Supprimer la clé d’API</value>
+  </data>
+  <data name="ApiKeyDeleteMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer la clé d’API « {0} » ? Toute requête utilisant cette clé échouera immédiatement.</value>
+  </data>
+  <data name="SettingsPageInfo" xml:space="preserve">
+    <value>Configurez les paramètres à l’échelle du service. Les paramètres en lecture seule sont définis par des variables d’environnement et ne peuvent pas être modifiés ici.</value>
+  </data>
+  <data name="ServiceSettingNounSingular" xml:space="preserve">
+    <value>Paramètre de service</value>
+  </data>
+  <data name="ServiceSettingNounPlural" xml:space="preserve">
+    <value>Paramètres de service</value>
+  </data>
+  <data name="SettingsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des paramètres</value>
+  </data>
+  <data name="SettingsShowConfigurableOnly" xml:space="preserve">
+    <value>Afficher uniquement les paramètres modifiables</value>
+  </data>
+  <data name="SettingsShowOverriddenOnly" xml:space="preserve">
+    <value>Afficher uniquement les paramètres modifiés</value>
+  </data>
+  <data name="SettingsShowPreviewFeaturesOnly" xml:space="preserve">
+    <value>Afficher uniquement les fonctionnalités en préversion</value>
+  </data>
+  <data name="SettingsColumnCategory" xml:space="preserve">
+    <value>Catégorie</value>
+  </data>
+  <data name="SettingsColumnSetting" xml:space="preserve">
+    <value>Paramètre</value>
+  </data>
+  <data name="SettingsColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="SettingsCategorySso" xml:space="preserve">
+    <value>Authentification unique (SSO)</value>
+  </data>
+  <data name="SettingsCategorySynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+  </data>
+  <data name="SettingsCategoryMaintenance" xml:space="preserve">
+    <value>Maintenance</value>
+  </data>
+  <data name="SettingsCategoryHistory" xml:space="preserve">
+    <value>Historique</value>
+  </data>
+  <data name="SettingsCategorySecurity" xml:space="preserve">
+    <value>Sécurité</value>
+  </data>
+  <data name="SettingsCategoryInstance" xml:space="preserve">
+    <value>Instance</value>
+  </data>
+  <data name="SettingsCategoryPreviewFeatures" xml:space="preserve">
+    <value>Fonctionnalités en préversion</value>
+  </data>
+  <data name="SettingsInDevelopment" xml:space="preserve">
+    <value>En développement</value>
+  </data>
+  <data name="SettingsNotSet" xml:space="preserve">
+    <value>(non défini)</value>
+  </data>
+  <data name="SettingsCopyToClipboard" xml:space="preserve">
+    <value>Copier dans le presse-papiers</value>
+  </data>
+  <data name="SettingsReadOnly" xml:space="preserve">
+    <value>Lecture seule</value>
+  </data>
+  <data name="SettingsModifiedOn" xml:space="preserve">
+    <value>Modifié le {0}</value>
+  </data>
+  <data name="SettingsModifiedBy" xml:space="preserve">
+    <value>par {0}</value>
+  </data>
+  <data name="SettingsDefault" xml:space="preserve">
+    <value>Par défaut</value>
+  </data>
+  <data name="SettingsRevertToDefault" xml:space="preserve">
+    <value>Rétablir la valeur par défaut</value>
+  </data>
+  <data name="SettingsRevert" xml:space="preserve">
+    <value>Rétablir</value>
+  </data>
+  <data name="SettingsRevertConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment rétablir la valeur par défaut de « {0} » ?</value>
+  </data>
+  <data name="SettingsRevertedSuccess" xml:space="preserve">
+    <value>Paramètre « {0} » rétabli à sa valeur par défaut.</value>
+  </data>
+  <data name="SettingsRevertFailed" xml:space="preserve">
+    <value>Échec du rétablissement du paramètre : {0}</value>
+  </data>
+  <data name="SettingsUpdatedSuccess" xml:space="preserve">
+    <value>Paramètre « {0} » mis à jour.</value>
+  </data>
+  <data name="SettingsUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour du paramètre : {0}</value>
+  </data>
+  <data name="SettingsEditTitle" xml:space="preserve">
+    <value>Modifier {0}</value>
+  </data>
+  <data name="SettingsDecryptionFailedTitle" xml:space="preserve">
+    <value>Échec du déchiffrement</value>
+  </data>
+  <data name="SettingsDecryptionFailedMessage" xml:space="preserve">
+    <value>Impossible de déchiffrer cette valeur. La clé de chiffrement a peut-être été modifiée ou supprimée (par exemple après une réinitialisation de l’environnement). Modifiez ce paramètre et enregistrez-le à nouveau pour le chiffrer avec la clé actuelle.</value>
+  </data>
+  <data name="SettingsCopiedToClipboard" xml:space="preserve">
+    <value>Copié dans le presse-papiers.</value>
+  </data>
+  <data name="SettingsCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers.</value>
+  </data>
+  <data name="SettingsEmptySearch" xml:space="preserve">
+    <value>Aucun paramètre de service ne correspond à « {0} ».</value>
+  </data>
+  <data name="SettingsEmptyFilters" xml:space="preserve">
+    <value>Aucun paramètre de service ne correspond aux filtres.</value>
+  </data>
+  <data name="SettingsEmptyFiltersHint" xml:space="preserve">
+    <value>Effacez les filtres ci-dessus pour voir tous les paramètres, y compris ceux en lecture seule définis par des variables d’environnement.</value>
+  </data>
+  <data name="SettingsEmptyNone" xml:space="preserve">
+    <value>Aucun paramètre de service n’est disponible.</value>
+  </data>
+  <data name="SettingsEmptyNoneHint" xml:space="preserve">
+    <value>Les paramètres de service sont créés au démarrage de JIM ; si aucun n’apparaît, le service n’a pas encore fini de s’initialiser.</value>
+  </data>
+  <data name="SettingsModified" xml:space="preserve">
+    <value>Modifié</value>
+  </data>
+  <data name="SettingsOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="LogsPageTitle" xml:space="preserve">
+    <value>Journaux</value>
+  </data>
+  <data name="LogsPageInfo" xml:space="preserve">
+    <value>Consultez et recherchez les journaux de tous les services JIM. Chaque service conserve ses 100 fichiers journaux les plus récents.</value>
+  </data>
+  <data name="LogsService" xml:space="preserve">
+    <value>Service</value>
+  </data>
+  <data name="LogsAllServices" xml:space="preserve">
+    <value>Tous les services</value>
+  </data>
+  <data name="LogsDate" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="LogsToday" xml:space="preserve">
+    <value>Aujourd’hui</value>
+  </data>
+  <data name="LogsLevels" xml:space="preserve">
+    <value>Niveau(x)</value>
+  </data>
+  <data name="LogsAllLevels" xml:space="preserve">
+    <value>Tous les niveaux</value>
+  </data>
+  <data name="LogsLevelCountOne" xml:space="preserve">
+    <value>{0} niveau</value>
+  </data>
+  <data name="LogsLevelCountOther" xml:space="preserve">
+    <value>{0} niveaux</value>
+  </data>
+  <data name="LogsLevelVerbose" xml:space="preserve">
+    <value>Détaillé</value>
+  </data>
+  <data name="LogsLevelDebug" xml:space="preserve">
+    <value>Débogage</value>
+  </data>
+  <data name="LogsLevelInformation" xml:space="preserve">
+    <value>Information</value>
+  </data>
+  <data name="LogsLevelWarning" xml:space="preserve">
+    <value>Avertissement</value>
+  </data>
+  <data name="LogsLevelError" xml:space="preserve">
+    <value>Erreur</value>
+  </data>
+  <data name="LogsLevelFatal" xml:space="preserve">
+    <value>Critique</value>
+  </data>
+  <data name="LogsAutoRefresh" xml:space="preserve">
+    <value>Actualisation automatique (5 s)</value>
+  </data>
+  <data name="LogsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher dans les messages...</value>
+  </data>
+  <data name="LogsColumnTime" xml:space="preserve">
+    <value>Heure</value>
+  </data>
+  <data name="LogsColumnLevel" xml:space="preserve">
+    <value>Niveau</value>
+  </data>
+  <data name="LogsColumnMessage" xml:space="preserve">
+    <value>Message</value>
+  </data>
+  <data name="LogsHasException" xml:space="preserve">
+    <value>Contient une exception</value>
+  </data>
+  <data name="LogsPropertyCountOne" xml:space="preserve">
+    <value>{0} propriété</value>
+  </data>
+  <data name="LogsPropertyCountOther" xml:space="preserve">
+    <value>{0} propriétés</value>
+  </data>
+  <data name="LogsEmptySearch" xml:space="preserve">
+    <value>Aucune entrée de journal ne correspond à « {0} ».</value>
+  </data>
+  <data name="LogsEmptyFilters" xml:space="preserve">
+    <value>Aucune entrée de journal ne correspond à vos filtres.</value>
+  </data>
+  <data name="LogsEmptyFiltersHint" xml:space="preserve">
+    <value>Ajustez les filtres ci-dessus et sélectionnez Actualiser, ou effacez-les pour afficher les dernières entrées de journal.</value>
+  </data>
+  <data name="LogsEmptyNone" xml:space="preserve">
+    <value>Aucune entrée de journal trouvée.</value>
+  </data>
+  <data name="LogsEmptyNoneHint" xml:space="preserve">
+    <value>Les entrées de journal apparaissent ici au fur et à mesure que les services JIM écrivent dans leurs journaux.</value>
+  </data>
+  <data name="LogsNounSingular" xml:space="preserve">
+    <value>entrée de journal</value>
+  </data>
+  <data name="LogsNounPlural" xml:space="preserve">
+    <value>entrées de journal</value>
+  </data>
+  <data name="LogsDetailsTitle" xml:space="preserve">
+    <value>Détails de l’entrée de journal</value>
+  </data>
+  <data name="LogsPropertiesHeading" xml:space="preserve">
+    <value>Propriétés ({0})</value>
+  </data>
+  <data name="LogsPropertyKey" xml:space="preserve">
+    <value>Clé</value>
+  </data>
+  <data name="LogsException" xml:space="preserve">
+    <value>Exception</value>
+  </data>
+  <data name="LogsRawJson" xml:space="preserve">
+    <value>JSON brut</value>
+  </data>
+  <data name="LogsCopiedToClipboard" xml:space="preserve">
+    <value>Copié dans le presse-papiers</value>
+  </data>
+  <data name="LogsLoadFailed" xml:space="preserve">
+    <value>Échec du chargement des journaux : {0}</value>
+  </data>
+  <data name="ApiKeyDetailPageTitle" xml:space="preserve">
+    <value>Clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyHeading" xml:space="preserve">
+    <value>Clé d’API :</value>
+  </data>
+  <data name="ApiKeyDetailPageInfo" xml:space="preserve">
+    <value>Une clé d’API permet à un script ou à un autre système d’appeler l’API REST de JIM sans se connecter. Ses rôles déterminent ce qu’elle peut faire.</value>
+  </data>
+  <data name="ApiKeyDetailNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="ApiKeyDetailsTab" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="ApiKeyActivityTab" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="ApiKeyChangesTab" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="ApiKeyMetadata" xml:space="preserve">
+    <value>Métadonnées</value>
+  </data>
+  <data name="ApiKeyIdLabel" xml:space="preserve">
+    <value>ID :</value>
+  </data>
+  <data name="ApiKeyPrefixLabel" xml:space="preserve">
+    <value>Préfixe de clé :</value>
+  </data>
+  <data name="ApiKeyPrefixTooltip" xml:space="preserve">
+    <value>Seul le préfixe de la clé est stocké, par sécurité. La clé complète n’est affichée qu’une fois, à sa création, et ne peut plus être récupérée.</value>
+  </data>
+  <data name="ApiKeyStatusLabel" xml:space="preserve">
+    <value>Statut :</value>
+  </data>
+  <data name="ApiKeyExpiresLabel" xml:space="preserve">
+    <value>Expiration :</value>
+  </data>
+  <data name="ApiKeyExpiredOn" xml:space="preserve">
+    <value>Expirée ({0})</value>
+  </data>
+  <data name="ApiKeyLastUsedLabel" xml:space="preserve">
+    <value>Dernière utilisation :</value>
+  </data>
+  <data name="ApiKeyFrom" xml:space="preserve">
+    <value>depuis</value>
+  </data>
+  <data name="ApiKeyIpTooltip" xml:space="preserve">
+    <value>Adresse IP d’où provenait la requête la plus récente authentifiée avec cette clé.</value>
+  </data>
+  <data name="ApiKeyRolesLabel" xml:space="preserve">
+    <value>Rôles :</value>
+  </data>
+  <data name="ApiKeyNoRolesAssigned" xml:space="preserve">
+    <value>Aucun rôle attribué</value>
+  </data>
+  <data name="ApiKeyTypeLabel" xml:space="preserve">
+    <value>Type :</value>
+  </data>
+  <data name="ApiKeyInfrastructureKey" xml:space="preserve">
+    <value>Clé d’infrastructure</value>
+  </data>
+  <data name="ApiKeyActivitiesIntro" xml:space="preserve">
+    <value>Toutes les activités initiées par cette clé d’API.</value>
+  </data>
+  <data name="ApiKeyActivityNounSingular" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="ApiKeyActivityNounPlural" xml:space="preserve">
+    <value>Activités</value>
+  </data>
+  <data name="ApiKeyActivitySearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par type ou cible</value>
+  </data>
+  <data name="ApiKeyActivityTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="ApiKeyActivityOperation" xml:space="preserve">
+    <value>Opération</value>
+  </data>
+  <data name="ApiKeyActivityExecutionTime" xml:space="preserve">
+    <value>Durée d’exécution</value>
+  </data>
+  <data name="ApiKeyActivityNoName" xml:space="preserve">
+    <value>(sans nom)</value>
+  </data>
+  <data name="ApiKeyActivityEmptySearch" xml:space="preserve">
+    <value>Aucune activité ne correspond à « {0} ».</value>
+  </data>
+  <data name="ApiKeyActivityEmptyNone" xml:space="preserve">
+    <value>Aucune activité n’a encore été enregistrée pour cette clé d’API.</value>
+  </data>
+  <data name="ApiKeyActivityEmptyNoneHint" xml:space="preserve">
+    <value>Les activités apparaissent ici dès que cette clé d’API est utilisée pour appeler l’API REST.</value>
+  </data>
+  <data name="ApiKeyNotFound" xml:space="preserve">
+    <value>Clé d’API introuvable. Elle a peut-être été supprimée.</value>
+  </data>
+  <data name="FactoryResetTitle" xml:space="preserve">
+    <value>Réinitialisation d’usine</value>
+  </data>
+  <data name="FactoryResetConfirmTitle" xml:space="preserve">
+    <value>Confirmer la réinitialisation d’usine</value>
+  </data>
+  <data name="FactoryResetPageInfo" xml:space="preserve">
+    <value>Effacez toutes les données et la configuration pour remettre JIM dans un état neuf.</value>
+  </data>
+  <data name="FactoryResetWhatItDoes" xml:space="preserve">
+    <value>Ce que fait une réinitialisation d’usine</value>
+  </data>
+  <data name="FactoryResetBackupFirst" xml:space="preserve">
+    <value>Faites une sauvegarde de la base de données avant de continuer.</value>
+  </data>
+  <data name="FactoryResetDeletesPermanently" xml:space="preserve">
+    <value>Cette opération supprime définitivement les données et </value>
+  </data>
+  <data name="FactoryResetCannotBeUndone" xml:space="preserve">
+    <value>ne peut pas être annulée</value>
+  </data>
+  <data name="FactoryResetBackupOnly" xml:space="preserve">
+    <value> ; si quelque chose ne va pas, une sauvegarde est le seul moyen de récupérer les données.</value>
+  </data>
+  <data name="FactoryResetRemoves" xml:space="preserve">
+    <value>Supprime définitivement :</value>
+  </data>
+  <data name="FactoryResetRemovesConnectedSystems" xml:space="preserve">
+    <value>Tous les systèmes connectés et leurs objets de l’espace connecteur</value>
+  </data>
+  <data name="FactoryResetRemovesSynchronisation" xml:space="preserve">
+    <value>Toutes les règles de synchronisation, planifications, profils d’exécution et exportations en attente</value>
+  </data>
+  <data name="FactoryResetRemovesMetaverse" xml:space="preserve">
+    <value>Tous les objets Metaverse et leur historique des modifications</value>
+  </data>
+  <data name="FactoryResetRemovesActivities" xml:space="preserve">
+    <value>Toutes les activités et toute la configuration personnalisée (types d’objets, attributs, rôles, connecteurs, recherches, données d’exemple)</value>
+  </data>
+  <data name="FactoryResetRemovesKeys" xml:space="preserve">
+    <value>Les clés d’API (à l’exception de la clé d’infrastructure) et les certificats approuvés</value>
+  </data>
+  <data name="FactoryResetPreserves" xml:space="preserve">
+    <value>Conserve :</value>
+  </data>
+  <data name="FactoryResetPreservesSchema" xml:space="preserve">
+    <value>Le schéma de la base de données et la configuration intégrée</value>
+  </data>
+  <data name="FactoryResetPreservesKey" xml:space="preserve">
+    <value>La clé d’API d’infrastructure et les paramètres de service</value>
+  </data>
+  <data name="FactoryResetAdminUsers" xml:space="preserve">
+    <value>Utilisateurs administrateurs</value>
+  </data>
+  <data name="FactoryResetAdminUsersUnless" xml:space="preserve">
+    <value> (sauf si vous choisissez de les supprimer ci-dessous)</value>
+  </data>
+  <data name="FactoryResetRecordWritten" xml:space="preserve">
+    <value>Un enregistrement de cette réinitialisation est écrit dans le journal des activités, et </value>
+  </data>
+  <data name="FactoryResetSignedOut" xml:space="preserve">
+    <value>tout utilisateur connecté (y compris vous) est déconnecté</value>
+  </data>
+  <data name="FactoryResetAuthenticateAgain" xml:space="preserve">
+    <value> et doit se réauthentifier.</value>
+  </data>
+  <data name="FactoryResetAlsoDeleteAdmins" xml:space="preserve">
+    <value>Supprimer aussi les utilisateurs administrateurs</value>
+  </data>
+  <data name="FactoryResetAdminCaption" xml:space="preserve">
+    <value>Laisse une installation réellement neuve. N’utilisez cette option que si vous comptez transmettre le système ou repartir de zéro.</value>
+  </data>
+  <data name="FactoryResetLockoutIntro" xml:space="preserve">
+    <value>Après cette opération, les seules façons de retrouver un accès administrateur sont :</value>
+  </data>
+  <data name="FactoryResetLockoutApiKeyPrefix" xml:space="preserve">
+    <value>la </value>
+  </data>
+  <data name="FactoryResetLockoutApiKey" xml:space="preserve">
+    <value>clé d’API d’infrastructure</value>
+  </data>
+  <data name="FactoryResetLockoutApiKeySuffix" xml:space="preserve">
+    <value> (API REST / module PowerShell), et </value>
+  </data>
+  <data name="FactoryResetLockoutAdminPrefix" xml:space="preserve">
+    <value>L’</value>
+  </data>
+  <data name="FactoryResetLockoutAdminKey" xml:space="preserve">
+    <value>administrateur par défaut</value>
+  </data>
+  <data name="FactoryResetLockoutAdminSuffix" xml:space="preserve">
+    <value>, recréé lors de sa prochaine connexion via SSO (nécessite de configurer l’administrateur initial dans le fichier .env).</value>
+  </data>
+  <data name="FactoryResetLockoutNeither" xml:space="preserve">
+    <value>Si aucune de ces deux options n’est disponible, vous serez bloqué hors du portail.</value>
+  </data>
+  <data name="FactoryResetAcknowledge" xml:space="preserve">
+    <value>Je comprends le risque de verrouillage administrateur et souhaite poursuivre</value>
+  </data>
+  <data name="FactoryResetConfirmLabel" xml:space="preserve">
+    <value>Saisissez RESET pour confirmer</value>
+  </data>
+  <data name="FactoryResetInProgress" xml:space="preserve">
+    <value>Réinitialisation en cours…</value>
+  </data>
+  <data name="FactoryResetAdminsRemoved" xml:space="preserve">
+    <value>Les administrateurs SERONT supprimés. Le portail pourrait être inaccessible ensuite.</value>
+  </data>
+  <data name="FactoryResetAdminsPreserved" xml:space="preserve">
+    <value>Les administrateurs seront conservés.</value>
+  </data>
+  <data name="FactoryResetWipeWarning" xml:space="preserve">
+    <value>Cette opération efface définitivement toutes les données et toute la configuration, et </value>
+  </data>
+  <data name="FactoryResetWipeWarningEnd" xml:space="preserve">
+    <value>. Vérifiez que vous disposez d’une sauvegarde de la base de données.</value>
+  </data>
+  <data name="FactoryResetWipeButton" xml:space="preserve">
+    <value>Tout effacer</value>
+  </data>
+  <data name="FactoryResetRefused" xml:space="preserve">
+    <value>Réinitialisation refusée : {0}</value>
+  </data>
+  <data name="FactoryResetComplete" xml:space="preserve">
+    <value>La réinitialisation d’usine est terminée. Vous allez être déconnecté.</value>
+  </data>
+  <data name="AttrEditorNameRequired" xml:space="preserve">
+    <value>Un nom est requis.</value>
+  </data>
+  <data name="AttrEditorNameTaken" xml:space="preserve">
+    <value>Un attribut nommé « {0} » existe déjà. Les noms ne distinguent pas les majuscules des minuscules.</value>
+  </data>
+  <data name="AttrEditorDataType" xml:space="preserve">
+    <value>Type de données</value>
+  </data>
+  <data name="AttrEditorDataTypeRequired" xml:space="preserve">
+    <value>Un type de données est requis.</value>
+  </data>
+  <data name="AttrEditorSingleValued" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="AttrEditorMultiValued" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="AttrEditorTypeLocked" xml:space="preserve">
+    <value>Verrouillé, car {0} pour cet attribut, et un type de données différent les rendrait invalides.</value>
+  </data>
+  <data name="AttrEditorValuesHeldOne" xml:space="preserve">
+    <value>{0} objet Metaverse détient une valeur</value>
+  </data>
+  <data name="AttrEditorValuesHeldOther" xml:space="preserve">
+    <value>{0} objets Metaverse détiennent des valeurs</value>
+  </data>
+  <data name="AttrEditorBooleanHelper" xml:space="preserve">
+    <value>Un attribut booléen ne contient qu’une valeur ; il est donc toujours monovalué.</value>
+  </data>
+  <data name="AttrEditorPluralityLocked" xml:space="preserve">
+    <value>Verrouillé, car {0} pour cet attribut, et le format monovalué ne pourrait pas toutes les conserver.</value>
+  </data>
+  <data name="AttrEditorPluralityWiden" xml:space="preserve">
+    <value>Peut être élargi au multivalué ; toutes les valeurs déjà détenues sont conservées.</value>
+  </data>
+  <data name="AttrEditorRenderingHint" xml:space="preserve">
+    <value>Indication d’affichage</value>
+  </data>
+  <data name="AttrEditorRenderingHelper" xml:space="preserve">
+    <value>Comment le contenu multivalué est affiché sur les pages de détail des objets.</value>
+  </data>
+  <data name="AttrEditorRenderDefault" xml:space="preserve">
+    <value>Par défaut (automatique)</value>
+  </data>
+  <data name="AttrEditorRenderTable" xml:space="preserve">
+    <value>Tableau</value>
+  </data>
+  <data name="AttrEditorRenderChipSet" xml:space="preserve">
+    <value>Ensemble de pastilles</value>
+  </data>
+  <data name="AttrEditorRenderList" xml:space="preserve">
+    <value>Liste</value>
+  </data>
+  <data name="AttrEditorAddToObjectTypes" xml:space="preserve">
+    <value>Ajouter aux types d’objets (facultatif)</value>
+  </data>
+  <data name="AttrEditorObjectTypesHelper" xml:space="preserve">
+    <value>Liez le nouvel attribut à ces types d’objets à sa création. Laissez vide pour le créer sans liaison et l’affecter plus tard.</value>
+  </data>
+  <data name="AttrEditorStandardMappings" xml:space="preserve">
+    <value>Mappages standard</value>
+  </data>
+  <data name="AttrEditorStandardMappingsIntro" xml:space="preserve">
+    <value>Cet attribut correspond à ses équivalents dans les standards SCIM 2.0 et LDAP/Active Directory, pour vous guider lors de la conception des flux d’attributs. À titre indicatif uniquement : ce qui se synchronise est toujours déterminé par vos flux d’attributs, jamais par ces mappages.</value>
+  </data>
+  <data name="AttrEditorBuiltInMaintained" xml:space="preserve">
+    <value>JIM tient ces éléments à jour automatiquement pour les attributs intégrés.</value>
+  </data>
+  <data name="AttrEditorNoMappings" xml:space="preserve">
+    <value>Aucun mappage standard.</value>
+  </data>
+  <data name="AttrEditorColStandard" xml:space="preserve">
+    <value>Standard</value>
+  </data>
+  <data name="AttrEditorColCounterpart" xml:space="preserve">
+    <value>Attribut équivalent</value>
+  </data>
+  <data name="AttrEditorColNotes" xml:space="preserve">
+    <value>Remarques</value>
+  </data>
+  <data name="AttrEditorEditMapping" xml:space="preserve">
+    <value>Modifier le mappage standard</value>
+  </data>
+  <data name="AttrEditorRemoveMapping" xml:space="preserve">
+    <value>Supprimer le mappage standard</value>
+  </data>
+  <data name="AttrEditorAddMapping" xml:space="preserve">
+    <value>Ajouter un mappage standard</value>
+  </data>
+  <data name="AttrEditorCounterpartHelper" xml:space="preserve">
+    <value>Le nom d’attribut équivalent dans le standard choisi, par exemple name.givenName (SCIM) ou givenName (LDAP).</value>
+  </data>
+  <data name="AttrEditorNotesOptional" xml:space="preserve">
+    <value>Remarques (facultatives)</value>
+  </data>
+  <data name="AttrEditorMappingDuplicate" xml:space="preserve">
+    <value>Un mappage {0} vers « {1} » existe déjà.</value>
+  </data>
+  <data name="AttrEditorUpdate" xml:space="preserve">
+    <value>Mettre à jour</value>
+  </data>
+  <data name="AttrEditorCreateButton" xml:space="preserve">
+    <value>Créer un attribut</value>
+  </data>
+  <data name="AttrEditorCreated" xml:space="preserve">
+    <value>Attribut « {0} » créé.</value>
+  </data>
+  <data name="AttrEditorSaveFailed" xml:space="preserve">
+    <value>Échec de l’enregistrement de l’attribut : {0}</value>
+  </data>
+  <data name="AttrEditorRenameBlocked" xml:space="preserve">
+    <value>« {0} » ne peut pas être renommé tant que des expressions le lisent par son nom. Modifiez-les d’abord : {1}.</value>
+  </data>
+  <data name="AttrEditorSchemaRefused" xml:space="preserve">
+    <value>Impossible de modifier le schéma : des objets Metaverse (au nombre de {0}) détiennent une valeur enregistrée, et seul un élargissement au multivalué les conserve.</value>
+  </data>
+  <data name="AttrEditorSaved" xml:space="preserve">
+    <value>Modifications enregistrées pour « {0} ».</value>
+  </data>
+  <data name="AttrEditorViewTitle" xml:space="preserve">
+    <value>Afficher « {0} »</value>
+  </data>
+  <data name="AttrEditorEditTitle" xml:space="preserve">
+    <value>Modifier « {0} »</value>
+  </data>
+  <data name="ClaimsPageTitle" xml:space="preserve">
+    <value>Vos revendications</value>
+  </data>
+  <data name="ClaimsPageInfo" xml:space="preserve">
+    <value>Les revendications sont les informations que votre fournisseur d’identité a affirmées à votre sujet lors de votre connexion. JIM s’en sert pour établir qui vous êtes, afficher votre nom et déterminer ce que vous pouvez faire. Cette page liste chaque revendication de votre session, ce qui aide à diagnostiquer les problèmes de connexion, d’autorisation ou de correspondance d’identité.</value>
+  </data>
+  <data name="ClaimsNounSingular" xml:space="preserve">
+    <value>Revendication</value>
+  </data>
+  <data name="ClaimsNounPlural" xml:space="preserve">
+    <value>Revendications</value>
+  </data>
+  <data name="ClaimsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des revendications</value>
+  </data>
+  <data name="ClaimsColumnType" xml:space="preserve">
+    <value>Type de revendication</value>
+  </data>
+  <data name="ClaimsColumnValue" xml:space="preserve">
+    <value>Valeur de revendication</value>
+  </data>
+  <data name="ClaimsEmptySearch" xml:space="preserve">
+    <value>Aucune revendication ne correspond à « {0} ».</value>
+  </data>
+  <data name="ClaimsEmptyNone" xml:space="preserve">
+    <value>Votre session ne contient aucune revendication.</value>
+  </data>
+  <data name="ClaimsEmptyNoneHint" xml:space="preserve">
+    <value>Les revendications sont fournies par votre fournisseur d’identité lors de la connexion ; une liste vide signifie qu’il n’en a envoyé aucune.</value>
+  </data>
+  <data name="ClaimsIdpHeading" xml:space="preserve">
+    <value>Fournisseur d’identité</value>
+  </data>
+  <data name="ClaimsIdpIntro" xml:space="preserve">
+    <value>Détails non sensibles sur le fournisseur d’identité auquel JIM est configuré pour faire confiance, ainsi que des informations d’exécution sur la manière dont votre session actuelle a été authentifiée. Les secrets (secret client, jetons) sont volontairement exclus.</value>
+  </data>
+  <data name="ClaimsSettingNounSingular" xml:space="preserve">
+    <value>Paramètre</value>
+  </data>
+  <data name="ClaimsSettingNounPlural" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="ClaimsIdpEmptySearch" xml:space="preserve">
+    <value>Aucun paramètre du fournisseur d’identité ne correspond à « {0} ».</value>
+  </data>
+  <data name="ClaimsIdpEmptyNone" xml:space="preserve">
+    <value>Aucun détail sur le fournisseur d’identité n’est disponible.</value>
+  </data>
+  <data name="ClaimsIdpEmptyNoneHint" xml:space="preserve">
+    <value>La connexion unique n’a pas encore été configurée ; configurez-la dans les paramètres de service.</value>
+  </data>
+  <data name="ClaimsIdpAuthority" xml:space="preserve">
+    <value>Autorité</value>
+  </data>
+  <data name="ClaimsIdpClientId" xml:space="preserve">
+    <value>ID client</value>
+  </data>
+  <data name="ClaimsIdpUniqueClaim" xml:space="preserve">
+    <value>Revendication d’identifiant unique</value>
+  </data>
+  <data name="ClaimsIdpMappedAttribute" xml:space="preserve">
+    <value>Attribut Metaverse associé</value>
+  </data>
+  <data name="ClaimsIdpSignOutEnabled" xml:space="preserve">
+    <value>Déconnexion activée</value>
+  </data>
+  <data name="ClaimsIdpTokenIssuer" xml:space="preserve">
+    <value>Émetteur du jeton (iss)</value>
+  </data>
+  <data name="ClaimsIdpAuthType" xml:space="preserve">
+    <value>Type d’authentification</value>
+  </data>
+  <data name="ClaimsIdpIsAuthenticated" xml:space="preserve">
+    <value>Authentifié</value>
+  </data>
+  <data name="ClaimsIdpNameClaimType" xml:space="preserve">
+    <value>Type de revendication de nom</value>
+  </data>
+  <data name="ClaimsIdpRoleClaimType" xml:space="preserve">
+    <value>Type de revendication de rôle</value>
+  </data>
+  <data name="AdminIntro" xml:space="preserve">
+    <value>Gérez la configuration du système, les opérations et la sécurité.</value>
+  </data>
+  <data name="AdminSectionOperations" xml:space="preserve">
+    <value>Opérations et supervision</value>
+  </data>
+  <data name="AdminSectionSyncConfig" xml:space="preserve">
+    <value>Configuration de la synchronisation</value>
+  </data>
+  <data name="AdminSectionData" xml:space="preserve">
+    <value>Gestion des données</value>
+  </data>
+  <data name="AdminSectionSecurity" xml:space="preserve">
+    <value>Sécurité et paramètres</value>
+  </data>
+  <data name="AdminTileOperations" xml:space="preserve">
+    <value>Opérations</value>
+  </data>
+  <data name="AdminTileOperationsDesc" xml:space="preserve">
+    <value>Gérez les opérations de synchronisation, les planifications, l’historique d’exécution et la remise des mots de passe.</value>
+  </data>
+  <data name="AdminOperationsAttention" xml:space="preserve">
+    <value>Un service JIM ne transmet pas son état ; ouvrez Opérations.</value>
+  </data>
+  <data name="AdminTileLogsDesc" xml:space="preserve">
+    <value>Consultez les journaux de l’application et de la synchronisation.</value>
+  </data>
+  <data name="AdminTilePendingDeletions" xml:space="preserve">
+    <value>Suppressions en attente</value>
+  </data>
+  <data name="AdminTilePendingDeletionsDesc" xml:space="preserve">
+    <value>Examinez les objets Metaverse en attente de suppression avant sa finalisation</value>
+  </data>
+  <data name="AdminTilePredefinedSearches" xml:space="preserve">
+    <value>Recherches prédéfinies</value>
+  </data>
+  <data name="AdminTilePredefinedSearchesDesc" xml:space="preserve">
+    <value>Créez et gérez les requêtes de recherche enregistrées.</value>
+  </data>
+  <data name="AdminTileExampleData" xml:space="preserve">
+    <value>Données d’exemple</value>
+  </data>
+  <data name="AdminTileExampleDataDesc" xml:space="preserve">
+    <value>Générez des données de test à partir de modèles.</value>
+  </data>
+  <data name="AdminTileDeletedObjects" xml:space="preserve">
+    <value>Objets supprimés</value>
+  </data>
+  <data name="AdminTileDeletedObjectsDesc" xml:space="preserve">
+    <value>Consultez l’historique des objets supprimés.</value>
+  </data>
+  <data name="AdminTileSettings" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="AdminTileSettingsDesc" xml:space="preserve">
+    <value>Configurez les paramètres de service.</value>
+  </data>
+  <data name="AdminTileDangerZone" xml:space="preserve">
+    <value>Zone dangereuse</value>
+  </data>
+  <data name="AdminTileDefineFlow" xml:space="preserve">
+    <value>Définissez comment les attributs circulent entre les systèmes.</value>
+  </data>
+  <data name="AdminTileConnectedSystemsDesc" xml:space="preserve">
+    <value>Configurez les connexions aux systèmes externes.</value>
+  </data>
+  <data name="AdminTileSchemaDesc" xml:space="preserve">
+    <value>Gérez les types d’objets et les attributs.</value>
+  </data>
+  <data name="AdminTileApiKeysDesc" xml:space="preserve">
+    <value>Gérez les clés d’authentification API.</value>
+  </data>
+  <data name="AdminTileCertificatesDesc" xml:space="preserve">
+    <value>Gérez les certificats approuvés.</value>
+  </data>
+  <data name="AdminTileFactoryResetDesc" xml:space="preserve">
+    <value>Effacez toutes les données et la configuration pour repartir de zéro.</value>
+  </data>
+  <data name="EditSettingValueWithFormat" xml:space="preserve">
+    <value>Valeur (format : d.hh:mm:ss)</value>
+  </data>
+  <data name="EditSettingDurationError" xml:space="preserve">
+    <value>Saisissez une durée valide au format d.hh:mm:ss</value>
+  </data>
+  <data name="EditSettingDurationExample" xml:space="preserve">
+    <value>Exemple : 30.00:00:00 pour 30 jours</value>
+  </data>
+  <data name="EditSettingTogglePassword" xml:space="preserve">
+    <value>Afficher ou masquer le mot de passe</value>
+  </data>
+  <data name="EditSettingDefault" xml:space="preserve">
+    <value>Par défaut : {0}</value>
+  </data>
+  <data name="DeleteEvaluatingImpact" xml:space="preserve">
+    <value>Évaluation de l’impact de la suppression…</value>
+  </data>
+  <data name="DeleteBusy" xml:space="preserve">
+    <value>Suppression en cours…</value>
+  </data>
+  <data name="DeleteObjectTypeSafe" xml:space="preserve">
+    <value>Aucun objet Metaverse de ce type n’existe et aucune règle de synchronisation ne le cible. Suppression sans risque.</value>
+  </data>
+  <data name="DeleteObjectTypeBuiltInHeadline" xml:space="preserve">
+    <value>Il s’agit d’un type d’objets Metaverse intégré</value>
+  </data>
+  <data name="DeleteObjectTypeBuiltInBody" xml:space="preserve">
+    <value>Les types d’objets intégrés font partie du schéma de JIM et ne peuvent pas être supprimés.</value>
+  </data>
+  <data name="DeleteObjectTypeObjectsHeadline" xml:space="preserve">
+    <value>Objets Metaverse de ce type : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeObjectsBody" xml:space="preserve">
+    <value>Un type ne peut pas être supprimé tant que des objets Metaverse de ce type existent. Supprimez d’abord ces objets (arrêtez les flux sources et laissez-les se déprovisionner, ou supprimez-les manuellement), puis supprimez le type.</value>
+  </data>
+  <data name="DeleteViewObjects" xml:space="preserve">
+    <value>Afficher ces objets Metaverse</value>
+  </data>
+  <data name="DeleteObjectTypeRulesHeadline" xml:space="preserve">
+    <value>Règles de synchronisation ciblant ce type : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeRulesBody" xml:space="preserve">
+    <value>Supprimez d’abord ces règles de synchronisation ; sinon, la suppression du type supprimerait la règle entière.</value>
+  </data>
+  <data name="DeleteReferencesHeadline" xml:space="preserve">
+    <value>Ces {0} référence(s) seront également supprimées</value>
+  </data>
+  <data name="DeleteObjectTypeReferencesNote" xml:space="preserve">
+    <value>Les attributs liés sont conservés ; seuls leurs liens avec ce type sont supprimés.</value>
+  </data>
+  <data name="DeleteWithReferences" xml:space="preserve">
+    <value>Supprimer + {0} référence(s)</value>
+  </data>
+  <data name="DeleteReferencePredefinedSearch" xml:space="preserve">
+    <value>Recherche prédéfinie : {0}</value>
+  </data>
+  <data name="DeleteReferenceExampleData" xml:space="preserve">
+    <value>Modèle de données d’exemple : {0}</value>
+  </data>
+  <data name="DeleteReferenceAttributeBinding" xml:space="preserve">
+    <value>Liaison d’attribut : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeFailedRefresh" xml:space="preserve">
+    <value>Le type d’objets n’a pas pu être supprimé ; son état a peut-être changé. Actualisez la page et réessayez.</value>
+  </data>
+  <data name="DeleteObjectTypeSuccess" xml:space="preserve">
+    <value>Type d’objets « {0} » supprimé.</value>
+  </data>
+  <data name="DeleteObjectTypeFailed" xml:space="preserve">
+    <value>Échec de la suppression du type d’objets : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeTitle" xml:space="preserve">
+    <value>Supprimer le type d’objets « {0} »</value>
+  </data>
+  <data name="DeleteAttributeSafe" xml:space="preserve">
+    <value>Aucun objet ne détient de valeur pour cet attribut. Suppression sans risque : aucune donnée d’objet ne sera perdue.</value>
+  </data>
+  <data name="DeleteAttributeBuiltInHeadline" xml:space="preserve">
+    <value>Il s’agit d’un attribut intégré</value>
+  </data>
+  <data name="DeleteAttributeBuiltInBody" xml:space="preserve">
+    <value>Les attributs intégrés font partie du schéma de JIM et ne peuvent pas être supprimés.</value>
+  </data>
+  <data name="DeleteAttributeValuesHeadline" xml:space="preserve">
+    <value>{0} objet(s) ont une valeur</value>
+  </data>
+  <data name="DeleteAttributeValueCount" xml:space="preserve">
+    <value>{0} : {1} avec une valeur</value>
+  </data>
+  <data name="DeleteAttributeValuesBody" xml:space="preserve">
+    <value>Effacez d’abord ces valeurs (arrêtez le flux source et laissez-le se déprovisionner, ou effacez-les en masse), puis supprimez l’attribut.</value>
+  </data>
+  <data name="DeleteAttributeReadersHeadline" xml:space="preserve">
+    <value>{0} élément(s) de configuration lisent cet attribut</value>
+  </data>
+  <data name="DeleteAttributeReadersBody" xml:space="preserve">
+    <value>Modifiez ou supprimez d’abord chacun d’eux, puis supprimez l’attribut. JIM ne les supprime pas à votre place : un critère de périmètre retiré d’une règle de synchronisation modifie les objets que la règle gère.</value>
+  </data>
+  <data name="DeleteAttributeTitle" xml:space="preserve">
+    <value>Supprimer l’attribut « {0} »</value>
+  </data>
+  <data name="DeleteAttributeFailedRefresh" xml:space="preserve">
+    <value>L’attribut n’a pas pu être supprimé ; il détient peut-être désormais des valeurs, ou une configuration peut désormais le lire. Actualisez la page et réessayez.</value>
+  </data>
+  <data name="DeleteAttributeSuccess" xml:space="preserve">
+    <value>Attribut « {0} » supprimé.</value>
+  </data>
+  <data name="DeleteAttributeFailed" xml:space="preserve">
+    <value>Échec de la suppression de l’attribut : {0}</value>
+  </data>
+  <data name="IdpBannerReviewTrust" xml:space="preserve">
+    <value>Examiner et approuver</value>
+  </data>
+  <data name="IdpBannerHowToFix" xml:space="preserve">
+    <value>Comment résoudre le problème</value>
+  </data>
+  <data name="CertificateUnknown" xml:space="preserve">
+    <value>inconnue</value>
+  </data>
+  <data name="CertificateSourceSentByServer" xml:space="preserve">
+    <value>Envoyé par le serveur</value>
+  </data>
+  <data name="CertificateSourceDownloaded" xml:space="preserve">
+    <value>Téléchargé</value>
+  </data>
+  <data name="CertificateSourceInStore" xml:space="preserve">
+    <value>Dans les certificats approuvés</value>
+  </data>
+  <data name="CertificateSourceOperatingSystem" xml:space="preserve">
+    <value>Système d’exploitation</value>
+  </data>
+  <data name="CertificateRoleRoot" xml:space="preserve">
+    <value>Racine</value>
+  </data>
+  <data name="CertificateRoleIntermediate" xml:space="preserve">
+    <value>Intermédiaire</value>
+  </data>
+  <data name="CertificateRoleServer" xml:space="preserve">
+    <value>Serveur</value>
+  </data>
+</root>

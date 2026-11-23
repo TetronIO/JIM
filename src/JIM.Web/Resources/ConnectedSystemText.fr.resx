@@ -1,0 +1,1841 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RunProfilesIntro" xml:space="preserve">
+    <value>Les profils d’exécution définissent les opérations qu’un connecteur peut effectuer, c’est-à-dire l’importation, l’exportation et la synchronisation, avec les paramètres requis.</value>
+  </data>
+  <data name="RunProfileNounSingular" xml:space="preserve">
+    <value>profil d’exécution</value>
+  </data>
+  <data name="RunProfileNounPlural" xml:space="preserve">
+    <value>profils d’exécution</value>
+  </data>
+  <data name="RunProfileSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des profils d’exécution</value>
+  </data>
+  <data name="RunProfileCreateButton" xml:space="preserve">
+    <value>Créer un profil d’exécution</value>
+  </data>
+  <data name="RunProfileCreateTitle" xml:space="preserve">
+    <value>Créer un nouveau profil d’exécution</value>
+  </data>
+  <data name="RunProfileEditTitle" xml:space="preserve">
+    <value>Modifier le profil d’exécution</value>
+  </data>
+  <data name="RunType" xml:space="preserve">
+    <value>Type d’exécution</value>
+  </data>
+  <data name="RunProfileVerificationModeTooltip" xml:space="preserve">
+    <value>Le mode de vérification est activé : cette importation complète ne saute aucun objet d’après son hachage de contenu et compare chaque objet.</value>
+  </data>
+  <data name="VerificationMode" xml:space="preserve">
+    <value>Mode de vérification</value>
+  </data>
+  <data name="RunProfileObjectTypeChangesAllowedChip" xml:space="preserve">
+    <value>Changements de type d’objet autorisés</value>
+  </data>
+  <data name="RunProfileMaxCreatesTooltip" xml:space="preserve">
+    <value>Si plus de ce nombre de créations sont en attente au moment de cette exportation, aucune d’entre elles n’est tentée et l’exécution se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileMaxCreatesChip" xml:space="preserve">
+    <value>Créations max. {0}</value>
+  </data>
+  <data name="RunProfileMaxUpdatesTooltip" xml:space="preserve">
+    <value>Si plus de ce nombre de mises à jour sont en attente au moment de cette exportation, aucune n’est tentée et l’exécution se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileMaxUpdatesChip" xml:space="preserve">
+    <value>Mises à jour max. {0}</value>
+  </data>
+  <data name="RunProfileMaxDeletesTooltip" xml:space="preserve">
+    <value>Si plus de ce nombre de suppressions sont en attente au moment de cette exportation, aucune n’est tentée et l’exécution se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileMaxDeletesChip" xml:space="preserve">
+    <value>Suppressions max. {0}</value>
+  </data>
+  <data name="RunProfileMaxDetectedDeletionsChip" xml:space="preserve">
+    <value>Suppressions détectées max. {0}</value>
+  </data>
+  <data name="RunProfileMaxDetectedDeletionsPercentChip" xml:space="preserve">
+    <value>Suppressions détectées max. {0} %</value>
+  </data>
+  <data name="RunProfileMaxCreates" xml:space="preserve">
+    <value>Créations max.</value>
+  </data>
+  <data name="RunProfileMaxUpdates" xml:space="preserve">
+    <value>Mises à jour max.</value>
+  </data>
+  <data name="RunProfileMaxDeletes" xml:space="preserve">
+    <value>Suppressions max.</value>
+  </data>
+  <data name="MaxDetectedDeletionsLabel" xml:space="preserve">
+    <value>Suppressions détectées max.</value>
+  </data>
+  <data name="MaxDetectedDeletionsPercentLabel" xml:space="preserve">
+    <value>Suppressions détectées max. (% de l’espace connecteur)</value>
+  </data>
+  <data name="RunProfileNoLimit" xml:space="preserve">
+    <value>Aucune limite</value>
+  </data>
+  <data name="RunProfileExportLimitsIntro" xml:space="preserve">
+    <value>Limites de ce que cette exécution peut tenter. Laissez vide pour aucune limite.</value>
+  </data>
+  <data name="RunProfileExportLimitsCaption" xml:space="preserve">
+    <value>Si une exécution dépasserait une limite, elle ne tente aucune modification de ce type ; les modifications restent en attente et l’exécution se termine avec un avertissement. Pour laisser passer une modification massive légitime, exécutez un profil d’exécution d’exportation sans cette limite.</value>
+  </data>
+  <data name="PartitionLabel" xml:space="preserve">
+    <value>Partition</value>
+  </data>
+  <data name="PartitionOptionalHelp" xml:space="preserve">
+    <value>Facultatif. Laissez vide pour importer depuis toutes les partitions sélectionnées.</value>
+  </data>
+  <data name="RunProfilePartitionDeselectedTooltip" xml:space="preserve">
+    <value>Cette partition n’est plus sélectionnée ; elle n’est donc plus gérée par JIM et ce profil d’exécution ne peut pas s’exécuter. Sélectionnez de nouveau la partition dans l’onglet Périmètre, ou faites pointer ce profil d’exécution vers une partition sélectionnée.</value>
+  </data>
+  <data name="RunProfilePartitionNotSelectedChip" xml:space="preserve">
+    <value>Non sélectionnée</value>
+  </data>
+  <data name="RunProfilePartitionRemovedTooltip" xml:space="preserve">
+    <value>Le système connecté ne possède plus cette partition. Choisissez la partition que lit ce profil d’exécution, ou Toutes les partitions sélectionnées, lorsque vous l’activez.</value>
+  </data>
+  <data name="RunProfilePartitionRemovedChip" xml:space="preserve">
+    <value>Supprimée</value>
+  </data>
+  <data name="AllSelectedPartitionsShort" xml:space="preserve">
+    <value>Toutes les sélectionnées</value>
+  </data>
+  <data name="AllSelectedPartitions" xml:space="preserve">
+    <value>Toutes les partitions sélectionnées</value>
+  </data>
+  <data name="PageSizeLabel" xml:space="preserve">
+    <value>Taille de page</value>
+  </data>
+  <data name="PageSizeRequired" xml:space="preserve">
+    <value>Nombre d’éléments à traiter en une fois lors de l’importation</value>
+  </data>
+  <data name="FilePathLabel" xml:space="preserve">
+    <value>Chemin d’accès au fichier</value>
+  </data>
+  <data name="FilePathHelp" xml:space="preserve">
+    <value>Laissez vide pour utiliser le chemin d’accès au fichier du système connecté, ou saisissez un chemin dans le conteneur, tel que /connector-files/Users.csv, pour lire un autre fichier.</value>
+  </data>
+  <data name="RunProfilePreviewTooltip" xml:space="preserve">
+    <value>Prévisualiser ce que ferait cette synchronisation complète, sans l’exécuter</value>
+  </data>
+  <data name="RunProfilePreviewAriaLabel" xml:space="preserve">
+    <value>Prévisualiser cette synchronisation complète</value>
+  </data>
+  <data name="RunProfileNoSearchMatch" xml:space="preserve">
+    <value>Aucun profil d’exécution ne correspond à « {0} ».</value>
+  </data>
+  <data name="RunProfileNoSearchMatchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="RunProfileNoneYet" xml:space="preserve">
+    <value>Aucun profil d’exécution pour le moment</value>
+  </data>
+  <data name="RunProfileNoneYetHint" xml:space="preserve">
+    <value>Utilisez le bouton Créer un profil d’exécution pour définir les opérations que ce système connecté peut être invité à effectuer.</value>
+  </data>
+  <data name="RunProfileSelectRunType" xml:space="preserve">
+    <value>Sélectionner le type d’exécution</value>
+  </data>
+  <data name="RunProfileTypeNotSupported" xml:space="preserve">
+    <value>(non pris en charge par le connecteur)</value>
+  </data>
+  <data name="RunProfileNameRequired" xml:space="preserve">
+    <value>Un nom de profil d’exécution est requis</value>
+  </data>
+  <data name="RunProfileTypeRequired" xml:space="preserve">
+    <value>Un type de profil d’exécution est requis</value>
+  </data>
+  <data name="RunProfileSelectRunTypeRequired" xml:space="preserve">
+    <value>Veuillez sélectionner un type d’exécution.</value>
+  </data>
+  <data name="RunProfilePartitionChoiceRequired" xml:space="preserve">
+    <value>Choisissez la partition que lit ce profil d’exécution, ou Toutes les partitions sélectionnées</value>
+  </data>
+  <data name="RunProfilePartitionRemovedRequiredHelp" xml:space="preserve">
+    <value>Requis pour l’activer : la partition qu’il lisait a été supprimée.</value>
+  </data>
+  <data name="RunProfileVerificationModeHelp" xml:space="preserve">
+    <value>Compare les attributs de chaque objet au lieu d’ignorer les objets inchangés d’après leur hachage de contenu, et signale toute divergence entre le hachage stocké et cette comparaison comme une erreur. À utiliser temporairement pour valider l’optimisation d’ignorance par hachage de contenu ; à laisser désactivé pour une importation complète normale, plus rapide.</value>
+  </data>
+  <data name="AllowObjectTypeChangesLabel" xml:space="preserve">
+    <value>Autoriser les changements de type d’objet</value>
+  </data>
+  <data name="SafeguardsTitle" xml:space="preserve">
+    <value>Garde-fous</value>
+  </data>
+  <data name="RunProfileConnectorNoObjectTypeDetection" xml:space="preserve">
+    <value>Ce connecteur ne peut pas distinguer un objet dont le type d’objet a changé de deux objets qui partagent un identifiant externe ; ce paramètre n’a donc aucun effet ici.</value>
+  </data>
+  <data name="RunProfileDisabledExplanation" xml:space="preserve">
+    <value>Ce profil d’exécution est désactivé, il ne peut donc pas s’exécuter. {0}</value>
+  </data>
+  <data name="RunProfileDisabledChipTooltip" xml:space="preserve">
+    <value>Ce profil d’exécution est désactivé, il ne peut donc pas s’exécuter. {0}</value>
+  </data>
+  <data name="RunTypeLockedHelp" xml:space="preserve">
+    <value>Le type d’exécution ne peut pas être modifié. Supprimez le profil et recréez-le pour utiliser un autre type.</value>
+  </data>
+  <data name="RunProfileAllowObjectTypeChangesExplanation" xml:space="preserve">
+    <value>Par défaut, un objet qui revient du système connecté sous un type d’objet différent est refusé : l’activité le signale comme une erreur, et l’objet du système connecté existant reste exactement tel quel. Activez cette option pour appliquer le changement : cette importation complète importe l’objet comme un nouvel objet de système connecté de son nouveau type d’objet, et retire l’ancien, qui est alors déconnecté selon les règles de suppression habituelles. Elle se définit généralement sur un second profil d’exécution d’importation complète, lancé manuellement lorsque le changement est voulu.</value>
+  </data>
+  <data name="RunProfileAllowObjectTypeChangesChipExplanation" xml:space="preserve">
+    <value>Cette importation complète applique les changements de type d’objet au lieu de les refuser. Un objet qui revient sous un type d’objet différent est importé comme un nouvel objet de système connecté, et l’ancien est retiré.</value>
+  </data>
+  <data name="RunProfileDeltaLimitsSummary" xml:space="preserve">
+    <value>Si le système connecté signale plus de suppressions que l’une ou l’autre limite, cette importation delta ne marque aucune suppression comme supprimée.</value>
+  </data>
+  <data name="RunProfileFullLimitsSummary" xml:space="preserve">
+    <value>Si une importation complète marquerait plus d’objets comme supprimés que l’une ou l’autre limite, elle n’en marque aucun.</value>
+  </data>
+  <data name="RunProfileDeltaLimitsCaption" xml:space="preserve">
+    <value>Le pourcentage porte sur les objets du périmètre de cette exécution qui ne sont pas déjà marqués comme supprimés, avant toute sauvegarde. Les créations et les mises à jour sont toujours appliquées. Chaque importation delta signale de nouveau les suppressions retenues, jusqu’à ce que vous augmentiez une limite ou exécutiez un profil d’exécution d’importation delta sans limite.</value>
+  </data>
+  <data name="RunProfileFullLimitsCaption" xml:space="preserve">
+    <value>Le pourcentage porte sur les objets du périmètre de cette exécution qui ne sont pas déjà marqués comme supprimés, au moment de son démarrage. Les objets que l’importation a vus sont toujours mis à jour. Corrigez le périmètre du connecteur ou augmentez une limite, puis exécutez de nouveau.</value>
+  </data>
+  <data name="RunProfileDeltaLimitTooltip" xml:space="preserve">
+    <value>Si le système connecté signale plus de suppressions que ce nombre, l’importation delta ne marque aucune suppression comme supprimée et se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileFullLimitTooltip" xml:space="preserve">
+    <value>Si une importation complète marquerait plus de ce nombre d’objets comme supprimés, elle n’en marque aucun et se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileAddedSnackbar" xml:space="preserve">
+    <value>Nouveau profil d’exécution ajouté.</value>
+  </data>
+  <data name="RunProfileCreateFailed" xml:space="preserve">
+    <value>Échec de la création du profil d’exécution. Veuillez réessayer.</value>
+  </data>
+  <data name="RunProfileUpdatedSnackbar" xml:space="preserve">
+    <value>Profil d’exécution mis à jour.</value>
+  </data>
+  <data name="RunProfileUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour du profil d’exécution. Veuillez réessayer.</value>
+  </data>
+  <data name="RunProfileDeleteTitle" xml:space="preserve">
+    <value>Supprimer le profil d’exécution</value>
+  </data>
+  <data name="RunProfileDeleteConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer le profil d’exécution « {0} » ? Cette action est irréversible.</value>
+  </data>
+  <data name="RunProfileRemovedSnackbar" xml:space="preserve">
+    <value>Profil d’exécution supprimé.</value>
+  </data>
+  <data name="ScimEndpointHeading" xml:space="preserve">
+    <value>Point de terminaison SCIM</value>
+  </data>
+  <data name="ScimEndpointInfo" xml:space="preserve">
+    <value>Remettez à votre fournisseur d’identité cette URL de base et l’une des clés ci-dessous. Les utilisateurs et les groupes qu’il envoie sont conservés ici et atteignent le Metaverse lors de la prochaine importation et synchronisation de ce système connecté.</value>
+  </data>
+  <data name="ScimBaseUrl" xml:space="preserve">
+    <value>URL de base</value>
+  </data>
+  <data name="ScimCopy" xml:space="preserve">
+    <value>Copier</value>
+  </data>
+  <data name="ScimCopiedSnackbar" xml:space="preserve">
+    <value>« {0} » copié dans le presse-papiers.</value>
+  </data>
+  <data name="ScimKeyNoun" xml:space="preserve">
+    <value>Clé</value>
+  </data>
+  <data name="ScimCopyFailed" xml:space="preserve">
+    <value>Copie impossible. Sélectionnez le texte et copiez-le manuellement.</value>
+  </data>
+  <data name="ScimKeysHeading" xml:space="preserve">
+    <value>Clés</value>
+  </data>
+  <data name="ScimUsableKeyCount" xml:space="preserve">
+    <value>{0} sur {1} utilisables</value>
+  </data>
+  <data name="ScimCreateKey" xml:space="preserve">
+    <value>Créer une clé</value>
+  </data>
+  <data name="ScimKeyLimitTooltip" xml:space="preserve">
+    <value>Un système connecté peut avoir deux clés utilisables à la fois. Désactivez ou supprimez-en une pour en ajouter une autre.</value>
+  </data>
+  <data name="ScimColumnKeyPrefix" xml:space="preserve">
+    <value>Préfixe de clé</value>
+  </data>
+  <data name="ScimColumnExpires" xml:space="preserve">
+    <value>Expiration</value>
+  </data>
+  <data name="ScimColumnLastUsed" xml:space="preserve">
+    <value>Dernière utilisation</value>
+  </data>
+  <data name="ScimStatusExpired" xml:space="preserve">
+    <value>Expirée</value>
+  </data>
+  <data name="ScimActionEnable" xml:space="preserve">
+    <value>Activer</value>
+  </data>
+  <data name="ScimActionDisable" xml:space="preserve">
+    <value>Désactiver</value>
+  </data>
+  <data name="ScimRotateKeyHint" xml:space="preserve">
+    <value>Pour renouveler une clé, créez-en une nouvelle pendant que l’ancienne fonctionne encore, remettez-la à votre fournisseur d’identité, puis désactivez l’ancienne une fois que son dernier usage ne progresse plus.</value>
+  </data>
+  <data name="ScimLastUsedFrom" xml:space="preserve">
+    <value>depuis {0}</value>
+  </data>
+  <data name="ScimNoKeysYet" xml:space="preserve">
+    <value>Ce système connecté n’a encore aucune clé</value>
+  </data>
+  <data name="ScimNoKeysHint" xml:space="preserve">
+    <value>Créez-en une à remettre à votre fournisseur d’identité.</value>
+  </data>
+  <data name="ScimStoreHeading" xml:space="preserve">
+    <value>Stockage</value>
+  </data>
+  <data name="ScimAwaitingImport" xml:space="preserve">
+    <value>En attente d’importation</value>
+  </data>
+  <data name="ScimChangesSinceImport" xml:space="preserve">
+    <value>modifications depuis la dernière importation</value>
+  </data>
+  <data name="ScimNeverImported" xml:space="preserve">
+    <value>jamais importé</value>
+  </data>
+  <data name="ScimDeletionsHeld" xml:space="preserve">
+    <value>Suppressions retenues</value>
+  </data>
+  <data name="ScimDeletionsHeldHint" xml:space="preserve">
+    <value>jusqu’à ce qu’une importation les lise</value>
+  </data>
+  <data name="ScimRejected" xml:space="preserve">
+    <value>Rejetées</value>
+  </data>
+  <data name="ScimRejectedHint" xml:space="preserve">
+    <value>requêtes au cours des 24 dernières heures</value>
+  </data>
+  <data name="ScimLastWrite" xml:space="preserve">
+    <value>Dernière écriture</value>
+  </data>
+  <data name="ScimLastWriteBy" xml:space="preserve">
+    <value>par un client SCIM</value>
+  </data>
+  <data name="ScimResourceTypesHeading" xml:space="preserve">
+    <value>Types de ressources</value>
+  </data>
+  <data name="ScimReadOnly" xml:space="preserve">
+    <value>lecture seule</value>
+  </data>
+  <data name="ScimColumnEndpoint" xml:space="preserve">
+    <value>Point de terminaison</value>
+  </data>
+  <data name="ScimColumnSchema" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="ScimColumnExtensions" xml:space="preserve">
+    <value>Extensions</value>
+  </data>
+  <data name="ScimKeyCreatedTitle" xml:space="preserve">
+    <value>Clé créée</value>
+  </data>
+  <data name="ScimKeyNameRequired" xml:space="preserve">
+    <value>Un nom est requis</value>
+  </data>
+  <data name="ScimKeyNameHelp" xml:space="preserve">
+    <value>Désigne généralement le fournisseur d’identité qui la détiendra, par exemple « Entra provisioning 2026 ».</value>
+  </data>
+  <data name="ScimOptional" xml:space="preserve">
+    <value>Facultatif</value>
+  </data>
+  <data name="ScimExpiryHelp" xml:space="preserve">
+    <value>Une clé expire toujours, au plus tard {0} ans après aujourd’hui.</value>
+  </data>
+  <data name="ScimKeyShownOnceWarning" xml:space="preserve">
+    <value>Copiez cette clé maintenant et conservez-la en lieu sûr. Elle n’est affichée qu’une seule fois ; si elle est perdue, créez-en une nouvelle.</value>
+  </data>
+  <data name="ScimCreatedKeyLabel" xml:space="preserve">
+    <value>Clé pour {0}</value>
+  </data>
+  <data name="ScimCopyKeyAria" xml:space="preserve">
+    <value>Copier la clé</value>
+  </data>
+  <data name="ScimDone" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="ScimKeyCreateFailed" xml:space="preserve">
+    <value>La clé n’a pas été créée : {0}</value>
+  </data>
+  <data name="ScimKeyNoLongerExists" xml:space="preserve">
+    <value>La clé n’existe plus.</value>
+  </data>
+  <data name="ScimKeyEnabled" xml:space="preserve">
+    <value>Clé « {0} » activée.</value>
+  </data>
+  <data name="ScimKeyDisabled" xml:space="preserve">
+    <value>Clé « {0} » désactivée.</value>
+  </data>
+  <data name="ScimKeyNotChanged" xml:space="preserve">
+    <value>La clé n’a pas été modifiée : {0}</value>
+  </data>
+  <data name="ScimDeleteKeyTitle" xml:space="preserve">
+    <value>Supprimer la clé</value>
+  </data>
+  <data name="ScimDeleteKeyConfirm" xml:space="preserve">
+    <value>Supprimer la clé « {0} » ? Un fournisseur d’identité qui l’utilise encore se voit refuser l’accès dès cet instant. Pour conserver une trace de la clé, désactivez-la plutôt.</value>
+  </data>
+  <data name="ScimKeyDeleted" xml:space="preserve">
+    <value>Clé « {0} » supprimée.</value>
+  </data>
+  <data name="ScimKeyNotDeleted" xml:space="preserve">
+    <value>La clé n’a pas été supprimée : {0}</value>
+  </data>
+  <data name="ConnectedSystemTerm" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="DetailPageTitle" xml:space="preserve">
+    <value>Système connecté : {0}</value>
+  </data>
+  <data name="DetailTitleLabel" xml:space="preserve">
+    <value>Système connecté :</value>
+  </data>
+  <data name="DetailInfoBody" xml:space="preserve">
+    <value>Un système connecté est un système depuis lequel JIM importe des données ou vers lequel il en exporte, avec ses paramètres de connexion, son schéma, ses profils d’exécution et les objets que JIM conserve pour lui.</value>
+  </data>
+  <data name="DetailConnectorSpace" xml:space="preserve">
+    <value>Espace connecteur</value>
+  </data>
+  <data name="DetailPendingExports" xml:space="preserve">
+    <value>Exportations en attente</value>
+  </data>
+  <data name="DetailFailingExports" xml:space="preserve">
+    <value>Exportations en échec</value>
+  </data>
+  <data name="DetailFailingLeadOne" xml:space="preserve">
+    <value>1 exportation en attente est en échec.</value>
+  </data>
+  <data name="DetailFailingLeadOther" xml:space="preserve">
+    <value>{0} exportations en attente sont en échec.</value>
+  </data>
+  <data name="DetailFailingTooltipOldest" xml:space="preserve">
+    <value>{0} La plus ancienne a commencé à échouer {1}. JIM les retente à chaque exécution d’exportation ; ouvrez-les pour voir ce que le système connecté a refusé.</value>
+  </data>
+  <data name="DetailFailingTooltip" xml:space="preserve">
+    <value>{0} JIM les retente à chaque exécution d’exportation ; ouvrez-les pour voir ce que le système connecté a refusé.</value>
+  </data>
+  <data name="DetailUnresolvedReferences" xml:space="preserve">
+    <value>Références non résolues</value>
+  </data>
+  <data name="DetailWithheldLead" xml:space="preserve">
+    <value>La dernière exportation a retenu {0} :</value>
+  </data>
+  <data name="DetailWithheldSingle" xml:space="preserve">
+    <value>{0} en attente</value>
+  </data>
+  <data name="DetailWithheldMany" xml:space="preserve">
+    <value>toutes les {0} {1} en attente</value>
+  </data>
+  <data name="DetailWithheldRest" xml:space="preserve">
+    <value>. Elles restent en attente jusqu’à ce que la limite soit relevée ou supprimée, ou qu’un profil d’exécution d’exportation sans cette limite s’exécute.</value>
+  </data>
+  <data name="DetailNounCreateOne" xml:space="preserve">
+    <value>création</value>
+  </data>
+  <data name="DetailNounCreateOther" xml:space="preserve">
+    <value>créations</value>
+  </data>
+  <data name="DetailNounUpdateOne" xml:space="preserve">
+    <value>mise à jour</value>
+  </data>
+  <data name="DetailNounUpdateOther" xml:space="preserve">
+    <value>mises à jour</value>
+  </data>
+  <data name="DetailNounDeleteOne" xml:space="preserve">
+    <value>suppression</value>
+  </data>
+  <data name="DetailNounDeleteOther" xml:space="preserve">
+    <value>suppressions</value>
+  </data>
+  <data name="DetailNounChangeOne" xml:space="preserve">
+    <value>modification</value>
+  </data>
+  <data name="DetailNounChangeOther" xml:space="preserve">
+    <value>modifications</value>
+  </data>
+  <data name="DetailMaxLimit" xml:space="preserve">
+    <value>Limite pour les {0} : {1}</value>
+  </data>
+  <data name="DetailLimitReason" xml:space="preserve">
+    <value>{1} pour {0}</value>
+  </data>
+  <data name="DetailLimitChanged" xml:space="preserve">
+    <value>La limite de {0} a été modifiée depuis, la prochaine exécution décidera donc de nouveau.</value>
+  </data>
+  <data name="DetailDeprovisioningInProgress" xml:space="preserve">
+    <value>Déprovisionnement en cours.</value>
+  </data>
+  <data name="DetailDeprovisioningDetail" xml:space="preserve">
+    <value>Ce système est en cours de suppression par synchronisation ; il est exclu des exécutions planifiées, et sa configuration est en lecture seule jusqu’à la fin de l’exécution.</value>
+  </data>
+  <data name="DetailObjectsProcessed" xml:space="preserve">
+    <value>{0} objets sur {1} traités.</value>
+  </data>
+  <data name="DetailDeletionInProgress" xml:space="preserve">
+    <value>Suppression en cours.</value>
+  </data>
+  <data name="DetailDeletionDetail" xml:space="preserve">
+    <value>Ce système est en cours de suppression ; il est exclu des exécutions planifiées, et sa configuration est en lecture seule jusqu’à la fin de la suppression.</value>
+  </data>
+  <data name="DetailDeprovisioningStopped" xml:space="preserve">
+    <value>Le déprovisionnement s’est arrêté avant son terme.</value>
+  </data>
+  <data name="DetailDeprovisioningStoppedDetail" xml:space="preserve">
+    <value>Une exécution de déprovisionnement synchronisé ne s’est pas achevée : ce système reste isolé et exclu des exécutions planifiées, et le travail déjà effectué est conservé. Supprimer de nouveau le système avec {0} reprend là où l’exécution s’était arrêtée ; {1} termine la suppression immédiatement.</value>
+  </data>
+  <data name="ConnectedSystemDeprovisionThroughSynchronisation" xml:space="preserve">
+    <value>Déprovisionner par synchronisation</value>
+  </data>
+  <data name="ConnectedSystemDeleteImmediatelyKeepData" xml:space="preserve">
+    <value>Supprimer immédiatement et conserver les données contribuées</value>
+  </data>
+  <data name="DetailImportIncompleteLead" xml:space="preserve">
+    <value>Une importation s’est arrêtée en cours de route.</value>
+  </data>
+  <data name="DetailImportIncompleteDetail" xml:space="preserve">
+    <value>Une importation de ce système connecté a commencé à enregistrer ce qu’elle avait lu le {0} UTC et ne s’est pas achevée ; l’espace connecteur ne contient donc qu’une partie des données. La synchronisation complète et la synchronisation delta de ce système connecté ne s’exécuteront pas tant qu’il ne sera pas complet.</value>
+  </data>
+  <data name="DetailObsoleteSingle" xml:space="preserve">
+    <value>1 objet de système connecté est obsolète. Il n’a pas été renvoyé par la dernière importation complète ; le prochain profil d’exécution de synchronisation de ce système le déconnectera de ses objets Metaverse et le supprimera.</value>
+  </data>
+  <data name="DetailObsoleteMany" xml:space="preserve">
+    <value>{0} objets de système connecté sont obsolètes. Ils n’ont pas été renvoyés par la dernière importation complète ; le prochain profil d’exécution de synchronisation de ce système les déconnectera de leurs objets Metaverse et les supprimera.</value>
+  </data>
+  <data name="DetailReview" xml:space="preserve">
+    <value>Examiner</value>
+  </data>
+  <data name="DetailSweepArmedReady" xml:space="preserve">
+    <value>Un balayage des valeurs orphelines est armé : l’espace connecteur a été vidé le {0} UTC et une importation complète s’est achevée le {1} UTC. La prochaine synchronisation complète de ce système connecté rappellera les valeurs contribuées par les objets qui n’ont pas été renvoyés.</value>
+  </data>
+  <data name="DetailSweepArmedWaiting" xml:space="preserve">
+    <value>Un balayage des valeurs orphelines est armé : l’espace connecteur a été vidé le {0} UTC. Il s’exécutera lors de la première synchronisation complète qui suit une importation complète réussie de ce système connecté ; une synchronisation complète exécutée avant ne fait rien au-delà de la synchronisation ordinaire.</value>
+  </data>
+  <data name="DetailDriftOneDated" xml:space="preserve">
+    <value>1 modification de configuration a été effectuée depuis la dernière synchronisation complète ({0}).</value>
+  </data>
+  <data name="DetailDriftOneUndated" xml:space="preserve">
+    <value>1 modification de configuration a été effectuée depuis la dernière synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftManyDated" xml:space="preserve">
+    <value>{0} modifications de configuration ont été effectuées depuis la dernière synchronisation complète ({1}).</value>
+  </data>
+  <data name="DetailDriftManyUndated" xml:space="preserve">
+    <value>{0} modifications de configuration ont été effectuées depuis la dernière synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveSingle" xml:space="preserve">
+    <value>Il est destructif et peut entraîner en cascade des suppressions ou un déprovisionnement massif dès son application. Examinez-le avant d’exécuter une synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveMany" xml:space="preserve">
+    <value>Au moins l’une d’elles est destructive et peut entraîner en cascade des suppressions ou un déprovisionnement massif dès son application. Examinez-les avant d’exécuter une synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftGuidanceSingle" xml:space="preserve">
+    <value>Exécutez une synchronisation complète pour qu’elle prenne effet.</value>
+  </data>
+  <data name="DetailDriftGuidanceMany" xml:space="preserve">
+    <value>Exécutez une synchronisation complète pour qu’elles prennent effet.</value>
+  </data>
+  <data name="DetailPreviewFullSync" xml:space="preserve">
+    <value>Prévisualiser la synchronisation complète</value>
+  </data>
+  <data name="DetailReviewChanges" xml:space="preserve">
+    <value>Examiner les modifications</value>
+  </data>
+  <data name="DetailNeverSynchronised" xml:space="preserve">
+    <value>Ce système connecté n’a encore jamais terminé de synchronisation complète : sa configuration n’a donc jamais été appliquée intégralement.</value>
+  </data>
+  <data name="DetailTrackingOff" xml:space="preserve">
+    <value>Le suivi des modifications de configuration est désactivé : JIM ne peut donc pas savoir si ce système connecté a des modifications de configuration en attente d’une synchronisation complète.</value>
+  </data>
+  <data name="DetailTabDetails" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="DetailTabScim" xml:space="preserve">
+    <value>SCIM</value>
+  </data>
+  <data name="DetailTabSettings" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="DetailTabSchema" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="DetailTabScope" xml:space="preserve">
+    <value>Périmètre</value>
+  </data>
+  <data name="DetailTabMatching" xml:space="preserve">
+    <value>Rapprochement</value>
+  </data>
+  <data name="DetailTabRunProfiles" xml:space="preserve">
+    <value>Profils d’exécution</value>
+  </data>
+  <data name="DetailTabPasswords" xml:space="preserve">
+    <value>Mots de passe</value>
+  </data>
+  <data name="DetailTabChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="DetailTabDangerZone" xml:space="preserve">
+    <value>Zone dangereuse</value>
+  </data>
+  <data name="DetailPartitionsAndContainers" xml:space="preserve">
+    <value>partitions et conteneurs</value>
+  </data>
+  <data name="DetailPartitionAndContainer" xml:space="preserve">
+    <value>partition et conteneur</value>
+  </data>
+  <data name="DetailPartitions" xml:space="preserve">
+    <value>partitions</value>
+  </data>
+  <data name="DetailPartition" xml:space="preserve">
+    <value>partition</value>
+  </data>
+  <data name="DetailBreadcrumbHome" xml:space="preserve">
+    <value>Accueil</value>
+  </data>
+  <data name="DetailBreadcrumbAdministration" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="DetailBreadcrumbConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="DetailViewActivity" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
+  <data name="DetailEditRunProfile" xml:space="preserve">
+    <value>Modifier le profil d’exécution</value>
+  </data>
+  <data name="DeleteSystemLoadingText" xml:space="preserve">
+    <value>Chargement de l’aperçu de la suppression…</value>
+  </data>
+  <data name="DeleteSystemIrreversible" xml:space="preserve">
+    <value>Cette action est définitive et ne peut pas être annulée.</value>
+  </data>
+  <data name="DeleteSystemConfirmButton" xml:space="preserve">
+    <value>Supprimer définitivement</value>
+  </data>
+  <data name="DeleteSystemBusy" xml:space="preserve">
+    <value>Suppression…</value>
+  </data>
+  <data name="DeleteSystemFencedAttached" xml:space="preserve">
+    <value>Une exécution de déprovisionnement synchronisé de ce système est déjà en file d’attente ou en cours. {0} s’y rattache et reprend à son point de contrôle ; {1} abandonne le déprovisionnement restant et termine la suppression immédiatement.</value>
+  </data>
+  <data name="DeleteSystemFencedWarning" xml:space="preserve">
+    <value>Une exécution précédente de déprovisionnement synchronisé s’est arrêtée avant son terme, et ce système reste isolé. {0} reprend là où l’exécution s’est arrêtée ; {1} termine la suppression immédiatement, en conservant les données contribuées restantes.</value>
+  </data>
+  <data name="DeleteSystemDeprovisionRecommended" xml:space="preserve">
+    <value>{0} (recommandé)</value>
+  </data>
+  <data name="DeleteSystemDeprovisionDetail" xml:space="preserve">
+    <value>Chaque objet de ce système est traité comme s’il s’était déconnecté par une synchronisation normale : les valeurs contribuées sont rappelées ou transmises aux contributeurs restants, les règles de suppression des objets Metaverse sont évaluées pour les objets qui perdent leur dernier connecteur, et les systèmes en aval reçoivent des exportations correctives. Il s’exécute comme une opération en file d’attente que vous pouvez suivre depuis la page Opérations ; la suppression du système en est la dernière étape.</value>
+  </data>
+  <data name="DeleteSystemImmediateDetail" xml:space="preserve">
+    <value>Le système est supprimé immédiatement. Les valeurs qu’il a contribuées restent en place, sans trace de leur origine ; les règles de suppression des objets Metaverse sont évaluées en masse pour les objets qui perdent leur dernier connecteur, mais aucun traitement de synchronisation objet par objet n’est effectué ; les systèmes en aval ne sont pas corrigés.</value>
+  </data>
+  <data name="DeleteSystemImmediateWarning" xml:space="preserve">
+    <value>Les valeurs conservées ne seront plus gérées de façon permanente, et les systèmes en aval conservent ce que ce système a exporté en dernier. Cette opération est irréversible.</value>
+  </data>
+  <data name="DeleteSystemPreviewHeading" xml:space="preserve">
+    <value>Aperçu de l’impact de la suppression</value>
+  </data>
+  <data name="DeleteSystemPreviewChipRunning" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="DeleteSystemPreviewChipComplete" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="DeleteSystemPreviewChipStale" xml:space="preserve">
+    <value>Obsolète</value>
+  </data>
+  <data name="DeleteSystemPreviewChipDidNotFinish" xml:space="preserve">
+    <value>Non terminé</value>
+  </data>
+  <data name="DeleteSystemPreviewChipNotPreviewed" xml:space="preserve">
+    <value>Non prévisualisé</value>
+  </data>
+  <data name="DeleteSystemRunningPreview" xml:space="preserve">
+    <value>Un aperçu est encore en cours. Supprimer maintenant l’annule, et la suppression indiquera qu’aucun aperçu ne l’a éclairée.</value>
+  </data>
+  <data name="DeleteSystemWaitForPreview" xml:space="preserve">
+    <value>Attendre l’aperçu</value>
+  </data>
+  <data name="DeleteSystemImmediatePreviewNote" xml:space="preserve">
+    <value>Cet aperçu décrit le déprovisionnement par synchronisation. Une suppression immédiate n’efface aucune de ces valeurs et n’envoie aucune exportation ; les objets Metaverse dont le dernier connecteur est ce système deviennent tout de même éligibles à la suppression selon la règle de suppression de leur type d’objet.</value>
+  </data>
+  <data name="DeleteSystemNoChange" xml:space="preserve">
+    <value>La suppression de ce système ne modifierait rien en dehors de lui.</value>
+  </data>
+  <data name="DeleteSystemMoreLines" xml:space="preserve">
+    <value>L’aperçu complet en liste {0} de plus.</value>
+  </data>
+  <data name="DeleteSystemOpenFullPreview" xml:space="preserve">
+    <value>Ouvrir l’aperçu complet</value>
+  </data>
+  <data name="DeleteSystemRecordedOnActivity" xml:space="preserve">
+    <value>Consigné dans l’activité de la suppression</value>
+  </data>
+  <data name="DeleteSystemSinceThisPreviewRan" xml:space="preserve">
+    <value>depuis que cet aperçu a été lancé :</value>
+  </data>
+  <data name="DeleteSystemStaleBody" xml:space="preserve">
+    <value>Il ne décrit peut-être plus ce que la suppression ferait ; relancez-le pour obtenir une réponse à jour. Une suppression enregistre désormais que l’aperçu qui l’a éclairée était périmé.</value>
+  </data>
+  <data name="DeleteSystemRunAgain" xml:space="preserve">
+    <value>Relancer</value>
+  </data>
+  <data name="DeleteSystemDidNotFinishBody" xml:space="preserve">
+    <value>Le dernier aperçu ne s’est pas terminé : il ne dit donc rien de ce que ferait la suppression. La suppression enregistrera qu’aucun aperçu ne l’a éclairée.</value>
+  </data>
+  <data name="DeleteSystemPreviewAgain" xml:space="preserve">
+    <value>Prévisualiser de nouveau</value>
+  </data>
+  <data name="DeleteSystemDefaultBody" xml:space="preserve">
+    <value>Consultez les valeurs qui seraient effacées ou reprises par un autre système connecté, ainsi que ce qui serait exporté, avant de supprimer. L’activité de la suppression indiquera qu’elle a été menée sans aperçu.</value>
+  </data>
+  <data name="DeleteSystemPreviewFirst" xml:space="preserve">
+    <value>Prévisualiser d’abord</value>
+  </data>
+  <data name="DeleteSystemBackgroundJob" xml:space="preserve">
+    <value>En raison de la taille de ce système, la suppression s’exécutera comme une tâche en arrière-plan.</value>
+  </data>
+  <data name="DeleteSystemEstimatedTime" xml:space="preserve">
+    <value>Durée estimée : {0}</value>
+  </data>
+  <data name="DeleteSystemChangeHistory" xml:space="preserve">
+    <value>Supprimer l’historique des modifications des objets supprimés</value>
+  </data>
+  <data name="DeleteSystemChangeHistoryHelp" xml:space="preserve">
+    <value>Lorsque cette option est activée, tous les enregistrements d’historique des modifications des objets de systèmes connectés supprimés sont également supprimés. Laissez-la décochée pour conserver la piste d’audit.</value>
+  </data>
+  <data name="DeleteSystemReason" xml:space="preserve">
+    <value>Motif (facultatif)</value>
+  </data>
+  <data name="DeleteSystemGroupRemoved" xml:space="preserve">
+    <value>Supprimés avec le système</value>
+  </data>
+  <data name="DeleteSystemGroupAffected" xml:space="preserve">
+    <value>Affectés, non supprimés</value>
+  </data>
+  <data name="DeleteSystemSubgroupMetaverseObjects" xml:space="preserve">
+    <value>Objets Metaverse</value>
+  </data>
+  <data name="DeleteSystemImpactConnectedSystemObjects" xml:space="preserve">
+    <value>Objets de systèmes connectés</value>
+  </data>
+  <data name="DeleteSystemImpactSyncRules" xml:space="preserve">
+    <value>Règles de synchronisation</value>
+  </data>
+  <data name="DeleteSystemImpactRunProfiles" xml:space="preserve">
+    <value>Profils d’exécution</value>
+  </data>
+  <data name="DeleteSystemImpactPartitions" xml:space="preserve">
+    <value>Partitions</value>
+  </data>
+  <data name="DeleteSystemImpactContainers" xml:space="preserve">
+    <value>Conteneurs</value>
+  </data>
+  <data name="DeleteSystemImpactPendingExports" xml:space="preserve">
+    <value>Exportations en attente</value>
+  </data>
+  <data name="DeleteSystemImpactJoined" xml:space="preserve">
+    <value>Jointes</value>
+  </data>
+  <data name="DeleteSystemImpactJoinedNote" xml:space="preserve">
+    <value>déconnectés de ce système ; ils restent dans le Metaverse, sauf si c’était leur dernier connecteur, voir ci-dessous</value>
+  </data>
+  <data name="DeleteSystemImpactContributed" xml:space="preserve">
+    <value>Valeurs d’attributs contribuées</value>
+  </data>
+  <data name="DeleteSystemImpactContributedNote" xml:space="preserve">
+    <value>rappelées ou conservées selon le choix ci-dessus</value>
+  </data>
+  <data name="DeleteSystemImpactEligible" xml:space="preserve">
+    <value>Éligibles aux règles de suppression</value>
+  </data>
+  <data name="DeleteSystemImpactEligibleNote" xml:space="preserve">
+    <value>ce système est leur dernier connecteur ; la règle de suppression de leur type d’objet décide</value>
+  </data>
+  <data name="DeleteSystemImpactActivities" xml:space="preserve">
+    <value>Activités</value>
+  </data>
+  <data name="DeleteSystemImpactActivitiesNote" xml:space="preserve">
+    <value>conservées : l’historique d’audit de ce que ce système a fait</value>
+  </data>
+  <data name="DeleteSystemDialogTitle" xml:space="preserve">
+    <value>Supprimer le système connecté « {0} »</value>
+  </data>
+  <data name="DeleteSystemFailed" xml:space="preserve">
+    <value>Échec de la suppression : {0}</value>
+  </data>
+  <data name="DeleteSystemDeleted" xml:space="preserve">
+    <value>Le système connecté a été supprimé.</value>
+  </data>
+  <data name="DeleteSystemDeprovisioningQueued" xml:space="preserve">
+    <value>Déprovisionnement mis en file d’attente : {0} objets seront traités avant la suppression de {1}.</value>
+  </data>
+  <data name="DeleteSystemQueuedBackground" xml:space="preserve">
+    <value>La suppression a été mise en file d’attente comme tâche en arrière-plan. Vous pouvez suivre sa progression dans la vue Opérations.</value>
+  </data>
+  <data name="DeleteSystemQueuedAfterSync" xml:space="preserve">
+    <value>Une opération de synchronisation est en cours. La suppression se poursuivra après son achèvement.</value>
+  </data>
+  <data name="DeleteSystemError" xml:space="preserve">
+    <value>Une erreur s’est produite : {0}</value>
+  </data>
+  <data name="PwPanelChannelHeading" xml:space="preserve">
+    <value>Canal de mot de passe</value>
+  </data>
+  <data name="PwPanelChannelInfo" xml:space="preserve">
+    <value>Vérifie si JIM pourrait définir un mot de passe sur ce système connecté. Rien n’est écrit et aucun mot de passe n’est défini : il n’existe aucun moyen de prouver qu’une définition de mot de passe fonctionne sans en effectuer une, donc ce contrôle vérifie tout ce qui l’entoure, là où surviennent la plupart des échecs.</value>
+  </data>
+  <data name="PwPanelSettingsFirst" xml:space="preserve">
+    <value>Renseignez d’abord les paramètres de connexion de ce système connecté, dans l’onglet Paramètres. JIM en a besoin pour se connecter avant de pouvoir vérifier quoi que ce soit.</value>
+  </data>
+  <data name="PwPanelChecking" xml:space="preserve">
+    <value>Vérification en cours</value>
+  </data>
+  <data name="PwPanelCheckButton" xml:space="preserve">
+    <value>Vérifier le canal de mot de passe</value>
+  </data>
+  <data name="PwPanelReadAt" xml:space="preserve">
+    <value>Vérifié {0}. Ce résultat ne reflète le système connecté qu’à cet instant précis et n’est pas enregistré.</value>
+  </data>
+  <data name="PwPanelThisSystem" xml:space="preserve">
+    <value>ce système connecté</value>
+  </data>
+  <data name="PwPanelOutcomeReady" xml:space="preserve">
+    <value>Tout ce que JIM peut vérifier au sujet de la définition des mots de passe sur {0} semble correct.</value>
+  </data>
+  <data name="PwPanelOutcomeReadyWarnings" xml:space="preserve">
+    <value>JIM peut définir des mots de passe sur {0}, mais un élément ci-dessous devrait faire l’objet d’un choix délibéré.</value>
+  </data>
+  <data name="PwPanelOutcomeInconclusive" xml:space="preserve">
+    <value>JIM n’a pas pu établir tout ce dont il a besoin au sujet de {0}. La définition d’un mot de passe peut tout de même fonctionner.</value>
+  </data>
+  <data name="PwPanelOutcomeFailed" xml:space="preserve">
+    <value>La définition des mots de passe sur {0} ne fonctionnera pas tant que les problèmes ci-dessous ne seront pas résolus.</value>
+  </data>
+  <data name="PwPanelCheckConnection" xml:space="preserve">
+    <value>Connexion</value>
+  </data>
+  <data name="PwPanelCheckEncryption" xml:space="preserve">
+    <value>Chiffrement</value>
+  </data>
+  <data name="PwPanelCheckMechanism" xml:space="preserve">
+    <value>Mécanisme de mot de passe</value>
+  </data>
+  <data name="PwPanelCheckResetRights" xml:space="preserve">
+    <value>Droits de réinitialisation du mot de passe</value>
+  </data>
+  <data name="PwPanelCheckPolicy" xml:space="preserve">
+    <value>Stratégie de mot de passe</value>
+  </data>
+  <data name="PwPanelNotConfigured" xml:space="preserve">
+    <value>Ce système connecté n’est pas encore assez configuré pour être vérifié. Renseignez d’abord ses paramètres.</value>
+  </data>
+  <data name="PwPanelPolicyHeading" xml:space="preserve">
+    <value>Stratégie de mot de passe</value>
+  </data>
+  <data name="PwPanelPolicyInfo" xml:space="preserve">
+    <value>Les règles de mot de passe appliquées par ce système connecté, lues lors de la dernière récupération du schéma. JIM les utilise pour préremplir les paramètres de mot de passe initial d’une règle de synchronisation, afin de ne pas avoir à les ressaisir.</value>
+  </data>
+  <data name="PwPanelMinimumLength" xml:space="preserve">
+    <value>Longueur minimale</value>
+  </data>
+  <data name="PwPanelCharacters" xml:space="preserve">
+    <value>{0} caractères</value>
+  </data>
+  <data name="PwPanelComplexity" xml:space="preserve">
+    <value>Complexité</value>
+  </data>
+  <data name="PwPanelRequired" xml:space="preserve">
+    <value>Obligatoire</value>
+  </data>
+  <data name="PwPanelNotRequired" xml:space="preserve">
+    <value>Non obligatoire</value>
+  </data>
+  <data name="PwPanelComplexityDetail" xml:space="preserve">
+    <value>Un mot de passe doit utiliser au moins {0} des {1} catégories de caractères : {2}.</value>
+  </data>
+  <data name="PwPanelCategoryUppercase" xml:space="preserve">
+    <value>majuscules</value>
+  </data>
+  <data name="PwPanelCategoryLowercase" xml:space="preserve">
+    <value>minuscules</value>
+  </data>
+  <data name="PwPanelCategoryDigits" xml:space="preserve">
+    <value>chiffres</value>
+  </data>
+  <data name="PwPanelCategorySymbols" xml:space="preserve">
+    <value>symboles</value>
+  </data>
+  <data name="PwPanelCategoryLettersWithoutCase" xml:space="preserve">
+    <value>lettres sans casse</value>
+  </data>
+  <data name="PwPanelHistory" xml:space="preserve">
+    <value>Historique des mots de passe</value>
+  </data>
+  <data name="PwPanelRememberedOne" xml:space="preserve">
+    <value>{0} mémorisé</value>
+  </data>
+  <data name="PwPanelRememberedOther" xml:space="preserve">
+    <value>{0} mémorisés</value>
+  </data>
+  <data name="PwPanelMaxAge" xml:space="preserve">
+    <value>Âge maximal du mot de passe</value>
+  </data>
+  <data name="PwPanelMinAge" xml:space="preserve">
+    <value>Âge minimal du mot de passe</value>
+  </data>
+  <data name="PwPanelNoMaxAge" xml:space="preserve">
+    <value>Les mots de passe n’expirent pas</value>
+  </data>
+  <data name="PwPanelNoMinAge" xml:space="preserve">
+    <value>Un mot de passe peut être modifié immédiatement</value>
+  </data>
+  <data name="PwPanelDayOne" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="PwPanelDayOther" xml:space="preserve">
+    <value>{0} jours</value>
+  </data>
+  <data name="PwPanelHours" xml:space="preserve">
+    <value>{0} heures</value>
+  </data>
+  <data name="PwPanelMinutes" xml:space="preserve">
+    <value>{0} minutes</value>
+  </data>
+  <data name="PwPanelFurtherChecks" xml:space="preserve">
+    <value>L’annuaire applique des contrôles supplémentaires que JIM ne voit pas ; un mot de passe respectant tout ce qui précède peut donc encore être refusé.</value>
+  </data>
+  <data name="PwPanelOverridePresent" xml:space="preserve">
+    <value>Certains objets de cet annuaire sont régis par une stratégie autre que la stratégie globale ci-dessus (les Fine-Grained Password Policies d’Active Directory, &lt;code&gt;{0}&lt;/code&gt; d’OpenLDAP ou les stratégies de sous-arbre de 389 Directory Server, selon l’annuaire), si bien qu’un objet régi par une stratégie plus stricte peut refuser un mot de passe qui la respecte.</value>
+  </data>
+  <data name="PwPanelOverrideUnknown" xml:space="preserve">
+    <value>JIM n’a pas pu établir si certains objets de cet annuaire sont régis par une stratégie autre que la stratégie globale ci-dessus (les Fine-Grained Password Policies d’Active Directory, &lt;code&gt;{0}&lt;/code&gt; d’OpenLDAP ou les stratégies de sous-arbre de 389 Directory Server, selon l’annuaire). Les lire exige des privilèges que le compte avec lequel JIM se connecte ne devrait normalement pas détenir, et un annuaire ne renvoie rien plutôt qu’une erreur lorsqu’il refuse. Considérez la stratégie ci-dessus comme un minimum.</value>
+  </data>
+  <data name="PwPanelOutcomeNotPublished" xml:space="preserve">
+    <value>Cet annuaire ne publie aucune stratégie de mot de passe que JIM peut lire. Rien n’est à configurer ici : les paramètres de mot de passe initial d’une règle de synchronisation se définissent manuellement, et un mot de passe refusé par l’annuaire est signalé au moment où cela se produit.</value>
+  </data>
+  <data name="PwPanelOutcomeUnreadable" xml:space="preserve">
+    <value>JIM n’a pas pu lire la stratégie de mot de passe de cet annuaire : le compte avec lequel il se connecte ne peut pas lire la configuration du serveur qui la contient. Accordez à ce compte un accès en lecture à cette configuration, puis actualisez le schéma.</value>
+  </data>
+  <data name="PwPanelOutcomeNoPolicy" xml:space="preserve">
+    <value>Le mécanisme de stratégie de mot de passe de cet annuaire est chargé, mais aucune stratégie n’est configurée : aucune règle ne s’applique. Si une stratégie est configurée plus tard, actualisez le schéma pour que JIM la lise.</value>
+  </data>
+  <data name="PwPanelOutcomeNotRead" xml:space="preserve">
+    <value>JIM n’a lu aucune stratégie de mot de passe depuis ce système connecté. Récupérez le schéma pour lire la stratégie, s’il en existe une ; lorsqu’un annuaire n’en publie aucune, les paramètres de mot de passe initial se configurent manuellement sur la règle de synchronisation.</value>
+  </data>
+  <data name="PwPanelReadFrom" xml:space="preserve">
+    <value>Lu depuis le système connecté {0}. Actualisez le schéma pour le relire.</value>
+  </data>
+  <data name="SettingsTabIntro" xml:space="preserve">
+    <value>Chaque connecteur exige des paramètres spécifiques pour se connecter à votre environnement. Renseignez les champs obligatoires ci-dessous, puis enregistrez vos modifications avant d’importer le schéma.</value>
+  </data>
+  <data name="SettingsTabImportBehaviour" xml:space="preserve">
+    <value>Comportement de l’importation</value>
+  </data>
+  <data name="SettingsTabImportBehaviourIntro" xml:space="preserve">
+    <value>Ces paramètres contrôlent la manière dont JIM traite les importations, indépendamment des paramètres propres au connecteur ci-dessus.</value>
+  </data>
+  <data name="SettingsTabUnresolvedReferenceHandling" xml:space="preserve">
+    <value>Gestion des références non résolues</value>
+  </data>
+  <data name="SettingsTabUnresolvedReferenceHelp" xml:space="preserve">
+    <value>Définit ce qui se passe lorsqu’une valeur de référence importée (par exemple un membre de groupe) ne peut pas être résolue en objet de système connecté, généralement parce que l’objet référencé se trouve hors de la portée du conteneur configurée, ou dans un conteneur qu’elle exclut.</value>
+  </data>
+  <data name="SettingsTabUnresolvedError" xml:space="preserve">
+    <value>Erreur (par défaut) : consigner une erreur sur chaque objet concerné</value>
+  </data>
+  <data name="SettingsTabUnresolvedWarn" xml:space="preserve">
+    <value>Avertissement : terminer avec un récapitulatif des avertissements</value>
+  </data>
+  <data name="SettingsTabUnresolvedIgnore" xml:space="preserve">
+    <value>Ignorer : aucune erreur ni avertissement</value>
+  </data>
+  <data name="SettingsTabExportPerformance" xml:space="preserve">
+    <value>Performance de l’exportation</value>
+  </data>
+  <data name="SettingsTabExportPerformanceIntro" xml:space="preserve">
+    <value>Définit la vitesse à laquelle JIM envoie les modifications à ce système connecté pendant une exportation.</value>
+  </data>
+  <data name="SettingsTabMaxExportParallelism" xml:space="preserve">
+    <value>Parallélisme d’exportation max.</value>
+  </data>
+  <data name="SettingsTabMaxExportParallelismHelp" xml:space="preserve">
+    <value>Nombre de lots de modifications que JIM envoie à ce système à la fois. Laissez vide pour utiliser la valeur recommandée par le connecteur, ou indiquez 1 pour n’envoyer qu’un lot à la fois. Des valeurs plus élevées terminent les grandes exportations plus vite, mais chargent davantage le système cible.</value>
+  </data>
+  <data name="SettingsTabPasswords" xml:space="preserve">
+    <value>Mots de passe</value>
+  </data>
+  <data name="SettingsTabPasswordsIntro" xml:space="preserve">
+    <value>Ces paramètres s’appliquent à chaque mot de passe que JIM envoie à ce système connecté, qu’il s’agisse du premier mot de passe d’un objet de système connecté créé par JIM, d’un mot de passe que vous définissez manuellement, ou d’une modification de mot de passe synchronisée depuis un autre système.</value>
+  </data>
+  <data name="SettingsTabRequireSecureTransport" xml:space="preserve">
+    <value>N’envoyer les mots de passe que par une connexion chiffrée</value>
+  </data>
+  <data name="SettingsTabSecureTransportHelp" xml:space="preserve">
+    <value>JIM ne peut pas toujours distinguer une connexion chiffrée d’une connexion non chiffrée ; une liaison signée et scellée est chiffrée, mais les paramètres de ce système ne le laissent pas voir, raison pour laquelle JIM avertit au lieu de refuser par défaut. Activez cette option, une fois certain que la connexion de ce système est chiffrée, pour que JIM refuse plutôt d’envoyer. Rien n’est écarté lors d’un refus : les modifications de mot de passe en file d’attente patientent, et les objets de systèmes connectés conservent leur premier mot de passe en attente.</value>
+  </data>
+  <data name="SettingsTabGiveUpAfter" xml:space="preserve">
+    <value>Abandonner après</value>
+  </data>
+  <data name="SettingsTabDays" xml:space="preserve">
+    <value>jours</value>
+  </data>
+  <data name="SettingsTabGiveUpHelp" xml:space="preserve">
+    <value>Durée pendant laquelle JIM continue d’essayer de remettre un mot de passe à ce système avant d’y renoncer : le premier mot de passe dû à un objet de système connecté qu’il provisionne, et une modification de mot de passe en file d’attente, dans les deux cas. Laissez vide pour utiliser la valeur par défaut de JIM, soit 7 jours. Augmentez-la avant de mettre ce système hors service plus longtemps que la fenêtre actuelle, sans quoi le travail en attente expire non remis.</value>
+  </data>
+  <data name="SettingsTabIssues" xml:space="preserve">
+    <value>Il y a des problèmes avec les paramètres :</value>
+  </data>
+  <data name="SettingsTabErrorLine" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="SettingsTabGeneralIssue" xml:space="preserve">
+    <value>Problème général {0}</value>
+  </data>
+  <data name="SettingsTabSavedWithWarnings" xml:space="preserve">
+    <value>Vos paramètres ont été enregistrés, mais certains éléments ne fonctionneront pas en l’état :</value>
+  </data>
+  <data name="SettingsTabProcessing" xml:space="preserve">
+    <value>Traitement en cours</value>
+  </data>
+  <data name="SettingsTabSave" xml:space="preserve">
+    <value>Enregistrer les paramètres</value>
+  </data>
+  <data name="SettingsTabFixBeforeSave" xml:space="preserve">
+    <value>Corrigez les problèmes affichés pour {0} avant d’enregistrer.</value>
+  </data>
+  <data name="SettingsTabServerCertificate" xml:space="preserve">
+    <value>Certificat du serveur</value>
+  </data>
+  <data name="SettingsTabCertificateIntro" xml:space="preserve">
+    <value>Lit le certificat présenté par le point de terminaison ci-dessus, pour vérifier que JIM lui fait confiance avant d’enregistrer. Rien n’est stocké tant que vous ne choisissez pas de lui faire confiance.</value>
+  </data>
+  <data name="SettingsTabFetchingCertificate" xml:space="preserve">
+    <value>Récupération du certificat</value>
+  </data>
+  <data name="SettingsTabFetchCertificate" xml:space="preserve">
+    <value>Récupérer le certificat</value>
+  </data>
+  <data name="SettingsTabCertificateTrusted" xml:space="preserve">
+    <value>JIM fait déjà confiance à ce certificat. Rien n’est à ajouter.</value>
+  </data>
+  <data name="SettingsTabCertificateNotTrusted" xml:space="preserve">
+    <value>JIM ne fait pas encore confiance à ce certificat. Rien n’a été enregistré ; lui faire confiance est une étape distincte.</value>
+  </data>
+  <data name="SettingsTabCertificateUnreadable" xml:space="preserve">
+    <value>JIM n’a pas pu lire de certificat depuis ce point de terminaison.</value>
+  </data>
+  <data name="SettingsTabSavedSnackbar" xml:space="preserve">
+    <value>Vos modifications de paramètres ont été enregistrées.</value>
+  </data>
+  <data name="SettingsTabSavedWithWarningsSnackbar" xml:space="preserve">
+    <value>Vos modifications de paramètres ont été enregistrées, avec des avertissements.</value>
+  </data>
+  <data name="CsListHeading" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="CsListInfoBody" xml:space="preserve">
+    <value>JIM importe des données depuis les systèmes connectés et en exporte vers eux, à l’aide de connecteurs.</value>
+  </data>
+  <data name="CsListInfoEmpty" xml:space="preserve">
+    <value>Configurez au moins un système connecté pour commencer.</value>
+  </data>
+  <data name="CsListTrackingOff" xml:space="preserve">
+    <value>Le suivi des modifications de configuration est désactivé : JIM ne peut donc pas savoir quels systèmes connectés ont des modifications de configuration en attente d’une synchronisation complète.</value>
+  </data>
+  <data name="CsListToggleLabel" xml:space="preserve">
+    <value>Systèmes connectés ou connecteurs</value>
+  </data>
+  <data name="CsListCreate" xml:space="preserve">
+    <value>Créer un système connecté</value>
+  </data>
+  <data name="CsListNounSingular" xml:space="preserve">
+    <value>système connecté</value>
+  </data>
+  <data name="CsListNounPlural" xml:space="preserve">
+    <value>systèmes connectés</value>
+  </data>
+  <data name="CsListColumnConnector" xml:space="preserve">
+    <value>Connecteur</value>
+  </data>
+  <data name="CsListColumnStats" xml:space="preserve">
+    <value>Statistiques</value>
+  </data>
+  <data name="CsListColumnPasswordSync" xml:space="preserve">
+    <value>Synchro. des mots de passe</value>
+  </data>
+  <data name="CsListColumnAction" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="CsListObjectsTooltip" xml:space="preserve">
+    <value>Objets</value>
+  </data>
+  <data name="CsListConnectedObjectsTooltip" xml:space="preserve">
+    <value>Objets connectés ({0} %)</value>
+  </data>
+  <data name="CsListPendingExportsTooltip" xml:space="preserve">
+    <value>Exportations en attente ({0} %)</value>
+  </data>
+  <data name="CsListViewObjects" xml:space="preserve">
+    <value>Afficher les objets</value>
+  </data>
+  <data name="CsListNoMatch" xml:space="preserve">
+    <value>Aucun système connecté ne correspond à « {0} ».</value>
+  </data>
+  <data name="CsListNoMatchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="CsListNoneYet" xml:space="preserve">
+    <value>Aucun système connecté pour le moment</value>
+  </data>
+  <data name="CsListNoneYetHint" xml:space="preserve">
+    <value>Utilisez le bouton Créer un système connecté pour commencer.</value>
+  </data>
+  <data name="CsListFilterAny" xml:space="preserve">
+    <value>Tous</value>
+  </data>
+  <data name="CsListFilterNeedsAttention" xml:space="preserve">
+    <value>Nécessite une action</value>
+  </data>
+  <data name="CsListFilterSwitchedOff" xml:space="preserve">
+    <value>Désactivée</value>
+  </data>
+  <data name="CsListFilterNotConfigured" xml:space="preserve">
+    <value>Non configurée</value>
+  </data>
+  <data name="CsListFilterNotSupported" xml:space="preserve">
+    <value>Non prise en charge</value>
+  </data>
+  <data name="CertEyebrow" xml:space="preserve">
+    <value>Certificat présenté par {0}:{1}</value>
+  </data>
+  <data name="CertSelfSigned" xml:space="preserve">
+    <value>Auto-signé</value>
+  </data>
+  <data name="CertIssuedBy" xml:space="preserve">
+    <value>Émis par {0}</value>
+  </data>
+  <data name="CertFieldIssuedFor" xml:space="preserve">
+    <value>Émis pour</value>
+  </data>
+  <data name="CertFieldValid" xml:space="preserve">
+    <value>Validité</value>
+  </data>
+  <data name="CertValidRange" xml:space="preserve">
+    <value>du {0} au {1}</value>
+  </data>
+  <data name="CertUnknownDate" xml:space="preserve">
+    <value>inconnue</value>
+  </data>
+  <data name="CertFieldThumbprint" xml:space="preserve">
+    <value>Empreinte</value>
+  </data>
+  <data name="CertFieldSignature" xml:space="preserve">
+    <value>Signature</value>
+  </data>
+  <data name="CertChainHeading" xml:space="preserve">
+    <value>Chaîne de certificats</value>
+  </data>
+  <data name="CertChainMissing" xml:space="preserve">
+    <value>{0} et au-dessus</value>
+  </data>
+  <data name="CertChainNotSent" xml:space="preserve">
+    <value>Non envoyé, et non téléchargeable</value>
+  </data>
+  <data name="CertChainNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="CertChainReferenceNote" xml:space="preserve">
+    <value>Cette connexion n’accepte que la racine ; le reste de la chaîne est donc affiché à titre de référence.</value>
+  </data>
+  <data name="CertSelfSignedBefore" xml:space="preserve">
+    <value>Auto-signé : il n’existe donc aucune autorité distincte à approuver. Ajoute ce certificat seul au magasin</value>
+  </data>
+  <data name="CertSelfSignedAfter" xml:space="preserve">
+    <value>; il devra être approuvé de nouveau lors de son renouvellement.</value>
+  </data>
+  <data name="CertRootBefore" xml:space="preserve">
+    <value>Approuver la racine reste valable lors des renouvellements de tout ce qui se trouve en dessous. JIM relit d’abord la chaîne depuis le serveur, puis ajoute la racine au magasin</value>
+  </data>
+  <data name="CertAfterStoreLink" xml:space="preserve">
+    <value>, et consigne qui l’a approuvée et pourquoi.</value>
+  </data>
+  <data name="CertChoiceBefore" xml:space="preserve">
+    <value>Approuvez n’importe quel certificat de cette chaîne. Approuver la racine reste valable lors des renouvellements de tout ce qui se trouve en dessous. JIM relit d’abord la chaîne depuis le serveur, puis ajoute votre choix au magasin</value>
+  </data>
+  <data name="CertServerOnlyBefore" xml:space="preserve">
+    <value>JIM ne peut proposer que le certificat propre du serveur, qui devra être approuvé de nouveau lors de son renouvellement. Pour approuver plutôt son autorité de certification, qui survit aux renouvellements, ajoutez le certificat de l’autorité sous</value>
+  </data>
+  <data name="CertServerOnlyAfter" xml:space="preserve">
+    <value>puis testez de nouveau.</value>
+  </data>
+  <data name="CertTrustedStore" xml:space="preserve">
+    <value>Certificats approuvés</value>
+  </data>
+  <data name="CertReasonUntrusted" xml:space="preserve">
+    <value>Non approuvé : aucun élément de cette chaîne ne figure dans {0}</value>
+  </data>
+  <data name="CertReasonInvalidChain" xml:space="preserve">
+    <value>Chaîne rompue : une autorité de certification de cette chaîne ne peut pas être fiable</value>
+  </data>
+  <data name="CertReasonNameMismatch" xml:space="preserve">
+    <value>Mauvais nom : ce certificat n’a pas été émis pour l’hôte auquel JIM s’est connecté</value>
+  </data>
+  <data name="CertReasonExpired" xml:space="preserve">
+    <value>Expiré</value>
+  </data>
+  <data name="CertReasonNotYetValid" xml:space="preserve">
+    <value>Pas encore valide</value>
+  </data>
+  <data name="CertReasonNoCertificate" xml:space="preserve">
+    <value>Aucun certificat n’a été proposé</value>
+  </data>
+  <data name="CertReasonNone" xml:space="preserve">
+    <value>Aucun problème détecté avec ce certificat</value>
+  </data>
+  <data name="CertReasonUnrecognised" xml:space="preserve">
+    <value>Refusé pour une raison non reconnue</value>
+  </data>
+  <data name="CertTrustRoot" xml:space="preserve">
+    <value>Approuver la racine</value>
+  </data>
+  <data name="CertChooseTrust" xml:space="preserve">
+    <value>Choisir ce qu’il faut approuver</value>
+  </data>
+  <data name="CertTrustThis" xml:space="preserve">
+    <value>Approuver ce certificat</value>
+  </data>
+  <data name="CertAlreadyTrusted" xml:space="preserve">
+    <value>Ce certificat figurait déjà dans le magasin {0}.</value>
+  </data>
+  <data name="CertTrusted" xml:space="preserve">
+    <value>Certificat approuvé.</value>
+  </data>
+  <data name="TrustChooseIntro" xml:space="preserve">
+    <value>Chacun de ces choix permet à cette connexion de fonctionner. Ils diffèrent par la durée de la décision et par ce qu’elle couvre d’autre.</value>
+  </data>
+  <data name="TrustRecommended" xml:space="preserve">
+    <value>Recommandé</value>
+  </data>
+  <data name="TrustDurabilityRoot" xml:space="preserve">
+    <value>Reste valable lors du renouvellement de chaque certificat qui se trouve en dessous. Approuve aussi chaque autre certificat émis sous cette racine.</value>
+  </data>
+  <data name="TrustDurabilityIntermediateDated" xml:space="preserve">
+    <value>Reste valable lors du renouvellement du certificat du serveur, jusqu’au renouvellement du certificat de cette autorité de certification, le {0}. Approuve aussi chaque certificat qu’elle émet.</value>
+  </data>
+  <data name="TrustDurabilityIntermediateUndated" xml:space="preserve">
+    <value>Reste valable lors du renouvellement du certificat du serveur, jusqu’au renouvellement du certificat de cette autorité de certification. Approuve aussi chaque certificat qu’elle émet.</value>
+  </data>
+  <data name="TrustDurabilityServerDated" xml:space="preserve">
+    <value>Ce serveur uniquement. Devra être approuvé de nouveau lors du renouvellement de son certificat, le {0}.</value>
+  </data>
+  <data name="TrustDurabilityServerUndated" xml:space="preserve">
+    <value>Ce serveur uniquement. Devra être approuvé de nouveau lors du renouvellement de son certificat.</value>
+  </data>
+  <data name="TrustSourceDownloadedBy" xml:space="preserve">
+    <value>Téléchargé depuis {0}, l’adresse figurant dans le certificat de {1}.</value>
+  </data>
+  <data name="TrustSourceDownloaded" xml:space="preserve">
+    <value>Téléchargé depuis {0}.</value>
+  </data>
+  <data name="TrustSourceStore" xml:space="preserve">
+    <value>Déjà dans {0}.</value>
+  </data>
+  <data name="TrustSourceOperatingSystem" xml:space="preserve">
+    <value>Trouvé dans le magasin de certificats du système d’exploitation.</value>
+  </data>
+  <data name="TrustSourceServer" xml:space="preserve">
+    <value>Envoyé par le serveur.</value>
+  </data>
+  <data name="TrustAlsoStored" xml:space="preserve">
+    <value>JIM ajoute aussi {0}, que le serveur n’envoie pas, afin que les connexions puissent relier {1} au certificat du serveur.</value>
+  </data>
+  <data name="TrustListAnd" xml:space="preserve">
+    <value>et</value>
+  </data>
+  <data name="TrustWillTrustThis" xml:space="preserve">
+    <value>JIM approuvera ce certificat,</value>
+  </data>
+  <data name="TrustWillTrustEvery" xml:space="preserve">
+    <value>JIM approuvera chaque certificat émis par {0},</value>
+  </data>
+  <data name="TrustUntilRemoveBefore" xml:space="preserve">
+    <value>jusqu’à ce que vous le retiriez de</value>
+  </data>
+  <data name="TrustUntilRemoveAfter" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="TrustCheckThumbprint" xml:space="preserve">
+    <value>Comparez l’empreinte avec celle que vous donne l’administrateur du serveur avant de continuer.</value>
+  </data>
+  <data name="TrustTableTrusting" xml:space="preserve">
+    <value>Certificat approuvé</value>
+  </data>
+  <data name="TrustPresentedBy" xml:space="preserve">
+    <value>Présenté par</value>
+  </data>
+  <data name="TrustThumbprintToCheck" xml:space="preserve">
+    <value>Empreinte à vérifier</value>
+  </data>
+  <data name="TrustChangeReasonLabel" xml:space="preserve">
+    <value>Motif de la modification</value>
+  </data>
+  <data name="TrustChangeReasonHelp" xml:space="preserve">
+    <value>Consigné dans l’activité avec votre nom.</value>
+  </data>
+  <data name="TrustRefusedBody" xml:space="preserve">
+    <value>{0} présente un certificat différent de celui affiché lors de cet échec, si bien que JIM n’a rien approuvé. C’est normal si le certificat a été renouvelé ; à examiner dans le cas contraire.</value>
+  </data>
+  <data name="TrustExpectedLabel" xml:space="preserve">
+    <value>Celui que vous avez confirmé</value>
+  </data>
+  <data name="TrustPresentedLabel" xml:space="preserve">
+    <value>Présenté maintenant</value>
+  </data>
+  <data name="TrustBusy" xml:space="preserve">
+    <value>Approbation en cours…</value>
+  </data>
+  <data name="TrustButton" xml:space="preserve">
+    <value>Approuver le certificat</value>
+  </data>
+  <data name="TrustContinue" xml:space="preserve">
+    <value>Continuer</value>
+  </data>
+  <data name="TrustTitleChoose" xml:space="preserve">
+    <value>Quel certificat JIM doit-il approuver ?</value>
+  </data>
+  <data name="TrustTitleRefused" xml:space="preserve">
+    <value>Le certificat a changé</value>
+  </data>
+  <data name="TrustTitleFailed" xml:space="preserve">
+    <value>JIM n’a pas pu approuver ce certificat</value>
+  </data>
+  <data name="TrustTitleConfirm" xml:space="preserve">
+    <value>Approuver {0} ?</value>
+  </data>
+  <data name="TrustFailedFallback" xml:space="preserve">
+    <value>JIM n’a pas pu approuver ce certificat.</value>
+  </data>
+  <data name="TrustReasonHost" xml:space="preserve">
+    <value>Déblocage de la connexion à {0}.</value>
+  </data>
+  <data name="TrustReasonConnectedSystem" xml:space="preserve">
+    <value>Déblocage du test de connexion du système connecté {0}.</value>
+  </data>
+  <data name="TrustDialogTitle" xml:space="preserve">
+    <value>Approuver ce certificat ?</value>
+  </data>
+  <data name="PwSyncHeading" xml:space="preserve">
+    <value>Synchronisation des mots de passe</value>
+  </data>
+  <data name="PwSyncInfo" xml:space="preserve">
+    <value>Lorsqu’un mot de passe change pour un objet Metaverse, JIM le remet à chaque système connecté configuré et activé ici, en réessayant automatiquement si le système est indisponible. Les mots de passe sont conservés chiffrés jusqu’à leur remise, et ne sont jamais lisibles, affichés dans un aperçu ni écrits dans un enregistrement de modification.</value>
+  </data>
+  <data name="PwSyncDeliverSwitch" xml:space="preserve">
+    <value>Remettre les modifications de mot de passe à ce système connecté</value>
+  </data>
+  <data name="PwSyncEnabledNote" xml:space="preserve">
+    <value>Les modifications de mot de passe sont remises au fur et à mesure. Les désactiver ne les supprime pas : elles s’accumulent et sont remises lorsque vous les réactivez.</value>
+  </data>
+  <data name="PwSyncDisabledNote" xml:space="preserve">
+    <value>Les modifications de mot de passe des objets Metaverse qui ont ici un objet de système connecté sont mises en file d’attente, mais non remises. Activez cette option pour remettre tout ce qui s’est accumulé, du plus ancien au plus récent.</value>
+  </data>
+  <data name="PwSyncObjectTypeLabel" xml:space="preserve">
+    <value>Type d’objet qui reçoit les mots de passe</value>
+  </data>
+  <data name="PwSyncObjectTypeHelp" xml:space="preserve">
+    <value>Le type d’objet de système connecté dont les objets reçoivent les mots de passe.</value>
+  </data>
+  <data name="PwSyncDelivery" xml:space="preserve">
+    <value>Remise</value>
+  </data>
+  <data name="PwSyncDeliveryIntro" xml:space="preserve">
+    <value>Le nombre de tentatives de JIM avant qu’il s’arrête et vous demande de vérifier. Une modification de mot de passe qui épuise ses tentatives est conservée et peut être réessayée ; elle n’est jamais abandonnée silencieusement.</value>
+  </data>
+  <data name="PwSyncMaxAttempts" xml:space="preserve">
+    <value>Nombre maximal de tentatives</value>
+  </data>
+  <data name="PwSyncMaxAttemptsDefault" xml:space="preserve">
+    <value>0 correspond à la valeur par défaut de JIM, soit {0}.</value>
+  </data>
+  <data name="PwSyncBackoffLabel" xml:space="preserve">
+    <value>Première nouvelle tentative après (minutes)</value>
+  </data>
+  <data name="PwSyncBackoffHelp" xml:space="preserve">
+    <value>Chaque tentative suivante attend deux fois plus longtemps que la précédente.</value>
+  </data>
+  <data name="PwSyncWaitsBefore" xml:space="preserve">
+    <value>Une modification de mot de passe en file d’attente patiente</value>
+  </data>
+  <data name="PwSyncWaitsAfter" xml:space="preserve">
+    <value>pendant ce délai avant que JIM ne l’expire, plutôt que de remettre un mot de passe depuis remplacé.</value>
+  </data>
+  <data name="PwSyncSecureBefore" xml:space="preserve">
+    <value>Les mots de passe sont</value>
+  </data>
+  <data name="PwSyncSecureStrong" xml:space="preserve">
+    <value>envoyés uniquement par une connexion chiffrée</value>
+  </data>
+  <data name="PwSyncSecureAfter" xml:space="preserve">
+    <value>à ce système. Si JIM ne peut pas confirmer que la connexion est chiffrée, rien n’est envoyé et les modifications en attente patientent.</value>
+  </data>
+  <data name="PwSyncPlainBefore" xml:space="preserve">
+    <value>Les mots de passe peuvent être envoyés à ce système</value>
+  </data>
+  <data name="PwSyncPlainStrong" xml:space="preserve">
+    <value>par une connexion non chiffrée</value>
+  </data>
+  <data name="PwSyncPlainAfter" xml:space="preserve">
+    <value>, où toute personne située sur le chemin réseau peut les lire.</value>
+  </data>
+  <data name="PwSyncChangeBefore" xml:space="preserve">
+    <value>Modifiez l’un ou l’autre dans l’onglet</value>
+  </data>
+  <data name="PwSyncChangeAfter" xml:space="preserve">
+    <value>sous {0} ; les deux sont partagés avec le provisionnement du mot de passe initial et avec la définition d’un mot de passe manuellement.</value>
+  </data>
+  <data name="PwSyncProblemsHeading" xml:space="preserve">
+    <value>Ces paramètres ne peuvent pas être enregistrés :</value>
+  </data>
+  <data name="PwSyncSaving" xml:space="preserve">
+    <value>Enregistrement…</value>
+  </data>
+  <data name="PwSyncOnSnackbar" xml:space="preserve">
+    <value>La synchronisation des mots de passe est activée pour ce système connecté. Tout ce qui a été mis en file d’attente pendant qu’elle était désactivée sera remis.</value>
+  </data>
+  <data name="PwSyncSavedSnackbar" xml:space="preserve">
+    <value>Vos paramètres de synchronisation des mots de passe ont été enregistrés.</value>
+  </data>
+  <data name="DangerDeletionImpactHeading" xml:space="preserve">
+    <value>Impact de la suppression</value>
+  </data>
+  <data name="DangerDeletionImpactIntro" xml:space="preserve">
+    <value>Consultez ce que ferait la suppression de ce système avant de la lancer : les valeurs d’attributs qui seraient effacées ou reprises par un autre système connecté, les objets Metaverse qui deviendraient éligibles à la suppression, et ce qui serait exporté en aval. Rien ne change pendant l’exécution de l’aperçu, et vous pouvez quitter cette page pendant qu’il s’exécute.</value>
+  </data>
+  <data name="DangerPreviewButton" xml:space="preserve">
+    <value>Prévisualiser l’impact de la suppression</value>
+  </data>
+  <data name="DangerNotPreviewed" xml:space="preserve">
+    <value>Pas encore prévisualisé</value>
+  </data>
+  <data name="DangerStaleBody" xml:space="preserve">
+    <value>Il n’est peut-être plus exact : relancez-le avant de supprimer ; une suppression enregistre désormais que l’aperçu qui l’a éclairée était périmé.</value>
+  </data>
+  <data name="DangerDeleteSystem" xml:space="preserve">
+    <value>Supprimer le système connecté</value>
+  </data>
+  <data name="DangerDeleteIntro" xml:space="preserve">
+    <value>Supprimer définitivement ce système connecté et toutes ses données associées, notamment :</value>
+  </data>
+  <data name="DangerListObjects" xml:space="preserve">
+    <value>Tous les objets de systèmes connectés</value>
+  </data>
+  <data name="DangerListRules" xml:space="preserve">
+    <value>Toutes les règles de synchronisation</value>
+  </data>
+  <data name="DangerListProfiles" xml:space="preserve">
+    <value>Tous les profils d’exécution</value>
+  </data>
+  <data name="DangerListPartitions" xml:space="preserve">
+    <value>Toutes les partitions et tous les conteneurs</value>
+  </data>
+  <data name="DangerListExports" xml:space="preserve">
+    <value>Toutes les exportations en attente</value>
+  </data>
+  <data name="DangerJoinedText" xml:space="preserve">
+    <value>Les objets Metaverse rattachés à ce système en sont déconnectés. Ceux dont il est le dernier connecteur sont alors soumis à la règle de suppression de leur type d’objet ; l’aperçu de l’impact de la suppression ci-dessus les désigne.</value>
+  </data>
+  <data name="DangerFencedNote" xml:space="preserve">
+    <value>Une suppression est déjà en cours ou s’est arrêtée en cours de route pour ce système. Supprimer de nouveau propose les sorties : {0} reprend l’exécution, et {1} termine la suppression immédiatement.</value>
+  </data>
+  <data name="DangerPreviewStartFailed" xml:space="preserve">
+    <value>Échec du démarrage de l’aperçu : {0}</value>
+  </data>
+  <data name="WatermarkNextDeltaLabel" xml:space="preserve">
+    <value>La prochaine importation delta lit les modifications après</value>
+  </data>
+  <data name="WatermarkReadChangesLabel" xml:space="preserve">
+    <value>Modifications lues</value>
+  </data>
+  <data name="WatermarkNote" xml:space="preserve">
+    <value>Aucun nouveau repère n’a été enregistré ; la prochaine importation delta lit donc depuis le même point.</value>
+  </data>
+  <data name="WatermarkHideState" xml:space="preserve">
+    <value>Masquer l’état du connecteur</value>
+  </data>
+  <data name="WatermarkShowState" xml:space="preserve">
+    <value>Afficher l’état du connecteur</value>
+  </data>
+  <data name="WatermarkLabelColon" xml:space="preserve">
+    <value>{0} :</value>
+  </data>
+  <data name="WatermarkPerPartition" xml:space="preserve">
+    <value>Repère enregistré pour chaque partition :</value>
+  </data>
+  <data name="WatermarkBeforeHeader" xml:space="preserve">
+    <value>Avant cette exécution</value>
+  </data>
+  <data name="WatermarkAfterHeader" xml:space="preserve">
+    <value>Après cette exécution</value>
+  </data>
+  <data name="WatermarkBeforeLabel" xml:space="preserve">
+    <value>Avant cette exécution :</value>
+  </data>
+  <data name="WatermarkAfterLabel" xml:space="preserve">
+    <value>Après cette exécution :</value>
+  </data>
+  <data name="WatermarkNoWatermark" xml:space="preserve">
+    <value>Aucun repère</value>
+  </data>
+  <data name="WatermarkUnchanged" xml:space="preserve">
+    <value>Inchangé</value>
+  </data>
+  <data name="WatermarkCleared" xml:space="preserve">
+    <value>Effacé</value>
+  </data>
+  <data name="WatermarkNothingRecorded" xml:space="preserve">
+    <value>Rien d’enregistré</value>
+  </data>
+  <data name="WatermarkFullReading" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="WatermarkScopedLine" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="WatermarkNoChanges" xml:space="preserve">
+    <value>Aucune modification après {0} ({1})</value>
+  </data>
+  <data name="WatermarkAfterSame" xml:space="preserve">
+    <value>Après {0}, jusqu’à {1} ({2})</value>
+  </data>
+  <data name="WatermarkAfterDifferent" xml:space="preserve">
+    <value>Après {0} ({1}), jusqu’à {2} ({3})</value>
+  </data>
+  <data name="WatermarkFromStart" xml:space="preserve">
+    <value>Depuis le début, jusqu’à {0} ({1})</value>
+  </data>
+  <data name="WatermarkAfterOnly" xml:space="preserve">
+    <value>Après {0} ({1})</value>
+  </data>
+  <data name="SettingFieldRequired" xml:space="preserve">
+    <value>{0} est requis</value>
+  </data>
+  <data name="SettingFieldDiscoverTooltip" xml:space="preserve">
+    <value>Renseignez d’abord les paramètres de connexion ci-dessus avant de rechercher {0}.</value>
+  </data>
+  <data name="SettingFieldDiscover" xml:space="preserve">
+    <value>Rechercher…</value>
+  </data>
+  <data name="SettingFieldTogglePassword" xml:space="preserve">
+    <value>Afficher ou masquer le mot de passe</value>
+  </data>
+  <data name="SettingFieldExample" xml:space="preserve">
+    <value>Exemple</value>
+  </data>
+  <data name="SettingFieldUnknownType" xml:space="preserve">
+    <value>Oups. Type de paramètre inconnu !</value>
+  </data>
+  <data name="SettingFieldExampleCopied" xml:space="preserve">
+    <value>Exemple copié dans le presse-papiers.</value>
+  </data>
+  <data name="SettingFieldCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers. Copiez-le manuellement.</value>
+  </data>
+  <data name="SettingFieldSelectExport" xml:space="preserve">
+    <value>Sélectionner l’emplacement d’exportation</value>
+  </data>
+  <data name="SettingFieldSelectFile" xml:space="preserve">
+    <value>Sélectionner un fichier</value>
+  </data>
+  <data name="FullSyncStaleBody" xml:space="preserve">
+    <value>Il n’est peut-être plus exact : relancez-le avant de lancer une synchronisation complète ; une exécution lancée maintenant enregistre que l’aperçu qui la renseigne était périmé.</value>
+  </data>
+  <data name="FullSyncPreviewTitle" xml:space="preserve">
+    <value>Aperçu de la synchronisation complète</value>
+  </data>
+  <data name="FullSyncAllDisabled" xml:space="preserve">
+    <value>Tous les profils d’exécution de synchronisation complète de ce système connecté sont désactivés. Activez-en un dans l’onglet Profils d’exécution pour le lancer.</value>
+  </data>
+  <data name="FullSyncRunButton" xml:space="preserve">
+    <value>Lancer la synchronisation complète</value>
+  </data>
+  <data name="FullSyncQueued" xml:space="preserve">
+    <value>{0} mis en file d’attente.</value>
+  </data>
+  <data name="FullSyncQueueFailed" xml:space="preserve">
+    <value>Échec de la mise en file d’attente de la synchronisation complète.</value>
+  </data>
+  <data name="FullSyncQueueFailedDetail" xml:space="preserve">
+    <value>Échec de la mise en file d’attente de la synchronisation complète : {0}</value>
+  </data>
+  <data name="FullSyncView" xml:space="preserve">
+    <value>Afficher</value>
+  </data>
+  <data name="FullSyncOutOfDateTitle" xml:space="preserve">
+    <value>Aperçu périmé</value>
+  </data>
+  <data name="FullSyncThisObject" xml:space="preserve">
+    <value>Cet objet</value>
+  </data>
+  <data name="FullSyncNoObject" xml:space="preserve">
+    <value>{0} n’a pas d’objet de système connecté dans {1} à prévisualiser.</value>
+  </data>
+  <data name="FullSyncRunProfileName" xml:space="preserve">
+    <value>Synchronisation complète</value>
+  </data>
+  <data name="FullSyncObjectPreviewFailed" xml:space="preserve">
+    <value>L’aperçu de synchronisation a échoué : {0}</value>
+  </data>
+  <data name="DsWarnHeadingMany" xml:space="preserve">
+    <value>{0} systèmes projecteurs ne sont pas des sources faisant autorité</value>
+  </data>
+  <data name="DsWarnHeadingSingle" xml:space="preserve">
+    <value>{0} peut projeter des objets de type {1}, mais n’est pas une source faisant autorité</value>
+  </data>
+  <data name="DsWarnBodySingle" xml:space="preserve">
+    <value>{0} a une règle de synchronisation qui projette les objets {1} vers le Metaverse, mais elle n’est pas sélectionnée ci-dessus :</value>
+  </data>
+  <data name="DsWarnBodyMany" xml:space="preserve">
+    <value>{0} ont une règle de synchronisation qui projette les objets {1} vers le Metaverse, mais elles ne sont pas sélectionnées ci-dessus :</value>
+  </data>
+  <data name="DsWarnNeverLabel" xml:space="preserve">
+    <value>Jamais supprimés :</value>
+  </data>
+  <data name="DsWarnNeverBody" xml:space="preserve">
+    <value>un objet {0} projeté par {1} que nulle autre source sélectionnée ne détient ne sera jamais supprimé automatiquement, pas plus que ses comptes cibles.</value>
+  </data>
+  <data name="DsWarnDeletedLabel" xml:space="preserve">
+    <value>Supprimés alors qu’ils sont encore présents :</value>
+  </data>
+  <data name="DsWarnDeletedBodySingle" xml:space="preserve">
+    <value>un objet {0} qui quitte toutes les sources sélectionnées est supprimé même si {1} en dispose encore.</value>
+  </data>
+  <data name="DsWarnDeletedBodyMany" xml:space="preserve">
+    <value>un objet {0} qui quitte toutes les sources sélectionnées est supprimé même si {1} en disposent encore.</value>
+  </data>
+  <data name="DsWarnNoGrace" xml:space="preserve">
+    <value>Aucun délai de grâce n’est défini : cette suppression aurait donc lieu immédiatement.</value>
+  </data>
+  <data name="DsWarnSelectSingle" xml:space="preserve">
+    <value>Sélectionnez-le comme source faisant autorité, ou désactivez la projection s’il ne doit apporter que des attributs. L’enregistrement n’est pas bloqué.</value>
+  </data>
+  <data name="DsWarnSelectMany" xml:space="preserve">
+    <value>Sélectionnez-les comme sources faisant autorité, ou désactivez la projection s’ils ne doivent apporter que des attributs. L’enregistrement n’est pas bloqué.</value>
+  </data>
+  <data name="DsDefaultServerTerm" xml:space="preserve">
+    <value>serveurs d’annuaire</value>
+  </data>
+  <data name="DsDiscovering" xml:space="preserve">
+    <value>Recherche de {0}…</value>
+  </data>
+  <data name="DsTitle" xml:space="preserve">
+    <value>Découvrir {0}</value>
+  </data>
+  <data name="DsTitleInForest" xml:space="preserve">
+    <value>{0} dans {1}</value>
+  </data>
+  <data name="DsNoneInForest" xml:space="preserve">
+    <value>JIM n’a trouvé aucun {0} dans la forêt {1}.</value>
+  </data>
+  <data name="DsNoneInDirectory" xml:space="preserve">
+    <value>JIM n’a trouvé aucun {0} dans cet annuaire.</value>
+  </data>
+  <data name="DsColumnSite" xml:space="preserve">
+    <value>Site</value>
+  </data>
+  <data name="DsColumnVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="DsSelect" xml:space="preserve">
+    <value>Sélectionner</value>
+  </data>
+  <data name="CsCreatePageTitle" xml:space="preserve">
+    <value>Créer un système connecté</value>
+  </data>
+  <data name="CsCreateTitleLabel" xml:space="preserve">
+    <value>Systèmes connectés :</value>
+  </data>
+  <data name="CsCreateNew" xml:space="preserve">
+    <value>Nouveau</value>
+  </data>
+  <data name="CsCreateInfoTitle" xml:space="preserve">
+    <value>Nouveau système connecté</value>
+  </data>
+  <data name="CsCreateInfoBody" xml:space="preserve">
+    <value>Renseignez ici quelques informations de base, puis nous passerons à la configuration du système connecté.</value>
+  </data>
+  <data name="CsCreateConnector" xml:space="preserve">
+    <value>Connecteur</value>
+  </data>
+  <data name="CsCreateConnectorPlaceholder" xml:space="preserve">
+    <value>Veuillez sélectionner un connecteur…</value>
+  </data>
+  <data name="ScimReqTitle" xml:space="preserve">
+    <value>Requêtes SCIM</value>
+  </data>
+  <data name="ScimReqTitleCount" xml:space="preserve">
+    <value>Requêtes SCIM ({0})</value>
+  </data>
+  <data name="ScimReqNoPoint" xml:space="preserve">
+    <value>L’importation à l’origine de ce changement n’a enregistré aucun point jusqu’auquel elle a lu, si bien que les requêtes qu’elle a lues ne peuvent pas être affichées.</value>
+  </data>
+  <data name="ScimReqNoNew" xml:space="preserve">
+    <value>L’importation à l’origine de ce changement n’a lu aucune nouvelle requête : elle a débuté et s’est achevée au changement {0}. Les requêtes qui ont créé cette ressource ont été lues par une importation antérieure.</value>
+  </data>
+  <data name="ScimReqRangeCleared" xml:space="preserve">
+    <value>Aucune requête adressée à cette ressource ne figure dans ce que son importation a lu (changements {0} à {1}). Elles ont été lues par une importation antérieure, ou l’historique qui les enregistrait a été effacé.</value>
+  </data>
+  <data name="ScimReqUpToCleared" xml:space="preserve">
+    <value>Aucune requête adressée à cette ressource ne figure dans ce que son importation a lu (changements jusqu’à {0}). L’historique qui les enregistrait a été effacé.</value>
+  </data>
+  <data name="ScimReqColWhen" xml:space="preserve">
+    <value>Quand</value>
+  </data>
+  <data name="ScimReqColRequest" xml:space="preserve">
+    <value>Requête</value>
+  </data>
+  <data name="ScimReqColAttributes" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="ScimReqColKey" xml:space="preserve">
+    <value>Clé</value>
+  </data>
+  <data name="ScimReqColFrom" xml:space="preserve">
+    <value>Origine</value>
+  </data>
+  <data name="ScimReqIgnoredTooltip" xml:space="preserve">
+    <value>Envoyé par le fournisseur d’identité mais non conservé, car les définitions SCIM de ce système connecté ne les déclarent pas.</value>
+  </data>
+  <data name="ScimReqIgnored" xml:space="preserve">
+    <value>ignoré : {0}</value>
+  </data>
+  <data name="ScimReqDeletedKey" xml:space="preserve">
+    <value>Clé supprimée</value>
+  </data>
+  <data name="FileBrowserEmpty" xml:space="preserve">
+    <value>Aucun fichier ni dossier trouvé</value>
+  </data>
+  <data name="FileBrowserSelected" xml:space="preserve">
+    <value>Sélectionné : {0}</value>
+  </data>
+  <data name="FileBrowserFilename" xml:space="preserve">
+    <value>Nom de fichier</value>
+  </data>
+  <data name="FileBrowserFilenamePlaceholder" xml:space="preserve">
+    <value>Saisissez un nom de fichier (par exemple export.csv)</value>
+  </data>
+  <data name="FileBrowserWillCreate" xml:space="preserve">
+    <value>Le fichier sera créé dans : {0}</value>
+  </data>
+  <data name="FileBrowserLoadFailed" xml:space="preserve">
+    <value>Échec du chargement du dossier.</value>
+  </data>
+  <data name="ConnStateInSync" xml:space="preserve">
+    <value>Synchronisé</value>
+  </data>
+  <data name="ConnStateUpdatePending" xml:space="preserve">
+    <value>Mise à jour en attente</value>
+  </data>
+  <data name="ConnStateProvisioningExportPending" xml:space="preserve">
+    <value>Exportation en attente</value>
+  </data>
+  <data name="ConnStateProvisioningAwaitingConfirmation" xml:space="preserve">
+    <value>En attente de confirmation</value>
+  </data>
+  <data name="ConnStateExportNotConfirmed" xml:space="preserve">
+    <value>Exportation non confirmée</value>
+  </data>
+  <data name="ConnStateExportFailed" xml:space="preserve">
+    <value>Échec de l’exportation</value>
+  </data>
+  <data name="ConnStateDeletePending" xml:space="preserve">
+    <value>Suppression en attente</value>
+  </data>
+  <data name="ConnStateDisablePending" xml:space="preserve">
+    <value>Désactivation en attente</value>
+  </data>
+  <data name="ConnStateObsolete" xml:space="preserve">
+    <value>Obsolète</value>
+  </data>
+  <data name="ConnDefinedChip" xml:space="preserve">
+    <value>Défini par le connecteur</value>
+  </data>
+  <data name="ConnDefinedByConnector" xml:space="preserve">
+    <value>Défini par le connecteur, et non par le schéma propre au système connecté.</value>
+  </data>
+  <data name="ConnDefinedByNamed" xml:space="preserve">
+    <value>Défini par {0}, et non par le schéma propre au système connecté.</value>
+  </data>
+  <data name="ConnWrittenThrough" xml:space="preserve">
+    <value>Écrit dans le système connecté via {0}.</value>
+  </data>
+  <data name="TrustedForLabel" xml:space="preserve">
+    <value>Approuvé pour</value>
+  </data>
+  <data name="TrustedForConnectors" xml:space="preserve">
+    <value>Connecteurs : les serveurs auxquels les systèmes connectés se connectent (LDAPS, HTTPS, SQL Server)</value>
+  </data>
+  <data name="TrustedForSignIn" xml:space="preserve">
+    <value>Connexion : votre fournisseur d’identité (AD FS, Keycloak et équivalents)</value>
+  </data>
+  <data name="TrustedForChooseMessage" xml:space="preserve">
+    <value>Choisissez au moins une option.</value>
+  </data>
+  <data name="DsReviewTitle" xml:space="preserve">
+    <value>Vérifier avant d’enregistrer</value>
+  </data>
+  <data name="DsJoinOnlyNote" xml:space="preserve">
+    <value>Les règles de synchronisation de jointure seule (projection désactivée) n’affichent jamais cet avertissement ; les laisser en dehors des sources faisant autorité est la façon normale d’ajouter un système qui n’apporte que des attributs.</value>
+  </data>
+  <data name="DsSaveRule" xml:space="preserve">
+    <value>Enregistrer la règle de synchronisation</value>
+  </data>
+  <data name="DsOpenDeletionRules" xml:space="preserve">
+    <value>Ouvrir les règles de suppression de {0}</value>
+  </data>
+  <data name="CsDetailsSaved" xml:space="preserve">
+    <value>Vos modifications de détails ont été enregistrées.</value>
+  </data>
+  <data name="PreviewStaleBoth" xml:space="preserve">
+    <value>Les données et la configuration ont changé</value>
+  </data>
+  <data name="PreviewStaleConfig" xml:space="preserve">
+    <value>La configuration a changé</value>
+  </data>
+  <data name="PreviewStaleData" xml:space="preserve">
+    <value>Les données ont changé</value>
+  </data>
+  <data name="DetectedFactsHeading" xml:space="preserve">
+    <value>Propriétés</value>
+  </data>
+  <data name="DetectedFactsInfo" xml:space="preserve">
+    <value>Informations détectées par le connecteur sur le système cible lors d’une connexion précédente, affichées à titre de référence. Rien ici ne peut être modifié, et leur lecture n’ouvre jamais de nouvelle connexion.</value>
+  </data>
+  <data name="DetectedFactsEmpty" xml:space="preserve">
+    <value>Rien n’a encore été détecté ; les informations apparaissent après la première connexion réussie.</value>
+  </data>
+  <data name="SettingsTabGroupExactly" xml:space="preserve">
+    <value>Renseignez une valeur pour exactement un des paramètres suivants :</value>
+  </data>
+  <data name="SettingsTabGroupAtLeast" xml:space="preserve">
+    <value>Renseignez une valeur pour au moins un des paramètres suivants :</value>
+  </data>
+</root>

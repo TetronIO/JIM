@@ -21,17 +21,16 @@
 @* ─── Endpoint ─── *@
 <MudPaper Outlined="true" Class="pa-4">
     <div class="d-flex align-center">
-        <MudText Typo="Typo.h6">SCIM Endpoint</MudText>
-        <InfoPopover Title="SCIM Endpoint">
-            Give your identity provider this base URL and one of the keys below. The Users and Groups it sends are
-            kept here and reach the Metaverse at the next import and synchronisation of this Connected System.
+        <MudText Typo="Typo.h6">@ConnectedSystemText.ScimEndpointHeading</MudText>
+        <InfoPopover Title="@ConnectedSystemText.ScimEndpointHeading">
+            @ConnectedSystemText.ScimEndpointInfo
         </InfoPopover>
     </div>
     <div class="d-flex align-center gap-3 mt-3">
-        <MudTextField T="string" Value="@BaseUrl" Label="Base URL" ReadOnly="true" Variant="Variant.Outlined"
+        <MudTextField T="string" Value="@BaseUrl" Label="@ConnectedSystemText.ScimBaseUrl" ReadOnly="true" Variant="Variant.Outlined"
                       Margin="Margin.Dense" Class="jim-text-code" />
         <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.ContentCopy" DropShadow="false"
-                   OnClick="@(() => CopyAsync(BaseUrl, "Base URL"))">Copy</MudButton>
+                   OnClick="@(() => CopyAsync(BaseUrl, ConnectedSystemText.ScimBaseUrl))">@ConnectedSystemText.ScimCopy</MudButton>
     </div>
 </MudPaper>
 
@@ -41,50 +40,50 @@
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
-        <MudText Typo="Typo.h6">Keys</MudText>
+        <MudText Typo="Typo.h6">@ConnectedSystemText.ScimKeysHeading</MudText>
         @if (_keys != null)
         {
-            <MudText Class="ml-2 mud-text-secondary">@UsableKeyCount of @SecurityServer.MaximumActiveScopedApiKeys usable</MudText>
+            <MudText Class="ml-2 mud-text-secondary">@string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimUsableKeyCount, UsableKeyCount, SecurityServer.MaximumActiveScopedApiKeys)</MudText>
         }
         <MudSpacer />
-        <MudTooltip Text="@(CanCreateKey ? "" : "A Connected System can have two usable keys at once. Disable or delete one to add another.")"
+        <MudTooltip Text="@(CanCreateKey ? "" : ConnectedSystemText.ScimKeyLimitTooltip)"
                     Arrow="true" Placement="Placement.Top" Disabled="@CanCreateKey">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" DropShadow="false"
-                       Disabled="@(!CanCreateKey)" OnClick="ShowCreateDialog">Create Key</MudButton>
+                       Disabled="@(!CanCreateKey)" OnClick="ShowCreateDialog">@ConnectedSystemText.ScimCreateKey</MudButton>
         </MudTooltip>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh>Name</MudTh>
-        <MudTh>Key Prefix</MudTh>
-        <MudTh>Status</MudTh>
-        <MudTh>Expires</MudTh>
-        <MudTh>Last Used</MudTh>
+        <MudTh>@CommonText.ColumnName</MudTh>
+        <MudTh>@ConnectedSystemText.ScimColumnKeyPrefix</MudTh>
+        <MudTh>@CommonText.ColumnStatus</MudTh>
+        <MudTh>@ConnectedSystemText.ScimColumnExpires</MudTh>
+        <MudTh>@ConnectedSystemText.ScimColumnLastUsed</MudTh>
         <MudTh />
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Name">
+        <MudTd DataLabel="@CommonText.ColumnName">
             @context.Name
             @if (!string.IsNullOrEmpty(context.Description))
             {
                 <span class="mud-text-secondary ml-2">@context.Description</span>
             }
         </MudTd>
-        <MudTd DataLabel="Key Prefix"><span class="jim-text-code">@context.KeyPrefix...</span></MudTd>
-        <MudTd DataLabel="Status">
+        <MudTd DataLabel="@ConnectedSystemText.ScimColumnKeyPrefix"><span class="jim-text-code">@context.KeyPrefix...</span></MudTd>
+        <MudTd DataLabel="@CommonText.ColumnStatus">
             @if (!context.IsEnabled)
             {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@CommonText.Disabled</MudChip>
             }
             else if (!context.IsUsableAt(DateTime.UtcNow))
             {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Error">Expired</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Error">@ConnectedSystemText.ScimStatusExpired</MudChip>
             }
             else
             {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Success">@CommonText.Enabled</MudChip>
             }
         </MudTd>
-        <MudTd DataLabel="Expires">
+        <MudTd DataLabel="@ConnectedSystemText.ScimColumnExpires">
             @if (context.ExpiresAt.HasValue)
             {
                 var expiresAt = context.ExpiresAt.Value;
@@ -98,7 +97,7 @@
                 <EmptyValue />
             }
         </MudTd>
-        <MudTd DataLabel="Last Used">
+        <MudTd DataLabel="@ConnectedSystemText.ScimColumnLastUsed">
             @if (context.LastUsedAt.HasValue)
             {
                 var lastUsed = context.LastUsedAt.Value.ToLocalTime();
@@ -107,30 +106,29 @@
                 </MudTooltip>
                 @if (!string.IsNullOrEmpty(context.LastUsedFromIp))
                 {
-                    <span class="mud-text-secondary ml-1">from @context.LastUsedFromIp</span>
+                    <span class="mud-text-secondary ml-1">@string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimLastUsedFrom, context.LastUsedFromIp)</span>
                 }
             }
             else
             {
-                <span class="mud-text-secondary">Never</span>
+                <span class="mud-text-secondary">@CommonText.Never</span>
             }
         </MudTd>
         <MudTd Style="text-align: right; white-space: nowrap;">
             <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Disabled="@_busy"
-                       OnClick="@(() => SetEnabledAsync(context, !context.IsEnabled))">@(context.IsEnabled ? "Disable" : "Enable")</MudButton>
+                       OnClick="@(() => SetEnabledAsync(context, !context.IsEnabled))">@(context.IsEnabled ? ConnectedSystemText.ScimActionDisable : ConnectedSystemText.ScimActionEnable)</MudButton>
             <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Disabled="@_busy"
-                       OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                       OnClick="@(() => DeleteAsync(context))">@CommonText.Delete</MudButton>
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         <TableEmptyState Icon="@Icons.Material.Filled.Key"
-                         PrimaryText="This Connected System has no keys yet"
-                         SecondaryText="Create one to give to your identity provider." />
+                         PrimaryText="@ConnectedSystemText.ScimNoKeysYet"
+                         SecondaryText="@ConnectedSystemText.ScimNoKeysHint" />
     </NoRecordsContent>
     <FooterContent>
         <MudTd colspan="6" Class="mud-text-secondary">
-            To rotate a key, create a new one while the old one still works, give it to your identity provider, then
-            disable the old key once its last use stops moving.
+            @ConnectedSystemText.ScimRotateKeyHint
         </MudTd>
     </FooterContent>
 </MudTable>
@@ -139,7 +137,7 @@
 @* Tiles filled rather than outlined, inside the panel, so the panel's border stays the only line. Awaiting Import and
    Rejected are the figures that ask for action, so they alone take the accent, and only while above zero. *@
 <MudPaper Outlined="true" Class="pa-4 mt-6">
-    <MudText Typo="Typo.h6" Class="mb-3">Store</MudText>
+    <MudText Typo="Typo.h6" Class="mb-3">@ConnectedSystemText.ScimStoreHeading</MudText>
     @if (_summary == null)
     {
         <MudSkeleton Height="96px" />
@@ -160,33 +158,33 @@
             <div class="@(_summary.ChangesAwaitingImport > 0 ? "jim-stat-tile jim-stat-tile--attention" : "jim-stat-tile")">
                 <div class="jim-stat-tile-label">
                     <MudIcon Icon="@Icons.Material.Filled.Sync" Color="Color.Primary" />
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Awaiting Import</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ConnectedSystemText.ScimAwaitingImport</MudText>
                 </div>
                 <MudText Typo="Typo.h4" Class="jim-stat-tile-value">@_summary.ChangesAwaitingImport.ToString("N0", CultureInfo.CurrentCulture)</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    @(_summary.ImportedUpTo.HasValue ? "changes since the last import" : "never imported")
+                    @(_summary.ImportedUpTo.HasValue ? ConnectedSystemText.ScimChangesSinceImport : ConnectedSystemText.ScimNeverImported)
                 </MudText>
             </div>
             <div class="jim-stat-tile">
                 <div class="jim-stat-tile-label">
                     <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Color="Color.Primary" />
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Deletions Held</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ConnectedSystemText.ScimDeletionsHeld</MudText>
                 </div>
                 <MudText Typo="Typo.h4" Class="jim-stat-tile-value">@_summary.Tombstones.ToString("N0", CultureInfo.CurrentCulture)</MudText>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">until an import reads them</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@ConnectedSystemText.ScimDeletionsHeldHint</MudText>
             </div>
             <div class="@(_summary.RejectedLast24Hours > 0 ? "jim-stat-tile jim-stat-tile--attention" : "jim-stat-tile")">
                 <div class="jim-stat-tile-label">
                     <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Primary" />
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Rejected</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ConnectedSystemText.ScimRejected</MudText>
                 </div>
                 <MudText Typo="Typo.h4" Class="jim-stat-tile-value">@_summary.RejectedLast24Hours.ToString("N0", CultureInfo.CurrentCulture)</MudText>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">requests in the last 24 hours</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@ConnectedSystemText.ScimRejectedHint</MudText>
             </div>
             <div class="jim-stat-tile">
                 <div class="jim-stat-tile-label">
                     <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Primary" />
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Last Write</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ConnectedSystemText.ScimLastWrite</MudText>
                 </div>
                 @if (_summary.LastWrite.HasValue)
                 {
@@ -196,11 +194,11 @@
                             <MudText Typo="Typo.h5" Class="pt-1">@lastWrite.ToRelativeTime()</MudText>
                         </MudTooltip>
                     </div>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">by a SCIM client</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@ConnectedSystemText.ScimLastWriteBy</MudText>
                 }
                 else
                 {
-                    <MudText Typo="Typo.h5" Class="pt-1 mud-text-secondary">Never</MudText>
+                    <MudText Typo="Typo.h5" Class="pt-1 mud-text-secondary">@CommonText.Never</MudText>
                 }
             </div>
         </div>
@@ -213,20 +211,20 @@
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
-        <MudText Typo="Typo.h6">Resource Types</MudText>
-        <MudText Class="ml-2 mud-text-secondary">read-only</MudText>
+        <MudText Typo="Typo.h6">@ConnectedSystemText.ScimResourceTypesHeading</MudText>
+        <MudText Class="ml-2 mud-text-secondary">@ConnectedSystemText.ScimReadOnly</MudText>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh>Name</MudTh>
-        <MudTh>Endpoint</MudTh>
-        <MudTh>Schema</MudTh>
-        <MudTh>Extensions</MudTh>
+        <MudTh>@CommonText.ColumnName</MudTh>
+        <MudTh>@ConnectedSystemText.ScimColumnEndpoint</MudTh>
+        <MudTh>@ConnectedSystemText.ScimColumnSchema</MudTh>
+        <MudTh>@ConnectedSystemText.ScimColumnExtensions</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Endpoint"><span class="jim-text-code">@context.Endpoint</span></MudTd>
-        <MudTd DataLabel="Schema"><span class="jim-text-code">@context.Schema</span></MudTd>
-        <MudTd DataLabel="Extensions">
+        <MudTd DataLabel="@CommonText.ColumnName">@context.Name</MudTd>
+        <MudTd DataLabel="@ConnectedSystemText.ScimColumnEndpoint"><span class="jim-text-code">@context.Endpoint</span></MudTd>
+        <MudTd DataLabel="@ConnectedSystemText.ScimColumnSchema"><span class="jim-text-code">@context.Schema</span></MudTd>
+        <MudTd DataLabel="@ConnectedSystemText.ScimColumnExtensions">
             @if (context.SchemaExtensions.Count == 0)
             {
                 <EmptyValue />
@@ -242,46 +240,46 @@
 @* ─── Create key ─── *@
 <MudDialog @bind-Visible="_createDialogVisible" Options="_dialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-3" /> Create Key</MudText>
+        <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-3" /> @ConnectedSystemText.ScimCreateKey</MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_createName" Label="Name" Required="true" RequiredError="A name is required"
+        <MudTextField T="string" @bind-Value="_createName" Label="@CommonText.FieldName" Required="true" RequiredError="@ConnectedSystemText.ScimKeyNameRequired"
                       Immediate="true" Variant="Variant.Outlined" Class="mt-3"
-                      HelperText="Typically names the identity provider that will hold it, such as 'Entra provisioning 2026'" />
-        <MudTextField T="string" @bind-Value="_createDescription" Label="Description" Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
-                      Variant="Variant.Outlined" Class="mt-4" HelperText="Optional" />
-        <MudDatePicker @bind-Date="_createExpiresAt" Label="Expires" Variant="Variant.Outlined" Class="mt-4" Required="true"
+                      HelperText="@ConnectedSystemText.ScimKeyNameHelp" />
+        <MudTextField T="string" @bind-Value="_createDescription" Label="@CommonText.FieldDescription" Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
+                      Variant="Variant.Outlined" Class="mt-4" HelperText="@ConnectedSystemText.ScimOptional" />
+        <MudDatePicker @bind-Date="_createExpiresAt" Label="@ConnectedSystemText.ScimColumnExpires" Variant="Variant.Outlined" Class="mt-4" Required="true"
                        MinDate="@DateTime.Today.AddDays(1)" MaxDate="@DateTime.Today.AddDays(MaximumLifetimeDays)"
-                       HelperText="@($"A key always expires, at most {MaximumLifetimeDays / 365} years from today.")" />
+                       HelperText="@string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimExpiryHelp, MaximumLifetimeDays / 365)" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _createDialogVisible = false">Cancel</MudButton>
+        <MudButton OnClick="() => _createDialogVisible = false">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-                   Disabled="@(string.IsNullOrWhiteSpace(_createName) || _createExpiresAt == null || _busy)" OnClick="CreateAsync">Create</MudButton>
+                   Disabled="@(string.IsNullOrWhiteSpace(_createName) || _createExpiresAt == null || _busy)" OnClick="CreateAsync">@CommonText.Create</MudButton>
     </DialogActions>
 </MudDialog>
 
 @* ─── Key created: the secret, shown once ─── *@
 <MudDialog @bind-Visible="_createdDialogVisible" Options="_dialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-3" /> Key Created</MudText>
+        <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-3" /> @ConnectedSystemText.ScimKeyCreatedTitle</MudText>
     </TitleContent>
     <DialogContent>
         <MudAlert Severity="Severity.Warning" Class="mb-4">
-            Copy this key now and keep it somewhere safe. This is the only time it is shown; if it is lost, create a new key.
+            @ConnectedSystemText.ScimKeyShownOnceWarning
         </MudAlert>
-        <MudTextField T="string" Value="@_createdSecret" Label="@($"Key for {_createdName}")" ReadOnly="true" Variant="Variant.Outlined"
+        <MudTextField T="string" Value="@_createdSecret" Label="@string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimCreatedKeyLabel, _createdName)" ReadOnly="true" Variant="Variant.Outlined"
                       Class="jim-text-code" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
-                      AdornmentAriaLabel="Copy key" OnAdornmentClick="@(() => CopyAsync(_createdSecret, "Key"))" />
+                      AdornmentAriaLabel="@ConnectedSystemText.ScimCopyKeyAria" OnAdornmentClick="@(() => CopyAsync(_createdSecret, ConnectedSystemText.ScimKeyNoun))" />
         <MudSimpleTable Dense="true" Elevation="0" Class="mt-4">
             <tbody>
-                <tr><td class="mud-text-secondary">Base URL</td><td class="jim-text-code">@BaseUrl</td></tr>
-                <tr><td class="mud-text-secondary">Expires</td><td>@_createdExpiresAt?.ToLocalTime().ToFriendlyDate()</td></tr>
+                <tr><td class="mud-text-secondary">@ConnectedSystemText.ScimBaseUrl</td><td class="jim-text-code">@BaseUrl</td></tr>
+                <tr><td class="mud-text-secondary">@ConnectedSystemText.ScimColumnExpires</td><td>@_createdExpiresAt?.ToLocalTime().ToFriendlyDate()</td></tr>
             </tbody>
         </MudSimpleTable>
     </DialogContent>
     <DialogActions>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="CloseCreatedDialog">Done</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="CloseCreatedDialog">@ConnectedSystemText.ScimDone</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -371,7 +369,7 @@
         if (string.IsNullOrWhiteSpace(_createName) || _createExpiresAt == null)
             return;
 
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Create");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Create);
         if (cancelled)
             return;
 
@@ -393,11 +391,11 @@
         }
         catch (InvalidOperationException ex)
         {
-            Snackbar.Add($"The key was not created: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimKeyCreateFailed, ex.Message), Severity.Error);
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"The key was not created: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimKeyCreateFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -414,7 +412,7 @@
 
     private async Task SetEnabledAsync(ApiKey key, bool enabled)
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, enabled ? "Enable" : "Disable");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, enabled ? ConnectedSystemText.ScimActionEnable : ConnectedSystemText.ScimActionDisable);
         if (cancelled)
             return;
 
@@ -425,24 +423,24 @@
             var stored = await jim.Security.GetApiKeyAsync(key.Id);
             if (stored == null || stored.ScopeConnectedSystemId != ConnectedSystem.Id)
             {
-                Snackbar.Add("The key no longer exists.", Severity.Warning);
+                Snackbar.Add(ConnectedSystemText.ScimKeyNoLongerExists, Severity.Warning);
             }
             else
             {
                 stored.IsEnabled = enabled;
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 await jim.Security.UpdateApiKeyAsync(stored, user, changeReason);
-                Snackbar.Add(enabled ? $"Key '{stored.Name}' enabled." : $"Key '{stored.Name}' disabled.", Severity.Success);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, enabled ? ConnectedSystemText.ScimKeyEnabled : ConnectedSystemText.ScimKeyDisabled, stored.Name), Severity.Success);
             }
             await LoadAsync();
         }
         catch (InvalidOperationException ex)
         {
-            Snackbar.Add($"The key was not changed: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimKeyNotChanged, ex.Message), Severity.Error);
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"The key was not changed: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimKeyNotChanged, ex.Message), Severity.Error);
         }
         finally
         {
@@ -452,13 +450,13 @@
 
     private async Task DeleteAsync(ApiKey key)
     {
-        var confirmed = await DialogService.ShowMessageBoxAsync("Delete Key",
-            $"Delete the key '{key.Name}'? An identity provider still using it is refused from that moment. To keep a record of the key, disable it instead.",
-            yesText: "Delete", cancelText: "Cancel");
+        var confirmed = await DialogService.ShowMessageBoxAsync(ConnectedSystemText.ScimDeleteKeyTitle,
+            string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimDeleteKeyConfirm, key.Name),
+            yesText: CommonText.Delete, cancelText: CommonText.Cancel);
         if (confirmed != true)
             return;
 
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Delete);
         if (cancelled)
             return;
 
@@ -468,12 +466,12 @@
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Security.DeleteApiKeyAsync(key.Id, user, changeReason);
-            Snackbar.Add($"Key '{key.Name}' deleted.", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimKeyDeleted, key.Name), Severity.Success);
             await LoadAsync();
         }
         catch (InvalidOperationException ex)
         {
-            Snackbar.Add($"The key was not deleted: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimKeyNotDeleted, ex.Message), Severity.Error);
         }
         finally
         {
@@ -486,11 +484,11 @@
         try
         {
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
-            Snackbar.Add($"{what} copied.", Severity.Info);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, ConnectedSystemText.ScimCopiedSnackbar, what), Severity.Info);
         }
         catch (JSException)
         {
-            Snackbar.Add("Could not copy. Select the text and copy it instead.", Severity.Warning);
+            Snackbar.Add(ConnectedSystemText.ScimCopyFailed, Severity.Warning);
         }
     }
 }

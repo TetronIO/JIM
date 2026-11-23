@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Core
 @using JIM.Models.ExampleData
 @using JIM.Web.Models
@@ -13,16 +14,16 @@
         <MudStack Spacing="4">
             @if (ExistingObjectType == null)
             {
-                <MudSelect T="MetaverseObjectType" Label="Metaverse Object Type" Variant="Variant.Outlined"
+                <MudSelect T="MetaverseObjectType" Label="@ExampleDataText.MetaverseObjectType" Variant="Variant.Outlined"
                            @bind-Value="_metaverseObjectType" ToStringFunc="@(t => t?.Name ?? string.Empty)"
-                           HelperText="@(_choices.Count == 0 && _loaded ? "Every Metaverse Object Type is already in this template." : null)">
+                           HelperText="@(_choices.Count == 0 && _loaded ? ExampleDataText.AllObjectTypesInTemplate : null)">
                     @foreach (var choice in _choices)
                     {
                         <MudSelectItem T="MetaverseObjectType" Value="@choice">@choice.Name</MudSelectItem>
                     }
                 </MudSelect>
             }
-            <MudNumericField T="int" Label="Objects to create" Variant="Variant.Outlined" Immediate="true" @bind-Value="_objectsToCreate" Min="1" />
+            <MudNumericField T="int" Label="@ExampleDataText.ObjectsToCreate" Variant="Variant.Outlined" Immediate="true" @bind-Value="_objectsToCreate" Min="1" />
             @if (_saveError != null)
             {
                 <MudAlert Severity="Severity.Error">@_saveError</MudAlert>
@@ -30,9 +31,9 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanSave())" OnClick="SaveAsync">
-            @(ExistingObjectType == null ? "Add Object Type" : "Save")
+            @(ExistingObjectType == null ? ExampleDataText.AddObjectType : CommonText.Save)
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -81,7 +82,7 @@
 
     private async Task SaveAsync()
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, ExistingObjectType == null ? "Add" : "Save");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, ExistingObjectType == null ? CommonText.Add : CommonText.Save);
         if (cancelled)
             return;
 
@@ -122,7 +123,9 @@
             { x => x.ExistingObjectType, existingObjectType }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true };
-        var title = existingObjectType == null ? "Add Metaverse Object Type" : $"Objects to Create: {existingObjectType.MetaverseObjectType.Name}";
+        var title = existingObjectType == null
+            ? ExampleDataText.AddMetaverseObjectType
+            : string.Format(CultureInfo.CurrentCulture, ExampleDataText.ObjectsToCreateTitle, existingObjectType.MetaverseObjectType.Name);
         var dialog = await dialogService.ShowAsync<ExampleDataTemplateObjectTypeDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };

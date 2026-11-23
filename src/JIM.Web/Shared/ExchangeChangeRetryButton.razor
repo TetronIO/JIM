@@ -9,8 +9,8 @@
    an account's Exchange Recipient panel, the change's own page. It retries the change it was given by its queue id, as
    the signed-in administrator, and tells its host so the host can re-read where the change now stands. *@
 <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Replay" Disabled="@_busy"
-           OnClick="RetryAsync" data-testid="jim-exchange-retry" aria-label="Retry this Exchange change">
-    @(Retrying ? "Retry now" : "Retry")
+           OnClick="RetryAsync" data-testid="jim-exchange-retry" aria-label="@MetaverseText.EcrbAria">
+    @(Retrying ? MetaverseText.EcrbRetryNow : CommonText.Retry)
 </MudButton>
 
 @code {
@@ -39,7 +39,7 @@
 
             // Zero is said out loud: the change moved on (delivered, claimed or already retried) since the page was read.
             Snackbar.Add(
-                retried == 0 ? "Nothing was retried: the change is no longer parked or retrying." : "The change will be attempted again within seconds.",
+                retried == 0 ? MetaverseText.EcrbNothing : MetaverseText.EcrbWillRetry,
                 retried == 0 ? Severity.Info : Severity.Success);
         }
         finally

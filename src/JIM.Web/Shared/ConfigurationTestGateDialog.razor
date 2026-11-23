@@ -11,18 +11,18 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">This change stops @(Regressions.Count == 1 ? "a configuration test case" : $"{Regressions.Count} configuration test cases") passing</MudText>
+        <MudText Typo="Typo.h6">@string.Format(System.Globalization.CultureInfo.CurrentCulture,
+            PluralRules.Choose(Regressions.Count, SyncRuleText.GateTitleOne, SyncRuleText.GateTitleOther), Regressions.Count)</MudText>
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="mb-3">
-            Nothing has been saved. @(Regressions.Count == 1 ? "This case passed" : "These cases passed") before the change, and
-            @(Regressions.Count == 1 ? "does" : "do") not with it.
+            @(Regressions.Count == 1 ? SyncRuleText.GateNothingSavedOne : SyncRuleText.GateNothingSavedOther)
         </MudText>
         <MudSimpleTable Dense="true" Elevation="0" Outlined="true" data-testid="jim-test-gate-regressions">
             <thead>
                 <tr>
-                    <th>Test case</th>
-                    <th>With this change</th>
+                    <th>@SyncRuleText.GateTestCase</th>
+                    <th>@SyncRuleText.GateWithChange</th>
                 </tr>
             </thead>
             <tbody>
@@ -49,17 +49,17 @@
             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" data-testid="jim-test-gate-accept-blocked">@_acceptBlockedReason</MudAlert>
         }
         <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-3">
-            Accepting or saving anyway is recorded with the change in Configuration History, naming each case.
+            @SyncRuleText.GateRecordedNote
         </MudText>
     </DialogContent>
     <DialogActions>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => MudDialog.Cancel())" data-testid="jim-test-gate-keep-editing">Keep editing</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => MudDialog.Cancel())" data-testid="jim-test-gate-keep-editing">@SyncRuleText.GateKeepEditing</MudButton>
         <MudButton Variant="Variant.Filled" Disabled="@(_acceptBlockedReason != null)"
                    OnClick="@(() => MudDialog.Close(DialogResult.Ok(new ConfigurationTestGateOptions(AcceptNewResults: true))))"
-                   data-testid="jim-test-gate-accept">Accept new @(Regressions.Count == 1 ? "result" : "results")</MudButton>
+                   data-testid="jim-test-gate-accept">@(Regressions.Count == 1 ? SyncRuleText.GateAcceptOne : SyncRuleText.GateAcceptOther)</MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Warning"
                    OnClick="@(() => MudDialog.Close(DialogResult.Ok(new ConfigurationTestGateOptions(SaveAnyway: true))))"
-                   data-testid="jim-test-gate-save-anyway">Save anyway</MudButton>
+                   data-testid="jim-test-gate-save-anyway">@SyncRuleText.GateSaveAnyway</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -79,10 +79,10 @@
 
     private static string StatusLabel(ConfigurationTestStatus status) => status switch
     {
-        ConfigurationTestStatus.Failed => "Now fails",
-        ConfigurationTestStatus.NeedsReview => "Now needs review",
-        ConfigurationTestStatus.Error => "Could not run",
-        _ => "Passes"
+        ConfigurationTestStatus.Failed => SyncRuleText.GateNowFails,
+        ConfigurationTestStatus.NeedsReview => SyncRuleText.GateNeedsReview,
+        ConfigurationTestStatus.Error => SyncRuleText.GateCouldNotRun,
+        _ => SyncRuleText.GatePasses
     };
 
     /// <summary>

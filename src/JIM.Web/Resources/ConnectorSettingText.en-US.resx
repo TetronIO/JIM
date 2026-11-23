@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="JIM_LDAP_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronization with LDAP compliant directories, including Microsoft Active Directory, OpenLDAP, and Samba AD.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Manage_Exchange_recipients_Description" xml:space="preserve">
+    <value>Active Directory only. Makes the objects this Connected System provisions Exchange recipients (mailboxes, mail users, mail contacts and mail-enabled groups), as declared by the Exchange attributes their Synchronization Rules flow.</value>
+  </data>
+  <data name="JIM_File_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronization with files, i.e. CSV.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronization with any system that exposes a SCIM 2.0 service provider interface. JIM acts as the SCIM client, connecting out to the service provider.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Retry_Delay_ms_Description" xml:space="preserve">
+    <value>Initial delay between retries in milliseconds. Uses exponential backoff with jitter, and honors Retry-After response headers. Default is 1000ms.</value>
+  </data>
+  <data name="JIM_SQL_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronization with relational databases, including Microsoft SQL Server and Oracle Database.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_RAW_16_Columns_as_Guid_Description" xml:space="preserve">
+    <value>Oracle Database holds GUIDs in RAW(16) columns, but so it does digests and other binary values, and the catalog cannot tell them apart. Turn this on if RAW(16) columns in this database hold GUIDs; leave it off and they import as binary values.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Enables bi-directional synchronization of users and groups with Microsoft Entra ID, through the Microsoft Graph API.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Microsoft_Entra_ID_Tenant_Info_Description" xml:space="preserve">
+    <value>Enter the details of the tenant to synchronize with, and of the app registration JIM authenticates as. The app registration needs Microsoft Graph application permissions, granted with admin consent.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Track_Source_of_Authority_Changes_Description" xml:space="preserve">
+    <value>Whether to read, for each object synchronized from Active Directory, whether its Source of Authority has been switched to Entra ID, or switched back, so sourceOfAuthority shows where it is managed now. Turn it on in a hybrid tenant whose objects have their Source of Authority switched. It needs the User-OnPremisesSyncBehavior.ReadWrite.All and Group-OnPremisesSyncBehavior.ReadWrite.All permissions, the only ones Microsoft offers for reading it, which also allow changing it. Off, an object synchronized from Active Directory always reads as onPremisesDirectory.</value>
+  </data>
+</root>

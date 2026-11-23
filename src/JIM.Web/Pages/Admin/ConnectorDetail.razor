@@ -1,5 +1,6 @@
 ﻿@page "/admin/connected-systems/connectors/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Connectors
 @using JIM.Models.Activities
 @using JIM.Models.Interfaces;
@@ -12,11 +13,11 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Connector: @_connector?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector:</span> <span class="mud-primary-text">@_connector?.Name</span>
+<PageTitle>@string.Format(CultureInfo.CurrentCulture, ConnectorText.DetailPageTitle, _connector?.Name)</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@ConnectorText.DetailHeading</span> <span class="mud-primary-text">@_connector?.Name</span>
     @* A built-in Connector links to its own page; any other, to the Connectors overview. Each page is a literal
        so the docs coverage check (COV-5) can confirm it exists. *@
-    <PageInfo Title="Connector"
+    <PageInfo Title="@ConnectorText.Connector"
               DocsPage="@(_connector?.Name == ConnectorConstants.LdapConnectorName ? "connectors/jim-ldap-connector.md"
                         : _connector?.Name == ConnectorConstants.FileConnectorName ? "connectors/jim-file-connector.md"
                         : _connector?.Name == ConnectorConstants.ScimClientConnectorName ? "connectors/jim-scim-connector.md"
@@ -24,7 +25,7 @@
                         : _connector?.Name == ConnectorConstants.SqlConnectorName ? "connectors/jim-sql-connector.md"
                         : _connector?.Name == ConnectorConstants.GraphConnectorName ? "connectors/jim-graph-connector.md"
                         : "connectors/index.md")">
-        A Connector is how JIM talks to one kind of system, such as a directory or a database. This page shows what it is and what it can do.
+        @ConnectorText.DetailPageInfo
     </PageInfo>
 </MudText>
 <div class="d-flex justify-space-between align-center">
@@ -39,49 +40,49 @@
 {
     <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-6">
 
-        <MudTabPanel Text="Details">
+        <MudTabPanel Text="@ConnectorText.Details">
     <MudPaper Class="pa-4" Outlined="true">
-        <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
+        <MudText Typo="Typo.h5" Class="mb-4">@ConnectorText.Details</MudText>
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Description" Variant="Variant.Outlined">@_connector.Description</MudField>
+                <MudField Label="@ConnectorText.ColumnDescription" Variant="Variant.Outlined">@ConnectorSettingDisplay.ConnectorDescription(_connector.Name, _connector.Description)</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Url" Variant="Variant.Outlined"><MudLink Href="@_connector.Url">@_connector.Url</MudLink></MudField>
+                <MudField Label="@ConnectorText.Url" Variant="Variant.Outlined"><MudLink Href="@_connector.Url">@_connector.Url</MudLink></MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Outlined">@(_connector.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="@ConnectorText.ColumnBuiltIn" Variant="Variant.Outlined">@(_connector.BuiltIn ? ConnectorText.Yes : ConnectorText.No)</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
 
     <MudPaper Class="pa-4 mt-6" Outlined="true">
-        <MudText Typo="Typo.h5" Class="mb-4">Capabilities</MudText>
+        <MudText Typo="Typo.h5" Class="mb-4">@ConnectorText.Capabilities</MudText>
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="3">
-                <MudText Typo="Typo.subtitle2">Import</MudText>
-                <MudCheckBox @bind-Value="@_connector.SupportsFullImport" Disabled="true">Full import</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsDeltaImport" Disabled="true">Delta import</MudCheckBox>
+                <MudText Typo="Typo.subtitle2">@ConnectorText.Import</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsFullImport" Disabled="true">@ConnectorText.FullImport</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsDeltaImport" Disabled="true">@ConnectorText.DeltaImport</MudCheckBox>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudText Typo="Typo.subtitle2">Export</MudText>
-                <MudCheckBox @bind-Value="@_connector.SupportsExport" Disabled="true">Export</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsAutoConfirmExport" Disabled="true">Auto-confirm export</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsParallelExport" Disabled="true">Parallel export</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsDisable" Disabled="true">Disable</MudCheckBox>
+                <MudText Typo="Typo.subtitle2">@ConnectorText.Export</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsExport" Disabled="true">@ConnectorText.Export</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsAutoConfirmExport" Disabled="true">@ConnectorText.AutoConfirmExport</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsParallelExport" Disabled="true">@ConnectorText.ParallelExport</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsDisable" Disabled="true">@ConnectorText.Disable</MudCheckBox>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudText Typo="Typo.subtitle2">Hierarchy</MudText>
-                <MudCheckBox @bind-Value="@_connector.SupportsPartitions" Disabled="true">Partitions</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsPartitionContainers" Disabled="true">Partition containers</MudCheckBox>
+                <MudText Typo="Typo.subtitle2">@ConnectorText.Hierarchy</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsPartitions" Disabled="true">@ConnectorText.Partitions</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsPartitionContainers" Disabled="true">@ConnectorText.PartitionContainers</MudCheckBox>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudText Typo="Typo.subtitle2">Data Handling</MudText>
-                <MudCheckBox @bind-Value="@_connector.SupportsFilePaths" Disabled="true">File paths</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsPaging" Disabled="true">Paging</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsSecondaryExternalId" Disabled="true">Secondary external ID</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedExternalId" Disabled="true">User selected external ID</MudCheckBox>
-                <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedAttributeTypes" Disabled="true">User selected attribute types</MudCheckBox>
+                <MudText Typo="Typo.subtitle2">@ConnectorText.DataHandling</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsFilePaths" Disabled="true">@ConnectorText.FilePaths</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsPaging" Disabled="true">@ConnectorText.Paging</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsSecondaryExternalId" Disabled="true">@ConnectorText.SecondaryExternalId</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedExternalId" Disabled="true">@ConnectorText.UserSelectedExternalId</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedAttributeTypes" Disabled="true">@ConnectorText.UserSelectedAttributeTypes</MudCheckBox>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -93,38 +94,38 @@
                          ContainerId="connector-file-list"
                          DefaultSortBy="filename"
                          LoadWindow="LoadFileWindowAsync"
-                         SearchPlaceholder="Search files">
+                         SearchPlaceholder="@ConnectorText.SearchFilesPlaceholder">
         <ToolBarExtras>
-            <MudText Typo="Typo.h6">Files</MudText>
+            <MudText Typo="Typo.h6">@ConnectorText.Files</MudText>
         </ToolBarExtras>
         <Columns>
-            <TemplateColumn Title="Filename" Sortable="false">
+            <TemplateColumn Title="@ConnectorText.ColumnFilename" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Filename" Name="filename" />
+                    <VirtualisedSortHeader Title="@ConnectorText.ColumnFilename" Name="filename" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @context.Item.Filename
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Filesize (kb)" Sortable="false">
+            <TemplateColumn Title="@ConnectorText.ColumnFilesizeKb" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Filesize (kb)" Name="filesize" />
+                    <VirtualisedSortHeader Title="@ConnectorText.ColumnFilesizeKb" Name="filesize" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @(context.Item.FileSizeBytes / 1000)
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Interfaces" Sortable="false">
+            <TemplateColumn Title="@ConnectorText.ColumnInterfaces" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Interfaces" Name="interfaces" />
+                    <VirtualisedSortHeader Title="@ConnectorText.ColumnInterfaces" Name="interfaces" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @GetFileInterfaces(context.Item)
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Version" Sortable="false">
+            <TemplateColumn Title="@ConnectorText.ColumnVersion" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Version" Name="version" />
+                    <VirtualisedSortHeader Title="@ConnectorText.ColumnVersion" Name="version" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @context.Item.Version
@@ -135,29 +136,29 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No files match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(CultureInfo.CurrentCulture, ConnectorText.NoFilesMatch, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else if (BuiltInConnector)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.Inventory2"
-                                 PrimaryText="No files"
-                                 SecondaryText="This is a built-in Connector, so it ships inside JIM rather than as uploaded files." />
+                                 PrimaryText="@ConnectorText.NoFiles"
+                                 SecondaryText="@ConnectorText.NoFilesBuiltInHint" />
             }
             else
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.Inventory2"
-                                 PrimaryText="No files"
-                                 SecondaryText="Upload the Connector's assemblies to make it functional." />
+                                 PrimaryText="@ConnectorText.NoFiles"
+                                 SecondaryText="@ConnectorText.NoFilesUploadHint" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>
         </MudTabPanel>
 
-        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-            <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectorDefinition" ObjectId="@_connector.Id" ObjectTypeLabel="Connector Definition" />
+        <MudTabPanel Text="@ConnectorText.Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectorDefinition" ObjectId="@_connector.Id" ObjectTypeLabel="@ConnectorText.ConnectorDefinition" />
         </MudTabPanel>
 
     </NavigableMudTabs>
@@ -221,10 +222,10 @@
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Administration", href: "/admin"),
-            new("Connected Systems", href: "/admin/connected-systems/"),
-            new("Connectors", href: "/admin/connected-systems/connectors/"),
+            new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+            new(LayoutText.NavAdministration, href: "/admin"),
+            new(LayoutText.NavConnectedSystems, href: "/admin/connected-systems/"),
+            new(ConnectorText.Connectors, href: "/admin/connected-systems/connectors/"),
             new(_connector.Name, href: null, disabled: true)
         };
 

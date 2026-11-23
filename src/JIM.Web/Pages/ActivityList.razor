@@ -26,10 +26,10 @@
 
 @* ─── Category quick-filter ─── *@
 <MudStack Row="true" Spacing="2" Class="mt-2 flex-wrap" AlignItems="AlignItems.Center">
-    <MudText Typo="Typo.button" Class="mud-text-secondary">Category:</MudText>
+    <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFilterCategory</MudText>
     <MudChip T="string" OnClick="() => OnCategorySelectedAsync(null)"
              Variant="@(IsAllCategorySelected ? Variant.Filled : Variant.Outlined)"
-             Color="@(IsAllCategorySelected ? Color.Primary : Color.Default)">All</MudChip>
+             Color="@(IsAllCategorySelected ? Color.Primary : Color.Default)">@ActivityText.ActivityFilterAll</MudChip>
     @foreach (var chipCategory in Enum.GetValues<ActivityTargetCategory>())
     {
         <MudChip T="string" OnClick="() => OnCategorySelectedAsync(chipCategory)"
@@ -40,95 +40,95 @@
 
 <MudStack Row="true" Spacing="3" Class="mt-3 flex-wrap" AlignItems="AlignItems.End">
     <MudItem Class="flex-grow-1">
-        <MudSelect T="ActivityTargetOperationType" Label="Operation" Variant="Variant.Outlined"
+        <MudSelect T="ActivityTargetOperationType" Label="@ActivityText.ActivityColumnOperation" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterOperations"
                    SelectedValuesChanged="OnOperationFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Create">Create</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Read">Read</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Update">Update</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Delete">Delete</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Clear">Clear</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Execute">Execute</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportHierarchy">Import Hierarchy</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportSchema">Import Schema</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Revert">Revert</MudSelectItem>
-            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Authenticate">Authenticate</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Create">@ActivityText.ActivityOperationCreate</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Read">@ActivityText.ActivityOperationRead</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Update">@ActivityText.ActivityOperationUpdate</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Delete">@ActivityText.ActivityOperationDelete</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Clear">@ActivityText.ActivityOperationClear</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Execute">@ActivityText.ActivityOperationExecute</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportHierarchy">@ActivityText.ActivityOperationImportHierarchy</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportSchema">@ActivityText.ActivityOperationImportSchema</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Revert">@ActivityText.ActivityOperationRevert</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Authenticate">@ActivityText.ActivityOperationAuthenticate</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudSelect T="ActivityOutcomeType" Label="Outcomes" Variant="Variant.Outlined"
+        <MudSelect T="ActivityOutcomeType" Label="@ActivityText.ActivityColumnOutcomes" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterOutcomes"
                    SelectedValuesChanged="OnOutcomeFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Added">Added</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Updated">Updated</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Deleted">Deleted</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Projected">Projected</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Joined">Joined</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.AttributeFlows">Attribute Flows</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Disconnected">Disconnected</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.DriftCorrections">Drift Corrections</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Provisioned">Provisioned</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Exported">Exported</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Deprovisioned">Deprovisioned</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Created">Created</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.PendingExports">Pending Exports</MudSelectItem>
-            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Errors">Errors</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Added">@ActivityText.ActivityOutcomeAdded</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Updated">@ActivityText.ActivityOutcomeUpdated</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Deleted">@ActivityText.ActivityOutcomeDeleted</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Projected">@ActivityText.ActivityOutcomeProjected</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Joined">@ActivityText.ActivityOutcomeJoined</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.AttributeFlows">@ActivityText.ActivityOutcomeAttributeFlows</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Disconnected">@ActivityText.ActivityOutcomeDisconnected</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.DriftCorrections">@ActivityText.ActivityOutcomeDriftCorrections</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Provisioned">@ActivityText.ActivityOutcomeProvisioned</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Exported">@ActivityText.ActivityOutcomeExported</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Deprovisioned">@ActivityText.ActivityOutcomeDeprovisioned</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Created">@ActivityText.ActivityOutcomeCreated</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.PendingExports">@ActivityText.ActivityOutcomePendingExports</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Errors">@ActivityText.ActivityOutcomeErrors</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudSelect T="ActivityTargetType" Label="Type" Variant="Variant.Outlined"
+        <MudSelect T="ActivityTargetType" Label="@ActivityText.ActivityColumnType" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterTypes"
                    SelectedValuesChanged="OnTypeFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystem">Connected System</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemRunProfile">Connected System Run Profile</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SynchronisationRule">Synchronisation Rule</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObject">Metaverse Object</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemObject">Connected System Object</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseAttribute">Metaverse Attribute</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ExampleDataTemplate">Example Data Template</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.DataGeneration">Data Generation</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.TrustedCertificate">Trusted Certificate</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ObjectMatchingRule">Object Matching Rule</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ServiceSetting">Service Setting</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.HistoryRetentionCleanup">History Retention Cleanup</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystem">@ActivityText.ActivityTypeConnectedSystem</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemRunProfile">@ActivityText.ActivityTypeConnectedSystemRunProfile</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SynchronisationRule">@ActivityText.ActivityTypeSynchronisationRule</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObject">@ActivityText.ActivityTypeMetaverseObject</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemObject">@ActivityText.ActivityTypeConnectedSystemObject</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseAttribute">@ActivityText.ActivityTypeMetaverseAttribute</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ExampleDataTemplate">@ActivityText.ActivityTypeExampleDataTemplate</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.DataGeneration">@ActivityText.ActivityTypeDataGeneration</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.TrustedCertificate">@ActivityText.ActivityTypeTrustedCertificate</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ObjectMatchingRule">@ActivityText.ActivityTypeObjectMatchingRule</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ServiceSetting">@ActivityText.ActivityTypeServiceSetting</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.HistoryRetentionCleanup">@ActivityText.ActivityTargetHistoryRetentionCleanup</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObjectHousekeeping">@Constants.ActivityTargetNames.ScheduledMetaverseObjectDeletion</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.Authentication">Authentication</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ScimRequests">SCIM Requests</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.Authentication">@ActivityText.ActivityTargetAuthentication</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ScimRequests">@ActivityText.ActivityScimRequestsHeading</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
+        <MudSelect T="ActivityStatus" Label="@ActivityText.ActivityColumnStatus" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterStatuses"
                    SelectedValuesChanged="OnStatusFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">@ActivityText.ActivityStatusFilterInProgress</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">@ActivityText.ActivityStatusComplete</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">@ActivityText.ActivityStatusFilterCompleteWithWarning</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">@ActivityText.ActivityStatusFilterCompleteWithError</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">@ActivityText.ActivityStatusFilterFailedWithError</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">@ActivityText.ActivityStatusCancelled</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
         @* My Activity is already scoped to one initiator (the signed-in user), so an initiator-type filter is
            mutually exclusive with that view; the control is disabled rather than hidden so the filter row keeps
            its shape across the two views. *@
-        <MudSelect T="ActivityInitiatorType" Label="Initiator" Variant="Variant.Outlined"
+        <MudSelect T="ActivityInitiatorType" Label="@ActivityText.ActivityFilterInitiator" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true" Disabled="_isMyActivity"
                    SelectedValues="_filterInitiatorTypes"
                    SelectedValuesChanged="OnInitiatorTypeFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.User">User</MudSelectItem>
-            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.ApiKey">API Key</MudSelectItem>
-            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.System">System</MudSelectItem>
-            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.Anonymous">Anonymous</MudSelectItem>
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.User">@ActivityText.ActivityInitiatorUser</MudSelectItem>
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.ApiKey">@ActivityText.ActivityInitiatorApiKey</MudSelectItem>
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.System">@ActivityText.ActivityInitiatorSystem</MudSelectItem>
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.Anonymous">@ActivityText.ActivityInitiatorAnonymous</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1" Style="max-width: 280px;">
@@ -136,16 +136,16 @@
            Max-width caps MudDateRangePicker's much wider default (~2x a select),
            which otherwise starves the trailing checkbox and pause button of row
            space and pushes them onto their own line. *@
-        <MudDateRangePicker Label="Created between" Variant="Variant.Outlined"
+        <MudDateRangePicker Label="@ActivityText.ActivityFilterCreatedBetween" Variant="Variant.Outlined"
                             DateRange="_filterDateRange" DateRangeChanged="OnDateRangeChangedAsync"
                             Clearable="true" AutoClose="true" />
     </MudItem>
     <MudItem Class="d-flex align-end">
         <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChangedAsync"
-                     Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
+                     Label="@ActivityText.ActivityFilterHasChildActivities" Dense="true" Class="mb-1 mud-typography-nowrap" />
     </MudItem>
     <MudItem Class="d-flex align-end mb-2">
-        <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
+        <MudTooltip Text="@(_pollingPaused ? ActivityText.ActivityResumeAutoRefresh : ActivityText.ActivityPauseAutoRefresh)" Placement="Placement.Top">
             <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
                            Size="Size.Small"
                            OnClick="@(() => _pollingPaused = !_pollingPaused)"
@@ -164,29 +164,29 @@
                      DefaultSortDescending="true"
                      LoadWindow="LoadWindowAsync"
                      RowClicked="HandleRowClicked"
-                     SingularName="Activity"
-                     PluralName="Activities"
-                     SearchPlaceholder="Search target or initiator">
+                     SingularName="@ActivityText.ActivitySingularName"
+                     PluralName="@ActivityText.ActivityPluralName"
+                     SearchPlaceholder="@ActivityText.ActivitySearchTargetOrInitiator">
     <Columns>
-        <TemplateColumn T="Activity" Title="Operation" Sortable="false">
+        <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnOperation" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Operation" Name="operation" />
+                <VirtualisedSortHeader Title="@ActivityText.ActivityColumnOperation" Name="operation" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudChip T="string" Variant="Variant.Text"
                          Color="Helpers.GetActivityMudBlazorColorForOperation(context.Item.TargetOperationType)">
-                    @context.Item.TargetOperationType.ToString().SplitOnCapitalLetters()
+                    @context.Item.TargetOperationType.ForDisplay()
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Target" Sortable="false">
+        <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnTarget" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Target" Name="target" />
+                <VirtualisedSortHeader Title="@ActivityText.ActivityColumnTarget" Name="target" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (!string.IsNullOrEmpty(context.Item.TargetContext) && !string.IsNullOrEmpty(context.Item.TargetName))
                 {
-                    <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetName</span>
+                    <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetNameForDisplay()</span>
                 }
                 else if (!string.IsNullOrEmpty(context.Item.TargetContext))
                 {
@@ -194,7 +194,7 @@
                 }
                 else if (!string.IsNullOrEmpty(context.Item.TargetName))
                 {
-                    @context.Item.TargetName
+                    @context.Item.TargetNameForDisplay()
                 }
                 else
                 {
@@ -202,9 +202,9 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Outcomes" Sortable="false">
+        <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnOutcomes" Sortable="false">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Outcomes</MudText>
+                <MudText Typo="Typo.button">@ActivityText.ActivityColumnOutcomes</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{
@@ -223,69 +223,69 @@
                             {
                                 @if (activity.TotalAdded > 0)
                                 {
-                                    <StatChip Label="Connected System Objects added" Count="@activity.TotalAdded" Color="Color.Success" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" />
+                                    <StatChip Label="@ActivityText.ActivityChipAdded" Count="@activity.TotalAdded" Color="Color.Success" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" />
                                 }
                                 @if (activity.TotalUpdated > 0)
                                 {
-                                    <StatChip Label="Connected System Objects updated" Count="@activity.TotalUpdated" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" />
+                                    <StatChip Label="@ActivityText.ActivityChipUpdated" Count="@activity.TotalUpdated" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" />
                                 }
                                 @if (activity.TotalDeleted > 0)
                                 {
-                                    <StatChip Label="Connected System Object deletions detected" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" />
+                                    <StatChip Label="@ActivityText.ActivityChipDeletionsDetected" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" />
                                 }
                             }
                             else if (effectiveRunType == "Sync")
                             {
                                 @if (activity.TotalProjected > 0)
                                 {
-                                    <StatChip Label="Metaverse Objects projected" Count="@activity.TotalProjected" Color="Color.Primary" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" />
+                                    <StatChip Label="@ActivityText.ActivityChipProjected" Count="@activity.TotalProjected" Color="Color.Primary" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" />
                                 }
                                 @if (activity.TotalJoined > 0)
                                 {
-                                    <StatChip Label="Connected System Objects joined" Count="@activity.TotalJoined" Color="Color.Secondary" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" />
+                                    <StatChip Label="@ActivityText.ActivityChipJoined" Count="@activity.TotalJoined" Color="Color.Secondary" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" />
                                 }
                                 @if (activity.TotalAttributeFlows > 0)
                                 {
-                                    <StatChip Label="Metaverse Objects with Attribute Flow" Count="@activity.TotalAttributeFlows" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" />
+                                    <StatChip Label="@ActivityText.ActivityChipAttributeFlow" Count="@activity.TotalAttributeFlows" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" />
                                 }
                                 @if (activity.TotalDisconnected > 0)
                                 {
-                                    <StatChip Label="Connected System Objects disconnected" Count="@activity.TotalDisconnected" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" />
+                                    <StatChip Label="@ActivityText.ActivityChipDisconnected" Count="@activity.TotalDisconnected" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" />
                                 }
                                 @if (activity.TotalDisconnectedOutOfScope > 0)
                                 {
-                                    <StatChip Label="Connected System Objects disconnected (out of scope)" Count="@activity.TotalDisconnectedOutOfScope" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" />
+                                    <StatChip Label="@ActivityText.ActivityChipDisconnectedOutOfScope" Count="@activity.TotalDisconnectedOutOfScope" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" />
                                 }
                                 @if (activity.TotalOutOfScopeRetainJoin > 0)
                                 {
-                                    <StatChip Label="Connected System Objects out of scope (join retained)" Count="@activity.TotalOutOfScopeRetainJoin" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" />
+                                    <StatChip Label="@ActivityText.ActivityChipOutOfScopeRetainJoin" Count="@activity.TotalOutOfScopeRetainJoin" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" />
                                 }
                                 @if (activity.TotalDeleted > 0)
                                 {
-                                    <StatChip Label="Connected System Objects deleted" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" />
+                                    <StatChip Label="@ActivityText.ActivityChipDeleted" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" />
                                 }
                                 @if (activity.TotalDriftCorrections > 0)
                                 {
-                                    <StatChip Label="Connected System Objects drift corrected" Count="@activity.TotalDriftCorrections" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" />
+                                    <StatChip Label="@ActivityText.ActivityChipDriftCorrected" Count="@activity.TotalDriftCorrections" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" />
                                 }
                                 @if (activity.TotalProvisioned > 0)
                                 {
-                                    <StatChip Label="Connected System Objects provisioned" Count="@activity.TotalProvisioned" Color="Color.Primary" Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" />
+                                    <StatChip Label="@ActivityText.ActivityChipProvisioned" Count="@activity.TotalProvisioned" Color="Color.Primary" Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" />
                                 }
                                 @if (activity.TotalPendingExports > 0)
                                 {
-                                    <StatChip Label="Connected System Object Pending Exports" Count="@activity.TotalPendingExports" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" />
+                                    <StatChip Label="@ActivityText.ActivityChipPendingExports" Count="@activity.TotalPendingExports" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" />
                                 }
                             }
                             else if (effectiveRunType == "Export")
                             {
                                 @if (activity.TotalExported > 0)
                                 {
-                                    <StatChip Label="Connected System Objects exported" Count="@activity.TotalExported" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" />
+                                    <StatChip Label="@ActivityText.ActivityChipExported" Count="@activity.TotalExported" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" />
                                 }
                                 @if (activity.TotalDeprovisioned > 0)
                                 {
-                                    <StatChip Label="Connected System Objects deprovisioned" Count="@activity.TotalDeprovisioned" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" />
+                                    <StatChip Label="@ActivityText.ActivityChipDeprovisioned" Count="@activity.TotalDeprovisioned" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" />
                                 }
                                 @if (_followUpSummaries.TryGetValue(activity.Id, out var followUpLines))
                                 {
@@ -295,14 +295,14 @@
                             @* Errors shown for all run types *@
                             @if (activity.TotalErrors > 0)
                             {
-                                <StatChip Label="Errors" Count="@activity.TotalErrors" Color="Color.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Error" />
+                                <StatChip Label="@ActivityText.ActivityOutcomeErrors" Count="@activity.TotalErrors" Color="Color.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Error" />
                             }
                         </MudStack>
                     }
                     else
                     {
                         @* Run Profile execution completed with no changes *@
-                        <StatChip Label="No changes" Count="0" Color="Color.Default" Icon="@Icons.Material.Outlined.CheckCircle" />
+                        <StatChip Label="@ActivityText.ActivityChipNoChanges" Count="0" Color="Color.Default" Icon="@Icons.Material.Outlined.CheckCircle" />
                     }
                 }
                 else if (activity.TargetType == ActivityTargetType.DataGeneration
@@ -310,7 +310,7 @@
                          && activity.Status != ActivityStatus.InProgress)
                 {
                     @* Data generation stats - only shows creates *@
-                    <StatChip Label="Objects Generated" Count="@activity.TotalCreated" Color="Color.Success" Icon="@Icons.Material.Filled.Add" />
+                    <StatChip Label="@ActivityText.ActivityChipObjectsGenerated" Count="@activity.TotalCreated" Color="Color.Success" Icon="@Icons.Material.Filled.Add" />
                 }
                 else if (activity.TargetType == ActivityTargetType.HistoryRetentionCleanup
                          && activity.Status != ActivityStatus.InProgress)
@@ -323,23 +323,23 @@
                             @if (activity.DeletedCsoChangeCount > 0)
                             {
                                 var deletedCsoChangeCount = activity.DeletedCsoChangeCount!.Value;
-                                <StatChip Label="Connected System Object changes deleted" Count="@deletedCsoChangeCount" Color="Color.Warning" Icon="@Icons.Material.Filled.DeleteSweep" />
+                                <StatChip Label="@ActivityText.ActivityChipCsoChangesDeleted" Count="@deletedCsoChangeCount" Color="Color.Warning" Icon="@Icons.Material.Filled.DeleteSweep" />
                             }
                             @if (activity.DeletedMvoChangeCount > 0)
                             {
                                 var deletedMvoChangeCount = activity.DeletedMvoChangeCount!.Value;
-                                <StatChip Label="Metaverse Object changes deleted" Count="@deletedMvoChangeCount" Color="Color.Warning" Icon="@Icons.Material.Filled.DeleteSweep" />
+                                <StatChip Label="@ActivityText.ActivityChipMvoChangesDeleted" Count="@deletedMvoChangeCount" Color="Color.Warning" Icon="@Icons.Material.Filled.DeleteSweep" />
                             }
                             @if (activity.DeletedActivityCount > 0)
                             {
                                 var deletedActivityCount = activity.DeletedActivityCount!.Value;
-                                <StatChip Label="Activities Deleted" Count="@deletedActivityCount" Color="Color.Warning" Icon="@Icons.Material.Filled.CleaningServices" />
+                                <StatChip Label="@ActivityText.ActivityChipActivitiesDeleted" Count="@deletedActivityCount" Color="Color.Warning" Icon="@Icons.Material.Filled.CleaningServices" />
                             }
                         </MudStack>
                     }
                     else
                     {
-                        <StatChip Label="No records to clean up" Count="0" Color="Color.Default" Icon="@Icons.Material.Outlined.CheckCircle" />
+                        <StatChip Label="@ActivityText.ActivityChipNoRecordsToClean" Count="0" Color="Color.Default" Icon="@Icons.Material.Outlined.CheckCircle" />
                     }
                 }
                 else if (activity.TargetType == ActivityTargetType.Authentication)
@@ -348,7 +348,7 @@
                     @if (activity.AttemptCount is > 0)
                     {
                         var attemptCount = activity.AttemptCount.Value;
-                        <StatChip Label="Failed Attempts" Count="@attemptCount" Color="Color.Error" Icon="@Icons.Material.Filled.Report" />
+                        <StatChip Label="@ActivityText.ActivityChipFailedAttempts" Count="@attemptCount" Color="Color.Error" Icon="@Icons.Material.Filled.Report" />
                     }
                     else
                     {
@@ -360,19 +360,19 @@
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         @if (activity.TotalAdded > 0)
                         {
-                            <StatChip Label="Resources created" Count="@activity.TotalAdded" Color="Color.Success" Icon="@Icons.Material.Filled.Add" />
+                            <StatChip Label="@ActivityText.ActivityChipResourcesCreated" Count="@activity.TotalAdded" Color="Color.Success" Icon="@Icons.Material.Filled.Add" />
                         }
                         @if (activity.TotalUpdated > 0)
                         {
-                            <StatChip Label="Resources replaced or patched" Count="@activity.TotalUpdated" Color="Color.Info" Icon="@Icons.Material.Filled.Edit" />
+                            <StatChip Label="@ActivityText.ActivityChipResourcesReplaced" Count="@activity.TotalUpdated" Color="Color.Info" Icon="@Icons.Material.Filled.Edit" />
                         }
                         @if (activity.TotalDeleted > 0)
                         {
-                            <StatChip Label="Resources deleted" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Icons.Material.Filled.Delete" />
+                            <StatChip Label="@ActivityText.ActivityChipResourcesDeleted" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Icons.Material.Filled.Delete" />
                         }
                         @if (activity.TotalErrors > 0)
                         {
-                            <StatChip Label="Requests rejected" Count="@activity.TotalErrors" Color="Color.Warning" Icon="@Icons.Material.Filled.Block" />
+                            <StatChip Label="@ActivityText.ActivityChipRequestsRejected" Count="@activity.TotalErrors" Color="Color.Warning" Icon="@Icons.Material.Filled.Block" />
                         }
                     </MudStack>
                 }
@@ -383,17 +383,17 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Type" Sortable="false">
+        <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnType" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Type" Name="type" />
+                <VirtualisedSortHeader Title="@ActivityText.ActivityColumnType" Name="type" />
             </HeaderTemplate>
             <CellTemplate>
                 @Helpers.GetActivityTargetTypeName(context.Item.TargetType)
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Initiated By" Sortable="false">
+        <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnInitiatedBy" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
+                <VirtualisedSortHeader Title="@ActivityText.ActivityColumnInitiatedBy" Name="initiatedby" />
             </HeaderTemplate>
             <CellTemplate>
                 <InitiatorChip InitiatedByType="@context.Item.InitiatedByType"
@@ -403,20 +403,20 @@
                                    ScheduleExecutionId="@context.Item.ScheduleExecutionId" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Status" Sortable="false">
+        <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnStatus" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Status" Name="status" />
+                <VirtualisedSortHeader Title="@ActivityText.ActivityColumnStatus" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudChip T="string" Variant="Variant.Text"
                          Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)">
-                    @context.Item.Status.ToString().SplitOnCapitalLetters()
+                    @context.Item.Status.ForDisplay()
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Created" Sortable="false">
+        <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnCreated" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Created" Name="created" />
+                <VirtualisedSortHeader Title="@ActivityText.ActivityColumnCreated" Name="created" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -429,7 +429,7 @@
             <CellTemplate>
                 @if (_childActivityCounts.TryGetValue(context.Item.Id, out var childCount) && childCount > 0)
                 {
-                    <MudTooltip Text="@($"{childCount} child {(childCount == 1 ? "activity" : "activities")}")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(childCount, ActivityText.ActivityChildCountOne, ActivityText.ActivityChildCountOther), childCount)" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.AccountTree" Class="jim-stat-chip">@childCount</MudChip>
                     </MudTooltip>
                 }
@@ -443,30 +443,30 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No Activities match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityNoActivitiesMatchSearch, grid.SearchText)"
+                             SecondaryText="@ActivityText.ActivitySearchTryAgain"
+                             ActionText="@ActivityText.ActivityClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else if (HasActiveFilters)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                             PrimaryText="No Activities match the current filters"
-                             SecondaryText="Adjust or clear the filters above to see more Activities."
-                             ActionText="Clear Filters"
+                             PrimaryText="@ActivityText.ActivityNoActivitiesMatchFilters"
+                             SecondaryText="@ActivityText.ActivityAdjustFiltersActivities"
+                             ActionText="@ActivityText.ActivityClearFilters"
                              OnAction="ClearFiltersAsync" />
         }
         else if (_isMyActivity)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
-                             PrimaryText="No Activities yet"
-                             SecondaryText="Activities appear here as you initiate operations in JIM, such as synchronisations and configuration changes." />
+                             PrimaryText="@ActivityText.ActivityNoActivitiesYet"
+                             SecondaryText="@ActivityText.ActivityNoActivitiesYetMine" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
-                             PrimaryText="No Activities yet"
-                             SecondaryText="Activities appear here as operations run in JIM, whether initiated by users, automated processes, or the API." />
+                             PrimaryText="@ActivityText.ActivityNoActivitiesYet"
+                             SecondaryText="@ActivityText.ActivityNoActivitiesYetAll" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -482,8 +482,8 @@
     private Dictionary<Guid, int> _childActivityCounts = new();
     private readonly Dictionary<Guid, IReadOnlyList<FollowUpSummaryLine>> _followUpSummaries = new();
     private Guid? _currentUserId;
-    private string _pageTitle = "Activity";
-    private string _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
+    private string _pageTitle = ActivityText.ActivityPageTitle;
+    private string _pageDescription = ActivityText.ActivityListDescription;
     private List<BreadcrumbItem> _breadcrumbs = new();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private bool _pollingPaused;
@@ -646,16 +646,16 @@
 
         if (_isMyActivity)
         {
-            _pageTitle = "My Activity";
-            _pageDescription = "View operations you have initiated, including synchronisations, configuration changes, and other actions.";
+            _pageTitle = ActivityText.ActivityMyActivityTitle;
+            _pageDescription = ActivityText.ActivityMyActivityDescription;
 
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             _currentUserId = IdentityUtilities.GetUserId(authState.User);
         }
         else
         {
-            _pageTitle = "Activity";
-            _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
+            _pageTitle = ActivityText.ActivityPageTitle;
+            _pageDescription = ActivityText.ActivityListDescription;
             _currentUserId = null;
         }
 
@@ -921,13 +921,13 @@
 
     private static string GetCategoryLabel(ActivityTargetCategory category) => category switch
     {
-        ActivityTargetCategory.Configuration => "Configuration",
-        ActivityTargetCategory.IdentityData => "Identity",
-        ActivityTargetCategory.SyncRuns => "Synchronisation",
-        ActivityTargetCategory.System => "System",
-        ActivityTargetCategory.Security => "Security",
-        ActivityTargetCategory.PasswordSynchronisation => "Passwords",
-        _ => category.ToString()
+        ActivityTargetCategory.Configuration => ActivityText.ActivityCategoryConfiguration,
+        ActivityTargetCategory.IdentityData => ActivityText.ActivityCategoryIdentity,
+        ActivityTargetCategory.SyncRuns => ActivityText.ActivityCategorySynchronisation,
+        ActivityTargetCategory.System => ActivityText.ActivityCategorySystem,
+        ActivityTargetCategory.Security => ActivityText.ActivityCategorySecurity,
+        ActivityTargetCategory.PasswordSynchronisation => ActivityText.ActivityCategoryPasswords,
+        _ => category.ForDisplay()
     };
 
     private async Task OnStatusFilterChangedAsync(IReadOnlyCollection<ActivityStatus> values)
@@ -974,7 +974,9 @@
         {
             0 => string.Empty,
             1 => selectedValues[0],
-            _ => $"{selectedValues.Count} selected"
+            _ => string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                PluralRules.Choose(selectedValues.Count, ActivityText.ActivitySelectedCountOne, ActivityText.ActivitySelectedCountOther),
+                selectedValues.Count)
         };
     }
 

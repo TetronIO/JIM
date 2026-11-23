@@ -16,7 +16,7 @@
 @if (TargetType == ActivityTargetType.MetaverseAttribute || TargetType == ActivityTargetType.MetaverseObjectType)
 {
     <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
-        Attribute Priority changes are not shown here; priority is stored on the contributing Synchronisation Rules. Find them on the <MudLink Href="/activity">Activities</MudLink> page, listed as "Attribute priority order for ...".
+        @ActivityText.ActivityConfigPriorityNoteBefore <MudLink Href="/activity">@ActivityText.ActivityPluralName</MudLink> @ActivityText.ActivityConfigPriorityNoteAfter
     </MudAlert>
 }
 
@@ -28,31 +28,31 @@
 }
 else if (_items.Count == 0)
 {
-    <MudText Class="mud-text-secondary">No configuration changes have been recorded for this @ObjectTypeLabel yet.</MudText>
+    <MudText Class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityConfigNoChangesYet, ObjectTypeLabel)</MudText>
 }
 else
 {
     @* Compare any two versions. *@
     <MudPaper Outlined="true" Class="pa-4">
         <div class="d-flex flex-wrap align-center gap-3">
-            <MudText Typo="Typo.subtitle2">Compare versions</MudText>
-            <MudSelect T="int?" @bind-Value="_compareFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width: 110px;">
+            <MudText Typo="Typo.subtitle2">@ActivityText.ActivityConfigCompareVersions</MudText>
+            <MudSelect T="int?" @bind-Value="_compareFrom" Label="@ActivityText.ActivityConfigFrom" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width: 110px;">
                 @foreach (var v in _versions)
                 {
                     <MudSelectItem T="int?" Value="@v">v@(v)</MudSelectItem>
                 }
             </MudSelect>
-            <MudSelect T="int?" @bind-Value="_compareTo" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width: 110px;">
+            <MudSelect T="int?" @bind-Value="_compareTo" Label="@ActivityText.ActivityConfigTo" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width: 110px;">
                 @foreach (var v in _versions)
                 {
                     <MudSelectItem T="int?" Value="@v">v@(v)</MudSelectItem>
                 }
             </MudSelect>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="CompareAsync"
-                       Disabled="@(_compareFrom == null || _compareTo == null || _compareFrom == _compareTo)">Compare</MudButton>
+                       Disabled="@(_compareFrom == null || _compareTo == null || _compareFrom == _compareTo)">@ActivityText.ActivityConfigCompare</MudButton>
             @if (_compareDiff != null)
             {
-                <MudButton Variant="Variant.Text" OnClick="@(() => _compareDiff = null)">Clear</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="@(() => _compareDiff = null)">@ActivityText.ActivityConfigClear</MudButton>
             }
         </div>
         @if (_compareLoading)
@@ -125,7 +125,7 @@ else
                                             <MudButton Variant="Variant.Text" DropShadow="false" Size="Size.Small"
                                                        StartIcon="@(clamped ? Icons.Material.Filled.UnfoldMore : Icons.Material.Filled.UnfoldLess)"
                                                        OnClick="@(() => ToggleShowFull(item.Version))">
-                                                @(clamped ? "Show all changes" : "Show less")
+                                                @(clamped ? ActivityText.ActivityConfigShowAll : ActivityText.ActivityConfigShowLess)
                                             </MudButton>
                                         </div>
                                     }
@@ -141,7 +141,7 @@ else
     @if (_items.Count < _totalResults)
     {
         <div class="d-flex justify-center mt-3">
-            <MudButton Variant="Variant.Filled" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
+            <MudButton Variant="Variant.Filled" OnClick="LoadMoreAsync" Disabled="_loadingMore">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityConfigLoadMore, _totalResults - _items.Count)</MudButton>
         </div>
     }
 }
@@ -165,7 +165,7 @@ else
 
     /// <summary>A human-readable label for the object kind, used in the empty-state message.</summary>
     [Parameter]
-    public string ObjectTypeLabel { get; set; } = "object";
+    public string ObjectTypeLabel { get; set; } = ActivityText.ActivityHistoryDefaultObjectLabel;
 
     private bool _loading = true;
     private bool _loadingMore;
@@ -291,10 +291,10 @@ else
 
     private static string OperationLabel(ActivityTargetOperationType operation) => operation switch
     {
-        ActivityTargetOperationType.Create => "Created",
-        ActivityTargetOperationType.Update => "Updated",
-        ActivityTargetOperationType.Delete => "Deleted",
-        ActivityTargetOperationType.Revert => "Reverted",
-        _ => operation.ToString()
+        ActivityTargetOperationType.Create => ActivityText.ActivityConfigOpCreated,
+        ActivityTargetOperationType.Update => ActivityText.ActivityConfigOpUpdated,
+        ActivityTargetOperationType.Delete => ActivityText.ActivityConfigOpDeleted,
+        ActivityTargetOperationType.Revert => ActivityText.ActivityConfigOpReverted,
+        _ => operation.ForDisplay()
     };
 }

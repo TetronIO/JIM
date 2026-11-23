@@ -4,6 +4,7 @@
 using JIM.Models.Exchange;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -20,13 +21,13 @@ namespace JIM.Web.Models;
 public sealed class ExchangeRecipientFlows
 {
     // What happens to each attribute when no Attribute Flow sets it, as the Exchange step reads the declared state.
-    private static readonly Dictionary<string, string> WithoutFlow = new(StringComparer.Ordinal)
+    private static Dictionary<string, string> WithoutFlow => new(StringComparer.Ordinal)
     {
-        [ExchangeRecipientAttributes.RecipientType] = "Not set, so objects are not recipients",
-        [ExchangeRecipientAttributes.Alias] = "Not set, so mailNickname is used",
-        [ExchangeRecipientAttributes.Database] = "Not set, so Exchange chooses",
-        [ExchangeRecipientAttributes.PrimarySmtpAddress] = "Not set, so Email Address Policies apply",
-        [ExchangeRecipientAttributes.ExternalAddress] = "Not set; mail users and mail contacts need one"
+        [ExchangeRecipientAttributes.RecipientType] = MetaverseText.ErfRecipientType,
+        [ExchangeRecipientAttributes.Alias] = MetaverseText.ErfAlias,
+        [ExchangeRecipientAttributes.Database] = MetaverseText.ErfDatabase,
+        [ExchangeRecipientAttributes.PrimarySmtpAddress] = MetaverseText.ErfPrimarySmtp,
+        [ExchangeRecipientAttributes.ExternalAddress] = MetaverseText.ErfExternalAddress
     };
 
     private ExchangeRecipientFlows(IReadOnlyList<ExchangeRecipientFlowRow> rows)

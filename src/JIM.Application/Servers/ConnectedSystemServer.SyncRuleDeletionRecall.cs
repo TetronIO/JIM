@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
@@ -133,10 +135,7 @@ public partial class ConnectedSystemServer
 
         // Complete the task's Activity with summary statistics (the worker's dispatch boundary owns the
         // completion call itself, exactly as it does for the other queued task types).
-        activity.Message = $"Recalled {result.ValuesRecalled:N0} attribute value(s) across {result.MetaverseObjectsProcessed:N0} " +
-            $"Metaverse Object(s): {result.AttributesReElected:N0} re-elected to a surviving contributor, " +
-            $"{result.AttributesCleared:N0} cleared (no remaining contributor); {result.PendingExportsStaged:N0} " +
-            "Pending Export(s) staged. The Synchronisation Rule has been deleted.";
+        activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SyncRuleDeletionRecalled), result.ValuesRecalled, result.MetaverseObjectsProcessed, result.AttributesReElected, result.AttributesCleared, result.PendingExportsStaged);
 
         Log.Information(
             "ExecuteSyncRuleDeletionRecallAsync: Synchronisation Rule {SyncRuleId}: {ObjectCount} Metaverse Object(s) processed, " +

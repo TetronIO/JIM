@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
 using JIM.Application.Servers;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -21,12 +23,26 @@ internal static class TestSampleValues
     /// </summary>
     /// <param name="label">How messages name the input: an Expression's accessor (<c>cs["sn"]</c>), or an attribute's
     /// name in quotes.</param>
+    /// <param name="errors">Receives each problem as its British English, for the testers that read text.</param>
     internal static List<object> Typed(string label, IReadOnlyList<object> samples, AttributeDataType type, AttributePlurality plurality,
         List<string> errors)
     {
+        var problems = new List<JimMessage>();
+        var typedValues = Typed(label, samples, type, plurality, problems);
+        errors.AddRange(problems.Select(problem => problem.ToEnglish()));
+        return typedValues;
+    }
+
+    /// <summary>
+    /// <see cref="Typed(string, IReadOnlyList{object}, AttributeDataType, AttributePlurality, List{string})"/>, with each
+    /// problem as a message (#3030) so the portal can show it in the viewer's language.
+    /// </summary>
+    internal static List<object> Typed(string label, IReadOnlyList<object> samples, AttributeDataType type, AttributePlurality plurality,
+        List<JimMessage> errors)
+    {
         if (plurality == AttributePlurality.SingleValued && samples.Count > 1)
         {
-            errors.Add($"{label} has {samples.Count} values, but the attribute is single-valued, so an object holds at most one.");
+            errors.Add(ExpressionMessage.Of(nameof(ExpressionMessages.SampleTooManyValues), label, ExpressionMessage.Digits(samples.Count)));
             return [];
         }
 
@@ -39,14 +55,18 @@ internal static class TestSampleValues
                 continue;
             }
 
-            errors.Add($"The value '{ExpressionText.Describe(sample)}' for {label} is not a {type} value, the type of that attribute." +
-                type switch
-                {
-                    AttributeDataType.DateTime => " Enter a date in ISO 8601, such as 2026-03-15 or 2026-03-15T10:30:00Z.",
-                    AttributeDataType.Reference => " Enter the id of the object it refers to.",
-                    AttributeDataType.Binary => " Enter the value in base64.",
-                    _ => string.Empty
-                });
+            var sampleText = ExpressionText.Describe(sample);
+            var typeName = ExpressionMessage.DataType(type);
+            errors.Add(type switch
+            {
+                AttributeDataType.DateTime => ExpressionMessage.Of(nameof(ExpressionMessages.SampleWrongTypeWithHint), sampleText, label, typeName,
+                    ExpressionMessage.Of(nameof(ExpressionMessages.SampleHintDate))),
+                AttributeDataType.Reference => ExpressionMessage.Of(nameof(ExpressionMessages.SampleWrongTypeWithHint), sampleText, label, typeName,
+                    ExpressionMessage.Of(nameof(ExpressionMessages.SampleHintReference))),
+                AttributeDataType.Binary => ExpressionMessage.Of(nameof(ExpressionMessages.SampleWrongTypeWithHint), sampleText, label, typeName,
+                    ExpressionMessage.Of(nameof(ExpressionMessages.SampleHintBinary))),
+                _ => ExpressionMessage.Of(nameof(ExpressionMessages.SampleWrongType), sampleText, label, typeName)
+            });
         }
 
         return typedValues;

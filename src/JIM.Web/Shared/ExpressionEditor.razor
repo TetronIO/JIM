@@ -46,7 +46,7 @@
 {
     @* Each option keeps the textarea focused (mousedown is prevented), so choosing one with the pointer leaves the caret
        where the keyboard would have. *@
-    <div class="jim-expression-assist-list mud-elevation-8" id="@ListId" role="listbox" aria-label="Suggestions"
+    <div class="jim-expression-assist-list mud-elevation-8" id="@ListId" role="listbox" aria-label="@SyncRuleText.ExpressionSuggestionsLabel"
          data-testid="jim-expression-suggestions">
         @for (var i = 0; i < _completion!.Suggestions.Count; i++)
         {
@@ -65,7 +65,7 @@
                 </span>
             </div>
         }
-        <div class="jim-expression-assist-hint" aria-hidden="true">↑↓ to choose · Enter or Tab to insert · Esc to close</div>
+        <div class="jim-expression-assist-hint" aria-hidden="true">@SyncRuleText.ExpressionKeyHint</div>
     </div>
 }
 else if (_signature != null)
@@ -73,11 +73,11 @@ else if (_signature != null)
     var signature = _signature;
     <div class="jim-expression-signature" aria-live="polite" data-testid="jim-expression-signature">
         <code class="jim-expression-signature-call">@foreach (var part in SignatureParts(signature)){@if (part.Active){<span class="jim-expression-signature-active">@part.Text</span>}else{@part.Text}}</code>
-        <span class="jim-expression-signature-description">@ExpressionAssist.PlainText(signature.Function.Description)</span>
+        <span class="jim-expression-signature-description">@ExpressionAssist.PlainText(ExpressionAssist.DescriptionText(signature.Function))</span>
         @if (signature.Function.Parameters.Count > 0)
         {
             var active = signature.Function.Parameters[signature.ParameterIndex];
-            <span class="jim-expression-signature-parameter"><code>@active.Name</code>: @active.Description</span>
+            <span class="jim-expression-signature-parameter"><code>@active.Name</code>: @ExpressionAssist.DescriptionText(active)</span>
         }
     </div>
 }

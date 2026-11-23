@@ -18,11 +18,9 @@
 @if (ConnectedSystem.Status != ConnectedSystemStatus.Deleting)
 {
     <MudPaper Class="pa-4" Outlined="true" data-testid="jim-deletion-impact">
-        <MudText Typo="Typo.h6">Deletion impact</MudText>
+        <MudText Typo="Typo.h6">@ConnectedSystemText.DangerDeletionImpactHeading</MudText>
         <MudText Class="mt-2">
-            See what deleting this system would do before you do it: which attribute values would be cleared or taken
-            over by another Connected System, which Metaverse Objects would become eligible for deletion, and what would
-            be exported downstream. Nothing changes while the preview runs, and you can leave this page while it does.
+            @ConnectedSystemText.DangerDeletionImpactIntro
         </MudText>
         <div class="d-flex align-center flex-wrap gap-3 mt-4">
             <MudButton Variant="Variant.Filled"
@@ -31,11 +29,11 @@
                        Disabled="@(_startingPreview || _previewState.Status == ConnectedSystemPreviewStatus.Running)"
                        OnClick="StartPreviewAsync"
                        data-testid="jim-preview-deletion-impact">
-                @(_previewActivityId.HasValue ? "Run again" : "Preview deletion impact")
+                @(_previewActivityId.HasValue ? ConnectedSystemText.DeleteSystemRunAgain : ConnectedSystemText.DangerPreviewButton)
             </MudButton>
             @if (!_previewActivityId.HasValue)
             {
-                <MudText Class="mud-text-secondary">Not previewed yet</MudText>
+                <MudText Class="mud-text-secondary">@ConnectedSystemText.DangerNotPreviewed</MudText>
             }
         </div>
     </MudPaper>
@@ -47,14 +45,12 @@
         @if (_previewState.Status == ConnectedSystemPreviewStatus.Stale)
         {
             <MudAlert Severity="Severity.Warning" Class="mt-6" data-testid="jim-deletion-impact-stale">
-                @_previewState.StaleReason since this preview ran: <PreviewOvertakenBy Staleness="@_previewState.Staleness" />. It
-                may no longer be accurate, so run it again before deleting; a deletion now records that the preview informing it
-                was out of date.
+                @_previewState.StaleReason @ConnectedSystemText.DeleteSystemSinceThisPreviewRan <PreviewOvertakenBy Staleness="@_previewState.Staleness" />. @ConnectedSystemText.DangerStaleBody
             </MudAlert>
         }
 
         <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
-                                         Title="Deletion impact preview"
+                                         Title="@ConnectedSystemText.DeleteSystemPreviewHeading"
                                          OnPreviewChanged="OnPreviewChangedAsync"
                                          OnClose="DiscardPreview"
                                          Class="mt-6" />
@@ -62,28 +58,25 @@
 }
 
 <MudPaper Class="@(ConnectedSystem.Status == ConnectedSystemStatus.Deleting ? "pa-4 jim-paper-danger-zone" : "pa-4 mt-6 jim-paper-danger-zone")">
-    <MudText Typo="Typo.h6" Color="Color.Error">Delete Connected System</MudText>
+    <MudText Typo="Typo.h6" Color="Color.Error">@ConnectedSystemText.DangerDeleteSystem</MudText>
     <MudText Class="mt-2">
-        Permanently delete this Connected System and all its related data, including:
+        @ConnectedSystemText.DangerDeleteIntro
     </MudText>
     <ul class="mt-2 ml-4">
-        <li>All Connected System Objects</li>
-        <li>All Synchronisation Rules</li>
-        <li>All Run Profiles</li>
-        <li>All Partitions and Containers</li>
-        <li>All Pending Exports</li>
+        <li>@ConnectedSystemText.DangerListObjects</li>
+        <li>@ConnectedSystemText.DangerListRules</li>
+        <li>@ConnectedSystemText.DangerListProfiles</li>
+        <li>@ConnectedSystemText.DangerListPartitions</li>
+        <li>@ConnectedSystemText.DangerListExports</li>
     </ul>
     <MudText Class="mt-2">
-        Metaverse Objects joined to this system are disconnected from it. Any for which it is the last connector are then
-        subject to their Object Type's deletion rule; the deletion impact preview above names them.
+        @ConnectedSystemText.DangerJoinedText
     </MudText>
 
     @if (ConnectedSystem.Status == ConnectedSystemStatus.Deleting)
     {
         <MudText Class="mt-2">
-            A deletion is already underway or stopped partway for this system. Deleting again offers the
-            exits: Deprovision through synchronisation resumes the run, and Delete immediately and keep
-            contributed data completes the deletion at once.
+            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DangerFencedNote, ConnectedSystemText.ConnectedSystemDeprovisionThroughSynchronisation, ConnectedSystemText.ConnectedSystemDeleteImmediatelyKeepData)
         </MudText>
     }
 
@@ -96,7 +89,7 @@
         DropShadow="false"
         StartIcon="@Icons.Material.Filled.Delete"
         OnClick="HandleShowDeleteConfirmationAsync">
-        Delete Connected System
+        @ConnectedSystemText.DangerDeleteSystem
     </MudButton>
 </MudPaper>
 
@@ -174,7 +167,7 @@
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
         {
             Log.Error(ex, "Failed to start a deletion impact preview for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DangerPreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {

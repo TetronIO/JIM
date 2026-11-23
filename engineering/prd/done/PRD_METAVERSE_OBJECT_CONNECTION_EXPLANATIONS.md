@@ -243,7 +243,7 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 ## Dependencies
 
 - None blocking. Builds on the Connections tab (#1519) and value provenance (#399).
-- Related: [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements (its "validate whether an object is in scope" item is partly delivered here, for saved rules), [PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](../PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md) (integration coverage of the same evaluator; complementary, and an explanation endpoint could later give it a no-commit evaluation path), [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping (any new criterion kind must extend the explanation too).
+- Related: [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements (its "validate whether an object is in scope" item is partly delivered here, for saved rules), [PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md) (integration coverage of the same evaluator; complementary, and an explanation endpoint could later give it a no-commit evaluation path), [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping (any new criterion kind must extend the explanation too).
 
 ## Resolved Decisions
 
