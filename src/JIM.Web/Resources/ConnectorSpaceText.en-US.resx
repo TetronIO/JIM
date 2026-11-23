@@ -35,4 +35,19 @@
   <data name="PexListPageInfo" xml:space="preserve">
     <value>Pending Exports are changes that need to be applied to the Connected System. These are created when Metaverse Objects change and need to be synchronized to this target system.</value>
   </data>
+  <data name="AwsTitle" xml:space="preserve">
+    <value>Changes awaiting synchronization: {0}</value>
+  </data>
+  <data name="AwsBodyCounted" xml:space="preserve">
+    <value>The next synchronization of this Connected System, Delta or Full, applies them by processing every {0} object ({1}).</value>
+  </data>
+  <data name="AwsBodyPlain" xml:space="preserve">
+    <value>The next synchronization of this Connected System, Delta or Full, applies them by processing every {0} object.</value>
+  </data>
+  <data name="AwsNoRunProfile" xml:space="preserve">
+    <value>This Connected System has no Delta Synchronization or Full Synchronization Run Profile to queue.</value>
+  </data>
+  <data name="AwsRunDelta" xml:space="preserve">
+    <value>Delta Synchronization</value>
+  </data>
 </root>

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -38,8 +39,8 @@ public static class AwaitingSynchronisationRunProfile
     /// </summary>
     public static string RunTypeName(ConnectedSystemRunType runType) => runType switch
     {
-        ConnectedSystemRunType.DeltaSynchronisation => "Delta Synchronisation",
-        ConnectedSystemRunType.FullSynchronisation => "Full Synchronisation",
+        ConnectedSystemRunType.DeltaSynchronisation => ConnectorSpaceText.AwsRunDelta,
+        ConnectedSystemRunType.FullSynchronisation => ConnectorSpaceText.CsoFullSynchronisation,
         _ => runType.ToString()
     };
 }

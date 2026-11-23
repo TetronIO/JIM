@@ -17,19 +17,19 @@
         <ToolBarContent>
             <TableDensityToggle @bind-Dense="_dense" />
             <MudText Class="mx-2 mud-text-disabled">|</MudText>
-            <MudText Typo="Typo.h6">@(_metaverseObjects ? "Matching Metaverse Objects" : "Matching Connected System Objects")</MudText>
+            <MudText Typo="Typo.h6">@(_metaverseObjects ? ConnectorSpaceText.MchMetaverse : ConnectorSpaceText.MchConnected)</MudText>
             <TableObjectCount Count="@Candidates.Count" Total="@Total" Class="ml-2" />
         </ToolBarContent>
         <HeaderContent>
-            <MudTh>@(_metaverseObjects ? "Metaverse Object" : "Connected System Object")</MudTh>
-            <MudTh>Matched On</MudTh>
+            <MudTh>@(_metaverseObjects ? ConnectorSpaceText.MchColMv : ConnectorSpaceText.CsoTerm)</MudTh>
+            <MudTh>@ConnectorSpaceText.MchColMatched</MudTh>
             @if (_metaverseObjects)
             {
-                <MudTh>Joined To</MudTh>
+                <MudTh>@ConnectorSpaceText.MchColJoined</MudTh>
             }
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Object">
+            <MudTd DataLabel="@ConnectorSpaceText.MchColObject">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                     <ObjectChip Kind="@(_metaverseObjects ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject)"
                                 TypeName="@context.Candidate.TypeNameSnapshot"
@@ -40,17 +40,17 @@
                     @if (!context.Exists)
                     {
                         <MudText Class="mud-text-secondary" data-testid="@($"jim-match-candidate-deleted-{context.Candidate.CandidateId}")">
-                            (no longer exists)
+                            @ConnectorSpaceText.MchNoLongerExists
                         </MudText>
                     }
                 </MudStack>
             </MudTd>
-            <MudTd DataLabel="Matched On">
+            <MudTd DataLabel="@ConnectorSpaceText.MchColMatched">
                 <TextValueDisplay Value="@context.Candidate.MatchedValue" />
             </MudTd>
             @if (_metaverseObjects)
             {
-                <MudTd DataLabel="Joined To">
+                <MudTd DataLabel="@ConnectorSpaceText.MchColJoined">
                     @if (context.JoinedObjects.Count == 0)
                     {
                         <EmptyValue />

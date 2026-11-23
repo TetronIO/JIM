@@ -1133,4 +1133,115 @@
   <data name="DtsAdjZero" xml:space="preserve">
     <value>0 minute</value>
   </data>
+  <data name="ExrTitle" xml:space="preserve">
+    <value>Destinataire Exchange</value>
+  </data>
+  <data name="ExrColDeclared" xml:space="preserve">
+    <value>Déclaré</value>
+  </data>
+  <data name="ExrColInExchange" xml:space="preserve">
+    <value>Dans Exchange</value>
+  </data>
+  <data name="ExrAsOf" xml:space="preserve">
+    <value>à la dernière importation</value>
+  </data>
+  <data name="ExrRecipientType" xml:space="preserve">
+    <value>Type de destinataire</value>
+  </data>
+  <data name="ExrAlias" xml:space="preserve">
+    <value>Alias</value>
+  </data>
+  <data name="ExrDatabase" xml:space="preserve">
+    <value>Base de données</value>
+  </data>
+  <data name="ExrPrimarySmtp" xml:space="preserve">
+    <value>Adresse SMTP principale</value>
+  </data>
+  <data name="ExrExternalAddress" xml:space="preserve">
+    <value>Adresse externe</value>
+  </data>
+  <data name="ExrNotRecipient" xml:space="preserve">
+    <value>Pas un destinataire</value>
+  </data>
+  <data name="ExrExchangeChooses" xml:space="preserve">
+    <value>Choisi par Exchange</value>
+  </data>
+  <data name="ExrPoliciesApply" xml:space="preserve">
+    <value>Les stratégies d’adresses de messagerie s’appliquent</value>
+  </data>
+  <data name="MchMetaverse" xml:space="preserve">
+    <value>Objets Metaverse correspondants</value>
+  </data>
+  <data name="MchConnected" xml:space="preserve">
+    <value>Objets de systèmes connectés correspondants</value>
+  </data>
+  <data name="MchColMv" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="MchColMatched" xml:space="preserve">
+    <value>Correspondance sur</value>
+  </data>
+  <data name="MchColJoined" xml:space="preserve">
+    <value>Jointe à</value>
+  </data>
+  <data name="MchColObject" xml:space="preserve">
+    <value>Objet</value>
+  </data>
+  <data name="MchNoLongerExists" xml:space="preserve">
+    <value>(n’existe plus)</value>
+  </data>
+  <data name="AwsTitle" xml:space="preserve">
+    <value>Modifications en attente de synchronisation : {0}</value>
+  </data>
+  <data name="AwsBodyCounted" xml:space="preserve">
+    <value>La prochaine synchronisation de ce système connecté, delta ou complète, les applique en traitant chaque objet {0} ({1}).</value>
+  </data>
+  <data name="AwsBodyPlain" xml:space="preserve">
+    <value>La prochaine synchronisation de ce système connecté, delta ou complète, les applique en traitant chaque objet {0}.</value>
+  </data>
+  <data name="AwsOtherTypes" xml:space="preserve">
+    <value>Les autres types d’objets sont traités normalement.</value>
+  </data>
+  <data name="AwsTruncated" xml:space="preserve">
+    <value>Affichage des {0} modifications les plus récentes sur {1}.</value>
+  </data>
+  <data name="AwsRunNow" xml:space="preserve">
+    <value>Exécuter maintenant</value>
+  </data>
+  <data name="AwsQueues" xml:space="preserve">
+    <value>Met en file d’attente le profil d’exécution {0} ; vous pouvez en choisir un autre.</value>
+  </data>
+  <data name="AwsNoRunProfile" xml:space="preserve">
+    <value>Ce système connecté n’a ni profil d’exécution de synchronisation delta ni profil d’exécution de synchronisation complète à mettre en file d’attente.</value>
+  </data>
+  <data name="AwsRunDelta" xml:space="preserve">
+    <value>Synchronisation delta</value>
+  </data>
+  <data name="AwsColChanged" xml:space="preserve">
+    <value>Modifié</value>
+  </data>
+  <data name="AwsColWhatDone" xml:space="preserve">
+    <value>Action effectuée</value>
+  </data>
+  <data name="AwsColLastMade" xml:space="preserve">
+    <value>Dernière modification</value>
+  </data>
+  <data name="AwsColBy" xml:space="preserve">
+    <value>Par</value>
+  </data>
+  <data name="AwsHideChanges" xml:space="preserve">
+    <value>Masquer les modifications</value>
+  </data>
+  <data name="AwsShowChanges" xml:space="preserve">
+    <value>Afficher les {0} modifications</value>
+  </data>
+  <data name="CavBinary" xml:space="preserve">
+    <value>[Binaire : {0} octets]</value>
+  </data>
+  <data name="PevUnresolved" xml:space="preserve">
+    <value>[Référence non résolue : {0}]</value>
+  </data>
+  <data name="PevBinary" xml:space="preserve">
+    <value>[Données binaires : {0} octets]</value>
+  </data>
 </root>

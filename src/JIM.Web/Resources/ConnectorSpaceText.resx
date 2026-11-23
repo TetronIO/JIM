@@ -1506,4 +1506,152 @@
     <value>0 minute</value>
     <comment>Grace period shown when every part is zero</comment>
   </data>
+  <data name="ExrTitle" xml:space="preserve">
+    <value>Exchange Recipient</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="ExrColDeclared" xml:space="preserve">
+    <value>Declared</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="ExrColInExchange" xml:space="preserve">
+    <value>In Exchange</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="ExrAsOf" xml:space="preserve">
+    <value>as of the last import</value>
+    <comment>Column header note</comment>
+  </data>
+  <data name="ExrRecipientType" xml:space="preserve">
+    <value>Recipient type</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrAlias" xml:space="preserve">
+    <value>Alias</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrDatabase" xml:space="preserve">
+    <value>Database</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrPrimarySmtp" xml:space="preserve">
+    <value>Primary SMTP address</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrExternalAddress" xml:space="preserve">
+    <value>External address</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrNotRecipient" xml:space="preserve">
+    <value>Not a recipient</value>
+    <comment>Value when the account is not a recipient</comment>
+  </data>
+  <data name="ExrExchangeChooses" xml:space="preserve">
+    <value>Exchange chooses</value>
+    <comment>Value when Exchange picks the value</comment>
+  </data>
+  <data name="ExrPoliciesApply" xml:space="preserve">
+    <value>Email Address Policies apply</value>
+    <comment>Value when Exchange policies assign the address</comment>
+  </data>
+  <data name="MchMetaverse" xml:space="preserve">
+    <value>Matching Metaverse Objects</value>
+    <comment>Toolbar title</comment>
+  </data>
+  <data name="MchConnected" xml:space="preserve">
+    <value>Matching Connected System Objects</value>
+    <comment>Toolbar title</comment>
+  </data>
+  <data name="MchColMv" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="MchColMatched" xml:space="preserve">
+    <value>Matched On</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="MchColJoined" xml:space="preserve">
+    <value>Joined To</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="MchColObject" xml:space="preserve">
+    <value>Object</value>
+    <comment>Column label on narrow screens</comment>
+  </data>
+  <data name="MchNoLongerExists" xml:space="preserve">
+    <value>(no longer exists)</value>
+    <comment>Shown beside a candidate that has been deleted</comment>
+  </data>
+  <data name="AwsTitle" xml:space="preserve">
+    <value>Changes awaiting synchronisation: {0}</value>
+    <comment>Notice heading; {0} is the Object Type</comment>
+  </data>
+  <data name="AwsBodyCounted" xml:space="preserve">
+    <value>The next synchronisation of this Connected System, Delta or Full, applies them by processing every {0} object ({1}).</value>
+    <comment>{0} is the Object Type; {1} is the number of objects</comment>
+  </data>
+  <data name="AwsBodyPlain" xml:space="preserve">
+    <value>The next synchronisation of this Connected System, Delta or Full, applies them by processing every {0} object.</value>
+    <comment>{0} is the Object Type; used when the count was not read</comment>
+  </data>
+  <data name="AwsOtherTypes" xml:space="preserve">
+    <value>Other Object Types are processed as usual.</value>
+    <comment>Notice body</comment>
+  </data>
+  <data name="AwsTruncated" xml:space="preserve">
+    <value>Showing the newest {0} of {1} changes.</value>
+    <comment>{0} shown, {1} in all, both formatted</comment>
+  </data>
+  <data name="AwsRunNow" xml:space="preserve">
+    <value>Run now</value>
+    <comment>Button</comment>
+  </data>
+  <data name="AwsQueues" xml:space="preserve">
+    <value>Queues the {0} Run Profile; you can pick another.</value>
+    <comment>{0} is the run type</comment>
+  </data>
+  <data name="AwsNoRunProfile" xml:space="preserve">
+    <value>This Connected System has no Delta Synchronisation or Full Synchronisation Run Profile to queue.</value>
+    <comment>Caption when there is no Run Profile to queue</comment>
+  </data>
+  <data name="AwsRunDelta" xml:space="preserve">
+    <value>Delta Synchronisation</value>
+    <comment>Run type name</comment>
+  </data>
+  <data name="AwsColChanged" xml:space="preserve">
+    <value>Changed</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsColWhatDone" xml:space="preserve">
+    <value>What was done</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsColLastMade" xml:space="preserve">
+    <value>Last made</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsColBy" xml:space="preserve">
+    <value>By</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsHideChanges" xml:space="preserve">
+    <value>Hide the changes</value>
+    <comment>Button accessible name</comment>
+  </data>
+  <data name="AwsShowChanges" xml:space="preserve">
+    <value>Show the {0} changes</value>
+    <comment>Button accessible name; {0} is the count, formatted</comment>
+  </data>
+  <data name="CavBinary" xml:space="preserve">
+    <value>[Binary: {0} bytes]</value>
+    <comment>A binary value; {0} is its length</comment>
+  </data>
+  <data name="PevUnresolved" xml:space="preserve">
+    <value>[Unresolved Reference: {0}]</value>
+    <comment>A reference JIM could not link; {0} is the raw identifier</comment>
+  </data>
+  <data name="PevBinary" xml:space="preserve">
+    <value>[Binary data: {0} bytes]</value>
+    <comment>A binary value; {0} is its length</comment>
+  </data>
 </root>
