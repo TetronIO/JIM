@@ -226,7 +226,7 @@
     <value>Änderungsverlauf</value>
   </data>
   <data name="CsoColumnPlurality" xml:space="preserve">
-    <value>Mehrwertigkeit</value>
+    <value>Wertigkeit</value>
   </data>
   <data name="CsoColumnExternalIdQuestion" xml:space="preserve">
     <value>Externe ID?</value>
@@ -376,7 +376,7 @@
     <value>Löschungen von Metaverse-Objekten werden über eine Aufgabe ausgeführt und können einige Zeit dauern. Prüfen Sie die Seite</value>
   </data>
   <data name="CsoListOperationsLink" xml:space="preserve">
-    <value>Vorgänge</value>
+    <value>Betrieb</value>
   </data>
   <data name="CsoListClearExplain4Trail" xml:space="preserve">
     <value>oder aktualisieren Sie diese Seite, um den Fortschritt zu sehen.</value>

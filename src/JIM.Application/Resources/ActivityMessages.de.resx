@@ -548,10 +548,10 @@
     <value>{0} von einem Export erstellte oder umbenannte Objekte wurden geschrieben, aber JIM konnte nicht erfassen, in welcher Partition sie liegen; ein auf eine Partition ausgerichteter Import sieht sie dort daher nicht, bis der nächste Import, der sie liest, erfasst, wo sie liegen. Das Dienstprotokoll nennt die Objekte und die Ursache.</value>
   </data>
   <data name="InitialPasswordMarkingFailedOne" xml:space="preserve">
-    <value>Bei 1 Konto wurde der Aktivierungsstatus durch diesen Export geschrieben, aber JIM konnte nicht prüfen, ob ihm noch ein Initialkennwort zusteht. Falls ja, folgt die Zustellung möglicherweise der Synchronisierungsregel statt dem Attributfluss; das Dienstprotokoll nennt das Konto, und unter Vorgänge &gt; Kennwörter ist zu sehen, ob ein Kennwort auf es wartet.</value>
+    <value>Bei 1 Konto wurde der Aktivierungsstatus durch diesen Export geschrieben, aber JIM konnte nicht prüfen, ob ihm noch ein Initialkennwort zusteht. Falls ja, folgt die Zustellung möglicherweise der Synchronisierungsregel statt dem Attributfluss; das Dienstprotokoll nennt das Konto, und unter Betrieb &gt; Kennwörter ist zu sehen, ob ein Kennwort auf es wartet.</value>
   </data>
   <data name="InitialPasswordMarkingFailedOther" xml:space="preserve">
-    <value>Bei {0} Konten wurde der Aktivierungsstatus durch diesen Export geschrieben, aber JIM konnte nicht prüfen, ob ihnen noch ein Initialkennwort zusteht. Wo dies der Fall ist, folgt die Zustellung möglicherweise der Synchronisierungsregel statt dem Attributfluss; das Dienstprotokoll nennt die Konten, und unter Vorgänge &gt; Kennwörter ist zu sehen, bei welchen ein Kennwort wartet.</value>
+    <value>Bei {0} Konten wurde der Aktivierungsstatus durch diesen Export geschrieben, aber JIM konnte nicht prüfen, ob ihnen noch ein Initialkennwort zusteht. Wo dies der Fall ist, folgt die Zustellung möglicherweise der Synchronisierungsregel statt dem Attributfluss; das Dienstprotokoll nennt die Konten, und unter Betrieb &gt; Kennwörter ist zu sehen, bei welchen ein Kennwort wartet.</value>
   </data>
   <data name="UnresolvableReferencesWarning" xml:space="preserve">
     <value>{0} Verweiswerte konnten nicht geschrieben werden, weil das referenzierte Metaverse-Objekt kein Objekt im verbundenen System hat. Die referenzierten Objekte liegen außerhalb des Geltungsbereichs jeder Synchronisierungsregel in dieses System oder wurden noch nicht provisioniert; zeigen Sie die betroffenen ausstehenden Exporte an, um Details zu sehen.</value>

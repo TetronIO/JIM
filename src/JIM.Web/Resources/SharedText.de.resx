@@ -76,7 +76,7 @@
     <value>Änderungsgrund</value>
   </data>
   <data name="TrustDialogChangeReasonHelper" xml:space="preserve">
-    <value>Wird zusammen mit Ihrem Namen in der Aktivität erfasst.</value>
+    <value>Wird zusammen mit Ihrem Namen in der Aktivität aufgezeichnet.</value>
   </data>
   <data name="TrustDialogChangeReasonDefault" xml:space="preserve">
     <value>Anmeldung über {0} wiederherstellen.</value>

@@ -172,7 +172,7 @@
     <value>Führt den ehrlichen Attributvergleich für jedes Objekt aus, statt unveränderte Objekte anhand des Inhalts-Hashes zu überspringen, und meldet jede Abweichung zwischen dem gespeicherten Hash und dem Vergleich als Fehler. Nutzen Sie dies vorübergehend, um die Optimierung durch Überspringen per Inhalts-Hash zu validieren; lassen Sie es für normale, schnellere vollständige Importe aus.</value>
   </data>
   <data name="AllowObjectTypeChangesLabel" xml:space="preserve">
-    <value>Objekttypänderungen erlauben</value>
+    <value>Objekttypänderungen zulassen</value>
   </data>
   <data name="SafeguardsTitle" xml:space="preserve">
     <value>Schutzmaßnahmen</value>
@@ -700,7 +700,7 @@
     <value>Die letzte Vorschau wurde nicht abgeschlossen und sagt daher nichts darüber aus, was das Löschen bewirken würde. Die Löschung hält fest, dass keine Vorschau sie begleitet hat.</value>
   </data>
   <data name="DeleteSystemPreviewAgain" xml:space="preserve">
-    <value>Erneut in der Vorschau anzeigen</value>
+    <value>Vorschau erneut erstellen</value>
   </data>
   <data name="DeleteSystemDefaultBody" xml:space="preserve">
     <value>Sehen Sie vor dem Löschen, welche Werte gelöscht oder von einem anderen verbundenen System übernommen würden und was exportiert würde. Die Aktivität der Löschung hält fest, dass sie ohne Vorschau erfolgt ist.</value>
@@ -787,7 +787,7 @@
     <value>Deprovisionierung eingereiht: {0} Objekte werden verarbeitet, bevor {1} gelöscht wird.</value>
   </data>
   <data name="DeleteSystemQueuedBackground" xml:space="preserve">
-    <value>Die Löschung wurde als Hintergrundauftrag eingereiht. Den Fortschritt können Sie in der Ansicht „Vorgänge“ verfolgen.</value>
+    <value>Die Löschung wurde als Hintergrundauftrag eingereiht. Den Fortschritt können Sie in der Ansicht „Betrieb“ verfolgen.</value>
   </data>
   <data name="DeleteSystemQueuedAfterSync" xml:space="preserve">
     <value>Ein Synchronisierungsvorgang läuft. Die Löschung wird danach fortgesetzt.</value>
@@ -1543,7 +1543,7 @@
     <value>Ermitteln...</value>
   </data>
   <data name="SettingFieldTogglePassword" xml:space="preserve">
-    <value>Kennwortsichtbarkeit umschalten</value>
+    <value>Kennwort anzeigen oder verbergen</value>
   </data>
   <data name="SettingFieldExample" xml:space="preserve">
     <value>Beispiel</value>

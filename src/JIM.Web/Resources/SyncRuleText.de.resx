@@ -709,7 +709,7 @@
     <value>Nachdem das Kennwort festgelegt wurde</value>
   </data>
   <data name="ExpiryRequireChange" xml:space="preserve">
-    <value>Änderung bei der nächsten Anmeldung erforderlich</value>
+    <value>Änderung bei der nächsten Anmeldung verlangen</value>
   </data>
   <data name="ExpiryAccordingToTarget" xml:space="preserve">
     <value>Alterung gemäß der eigenen Richtlinie des verbundenen Systems</value>
@@ -1381,10 +1381,10 @@
     <value>Kein Container entspricht „{0}“.</value>
   </data>
   <data name="PickerExpandAria" xml:space="preserve">
-    <value>{0} erweitern</value>
+    <value>{0} ausklappen</value>
   </data>
   <data name="PickerCollapseAria" xml:space="preserve">
-    <value>{0} reduzieren</value>
+    <value>{0} einklappen</value>
   </data>
   <data name="PickerManageAria" xml:space="preserve">
     <value>{0} verwalten</value>
@@ -1459,7 +1459,7 @@
     <value>Wählen Sie zuerst auf der Registerkarte &lt;strong&gt;Details&lt;/strong&gt; das verbundene System, die Richtung und die Objekttypen; die Eingrenzung gilt dann für Objekte dieser Typen.</value>
   </data>
   <data name="ScopingHeading" xml:space="preserve">
-    <value>Eingrenzung</value>
+    <value>Geltungsbereich</value>
   </data>
   <data name="ScopeDefaultExport" xml:space="preserve">
     <value>Standardmäßig liegen alle Metaverse-Objekte des Typs {0} im Geltungsbereich dieser Synchronisierungsregel; um sie nur auf eine Teilmenge dieser Objekte anzuwenden, verwenden Sie einen Filter. Beispielsweise soll diese Regel vielleicht nur für Festangestellte gelten, nicht für Auftragnehmende.</value>

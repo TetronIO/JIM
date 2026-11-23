@@ -223,10 +223,10 @@
     <value>Parallel zu diesem Schritt ausführen</value>
   </data>
   <data name="ScheduleEditorMoveUp" xml:space="preserve">
-    <value>Nach oben</value>
+    <value>Nach oben verschieben</value>
   </data>
   <data name="ScheduleEditorMoveDown" xml:space="preserve">
-    <value>Nach unten</value>
+    <value>Nach unten verschieben</value>
   </data>
   <data name="ScheduleEditorDeleteStep" xml:space="preserve">
     <value>Schritt löschen</value>
@@ -1108,7 +1108,7 @@
     <value>Zeitplanausführung nicht gefunden.</value>
   </data>
   <data name="ScheduleExecBackToOps" xml:space="preserve">
-    <value>Zurück zu Operationen</value>
+    <value>Zurück zu „Betrieb“</value>
   </data>
   <data name="HealthStripTitle" xml:space="preserve">
     <value>Dienststatus</value>
@@ -1210,7 +1210,7 @@
     <value>Exporte zurückgehalten, bis Sie handeln</value>
   </data>
   <data name="GenValRenameAllowed" xml:space="preserve">
-    <value>Umbenennung erlaubt</value>
+    <value>Umbenennung zugelassen</value>
   </data>
   <data name="GenValRenamedNext" xml:space="preserve">
     <value>Beim nächsten Export umbenannt</value>
@@ -1249,7 +1249,7 @@
     <value>Für alle {0} erneut versuchen</value>
   </data>
   <data name="GenValAllowRename" xml:space="preserve">
-    <value>Umbenennung erlauben…</value>
+    <value>Umbenennung zulassen…</value>
   </data>
   <data name="GenValTryAgain" xml:space="preserve">
     <value>Erneut versuchen</value>

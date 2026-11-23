@@ -256,7 +256,7 @@
     <value>Typ:</value>
   </data>
   <data name="PluralityFilterLabel" xml:space="preserve">
-    <value>Mehrwertigkeit:</value>
+    <value>Wertigkeit:</value>
   </data>
   <data name="WritabilityFilterLabel" xml:space="preserve">
     <value>Schreibbarkeit:</value>
@@ -304,7 +304,7 @@
     <value>Klasse</value>
   </data>
   <data name="ColumnPlurality" xml:space="preserve">
-    <value>Mehrwertigkeit</value>
+    <value>Wertigkeit</value>
   </data>
   <data name="ColumnCaseExact" xml:space="preserve">
     <value>Groß-/Kleinschreibung</value>
@@ -424,7 +424,7 @@
     <value>Schema angewendet; die abhängige Konfiguration wurde entfernt.</value>
   </data>
   <data name="AppliedRemovedQueued" xml:space="preserve">
-    <value>Schema angewendet; die abhängige Konfiguration wurde entfernt und das Entfernen der Daten eingereiht. Verfolgen Sie es auf der Registerkarte „Operationen“.</value>
+    <value>Schema angewendet; die abhängige Konfiguration wurde entfernt und das Entfernen der Daten eingereiht. Verfolgen Sie es auf der Seite „Betrieb“.</value>
   </data>
   <data name="AppliedRemovedNotQueued" xml:space="preserve">
     <value>Schema angewendet und Konfiguration entfernt, aber das Entfernen der Daten konnte nicht eingereiht werden: {0}</value>
@@ -919,7 +919,7 @@
     <value>Dadurch werden Konfiguration und Identitätsdaten gelöscht.</value>
   </data>
   <data name="PreviewDeletesBody" xml:space="preserve">
-    <value>Die folgende Konfiguration wird gelöscht, und das Entfernen der Daten läuft als Hintergrundaufgabe, die Sie in der Operationen-Warteschlange verfolgen können.</value>
+    <value>Die folgende Konfiguration wird gelöscht, und das Entfernen der Daten läuft als Hintergrundaufgabe, die Sie unter „Betrieb“ verfolgen können.</value>
   </data>
   <data name="PreviewConfigDeleted" xml:space="preserve">
     <value>Gelöschte Konfiguration</value>
@@ -1075,10 +1075,10 @@
     <value>Aktionen</value>
   </data>
   <data name="MoveUp" xml:space="preserve">
-    <value>Nach oben</value>
+    <value>Nach oben verschieben</value>
   </data>
   <data name="MoveDown" xml:space="preserve">
-    <value>Nach unten</value>
+    <value>Nach unten verschieben</value>
   </data>
   <data name="NoRulesMatchSearch" xml:space="preserve">
     <value>Keine Objektabgleichsregeln entsprechen „{0}“</value>

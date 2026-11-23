@@ -49,7 +49,7 @@
     <value>Zurückgehalten</value>
   </data>
   <data name="ActivityFollowUpStateParked" xml:space="preserve">
-    <value>Angehalten</value>
+    <value>Zurückgestellt</value>
   </data>
   <data name="ActivityFollowUpStateExpired" xml:space="preserve">
     <value>Abgelaufen</value>
@@ -319,7 +319,7 @@
     <value>Zeitpunkt:</value>
   </data>
   <data name="ActivityFieldInitiatedBy" xml:space="preserve">
-    <value>Initiiert von:</value>
+    <value>Gestartet von:</value>
   </data>
   <data name="ActivityFieldStatus" xml:space="preserve">
     <value>Status:</value>
@@ -799,7 +799,7 @@
     <value>Aktivitätsdetails</value>
   </data>
   <data name="ActivityBreadcrumbOperations" xml:space="preserve">
-    <value>Vorgänge</value>
+    <value>Betrieb</value>
   </data>
   <data name="ActivityStatCsosDisconnectedTitle" xml:space="preserve">
     <value>Getrennte Objekte im verbundenen System</value>
@@ -817,7 +817,7 @@
     <value>Initiator</value>
   </data>
   <data name="ActivityColumnInitiatedBy" xml:space="preserve">
-    <value>Initiiert von</value>
+    <value>Gestartet von</value>
   </data>
   <data name="ActivityColumnCreated" xml:space="preserve">
     <value>Erstellt</value>
@@ -1393,7 +1393,7 @@
     <value>Suchen</value>
   </data>
   <data name="ActivityHistoryChangeType" xml:space="preserve">
-    <value>Änderungstyp</value>
+    <value>Änderungsart</value>
   </data>
   <data name="ActivityHistoryAllChanges" xml:space="preserve">
     <value>Alle Änderungen</value>
@@ -1420,7 +1420,7 @@
     <value>generierter Wert</value>
   </data>
   <data name="ActivityRetired" xml:space="preserve">
-    <value>ausgemustert</value>
+    <value>stillgelegt</value>
   </data>
   <data name="ActivityNone" xml:space="preserve">
     <value>(keine)</value>
@@ -1762,7 +1762,7 @@
     <value>Schlägt fehl</value>
   </data>
   <data name="ActivityPendingLastAttempted" xml:space="preserve">
-    <value>Letzter Versuch</value>
+    <value>Zuletzt versucht</value>
   </data>
   <data name="ActivityPendingAttributeChangesHeading" xml:space="preserve">
     <value>Ausstehende Attributänderungen ({0})</value>
@@ -1771,7 +1771,7 @@
     <value>Attribut {0}</value>
   </data>
   <data name="ActivityPendingNoAttributeChanges" xml:space="preserve">
-    <value>Keine Attributänderungen erfasst.</value>
+    <value>Keine Attributänderungen aufgezeichnet.</value>
   </data>
   <data name="ActivityPendingViewDetails" xml:space="preserve">
     <value>Vollständige Details des ausstehenden Exports anzeigen</value>

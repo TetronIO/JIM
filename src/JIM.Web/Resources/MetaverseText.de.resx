@@ -205,7 +205,7 @@
     <value>Attribut hinzufügen</value>
   </data>
   <data name="MvotPlurality" xml:space="preserve">
-    <value>Wertanzahl</value>
+    <value>Wertigkeit</value>
   </data>
   <data name="MvotBuiltInAttribute" xml:space="preserve">
     <value>Integriertes Attribut</value>
@@ -388,7 +388,7 @@
     <value>Objekt im verbundenen System beim Festlegen des Kennworts aktivieren</value>
   </data>
   <data name="SpdEnableIntro" xml:space="preserve">
-    <value>Diese Einstellungen gelten jetzt für dieses Konto. Wenn eine Synchronisierungsregel &lt;code&gt;userAccountControl&lt;/code&gt; mit eingeschaltetem „Enforce State“ übergibt, stellt der nächste Export dessen Wert wieder her. Ist die Option aus, wird ein Objekt im verbundenen System, das noch auf sein erstes Kennwort wartet, so aktiviert, wie es das Initialkennwort seiner Synchronisierungsregel vorgibt.</value>
+    <value>Diese Einstellungen gelten jetzt für dieses Konto. Wenn eine Synchronisierungsregel &lt;code&gt;userAccountControl&lt;/code&gt; mit eingeschaltetem „Zustand erzwingen“ übergibt, stellt der nächste Export dessen Wert wieder her. Ist die Option aus, wird ein Objekt im verbundenen System, das noch auf sein erstes Kennwort wartet, so aktiviert, wie es das Initialkennwort seiner Synchronisierungsregel vorgibt.</value>
   </data>
   <data name="SpdSharedPermanent" xml:space="preserve">
     <value>Ein Kennwort, das nie abläuft, in {0} Systemen. Ein aus einem dieser Systeme entwendeter Berechtigungsnachweis öffnet die anderen, und nichts wird es ändern. Legen Sie diese besser getrennt fest.</value>
@@ -901,7 +901,7 @@
     <value>Vorschau</value>
   </data>
   <data name="TvPreviewing" xml:space="preserve">
-    <value>Vorschau läuft…</value>
+    <value>Vorschau wird erstellt…</value>
   </data>
   <data name="TvSetPasswordTitle" xml:space="preserve">
     <value>Kennwort festlegen: {0}</value>
@@ -1081,7 +1081,7 @@
     <value>Ersetzt</value>
   </data>
   <data name="EchPillParked" xml:space="preserve">
-    <value>Geparkt</value>
+    <value>Zurückgestellt</value>
   </data>
   <data name="EchPillRefused" xml:space="preserve">
     <value>Abgelehnt</value>
@@ -1180,10 +1180,10 @@
     <value>{0} Kennwortänderungen in der Warteschlange</value>
   </data>
   <data name="PsiParkedOne" xml:space="preserve">
-    <value>1 Kennwortänderung in der Warteschlange ist für {0} geparkt. Das Ziel hat sie abgelehnt oder die Versuche sind ausgeschöpft, daher versucht JIM es nicht mehr. Beheben Sie die Ursache auf der Registerkarte „Kennwörter“ unter „Vorgänge“ und wiederholen Sie sie dann von dort.</value>
+    <value>1 Kennwortänderung in der Warteschlange ist für {0} geparkt. Das Ziel hat sie abgelehnt oder die Versuche sind ausgeschöpft, daher versucht JIM es nicht mehr. Beheben Sie die Ursache auf der Registerkarte „Kennwörter“ unter „Betrieb“ und wiederholen Sie sie dann von dort.</value>
   </data>
   <data name="PsiParkedOther" xml:space="preserve">
-    <value>{0} Kennwortänderungen in der Warteschlange sind für {1} geparkt. Das Ziel hat sie abgelehnt oder die Versuche sind ausgeschöpft, daher versucht JIM es nicht mehr. Beheben Sie die Ursache auf der Registerkarte „Kennwörter“ unter „Vorgänge“ und wiederholen Sie sie dann von dort.</value>
+    <value>{0} Kennwortänderungen in der Warteschlange sind für {1} geparkt. Das Ziel hat sie abgelehnt oder die Versuche sind ausgeschöpft, daher versucht JIM es nicht mehr. Beheben Sie die Ursache auf der Registerkarte „Kennwörter“ unter „Betrieb“ und wiederholen Sie sie dann von dort.</value>
   </data>
   <data name="PsiExpiredTooltip" xml:space="preserve">
     <value>{0} für {1} hat die Gültigkeitsdauer überschritten und kann nicht mehr zugestellt werden. Die Kennwörter dieser Personen in diesem System sind nicht mehr mit den übrigen abgeglichen, und JIM schließt diese Lücke nicht von selbst.</value>
@@ -1759,6 +1759,6 @@
     <value>Die Zustellung läuft noch. Das Kennwort ist sicher in der Warteschlange und wird wiederholt, wenn ein System nicht verfügbar ist; verfolgen Sie es auf der Registerkarte „Kennwort“ dieses Metaverse-Objekts oder auf der</value>
   </data>
   <data name="SpdPasswordsTabOperations" xml:space="preserve">
-    <value>Registerkarte „Kennwörter“ unter „Vorgänge“</value>
+    <value>Registerkarte „Kennwörter“ unter „Betrieb“</value>
   </data>
 </root>

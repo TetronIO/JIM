@@ -106,7 +106,7 @@
     <value>Mehrwertig</value>
   </data>
   <data name="SchemaPlurality" xml:space="preserve">
-    <value>Mehrwertigkeit</value>
+    <value>Wertigkeit</value>
   </data>
   <data name="SchemaCustom" xml:space="preserve">
     <value>Benutzerdefiniert</value>
@@ -325,7 +325,7 @@
     <value>Seriennummer</value>
   </data>
   <data name="CertificateSourceType" xml:space="preserve">
-    <value>Quellentyp</value>
+    <value>Quelltyp</value>
   </data>
   <data name="CertificateEditTitle" xml:space="preserve">
     <value>Zertifikat bearbeiten</value>
@@ -835,7 +835,7 @@
     <value>API-Schlüssel nicht gefunden. Er wurde möglicherweise gelöscht.</value>
   </data>
   <data name="FactoryResetTitle" xml:space="preserve">
-    <value>Werksreset</value>
+    <value>Zurücksetzen auf Werkseinstellungen</value>
   </data>
   <data name="FactoryResetConfirmTitle" xml:space="preserve">
     <value>Werksreset bestätigen</value>
@@ -1102,10 +1102,10 @@
     <value>Claims suchen</value>
   </data>
   <data name="ClaimsColumnType" xml:space="preserve">
-    <value>Claimtyp</value>
+    <value>Claim-Typ</value>
   </data>
   <data name="ClaimsColumnValue" xml:space="preserve">
-    <value>Claimwert</value>
+    <value>Claim-Wert</value>
   </data>
   <data name="ClaimsEmptySearch" xml:space="preserve">
     <value>Keine Claims entsprechen „{0}“</value>
@@ -1183,13 +1183,13 @@
     <value>Sicherheit und Einstellungen</value>
   </data>
   <data name="AdminTileOperations" xml:space="preserve">
-    <value>Operationen</value>
+    <value>Betrieb</value>
   </data>
   <data name="AdminTileOperationsDesc" xml:space="preserve">
     <value>Synchronisierungsvorgänge, Zeitpläne, Ausführungsverlauf und Kennwortzustellung verwalten</value>
   </data>
   <data name="AdminOperationsAttention" xml:space="preserve">
-    <value>Ein JIM-Dienst meldet sich nicht; öffnen Sie Operationen.</value>
+    <value>Ein JIM-Dienst meldet sich nicht; öffnen Sie „Betrieb“.</value>
   </data>
   <data name="AdminTileLogsDesc" xml:space="preserve">
     <value>Anwendungs- und Synchronisierungsprotokolle anzeigen</value>
@@ -1255,7 +1255,7 @@
     <value>Beispiel: 30.00:00:00 für 30 Tage</value>
   </data>
   <data name="EditSettingTogglePassword" xml:space="preserve">
-    <value>Sichtbarkeit des Kennworts umschalten</value>
+    <value>Kennwort anzeigen oder verbergen</value>
   </data>
   <data name="EditSettingDefault" xml:space="preserve">
     <value>Standard: {0}</value>

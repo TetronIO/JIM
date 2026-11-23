@@ -847,7 +847,7 @@
     <value>{0} wird beim nächsten Export umbenannt</value>
   </data>
   <data name="BannerAllowRename" xml:space="preserve">
-    <value>Umbenennung zulassen …</value>
+    <value>Umbenennung zulassen…</value>
   </data>
   <data name="SkipAheadConfirm" xml:space="preserve">
     <value>Speichern und überspringen</value>

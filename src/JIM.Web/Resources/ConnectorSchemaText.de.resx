@@ -175,7 +175,7 @@
     <value>Benutzerdefiniertes Exchange-Attribut 15. Für einen synchronisierten Benutzer wird stattdessen im lokalen Active Directory geschrieben.</value>
   </data>
   <data name="Graph_user_sourceOfAuthority" xml:space="preserve">
-    <value>Wo der Benutzer verwaltet wird, von JIM abgeleitet: cloud (in Entra ID, sodass JIM über Microsoft Graph darauf schreiben kann), onPremisesDirectory (aus Active Directory synchronisiert, sodass die meisten Attribute stattdessen dort geschrieben werden) oder externalEntraDirectory (ein Gast aus einem anderen Mandanten). Ein Objekt, dessen maßgebliche Quelle auf Entra ID umgestellt wurde, wird nur dann als cloud ausgewiesen, wenn „Änderungen der maßgeblichen Quelle nachverfolgen“ aktiviert ist. Übernehmen Sie es in ein Metaverse-Attribut, um Synchronisierungsregeln für den Export darauf einzugrenzen.</value>
+    <value>Wo der Benutzer verwaltet wird, von JIM abgeleitet: cloud (in Entra ID, sodass JIM über Microsoft Graph darauf schreiben kann), onPremisesDirectory (aus Active Directory synchronisiert, sodass die meisten Attribute stattdessen dort geschrieben werden) oder externalEntraDirectory (ein Gast aus einem anderen Mandanten). Ein Objekt, dessen maßgebliche Quelle auf Entra ID umgestellt wurde, wird nur dann als cloud ausgewiesen, wenn „Änderungen der maßgeblichen Quelle verfolgen“ aktiviert ist. Übernehmen Sie es in ein Metaverse-Attribut, um Synchronisierungsregeln für den Export darauf einzugrenzen.</value>
   </data>
   <data name="Graph_group_id" xml:space="preserve">
     <value>Die von Entra ID vergebene, unveränderliche Kennung des Objekts. Die externe ID.</value>
@@ -241,6 +241,6 @@
     <value>Die lokale Active-Directory-Domäne, aus der das Objekt stammt.</value>
   </data>
   <data name="Graph_group_sourceOfAuthority" xml:space="preserve">
-    <value>Wo die Gruppe verwaltet wird, von JIM abgeleitet: cloud (in Entra ID, sodass JIM über Microsoft Graph darauf schreiben kann), onPremisesDirectory (aus Active Directory synchronisiert, sodass die meisten Attribute stattdessen dort geschrieben werden) oder externalEntraDirectory (ein Gast aus einem anderen Mandanten). Ein Objekt, dessen maßgebliche Quelle auf Entra ID umgestellt wurde, wird nur dann als cloud ausgewiesen, wenn „Änderungen der maßgeblichen Quelle nachverfolgen“ aktiviert ist. Übernehmen Sie es in ein Metaverse-Attribut, um Synchronisierungsregeln für den Export darauf einzugrenzen.</value>
+    <value>Wo die Gruppe verwaltet wird, von JIM abgeleitet: cloud (in Entra ID, sodass JIM über Microsoft Graph darauf schreiben kann), onPremisesDirectory (aus Active Directory synchronisiert, sodass die meisten Attribute stattdessen dort geschrieben werden) oder externalEntraDirectory (ein Gast aus einem anderen Mandanten). Ein Objekt, dessen maßgebliche Quelle auf Entra ID umgestellt wurde, wird nur dann als cloud ausgewiesen, wenn „Änderungen der maßgeblichen Quelle verfolgen“ aktiviert ist. Übernehmen Sie es in ein Metaverse-Attribut, um Synchronisierungsregeln für den Export darauf einzugrenzen.</value>
   </data>
 </root>

@@ -295,7 +295,7 @@
     <value>Der OAuth-2.0-Client-Bezeichner.</value>
   </data>
   <data name="JIM_SCIM_2_0_Client_Connector_Client_Secret_Label" xml:space="preserve">
-    <value>Client Secret</value>
+    <value>Clientgeheimnis</value>
   </data>
   <data name="JIM_SCIM_2_0_Client_Connector_Client_Secret_Description" xml:space="preserve">
     <value>Das OAuth-2.0-Client-Geheimnis.</value>

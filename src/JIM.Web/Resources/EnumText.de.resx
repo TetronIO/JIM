@@ -334,10 +334,10 @@
     <value>Vordefinierte Suche</value>
   </data>
   <data name="ActivityTargetType_ConnectorDefinition" xml:space="preserve">
-    <value>Connectordefinition</value>
+    <value>Connector-Definition</value>
   </data>
   <data name="ActivityTargetType_ExampleDataSet" xml:space="preserve">
-    <value>Beispieldaten-Datensatz</value>
+    <value>Beispieldatensatz</value>
   </data>
   <data name="ActivityTargetType_SystemInitialisation" xml:space="preserve">
     <value>Systeminitialisierung</value>
@@ -373,7 +373,7 @@
     <value>Zahl</value>
   </data>
   <data name="AttributeDataType_DateTime" xml:space="preserve">
-    <value>Datum und Uhrzeit</value>
+    <value>Datum/Uhrzeit</value>
   </data>
   <data name="AttributeDataType_Binary" xml:space="preserve">
     <value>Binär</value>
@@ -508,7 +508,7 @@
     <value>Prüfung des Exportgeltungsbereichs</value>
   </data>
   <data name="AttributeFlowValueProcessingStep_TrimWhitespace" xml:space="preserve">
-    <value>Leerraum am Rand entfernen</value>
+    <value>Leerraum entfernen</value>
   </data>
   <data name="AttributeFlowValueProcessingStep_CollapseInternalWhitespace" xml:space="preserve">
     <value>Internen Leerraum zusammenfassen</value>
@@ -715,7 +715,7 @@
     <value>Wertigkeit</value>
   </data>
   <data name="SchemaAttributeChangeAspect_Writability" xml:space="preserve">
-    <value>Beschreibbarkeit</value>
+    <value>Schreibbarkeit</value>
   </data>
   <data name="NotConnectedReason_NotInScope" xml:space="preserve">
     <value>Nicht im Geltungsbereich</value>
@@ -787,7 +787,7 @@
     <value>Exportiert</value>
   </data>
   <data name="PendingExportStatus_Parked" xml:space="preserve">
-    <value>Angehalten</value>
+    <value>Zurückgestellt</value>
   </data>
   <data name="PendingExportStatus_Incomplete" xml:space="preserve">
     <value>Unvollständig</value>
