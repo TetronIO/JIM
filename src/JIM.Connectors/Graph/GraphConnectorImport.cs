@@ -107,11 +107,21 @@ internal sealed class GraphConnectorImport
         var roles = GraphAccessToken.ReadRoles(await _client.GetAccessTokenAsync(cancellationToken));
         var targets = GraphImportTarget.For(connectedSystem, GraphPermissions.CanReadHiddenMembership(roles));
 
+        // Which synchronised objects have had their Source of Authority switched is read only when tracking is on: the
+        // only permission that reads it also allows changing it. Off, the set is empty and no warning is given.
         var warnings = new List<string>();
+        var tracksSourceOfAuthority = GraphConnector.TracksSourceOfAuthority(connectedSystem.SettingValues);
         foreach (var target in targets)
         {
-            if (await LoadCloudManagedAsync(target, cancellationToken) is { } warning)
+            if (!tracksSourceOfAuthority)
+            {
+                _cloudManaged[target.Name] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _cloudManagedHashes[target.Name] = null;
+            }
+            else if (await LoadCloudManagedAsync(target, cancellationToken) is { } warning)
+            {
                 warnings.Add(warning);
+            }
         }
 
         if (runProfile.RunType != ConnectedSystemRunType.DeltaImport)
@@ -211,8 +221,8 @@ internal sealed class GraphConnectorImport
                        "and Microsoft Graph reports changes only to what was read then.";
 
             if (!state.CloudManagedHashes.TryGetValue(target.Name, out var hash) || hash != _cloudManagedHashes.GetValueOrDefault(target.Name))
-                return $"Some {target.Collection} have moved to or from cloud management since the last import, which Microsoft Graph's changes do not report, " +
-                       "so every one is read to bring its sourceOfAuthority up to date.";
+                return $"The Source of Authority of some {target.Collection} has been switched between Active Directory and Entra ID since the last import, or tracking it was turned on or off, " +
+                       "which Microsoft Graph's changes do not report, so every one is read to bring its sourceOfAuthority up to date.";
         }
 
         foreach (var target in targets)
@@ -407,8 +417,8 @@ internal sealed class GraphConnectorImport
     }
 
     /// <summary>
-    /// Asks which synchronised objects have been converted to cloud management, which Graph cannot report per object in
-    /// a list: such an object still reads <c>onPremisesSyncEnabled</c> as true. One paged query per Object Type,
+    /// Asks which synchronised objects have had their Source of Authority switched to Entra ID, which Graph cannot report
+    /// per object in a list: such an object still reads <c>onPremisesSyncEnabled</c> as true. Only with tracking on. One paged query per Object Type,
     /// selecting only ids. Refused (the permission is missing, or the cloud does not offer the filter), the run carries
     /// on deriving from synchronisation alone, and says so.
     /// </summary>
@@ -437,10 +447,9 @@ internal sealed class GraphConnectorImport
         catch (GraphRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden)
         {
             _logger.Warning(ex, "Microsoft Graph refused the query for cloud-managed {Collection}.", target.Collection);
-            var permission = target.IsUser ? GraphPermissions.UserSyncBehaviourRead : GraphPermissions.GroupSyncBehaviourRead;
-            return $"JIM could not ask Microsoft Graph which synchronised {target.Collection} have moved to cloud management ({ex.ErrorCode ?? $"HTTP {(int)ex.StatusCode}"}), " +
-                   $"so their sourceOfAuthority comes from onPremisesSyncEnabled alone, and one converted to cloud management reads as onPremisesDirectory. " +
-                   $"Grant the {permission} application permission to tell them apart.";
+            var permission = target.IsUser ? GraphPermissions.UserSourceOfAuthority : GraphPermissions.GroupSourceOfAuthority;
+            return $"Track Source of Authority Changes is on, but Microsoft Graph would not say which synchronised {target.Collection} have had their Source of Authority switched to Entra ID ({ex.ErrorCode ?? $"HTTP {(int)ex.StatusCode}"}), " +
+                   $"so a switched one reads as onPremisesDirectory. Grant the {permission} application permission, or turn the setting off.";
         }
     }
 

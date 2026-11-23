@@ -82,6 +82,17 @@ public abstract class GraphImportTestBase
         ]
     };
 
+    /// <summary>The Connected System with Track Source of Authority Changes turned on.</summary>
+    protected static ConnectedSystem Tracked(ConnectedSystem connectedSystem)
+    {
+        connectedSystem.SettingValues.Add(new ConnectedSystemSettingValue
+        {
+            Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingTrackSourceOfAuthority, Type = ConnectedSystemSettingType.CheckBox },
+            CheckboxValue = true
+        });
+        return connectedSystem;
+    }
+
     protected static ConnectedSystemObjectType Users(params string[] selected) => ObjectType("user", GraphSchemaCatalogue.UserAttributes, selected);
 
     protected static ConnectedSystemObjectType Groups(params string[] selected) => ObjectType("group", GraphSchemaCatalogue.GroupAttributes, selected);

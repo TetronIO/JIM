@@ -8,8 +8,9 @@
 # submits results to the metrics API, and posts a commit status named `jim-ad-lab` on the SHA it tested: `success` only
 # when everything passed, with the scenario count and the OS build in its description. It also signs people in to JIM
 # through the lab's AD FS server (Scenario 031, #2441) and through the JIM test tenant in Microsoft Entra ID (Scenario
-# 035, #2367), and posts each as a status of its own, `jim-ad-lab-adfs` and `jim-sso-entra`, so a sign-in failure never
-# turns `jim-ad-lab` red or the reverse. `/release` and release.yml
+# 035, #2367), provisions to that tenant through the Microsoft Entra ID Connector (Scenario 036, #361), and posts each
+# as a status of its own, `jim-ad-lab-adfs`, `jim-sso-entra` and `jim-entra-connector`, so a sign-in or tenant failure
+# never turns `jim-ad-lab` red or the reverse. `/release` and release.yml
 # require `success` for the SHA being tagged (scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab) once the repository variable
 # JIM_AD_LAB_GATE_ENFORCED is `true` (set after the lab's first green run); from then on there is no override, so the
 # remedy for a red night is a fix and a dispatched run.
@@ -228,11 +229,11 @@ jobs:
           }
 
       # What this run covers. The LDAP scenarios (the suite, reported as jim-ad-lab), the AD FS sign-in checks
-      # (Scenario 031, reported as jim-ad-lab-adfs, #2441) and the Entra ID sign-in checks (Scenario 035, reported as
-      # jim-sso-entra, #2367) run as separate steps, so a failure in one never colours another's status: a night (or a
-      # dispatch of All) runs all three, a dispatch of Scenario 031 or 035 runs those checks only, and a dispatch of any
-      # other scenario runs that scenario in the suite only. Test-ScenarioRunsOnItsOwn keeps 031 and 035 out of the
-      # suite's sweep.
+      # (Scenario 031, reported as jim-ad-lab-adfs, #2441), the Entra ID sign-in checks (Scenario 035, reported as
+      # jim-sso-entra, #2367) and the Entra ID Connector checks (Scenario 036, reported as jim-entra-connector, #361) run
+      # as separate steps, so a failure in one never colours another's status: a night (or a dispatch of All) runs all
+      # four, a dispatch of Scenario 031, 035 or 036 runs those checks only, and a dispatch of any other scenario runs
+      # that scenario in the suite only. Test-ScenarioRunsOnItsOwn keeps 031, 035 and 036 out of the suite's sweep.
       - name: Decide what this run covers
         id: plan
         env:
@@ -245,10 +246,12 @@ jobs:
           $suite = -not (Test-ScenarioRunsOnItsOwn -ScenarioNumber $number)
           $signIn = ($name -eq 'All') -or ($number -eq 31)
           $entra = ($name -eq 'All') -or ($number -eq 35)
+          $entraConnector = ($name -eq 'All') -or ($number -eq 36)
           "suite=$($suite.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "sign_in=$($signIn.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "entra=$($entra.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Scenario '$env:SCENARIO' ($name): LDAP suite $suite, AD FS sign-in checks $signIn, Entra ID sign-in checks $entra"
+          "entra_connector=$($entraConnector.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Scenario '$env:SCENARIO' ($name): LDAP suite $suite, AD FS sign-in checks $signIn, Entra ID sign-in checks $entra, Entra ID Connector checks $entraConnector"
 
       # The suite. -ContinueOnFailure so one red scenario does not hide the others: the point of a night's run is
       # the full list. The runner reverts each domain controller to its checkpoint, populates and re-checkpoints
@@ -349,6 +352,27 @@ jobs:
           pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 35 -Template Nano -DirectoryType ActiveDirectory
           exit $LASTEXITCODE
 
+      # The Entra ID Connector checks (Scenario 036, #361): JIM provisions, updates, disables and deletes users and
+      # groups in the JIM test tenant through the Microsoft Entra ID Connector. The CI app (its federated credential)
+      # gives the permanent "JIM Entra ID Connector (CI)" app registration a new certificate for JIM with
+      # Register-JIMEntraIdConnector, and a short-lived one for the harness, which checks every result through Graph
+      # itself and deletes everything the run made. Reported as jim-entra-connector below, so a tenant outage never
+      # colours anything else.
+      - name: Run the Entra ID Connector checks
+        id: entra_connector
+        if: ${{ !cancelled() && steps.plan.outputs.entra_connector == 'true' }}
+        continue-on-error: true
+        env:
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+          JIM_SSO_ENTRA_TENANT_ID: ${{ vars.JIM_SSO_ENTRA_TENANT_ID }}
+          JIM_SSO_ENTRA_CI_CLIENT_ID: ${{ vars.JIM_SSO_ENTRA_CI_CLIENT_ID }}
+          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
+          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 36 -Template Nano -DirectoryType ActiveDirectory
+          exit $LASTEXITCODE
+
       # What the run left, condensed: scenario counts and the domain controller OS builds (recorded by the runner in
       # the regression report, or in the performance file for a single scenario) into dc-builds.json, the job
       # summary and the one-line description of the commit status. The logic is Get-LabRunSummary in the lab
@@ -361,6 +385,7 @@ jobs:
           PROBES_OUTCOME: ${{ steps.probes.outcome }}
           SIGN_IN_OUTCOME: ${{ steps.sign_in.outcome }}
           ENTRA_OUTCOME: ${{ steps.entra.outcome }}
+          ENTRA_CONNECTOR_OUTCOME: ${{ steps.entra_connector.outcome }}
         run: |
           Import-Module ./test/integration/ad-lab/guest/LabDomainController.psm1 -Force
           $results = Join-Path (Get-Location) 'test/integration/results'
@@ -382,7 +407,7 @@ jobs:
             $lines += 'Failed scenarios: ' + (($summary.FailedScenarios | ForEach-Object { "``$_``" }) -join ', ')
           }
           $lines += ''
-          $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME. AD FS sign-in checks: $env:SIGN_IN_OUTCOME. Entra ID sign-in checks: $env:ENTRA_OUTCOME."
+          $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME. AD FS sign-in checks: $env:SIGN_IN_OUTCOME. Entra ID sign-in checks: $env:ENTRA_OUTCOME. Entra ID Connector checks: $env:ENTRA_CONNECTOR_OUTCOME."
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       # Artefacts are readable by anyone who can read the repository, and GitHub only masks secrets in the log, not
@@ -499,6 +524,26 @@ jobs:
             default   { $state = 'error'; $description = 'the run stopped before the Entra ID sign-in checks ran' }
           }
           gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-sso-entra' -f description="$description" -f target_url="$env:RUN_URL"
+          exit $LASTEXITCODE
+
+      # The Entra ID Connector checks' own status, kept apart from the others like jim-sso-entra's; not yet a release
+      # gate (that waits for a run of green nights). Posted only by a run that set out to run the checks; a cancelled
+      # run posts nothing.
+      - name: Post the jim-entra-connector commit status
+        if: ${{ always() && job.status != 'cancelled' && steps.plan.outputs.entra_connector == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ENTRA_CONNECTOR_OUTCOME: ${{ steps.entra_connector.outcome }}
+        run: |
+          switch ($env:ENTRA_CONNECTOR_OUTCOME) {
+            'success' { $state = 'success'; $description = 'Entra ID Connector checks passed (Scenario 036)' }
+            'failure' { $state = 'failure'; $description = 'Entra ID Connector checks failed (Scenario 036); see the run' }
+            default   { $state = 'error'; $description = 'the run stopped before the Entra ID Connector checks ran' }
+          }
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-entra-connector' -f description="$description" -f target_url="$env:RUN_URL"
           exit $LASTEXITCODE
 
       # The runner is not ephemeral: without teardown the stack and the key persist between jobs. Always run.

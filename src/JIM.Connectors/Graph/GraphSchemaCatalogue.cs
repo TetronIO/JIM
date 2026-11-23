@@ -48,6 +48,12 @@ internal static class GraphSchemaCatalogue
 
     public static IReadOnlyList<GraphSchemaAttribute> GroupAttributes { get; } = BuildGroupAttributes();
 
+    /// <summary>The properties Graph takes only on a create, such as a group's <c>mailEnabled</c>, which an update must leave out.</summary>
+    public static IReadOnlySet<string> CreateOnlyProperties { get; } = UserAttributes.Concat(GroupAttributes)
+        .Where(a => a.Writability == AttributeWritability.WritableOnCreate)
+        .Select(a => a.Name)
+        .ToHashSet(StringComparer.Ordinal);
+
     private static List<GraphSchemaAttribute> BuildUserAttributes()
     {
         var attributes = new List<GraphSchemaAttribute>
@@ -149,8 +155,9 @@ internal static class GraphSchemaCatalogue
 
     private static GraphSchemaAttribute SourceOfAuthorityAttribute(string objectTypeName) =>
         new(SourceOfAuthority, Text, ReadOnly,
-            $"Where the {objectTypeName} is managed, derived by JIM: cloud (Entra ID itself, so JIM can write to it), onPremisesDirectory " +
-            "(synchronised from Active Directory, so most attributes are written there instead) or externalEntraDirectory (a guest from " +
-            "another tenant). Scope export Synchronisation Rules on it.",
+            $"Where the {objectTypeName} is managed, derived by JIM: cloud (in Entra ID, so JIM can write to it through Microsoft Graph), " +
+            "onPremisesDirectory (synchronised from Active Directory, so most attributes are written there instead) or externalEntraDirectory " +
+            "(a guest from another tenant). An object whose Source of Authority was switched to Entra ID reads as cloud only with Track Source " +
+            "of Authority Changes on. Flow it into a Metaverse Attribute to scope export Synchronisation Rules on it.",
             null, AlwaysImported: true, IsConnectorDefined: true);
 }

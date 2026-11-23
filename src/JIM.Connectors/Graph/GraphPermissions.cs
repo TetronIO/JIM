@@ -9,9 +9,10 @@ namespace JIM.Connectors.Graph;
 /// </summary>
 /// <remarks>
 /// A broader permission satisfies a narrower one: ReadWrite covers Read, and Directory.ReadWrite.All covers users and
-/// groups alike, but nothing covers Member.Read.Hidden. Reading is required; writing, Source of Authority and hidden
-/// membership are needed only by the features that use them, which a Connected System may not, so their absence is a
-/// warning rather than an error.
+/// groups alike, but nothing covers Member.Read.Hidden. Reading is required; writing and hidden membership are needed only
+/// by the features that use them, which a Connected System may not, so their absence is a warning rather than an error.
+/// The Source of Authority permissions are asked about only while Track Source of Authority Changes is on: Microsoft
+/// offers no read-only form of them, so they are never requested by default.
 /// </remarks>
 internal static class GraphPermissions
 {
@@ -21,10 +22,14 @@ internal static class GraphPermissions
     public const string GroupReadWrite = "Group.ReadWrite.All";
     public const string DirectoryRead = "Directory.Read.All";
     public const string DirectoryReadWrite = "Directory.ReadWrite.All";
-    public const string UserSyncBehaviourRead = "User-OnPremisesSyncBehavior.Read.All";
-    public const string UserSyncBehaviourReadWrite = "User-OnPremisesSyncBehavior.ReadWrite.All";
-    public const string GroupSyncBehaviourRead = "Group-OnPremisesSyncBehavior.Read.All";
-    public const string GroupSyncBehaviourReadWrite = "Group-OnPremisesSyncBehavior.ReadWrite.All";
+    /// <summary>
+    /// Reads, and changes, a user's Source of Authority. Microsoft offers no read-only permission for it, so it is asked
+    /// for only when Track Source of Authority Changes is on.
+    /// </summary>
+    public const string UserSourceOfAuthority = "User-OnPremisesSyncBehavior.ReadWrite.All";
+
+    /// <summary>Reads, and changes, a group's Source of Authority; see <see cref="UserSourceOfAuthority"/>.</summary>
+    public const string GroupSourceOfAuthority = "Group-OnPremisesSyncBehavior.ReadWrite.All";
 
     /// <summary>
     /// Reads the members of a group whose membership is hidden. No other permission does, Directory.ReadWrite.All
@@ -63,7 +68,8 @@ internal static class GraphPermissions
     public static bool CanReadHiddenMembership(IReadOnlyCollection<string> roles) =>
         roles.Contains(MemberReadHidden, StringComparer.OrdinalIgnoreCase);
 
-    public static GraphPermissionCheckResult Check(IReadOnlyCollection<string> roles)
+    /// <param name="tracksSourceOfAuthority">Whether Track Source of Authority Changes is on, so its permissions are needed.</param>
+    public static GraphPermissionCheckResult Check(IReadOnlyCollection<string> roles, bool tracksSourceOfAuthority = false)
     {
         if (roles.Count == 0)
         {
@@ -95,10 +101,10 @@ internal static class GraphPermissions
             missing.Add($"{UserReadWrite} (to export users)");
         if (canReadGroups && !Any(GroupReadWrite, DirectoryReadWrite))
             missing.Add($"{GroupReadWrite} (to export groups)");
-        if (canReadUsers && !Any(UserSyncBehaviourRead, UserSyncBehaviourReadWrite))
-            missing.Add($"{UserSyncBehaviourRead} (to tell which synchronised users have moved to cloud management)");
-        if (canReadGroups && !Any(GroupSyncBehaviourRead, GroupSyncBehaviourReadWrite))
-            missing.Add($"{GroupSyncBehaviourRead} (to tell which synchronised groups have moved to cloud management)");
+        if (tracksSourceOfAuthority && canReadUsers && !Any(UserSourceOfAuthority))
+            missing.Add($"{UserSourceOfAuthority} (for Track Source of Authority Changes, on users)");
+        if (tracksSourceOfAuthority && canReadGroups && !Any(GroupSourceOfAuthority))
+            missing.Add($"{GroupSourceOfAuthority} (for Track Source of Authority Changes, on groups)");
         if (canReadGroups && !Any(MemberReadHidden))
             missing.Add($"{MemberReadHidden} (to import the members of groups whose membership is hidden)");
 

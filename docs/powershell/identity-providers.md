@@ -116,7 +116,7 @@ Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <stri
 
 ### Output
 
-With `-WhatIf`, nothing is returned.
+With `-WhatIf`, nothing is returned when there is something to change; when everything is already right, the result comes back with no Changes.
 
 | Property | Type | Description |
 |----------|------|-------------|

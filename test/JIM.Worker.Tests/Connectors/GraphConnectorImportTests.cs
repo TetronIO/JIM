@@ -237,7 +237,7 @@ public class GraphConnectorImportTests : GraphImportTestBase
         Tenant.AddUser("guest", "Guest", u => u["userType"] = "Guest");
         Tenant.CloudManaged.Add("converted");
 
-        var objects = await ImportAsync(Users("displayName"));
+        var objects = (await RunAsync(Tracked(ConnectedSystem(Users("displayName"))))).SelectMany(r => r.ImportObjects).ToList();
 
         Assert.That(objects.ToDictionary(o => Values(o, "id").Single(), o => Values(o, "sourceOfAuthority").Single()), Is.EqualTo(new Dictionary<string, string>
         {
@@ -249,11 +249,35 @@ public class GraphConnectorImportTests : GraphImportTestBase
     }
 
     [Test]
+    public async Task FullImport_SourceOfAuthorityNotTracked_DerivesFromSynchronisationWithoutAskingOrWarningAsync()
+    {
+        // Tracking is off by default, since its permission also allows changing Source of Authority. A synchronised
+        // object switched to cloud management then still reads as onPremisesDirectory, which the docs say plainly.
+        Tenant.AddUser("cloud", "Cloud");
+        Tenant.AddUser("converted", "Converted", u => u["onPremisesSyncEnabled"] = true);
+        Tenant.CloudManaged.Add("converted");
+
+        var results = await RunAsync(ConnectedSystem(Users("displayName")));
+
+        var objects = results.SelectMany(r => r.ImportObjects).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objects.ToDictionary(o => Values(o, "id").Single(), o => Values(o, "sourceOfAuthority").Single()), Is.EqualTo(new Dictionary<string, string>
+            {
+                ["cloud"] = "cloud",
+                ["converted"] = "onPremisesDirectory"
+            }));
+            Assert.That(Tenant.GraphRequests.Where(r => Query(r, "$filter")?.Contains("isCloudManaged", StringComparison.Ordinal) == true), Is.Empty);
+            Assert.That(results.Select(r => r.WarningMessage), Is.All.Null);
+        }
+    }
+
+    [Test]
     public async Task FullImport_CloudManagedQuery_UsesEventualConsistencyAndAsksOnlyForIdsAsync()
     {
         Tenant.AddUser("u1", "Ada");
 
-        await ImportAsync(Users("displayName"));
+        await RunAsync(Tracked(ConnectedSystem(Users("displayName"))));
 
         var request = Tenant.GraphRequests.Single(r => Query(r, "$filter")?.Contains("isCloudManaged", StringComparison.Ordinal) == true);
         using (Assert.EnterMultipleScope())
@@ -271,12 +295,13 @@ public class GraphConnectorImportTests : GraphImportTestBase
         Tenant.CloudManagedQueryStatus = refusal;
         Tenant.AddUser("synced", "Synced", u => u["onPremisesSyncEnabled"] = true);
 
-        var results = await RunAsync(ConnectedSystem(Users("displayName")));
+        var results = await RunAsync(Tracked(ConnectedSystem(Users("displayName"))));
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Values(results.SelectMany(r => r.ImportObjects).Single(), "sourceOfAuthority"), Is.EqualTo(new[] { "onPremisesDirectory" }));
-            Assert.That(results.First().WarningMessage, Does.Contain("cloud management"));
+            Assert.That(results.First().WarningMessage, Does.Contain("Source of Authority"));
+            Assert.That(results.First().WarningMessage, Does.Contain("User-OnPremisesSyncBehavior.ReadWrite.All"));
         }
     }
 

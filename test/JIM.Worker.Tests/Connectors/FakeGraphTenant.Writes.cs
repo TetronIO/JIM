@@ -64,6 +64,12 @@ internal sealed partial class FakeGraphTenant
 
     private (int, JsonNode?) CreateGroup(JsonObject body)
     {
+        // Graph answers a create binding an object it cannot find with 404, not the 400 a member add gives, and makes nothing.
+        var binds = Binds(body).ToList();
+        var missing = binds.SelectMany(b => b.Urls).Select(Referenced).FirstOrDefault(r => !CanReference(r));
+        if (missing != null)
+            return Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{missing}' does not exist or one of its queried reference-property objects are not present.");
+
         var group = new JsonObject { ["id"] = NextId(), ["onPremisesSyncEnabled"] = null };
         var id = (string)group["id"]!;
         foreach (var (name, value) in body.Where(p => !p.Key.EndsWith("@odata.bind", StringComparison.Ordinal)))
@@ -71,11 +77,8 @@ internal sealed partial class FakeGraphTenant
 
         Members[id] = [];
         Owners[id] = [];
-        foreach (var (relationship, urls) in Binds(body))
+        foreach (var (relationship, urls) in binds)
         {
-            var missing = urls.Select(Referenced).FirstOrDefault(r => !Exists(r));
-            if (missing != null)
-                return Error(HttpStatusCode.BadRequest, "Request_BadRequest", $"Resource '{missing}' does not exist or one of its queried reference-property objects are not present.");
             foreach (var reference in urls.Select(Referenced))
                 AddReference(id, relationship, reference);
         }
@@ -136,7 +139,7 @@ internal sealed partial class FakeGraphTenant
         if (Group(groupId) == null)
             return Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{groupId}' does not exist or one of its queried reference-property objects are not present.");
 
-        var missing = references.FirstOrDefault(r => !Exists(r));
+        var missing = references.FirstOrDefault(r => !CanReference(r));
         if (missing != null)
         {
             return references.Count == 1
@@ -165,7 +168,7 @@ internal sealed partial class FakeGraphTenant
     private (int, JsonNode?) SetManager(string userId, string managerId)
     {
         var user = User(userId);
-        if (user == null || User(managerId) == null)
+        if (user == null || User(managerId) == null || !CanReference(managerId))
             return Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{(user == null ? userId : managerId)}' does not exist or one of its queried reference-property objects are not present.");
 
         user["managerId"] = managerId;
@@ -196,6 +199,17 @@ internal sealed partial class FakeGraphTenant
             : Owners.GetValueOrDefault(groupId)?.Contains(reference) == true;
 
     private bool Exists(string id) => User(id) != null || Group(id) != null;
+
+    /// <summary>Whether a write may refer to the object: it exists, and replication has reached it (<see cref="NotYetReferenceable"/>).</summary>
+    private bool CanReference(string id)
+    {
+        if (!Exists(id))
+            return false;
+        if (!NotYetReferenceable.TryGetValue(id, out var misses) || misses <= 0)
+            return true;
+        NotYetReferenceable[id] = misses - 1;
+        return false;
+    }
 
     private string NextId() => NextIds.Count > 0 ? NextIds.Dequeue() : Guid.NewGuid().ToString(); // random-id: a fake tenant's object id
 

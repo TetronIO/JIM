@@ -53,16 +53,18 @@ function Get-JIMEntraIdAdminToken {
     [OutputType([securestring])]
     param(
         [Parameter(Mandatory)][string]$TenantId,
-        [switch]$UseDeviceCode
+        [switch]$UseDeviceCode,
+        # The Microsoft Graph delegated permissions to ask for; by default those JIM's own sign-in registration needs.
+        [string[]]$Scopes = $script:JIMEntraIdSignInScopes
     )
 
     if ($UseDeviceCode) {
-        return Get-JIMEntraIdDeviceCodeToken -TenantId $TenantId
+        return Get-JIMEntraIdDeviceCodeToken -TenantId $TenantId -Scopes $Scopes
     }
 
     $base = "https://login.microsoftonline.com/$([uri]::EscapeDataString($TenantId))/oauth2/v2.0"
     $tokens = Invoke-OAuthBrowserFlow -AuthorizeEndpoint "$base/authorize" -TokenEndpoint "$base/token" `
-        -ClientId $script:JIMEntraIdSignInClientId -Scopes $script:JIMEntraIdSignInScopes -RedirectPath '/'
+        -ClientId $script:JIMEntraIdSignInClientId -Scopes $Scopes -RedirectPath '/'
     return ConvertTo-SecureString -String $tokens.AccessToken -AsPlainText -Force
 }
 
@@ -75,11 +77,14 @@ function Get-JIMEntraIdDeviceCodeToken {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'The sign-in prompt is for the person at the console, and must reach them however output is redirected.')]
     [CmdletBinding()]
     [OutputType([securestring])]
-    param([Parameter(Mandatory)][string]$TenantId)
+    param(
+        [Parameter(Mandatory)][string]$TenantId,
+        [string[]]$Scopes = $script:JIMEntraIdSignInScopes
+    )
 
     $base = "https://login.microsoftonline.com/$([uri]::EscapeDataString($TenantId))/oauth2/v2.0"
     $code = Invoke-RestMethod -Method Post -Uri "$base/devicecode" -ErrorAction Stop -Body @{
-        client_id = $script:JIMEntraIdSignInClientId; scope = $script:JIMEntraIdSignInScopes -join ' '
+        client_id = $script:JIMEntraIdSignInClientId; scope = $Scopes -join ' '
     }
     Write-Host $code.message -ForegroundColor Yellow
 

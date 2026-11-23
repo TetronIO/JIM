@@ -73,6 +73,12 @@ public static class GraphConnectorConstants
 
     public const string SettingDeleteBehaviour = "Delete Behaviour";
 
+    /// <summary>
+    /// Whether the Connector reads which synchronised objects have had their Source of Authority switched between Active
+    /// Directory and Entra ID. Off by default: the only permission that reads it also allows changing it.
+    /// </summary>
+    public const string SettingTrackSourceOfAuthority = "Track Source of Authority Changes";
+
     /// <summary>Delete Behaviour: delete the object. Entra ID keeps a deleted user or Microsoft 365 group for 30 days.</summary>
     public const string DeleteBehaviourDelete = "Delete";
 

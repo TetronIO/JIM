@@ -24,7 +24,7 @@
     -PreRelease expand to (the lab needs its host, so they never include it).
 
     Test-ScenarioIsDirectoryAgnostic answers a different one: does the scenario use a directory at
-    all. Scenarios 011, 015, 016, 027, 028, 029 and 033 accept -DirectoryConfig for runner compatibility but never
+    all. Scenarios 011, 015, 016, 027, 028, 029, 033 and 036 accept -DirectoryConfig for runner compatibility but never
     read it (all but 011 explicitly discard it with `$null = $DirectoryConfig`), so their results are
     identical regardless of directory type; a -DirectoryType All run should execute them once, not
     once per directory type with identical results each time.
@@ -162,11 +162,11 @@ function Test-ScenarioIsDirectoryAgnostic {
 
     # Scenarios 011 (Scoping Criteria Matrix), 015 (SCIM Connector), 016 (JIM SQL Connector matrix),
     # 027 (the tested tutorial, which uses the File Connector only), 028 (SCIM Connector against
-    # Keycloak), 029 (JIM provisioning its own SCIM endpoint) and 033 (initial administrator provisioning,
-    # which uses two File Connector systems only) accept -DirectoryConfig for runner compatibility but never
-    # read it (015, 016, 027, 028, 029 and 033 explicitly discard it with `$null = $DirectoryConfig`); their
-    # results are identical on every directory type.
-    return $ScenarioNumber -in 11, 15, 16, 27, 28, 29, 33
+    # Keycloak), 029 (JIM provisioning its own SCIM endpoint), 033 (initial administrator provisioning,
+    # which uses two File Connector systems only) and 036 (Entra ID as a target, from a File Connector source)
+    # accept -DirectoryConfig for runner compatibility but never read it (all but 011 explicitly discard it with
+    # `$null = $DirectoryConfig`); their results are identical on every directory type.
+    return $ScenarioNumber -in 11, 15, 16, 27, 28, 29, 33, 36
 }
 
 function Test-ScenarioRunsOnItsOwn {
@@ -175,10 +175,13 @@ function Test-ScenarioRunsOnItsOwn {
         $true when Scenario $ScenarioNumber is left out of -Scenario All because the lab workflow runs it in a step of
         its own and reports it as a commit status of its own.
     .DESCRIPTION
-        Scenario 031 (AD FS sign-in, #2441) is reported as jim-ad-lab-adfs, and Scenario 035 (Entra ID sign-in, #2367)
-        as jim-sso-entra, apart from the LDAP scenarios' jim-ad-lab, so that a sign-in failure never turns the LDAP
-        result red or the reverse: ad-lab.yml runs each after the sweep (-Scenario 31, -Scenario 35), and the sweep does
-        not run them too. Each still runs by itself on request.
+        Scenario 031 (AD FS sign-in, #2441) is reported as jim-ad-lab-adfs, Scenario 035 (Entra ID sign-in, #2367)
+        as jim-sso-entra, and Scenario 036 (the Entra ID Connector with Entra ID as a target, #361) as
+        jim-entra-connector, apart from the LDAP scenarios' jim-ad-lab, so that a sign-in or tenant failure never turns
+        the LDAP result red or the reverse: ad-lab.yml runs each after the sweep (-Scenario 31, -Scenario 35,
+        -Scenario 36), and the sweep does not run them too. Each still runs by itself on request. Scenario 036 also
+        needs the test tenant's credentials, which only the lab's runner holds, so Pre-Release (which sweeps) must
+        never reach it either.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
@@ -188,5 +191,5 @@ function Test-ScenarioRunsOnItsOwn {
         [Nullable[int]]$ScenarioNumber
     )
 
-    return $ScenarioNumber -in 31, 35
+    return $ScenarioNumber -in 31, 35, 36
 }

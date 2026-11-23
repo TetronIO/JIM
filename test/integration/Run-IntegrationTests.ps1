@@ -1430,7 +1430,8 @@ $templateIrrelevantScenarioNumbers = @(
     27,  # First Synchronisation (the tested tutorial) - the tutorial's sample data is fixed at 25 people
     28,  # SCIM Connector against Keycloak - its own HR CSV, sized to put one group over Keycloak's 100-operation PATCH cap
     29,  # JIM provisioning its own SCIM endpoint - its own small HR CSV; the question is the round trip, not the population
-    33   # Initial Administrator Provisioning - two header-only files of its own; there is no population to size
+    33,  # Initial Administrator Provisioning - two header-only files of its own; there is no population to size
+    36   # Entra ID as a target - its own 24 people in a real tenant, sized to put one group over Graph's 20 members on a create
 )
 
 function Test-TemplateRelevant {

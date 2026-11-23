@@ -48,7 +48,7 @@ internal static partial class GraphExportErrorClassifier
         {
             return ConnectedSystemExportResult.Failed(
                 $"{described} The object is synchronised from on-premises Active Directory, which owns this attribute. Write it there instead, " +
-                "or scope the export Synchronisation Rule on sourceOfAuthority so it writes only to cloud objects.",
+                "or scope the export Synchronisation Rule, on the Metaverse Attribute that holds sourceOfAuthority, so it writes only to cloud objects.",
                 ConnectedSystemExportErrorType.RejectedByConnectedSystem);
         }
 

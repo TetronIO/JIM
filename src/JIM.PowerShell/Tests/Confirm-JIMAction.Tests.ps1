@@ -101,3 +101,25 @@ Describe 'No cmdlet lets -Force bypass -WhatIf' {
         $offenders | Should -BeNullOrEmpty -Because 'a cmdlet that ORs $Force with ShouldProcess carries out the action under -WhatIf -Force; call Confirm-JIMAction -Force:$Force instead'
     }
 }
+
+Describe 'No module code skips work under -WhatIf' {
+
+    It 'reads properties with ForEach-Object only through a script block, never by member name' {
+        # ForEach-Object given a member name (ForEach-Object KeyId, or -MemberName) supports ShouldProcess, so under
+        # -WhatIf it prints "What if: Retrieve the value for property" and returns nothing. Register-JIMEntraIdConnector
+        # -WhatIf read no granted permissions that way, and so previewed revoking ones the application held.
+        $module = Join-Path $PSScriptRoot '..'
+        $offenders = foreach ($file in Get-ChildItem -LiteralPath (Join-Path $module 'Public'), (Join-Path $module 'Private') -Filter '*.ps1' -Recurse) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
+            $calls = $ast.FindAll({ param($node)
+                    $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -in 'ForEach-Object', '%', 'foreach' }, $true)
+            foreach ($call in $calls) {
+                $byName = @($call.CommandElements | Select-Object -Skip 1 | Where-Object {
+                        ($_ -is [System.Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -like 'M*') -or
+                        $_ -is [System.Management.Automation.Language.StringConstantExpressionAst] })
+                if ($byName) { "$($file.Name):$($call.Extent.StartLineNumber)" }
+            }
+        }
+        $offenders | Should -BeNullOrEmpty -Because 'ForEach-Object by member name returns nothing under -WhatIf; write ForEach-Object { $_.Name } instead'
+    }
+}

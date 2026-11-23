@@ -226,7 +226,8 @@ internal sealed class GraphConnectorPasswords
             return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.ResetRights, $"The app holds the permission and the {role} directory role across the tenant.");
 
         return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
-            "The app holds the permission, but no directory role that resets passwords is assigned to it across the tenant. Graph also needs the app to hold " +
-            "User Administrator: assigned over an Administrative Unit, as recommended, it does not appear in the app's token, so JIM cannot confirm it from here.");
+            "The app holds the permission, but its token shows no directory role that resets passwords. Graph also needs the app to hold User Administrator " +
+            "across the tenant: run Register-JIMEntraIdConnector -PasswordManagement, or assign it in the Entra admin centre. A role assigned in the last hour " +
+            "can be missing from the token until it is renewed.");
     }
 }

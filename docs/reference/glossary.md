@@ -159,6 +159,9 @@ SCIM endpoint { #scim-endpoint }
 Service Health { #service-health }
 :   Whether JIM's background services, the Worker and the Scheduler, are alive, what each is doing and whether JIM is running short of memory, read from a heartbeat each service writes every few seconds. Shown at the top of **Administration > Operations** and available through the REST API and `Get-JIMServiceHealth`. See [Operations > Service Health](../configuration/operations.md#service-health).
 
+Source of Authority { #source-of-authority }
+:   The directory an object in a Connected System is managed in, which decides where a change to it must be written. In Microsoft Entra ID, an object synchronised from Active Directory is managed there, and every other object, including each one JIM creates through Microsoft Graph, in Entra ID itself. Not the same as Attribute Priority, which decides which Connected System's value the Metaverse keeps. See [JIM Microsoft Entra ID Connector](../connectors/jim-graph-connector.md#source-of-authority).
+
 Standard Mappings { #standard-mappings }
 :   The recorded correspondence between a Metaverse Attribute and its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, with notes where the correspondence needs care. Built-in attributes come pre-populated and are kept current by JIM; you can record your own on custom attributes. Standard Mappings are guidance for choosing which attribute to target when connecting a system that speaks either standard; what actually flows between systems is determined solely by your Attribute Flows.
 

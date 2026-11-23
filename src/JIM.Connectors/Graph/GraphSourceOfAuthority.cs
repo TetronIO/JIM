@@ -10,9 +10,9 @@ namespace JIM.Connectors.Graph;
 /// tells an administrator which objects JIM can write to, and is what export Synchronisation Rules scope on.
 /// </summary>
 /// <remarks>
-/// A guest is external whatever else is true of it, so that rule is checked first. A synchronised object converted to
-/// cloud management still reads <c>onPremisesSyncEnabled</c> as true, so the import passes in whether the object is
-/// among those Graph reports as cloud-managed.
+/// A guest is external whatever else is true of it, so that rule is checked first. A synchronised object whose Source of
+/// Authority was switched to Entra ID still reads <c>onPremisesSyncEnabled</c> as true, so the import passes in whether
+/// the object is among those Graph reports as cloud-managed; it knows only while Track Source of Authority Changes is on.
 /// </remarks>
 internal static class GraphSourceOfAuthority
 {

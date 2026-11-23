@@ -34,6 +34,13 @@ internal sealed class GraphExportState
     /// <summary>Whether this export created the object, after which it must report the new id however its follow-ups fare.</summary>
     public bool Created { get; set; }
 
+    /// <summary>
+    /// For a Create JIM sends again, the id an earlier send was given: the Connected System Object already carries it.
+    /// JIM sends a Create again when a confirming import did not see the object, which Graph's lagging lists can cause
+    /// moments after it was made, so the object may well exist.
+    /// </summary>
+    public string? PreviouslyCreatedId { get; private set; }
+
     /// <summary>The properties a create or update sends, already in Graph's shape.</summary>
     public JsonObject Properties { get; } = [];
 
@@ -74,7 +81,12 @@ internal sealed class GraphExportState
 
         state.IsUser = string.Equals(objectTypeName, GraphSchemaCatalogue.UserObjectType, StringComparison.OrdinalIgnoreCase);
 
-        if (pendingExport.ChangeType != PendingExportChangeType.Create)
+        if (pendingExport.ChangeType == PendingExportChangeType.Create)
+        {
+            var known = pendingExport.ConnectedSystemObject?.ExternalIdAttributeValue?.StringValue;
+            state.PreviouslyCreatedId = string.IsNullOrWhiteSpace(known) ? null : known;
+        }
+        else
         {
             state.Id = pendingExport.ConnectedSystemObject?.ExternalIdAttributeValue?.StringValue;
             if (string.IsNullOrWhiteSpace(state.Id))

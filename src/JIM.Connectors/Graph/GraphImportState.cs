@@ -29,7 +29,7 @@ internal sealed class GraphImportState
     public Dictionary<string, string> Signatures { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Each Object Type's set of objects moved to cloud management, as a hash, or null where Graph refused the query.
+    /// Each Object Type's set of synchronised objects whose Source of Authority is switched to Entra ID, as a hash, or null where Graph refused the query.
     /// Moving an object changes nothing a delta round reports, so this is how a Delta Import sees that one moved.
     /// </summary>
     [JsonPropertyName("cloudManaged")]

@@ -118,7 +118,7 @@ function Register-JIMIdentityProvider {
         InitialAdmin (string): For Entra ID, the object ID of the person who ran this, the value for JIM_SSO_INITIAL_ADMIN when they are to be JIM's first administrator. Empty for the other providers, and when run with a token that is not a person's.
         Changes (string[]): The changes this run made. Empty when the registration was already right.
 
-        With -WhatIf, nothing is returned.
+        With -WhatIf, nothing is returned when there is something to change; when everything is already right, the result comes back with no Changes.
 
     .EXAMPLE
         $registration = Register-JIMIdentityProvider -Provider ADFS -Url 'https://jim.example.com'

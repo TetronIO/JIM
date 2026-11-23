@@ -62,6 +62,12 @@ internal sealed partial class FakeGraphTenant
     /// </summary>
     public Dictionary<string, int> NotYetReadable { get; } = [];
 
+    /// <summary>
+    /// Ids a write cannot yet refer to (as a member, owner or manager), and how many more writes will not find them, as
+    /// replication delay leaves an object created moments earlier.
+    /// </summary>
+    public Dictionary<string, int> NotYetReferenceable { get; } = [];
+
     /// <summary>Group ids whose members were requested, in order: hidden membership must never be asked for without the permission.</summary>
     public List<string> MembersRequested { get; } = [];
 

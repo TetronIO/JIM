@@ -290,12 +290,12 @@ public class GraphConnectorDeltaImportTests : GraphImportTestBase
     }
 
     [Test]
-    public async Task DeltaImport_ObjectMovedToCloudManagement_ReadsEveryObjectSoItsSourceOfAuthorityChangesAsync()
+    public async Task DeltaImport_ObjectSwitchedToCloudManagement_ReadsEveryObjectSoItsSourceOfAuthorityChangesAsync()
     {
-        // Moving an object to cloud management changes nothing a delta round reports, so the change is seen in the set of
-        // cloud-managed objects instead.
+        // Switching an object's Source of Authority changes nothing a delta round reports, so the change is seen in the set
+        // of cloud-managed objects instead.
         Tenant.AddUser("u1", "Ada", u => u["onPremisesSyncEnabled"] = true);
-        var system = ConnectedSystem(Users("displayName"));
+        var system = Tracked(ConnectedSystem(Users("displayName")));
         var state = await FullImportStateAsync(system);
 
         Tenant.CloudManaged.Add("u1");
@@ -305,8 +305,38 @@ public class GraphConnectorDeltaImportTests : GraphImportTestBase
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Values(results.SelectMany(r => r.ImportObjects).Single(), "sourceOfAuthority"), Is.EqualTo(new[] { "cloud" }));
-            Assert.That(results.First().WarningMessage, Does.Contain("cloud management"));
+            Assert.That(results.First().WarningMessage, Does.Contain("Source of Authority"));
         }
+    }
+
+    [Test]
+    public async Task DeltaImport_ObjectSwitchedBackToActiveDirectory_ReadsEveryObjectSoItsSourceOfAuthorityChangesBackAsync()
+    {
+        // The switch goes both ways: rolled back, Active Directory owns the object again.
+        Tenant.AddUser("u1", "Ada", u => u["onPremisesSyncEnabled"] = true);
+        Tenant.CloudManaged.Add("u1");
+        var system = Tracked(ConnectedSystem(Users("displayName")));
+        var state = await FullImportStateAsync(system);
+
+        Tenant.CloudManaged.Remove("u1");
+        var results = await DeltaAsync(system, state);
+
+        AssertReadEveryObject(results, "u1");
+        Assert.That(Values(results.SelectMany(r => r.ImportObjects).Single(), "sourceOfAuthority"), Is.EqualTo(new[] { "onPremisesDirectory" }));
+    }
+
+    [Test]
+    public async Task DeltaImport_SourceOfAuthorityTrackingTurnedOnSinceTheBaseline_ReadsEveryObjectAsync()
+    {
+        // Objects switched before tracking began were never seen as switched, so every object is read once.
+        Tenant.AddUser("u1", "Ada", u => u["onPremisesSyncEnabled"] = true);
+        Tenant.CloudManaged.Add("u1");
+        var state = await FullImportStateAsync(ConnectedSystem(Users("displayName")));
+
+        var results = await DeltaAsync(Tracked(ConnectedSystem(Users("displayName"))), state);
+
+        AssertReadEveryObject(results, "u1");
+        Assert.That(Values(results.SelectMany(r => r.ImportObjects).Single(), "sourceOfAuthority"), Is.EqualTo(new[] { "cloud" }));
     }
 
     [Test]
@@ -315,7 +345,7 @@ public class GraphConnectorDeltaImportTests : GraphImportTestBase
         Tenant.AddUser("u1", "Ada", u => u["onPremisesSyncEnabled"] = true);
         Tenant.AddUser("u2", "Grace");
         Tenant.CloudManaged.Add("u1");
-        var system = ConnectedSystem(Users("displayName"));
+        var system = Tracked(ConnectedSystem(Users("displayName")));
         var state = await FullImportStateAsync(system);
 
         Tenant.RecordChange("users", "u2");
