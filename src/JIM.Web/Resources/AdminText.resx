@@ -1446,4 +1446,112 @@
     <value>Edit "{0}"</value>
     <comment>Dialog title for an edit; {0} is the name</comment>
   </data>
+  <data name="ClaimsPageTitle" xml:space="preserve">
+    <value>Your Claims</value>
+    <comment>Browser title, page heading and PageInfo title</comment>
+  </data>
+  <data name="ClaimsPageInfo" xml:space="preserve">
+    <value>Claims are what your identity provider asserted about you when you signed in. JIM uses them to establish who you are, show your name and decide what you may do. This page lists every claim on your session, which helps when diagnosing sign-in, authorisation or identity mapping problems.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ClaimsNounSingular" xml:space="preserve">
+    <value>Claim</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ClaimsNounPlural" xml:space="preserve">
+    <value>Claims</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ClaimsSearchPlaceholder" xml:space="preserve">
+    <value>Search claims</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="ClaimsColumnType" xml:space="preserve">
+    <value>Claim Type</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ClaimsColumnValue" xml:space="preserve">
+    <value>Claim Value</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ClaimsEmptySearch" xml:space="preserve">
+    <value>No claims match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ClaimsEmptyNone" xml:space="preserve">
+    <value>Your session carries no claims</value>
+    <comment>Empty state when the session has no claims</comment>
+  </data>
+  <data name="ClaimsEmptyNoneHint" xml:space="preserve">
+    <value>Claims are asserted by your identity provider during sign-in; an empty list means it sent none.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="ClaimsIdpHeading" xml:space="preserve">
+    <value>Identity Provider</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="ClaimsIdpIntro" xml:space="preserve">
+    <value>Non-sensitive details about the identity provider JIM is configured to trust, together with runtime information about how your current session was authenticated. Secrets (client secret, tokens) are deliberately excluded.</value>
+    <comment>Section introduction</comment>
+  </data>
+  <data name="ClaimsSettingNounSingular" xml:space="preserve">
+    <value>Setting</value>
+    <comment>Noun used in the count of identity provider rows</comment>
+  </data>
+  <data name="ClaimsSettingNounPlural" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Noun used in the count of identity provider rows</comment>
+  </data>
+  <data name="ClaimsIdpEmptySearch" xml:space="preserve">
+    <value>No identity provider settings match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ClaimsIdpEmptyNone" xml:space="preserve">
+    <value>No identity provider details are available</value>
+    <comment>Empty state when no details are available</comment>
+  </data>
+  <data name="ClaimsIdpEmptyNoneHint" xml:space="preserve">
+    <value>Single Sign-On has not been configured yet; configure it under Service Settings.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="ClaimsIdpAuthority" xml:space="preserve">
+    <value>Authority</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpClientId" xml:space="preserve">
+    <value>Client ID</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpUniqueClaim" xml:space="preserve">
+    <value>Unique identifier claim</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpMappedAttribute" xml:space="preserve">
+    <value>Mapped metaverse attribute</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpSignOutEnabled" xml:space="preserve">
+    <value>Sign-out enabled</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpTokenIssuer" xml:space="preserve">
+    <value>Token issuer (iss)</value>
+    <comment>Identity provider row label; iss is the claim name</comment>
+  </data>
+  <data name="ClaimsIdpAuthType" xml:space="preserve">
+    <value>Authentication type</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpIsAuthenticated" xml:space="preserve">
+    <value>Is authenticated</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpNameClaimType" xml:space="preserve">
+    <value>Name claim type</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpRoleClaimType" xml:space="preserve">
+    <value>Role claim type</value>
+    <comment>Identity provider row label</comment>
+  </data>
 </root>

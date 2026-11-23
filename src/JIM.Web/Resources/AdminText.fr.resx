@@ -1088,4 +1088,85 @@
   <data name="AttrEditorEditTitle" xml:space="preserve">
     <value>Modifier « {0} »</value>
   </data>
+  <data name="ClaimsPageTitle" xml:space="preserve">
+    <value>Vos revendications</value>
+  </data>
+  <data name="ClaimsPageInfo" xml:space="preserve">
+    <value>Les revendications sont les informations que votre fournisseur d’identité a affirmées à votre sujet lors de votre connexion. JIM s’en sert pour établir qui vous êtes, afficher votre nom et déterminer ce que vous pouvez faire. Cette page liste chaque revendication de votre session, ce qui aide à diagnostiquer les problèmes de connexion, d’autorisation ou de correspondance d’identité.</value>
+  </data>
+  <data name="ClaimsNounSingular" xml:space="preserve">
+    <value>Revendication</value>
+  </data>
+  <data name="ClaimsNounPlural" xml:space="preserve">
+    <value>Revendications</value>
+  </data>
+  <data name="ClaimsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des revendications</value>
+  </data>
+  <data name="ClaimsColumnType" xml:space="preserve">
+    <value>Type de revendication</value>
+  </data>
+  <data name="ClaimsColumnValue" xml:space="preserve">
+    <value>Valeur de revendication</value>
+  </data>
+  <data name="ClaimsEmptySearch" xml:space="preserve">
+    <value>Aucune revendication ne correspond à « {0} ».</value>
+  </data>
+  <data name="ClaimsEmptyNone" xml:space="preserve">
+    <value>Votre session ne contient aucune revendication.</value>
+  </data>
+  <data name="ClaimsEmptyNoneHint" xml:space="preserve">
+    <value>Les revendications sont fournies par votre fournisseur d’identité lors de la connexion ; une liste vide signifie qu’il n’en a envoyé aucune.</value>
+  </data>
+  <data name="ClaimsIdpHeading" xml:space="preserve">
+    <value>Fournisseur d’identité</value>
+  </data>
+  <data name="ClaimsIdpIntro" xml:space="preserve">
+    <value>Détails non sensibles sur le fournisseur d’identité auquel JIM est configuré pour faire confiance, ainsi que des informations d’exécution sur la manière dont votre session actuelle a été authentifiée. Les secrets (secret client, jetons) sont volontairement exclus.</value>
+  </data>
+  <data name="ClaimsSettingNounSingular" xml:space="preserve">
+    <value>Paramètre</value>
+  </data>
+  <data name="ClaimsSettingNounPlural" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="ClaimsIdpEmptySearch" xml:space="preserve">
+    <value>Aucun paramètre du fournisseur d’identité ne correspond à « {0} ».</value>
+  </data>
+  <data name="ClaimsIdpEmptyNone" xml:space="preserve">
+    <value>Aucun détail sur le fournisseur d’identité n’est disponible.</value>
+  </data>
+  <data name="ClaimsIdpEmptyNoneHint" xml:space="preserve">
+    <value>La connexion unique n’a pas encore été configurée ; configurez-la dans les paramètres de service.</value>
+  </data>
+  <data name="ClaimsIdpAuthority" xml:space="preserve">
+    <value>Autorité</value>
+  </data>
+  <data name="ClaimsIdpClientId" xml:space="preserve">
+    <value>ID client</value>
+  </data>
+  <data name="ClaimsIdpUniqueClaim" xml:space="preserve">
+    <value>Revendication d’identifiant unique</value>
+  </data>
+  <data name="ClaimsIdpMappedAttribute" xml:space="preserve">
+    <value>Attribut Metaverse associé</value>
+  </data>
+  <data name="ClaimsIdpSignOutEnabled" xml:space="preserve">
+    <value>Déconnexion activée</value>
+  </data>
+  <data name="ClaimsIdpTokenIssuer" xml:space="preserve">
+    <value>Émetteur du jeton (iss)</value>
+  </data>
+  <data name="ClaimsIdpAuthType" xml:space="preserve">
+    <value>Type d’authentification</value>
+  </data>
+  <data name="ClaimsIdpIsAuthenticated" xml:space="preserve">
+    <value>Authentifié</value>
+  </data>
+  <data name="ClaimsIdpNameClaimType" xml:space="preserve">
+    <value>Type de revendication de nom</value>
+  </data>
+  <data name="ClaimsIdpRoleClaimType" xml:space="preserve">
+    <value>Type de revendication de rôle</value>
+  </data>
 </root>
