@@ -21,6 +21,16 @@ internal static partial class GraphExportErrorClassifier
         && Message(response)?.Contains("object references already exist", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>
+    /// Whether Graph refused to remove a member, owner or manager because it is not there to remove: not found, or a
+    /// reference to an object deleted since, which Graph answers as a removed reference that does not exist (a deleted
+    /// user also leaves its groups). Either way the removal's aim is already met.
+    /// </summary>
+    public static bool IsAlreadyAbsent(GraphBatchResponse response) =>
+        response.Status == (int)HttpStatusCode.NotFound
+        || response.Status == (int)HttpStatusCode.BadRequest
+           && Message(response)?.Contains("removed object references do not exist", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>
     /// Whether Graph refused because something the write refers to does not exist, which for a just-created object is
     /// often replication not having reached it yet.
     /// </summary>
