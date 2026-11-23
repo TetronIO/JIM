@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Models.Transactional.DTOs;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 using MudBlazor;
 
 namespace JIM.Web;
@@ -44,8 +45,8 @@ public static class PasswordChangeCancellation
         if (queued == null || !PendingPasswordChangeDisplay.OwesFirstPassword(queued))
             return true;
 
-        var confirmed = await dialogService.ShowMessageBoxAsync("Cancel password change",
-            PendingPasswordChangeDisplay.CancelConfirmation(queued), yesText: "Cancel delivery", cancelText: "Close");
+        var confirmed = await dialogService.ShowMessageBoxAsync(MetaverseText.PccTitle,
+            PendingPasswordChangeDisplay.CancelConfirmation(queued), yesText: MetaverseText.PccConfirm, cancelText: CommonText.Close);
         return confirmed == true;
     }
 }

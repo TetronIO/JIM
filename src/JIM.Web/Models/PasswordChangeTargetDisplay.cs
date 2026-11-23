@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Staging;
+using JIM.Web.Resources;
 using JIM.Models.Transactional.DTOs;
 using MudBlazor;
 
@@ -87,13 +89,13 @@ public static class PasswordChangeTargetDisplay
                 // what was asked (#2159); the plain sentence would claim more than happened.
                 return outcome.CompletedWithWarning && !string.IsNullOrWhiteSpace(outcome.Message)
                     ? outcome.Message.Trim()
-                    : "Password set";
+                    : MetaverseText.PctPasswordSet;
 
             case PasswordChangeTargetState.Delivering:
-                return "Delivering now";
+                return MetaverseText.PctDelivering;
 
             case PasswordChangeTargetState.Queued:
-                return "Queued; the Password Delivery Service will pick it up in a moment";
+                return MetaverseText.PctQueued;
 
             case PasswordChangeTargetState.Retrying:
             {
@@ -102,26 +104,28 @@ public static class PasswordChangeTargetDisplay
                 // history rather than from the queue, in which case the state word stands in for it.
                 var lead = outcome.FailureReason is { } reason and not PasswordSetFailureReason.None
                     ? PendingPasswordChangeDisplay.Reason(reason)
-                    : "Retrying";
-                var words = string.IsNullOrWhiteSpace(outcome.Message) ? lead : $"{lead}: {outcome.Message}";
+                    : MetaverseText.PctRetrying;
+                var words = string.IsNullOrWhiteSpace(outcome.Message)
+                    ? lead
+                    : string.Format(CultureInfo.CurrentCulture, MetaverseText.EchLeadWithMessage, lead, outcome.Message);
                 return outcome.NextAttemptAt.HasValue
-                    ? $"{words}. Next attempt {outcome.NextAttemptAt.Value.ToLocalTime().ToFriendlyDate()}"
+                    ? string.Format(CultureInfo.CurrentCulture, MetaverseText.EchNextAttemptSuffix, words, outcome.NextAttemptAt.Value.ToLocalTime().ToFriendlyDate())
                     : words;
             }
 
             case PasswordChangeTargetState.Parked:
                 return string.IsNullOrWhiteSpace(outcome.Message)
-                    ? "Parked: JIM has stopped trying until somebody retries it"
-                    : $"Parked: {outcome.Message}";
+                    ? MetaverseText.EchParkedWords
+                    : string.Format(CultureInfo.CurrentCulture, MetaverseText.EchParkedWithMessage, outcome.Message);
 
             case PasswordChangeTargetState.Held:
-                return "Held until Password Synchronisation is switched on for this Connected System";
+                return MetaverseText.PctHeld;
 
             case PasswordChangeTargetState.Expired:
-                return "Expired before it could be delivered";
+                return MetaverseText.PctExpired;
 
             case PasswordChangeTargetState.Cancelled:
-                return "Cancelled";
+                return MetaverseText.PctCancelled;
 
             default:
                 return outcome.State.ToString();

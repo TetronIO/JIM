@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Transactional;
+using JIM.Web.Resources;
 using MudBlazor;
 
 namespace JIM.Web.Models;
@@ -16,20 +17,20 @@ public static class RetiredGeneratedValueReasonDisplay
     /// <summary>The short label on the reason chip.</summary>
     public static string Label(RetiredGeneratedValueReason reason) => reason switch
     {
-        RetiredGeneratedValueReason.ObjectDeleted => "Object deleted",
-        RetiredGeneratedValueReason.Superseded => "No longer generated",
-        RetiredGeneratedValueReason.Recalled => "Flow removed",
-        RetiredGeneratedValueReason.Regenerated => "Regenerated",
+        RetiredGeneratedValueReason.ObjectDeleted => MetaverseText.RgvObjectDeleted,
+        RetiredGeneratedValueReason.Superseded => MetaverseText.RgvSuperseded,
+        RetiredGeneratedValueReason.Recalled => MetaverseText.RgvRecalled,
+        RetiredGeneratedValueReason.Regenerated => MetaverseText.RgvRegenerated,
         _ => reason.ToString()
     };
 
     /// <summary>The one-line explanation behind the chip.</summary>
     public static string Tooltip(RetiredGeneratedValueReason reason) => reason switch
     {
-        RetiredGeneratedValueReason.ObjectDeleted => "The object that held this value was deleted.",
-        RetiredGeneratedValueReason.Superseded => "Another Attribute Flow now supplies this attribute for the object, so JIM stopped managing the generated value.",
-        RetiredGeneratedValueReason.Recalled => "The Attribute Flow that generated this value was removed.",
-        RetiredGeneratedValueReason.Regenerated => "JIM issued the object a different value in place of this one.",
+        RetiredGeneratedValueReason.ObjectDeleted => MetaverseText.RgvTipObjectDeleted,
+        RetiredGeneratedValueReason.Superseded => MetaverseText.RgvTipSuperseded,
+        RetiredGeneratedValueReason.Recalled => MetaverseText.RgvTipRecalled,
+        RetiredGeneratedValueReason.Regenerated => MetaverseText.RgvTipRegenerated,
         _ => string.Empty
     };
 

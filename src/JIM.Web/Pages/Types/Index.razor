@@ -7,6 +7,7 @@
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Models
+@using System.Globalization
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
@@ -16,7 +17,7 @@
 <PageTitle>@PageTitle</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@PageTitle
     <PageInfo Title="@(PageTitle!)" DocsPage="configuration/metaverse.md#searching-the-metaverse">
-        Search, or browse for @ObjectTypeName.
+        @string.Format(CultureInfo.CurrentCulture, MetaverseText.TixPageInfo, ObjectTypeName)
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -26,12 +27,12 @@
     @if (_hasAttributeName != null)
     {
         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text" Icon="@Icons.Material.Filled.FilterAlt"
-                 OnClose="ClearHasAttributeFilterAsync" Class="mt-3">Has a value for: @_hasAttributeName</MudChip>
+                 OnClose="ClearHasAttributeFilterAsync" Class="mt-3">@string.Format(CultureInfo.CurrentCulture, MetaverseText.TixHasValueFor, _hasAttributeName)</MudChip>
 
         @if (_hasAttributeUnknown)
         {
             <MudAlert Severity="Severity.Info" Class="mt-2">
-                No Metaverse Attribute named "@_hasAttributeName" is defined, so no objects match. Clear the filter to browse all @MetaverseObjectType?.PluralName.
+                @string.Format(CultureInfo.CurrentCulture, MetaverseText.TixUnknownAttribute, _hasAttributeName, MetaverseObjectType?.PluralName)
             </MudAlert>
         }
     }
@@ -89,22 +90,22 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No {PageTitle} match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.TixNoMatch, PageTitle, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else if (_hasAttributeName != null)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                                 PrimaryText="@($"No {PageTitle} have a value for {_hasAttributeName}")"
-                                 SecondaryText="@($"Clear the filter above to browse all {PageTitle}.")" />
+                                 PrimaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.TixNoHasValue, PageTitle, _hasAttributeName)"
+                                 SecondaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.TixClearFilterHint, PageTitle)" />
             }
             else
             {
                 <TableEmptyState Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)"
-                                 PrimaryText="@($"No {PageTitle} yet")"
-                                 SecondaryText="Objects appear here once they are created or imported." />
+                                 PrimaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.TixNoneYet, PageTitle)"
+                                 SecondaryText="@MetaverseText.TixObjectsAppear" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>
@@ -113,11 +114,11 @@ else if (_isInitialised)
 {
     if (!string.IsNullOrEmpty(PredefinedSearchUri))
     {
-        <b>No such predefined search found, sorry</b>
+        <b>@MetaverseText.TixNoSuchSearch</b>
     }
     else
     {
-        <b>Please create a default Predefined Search for this Metaverse Object Type</b>
+        <b>@MetaverseText.TixCreateDefault</b>
     }
 }
 
@@ -209,7 +210,7 @@ else if (_isInitialised)
         {
             _breadcrumbs = new List<BreadcrumbItem>
             {
-                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new(MetaverseText.TixHome, href: "/", icon: Icons.Material.Filled.Home),
                 new(MetaverseObjectType.PluralName, href: null, disabled: true)
             };
         }
@@ -217,7 +218,7 @@ else if (_isInitialised)
         {
             _breadcrumbs = new List<BreadcrumbItem>
             {
-                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new(MetaverseText.TixHome, href: "/", icon: Icons.Material.Filled.Home),
                 new(MetaverseObjectType.PluralName, href: $"/t/{MetaverseObjectType.PluralName.ToLower()}"),
                 new(PredefinedSearch.Name, href: null, disabled: true)
             };

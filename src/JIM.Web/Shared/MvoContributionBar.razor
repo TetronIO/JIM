@@ -1,4 +1,5 @@
 @using JIM.Models.Core.DTOs
+@using System.Globalization
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -12,8 +13,8 @@
 <MudPaper Outlined="true" Class="pa-4 jim-contribution-bar-panel">
     @{ var groups = ValueOriginGrouping.BuildGroups(Provenance.Attributes); }
     <div class="jim-contribution-heading">
-        <span class="jim-contribution-title">Where this @ObjectTypeName gets its values</span>
-        <span class="jim-contribution-count">@Provenance.Attributes.Count.ToString("N0") attributes@(groups.Count > 1 ? " · select a source to filter" : null)</span>
+        <span class="jim-contribution-title">@string.Format(CultureInfo.CurrentCulture, MetaverseText.McbTitle, ObjectTypeName)</span>
+        <span class="jim-contribution-count">@string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(Provenance.Attributes.Count, MetaverseText.MvcAttributeCountOne, MetaverseText.MvcAttributeCountOther), Provenance.Attributes.Count.ToString("N0", CultureInfo.CurrentCulture))@(groups.Count > 1 ? MetaverseText.McbSelectSourceHint : null)</span>
         @if (Actions != null)
         {
             <span class="jim-contribution-actions">@Actions</span>
@@ -23,7 +24,7 @@
     @if (groups.Count <= 1)
     {
         <div class="jim-contribution-single">
-            All @Provenance.Attributes.Count.ToString("N0") values from @(groups.Count == 1 ? FullSourceLabel(groups[0].Group) : "Source not recorded")
+            @string.Format(CultureInfo.CurrentCulture, MetaverseText.McbAllValuesFrom, Provenance.Attributes.Count.ToString("N0", CultureInfo.CurrentCulture), groups.Count == 1 ? FullSourceLabel(groups[0].Group) : MetaverseText.MaiSourceNotRecorded)
         </div>
     }
     else
@@ -37,7 +38,7 @@
             }
         </div>
 
-        <div class="jim-contribution-legend @(ActiveFilterKey != null ? "jim-contribution-legend-filtered" : null)" role="group" aria-label="Filter attributes by source">
+        <div class="jim-contribution-legend @(ActiveFilterKey != null ? "jim-contribution-legend-filtered" : null)" role="group" aria-label="@MetaverseText.McbFilterAria">
             @foreach (var (group, count) in groups)
             {
                 var pressed = ActiveFilterKey == group.Key;
@@ -89,19 +90,19 @@
     /// </summary>
     private static string FullSourceLabel(ValueOriginGrouping.Group group) => group.Kind switch
     {
-        null => "Several sources",
+        null => MetaverseText.McbSeveralSources,
         ValueOriginKind.SetByPerson or ValueOriginKind.SignInClaim or ValueOriginKind.System => group.Label,
         ValueOriginKind.SynchronisationRule => group.SyncRuleDeleted
-            ? $"{group.ConnectedSystemName} · rule deleted"
+            ? string.Format(CultureInfo.CurrentCulture, MetaverseText.McbRuleDeleted, group.ConnectedSystemName)
             : group.SyncRuleName != null
                 ? $"{group.ConnectedSystemName} · {group.SyncRuleName}"
-                : group.ConnectedSystemName ?? "Source not recorded",
+                : group.ConnectedSystemName ?? MetaverseText.MaiSourceNotRecorded,
         ValueOriginKind.GeneratedValue => group.ConnectedSystemName == null
             ? ValueOriginGrouping.GeneratedValueLabel
             : group.SyncRuleName != null
                 ? $"{group.ConnectedSystemName} · {group.SyncRuleName} · {ValueOriginGrouping.GeneratedValueLabel}"
                 : $"{group.ConnectedSystemName} · {ValueOriginGrouping.GeneratedValueLabel}",
-        _ => "Source not recorded"
+        _ => MetaverseText.MaiSourceNotRecorded
     };
 
     private static string ColourFor(ValueOriginGrouping.Group group) => ValueOriginGrouping.ColourTokenFor(group);

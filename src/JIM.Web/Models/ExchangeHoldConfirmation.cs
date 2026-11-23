@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+
 namespace JIM.Web.Models;
 
 /// <summary>
@@ -11,17 +13,17 @@ namespace JIM.Web.Models;
 public static class ExchangeHoldConfirmation
 {
     /// <summary>The dialog's title.</summary>
-    public const string Title = "Stop managing Exchange recipients?";
+    public static string Title => MetaverseText.EhcTitle;
 
     /// <summary>The confirming button's words.</summary>
-    public const string ConfirmButtonText = "Hold Exchange Delivery";
+    public static string ConfirmButtonText => MetaverseText.EhcConfirm;
 
     /// <summary>What turning management off does, one consequence per line.</summary>
-    public static IReadOnlyList<string> Consequences { get; } =
+    public static IReadOnlyList<string> Consequences =>
     [
-        "Changes already queued for Exchange wait, held, and are delivered once this Connected System manages Exchange recipients again.",
-        "Exports go on queueing changes, which are held the same way.",
-        "A schema refresh while it is off reports the Exchange attributes as removed: apply it plainly to keep them, or the Synchronisation Rules that declare recipients stop."
+        MetaverseText.EhcConsequence1,
+        MetaverseText.EhcConsequence2,
+        MetaverseText.EhcConsequence3
     ];
 
     /// <summary>

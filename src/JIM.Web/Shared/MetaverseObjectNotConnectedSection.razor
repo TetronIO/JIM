@@ -1,6 +1,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using System.Globalization
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -17,15 +18,15 @@
     <button type="button" class="jim-not-connected-toggle" aria-expanded="@(Open ? "true" : "false")"
             @onclick="ToggleOpenAsync" data-testid="jim-not-connected-toggle">
         <MudIcon Icon="@(Open ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" aria-hidden="true" />
-        <span class="jim-not-connected-title">Not connected</span>
+        <span class="jim-not-connected-title">@MetaverseText.MncTitle</span>
         <span class="jim-not-connected-count" data-testid="jim-not-connected-count">@Entries.Count.ToString("N0")</span>
         <span class="jim-not-connected-caption">
-            Connected Systems this Metaverse Object could be exported to, and why it isn't in them
+            @MetaverseText.MncCaption
         </span>
         @if (EvaluatedAt.HasValue)
         {
             var evaluatedAt = EvaluatedAt.Value;
-            <span class="jim-not-connected-caption jim-nowrap">Evaluated now, @evaluatedAt.ToLocalTime().ToFriendlyDate()</span>
+            <span class="jim-not-connected-caption jim-nowrap">@string.Format(CultureInfo.CurrentCulture, MetaverseText.MncEvaluatedNow, evaluatedAt.ToLocalTime().ToFriendlyDate())</span>
         }
     </button>
 
@@ -34,7 +35,7 @@
         @if (Entries.Count == 0)
         {
             <div class="jim-not-connected-empty" data-testid="jim-not-connected-empty">
-                Connected to every Connected System it could be exported to.
+                @MetaverseText.MncEmpty
             </div>
         }
         else
@@ -42,9 +43,9 @@
             <MudTable Items="Entries" Dense="@Dense" Elevation="0" Class="jim-not-connected-table">
                 <HeaderContent>
                     <MudTh Class="jim-expand-column"></MudTh>
-                    <MudTh Class="jim-nowrap">Connected System</MudTh>
-                    <MudTh Class="jim-nowrap">Synchronisation Rule</MudTh>
-                    <MudTh Class="jim-fill-column">Reason</MudTh>
+                    <MudTh Class="jim-nowrap">@MetaverseText.MvcConnectedSystem</MudTh>
+                    <MudTh Class="jim-nowrap">@MetaverseText.MncSyncRuleHeader</MudTh>
+                    <MudTh Class="jim-fill-column">@MetaverseText.MncReason</MudTh>
                     <MudTh></MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -52,17 +53,17 @@
                         @{ var expanded = ExpandedRuleIds.Contains(context.SyncRuleId); }
                         <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                                        Size="Size.Small" aria-expanded="@(expanded ? "true" : "false")"
-                                       aria-label="@($"Why this Metaverse Object is not in {context.ConnectedSystemName}")"
+                                       aria-label="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MncWhyNotIn, context.ConnectedSystemName)"
                                        OnClick="@(() => ToggleExpanded(context))"
                                        data-testid="jim-not-connected-expand" data-rule-id="@context.SyncRuleId" />
                     </MudTd>
-                    <MudTd DataLabel="Connected System" Class="jim-nowrap">
+                    <MudTd DataLabel="@MetaverseText.MvcConnectedSystem" Class="jim-nowrap">
                         <MudLink Href="@Utilities.GetConnectedSystemHref(context.ConnectedSystemId)">@context.ConnectedSystemName</MudLink>
                     </MudTd>
-                    <MudTd DataLabel="Synchronisation Rule" Class="jim-nowrap">
+                    <MudTd DataLabel="@MetaverseText.MncSyncRuleHeader" Class="jim-nowrap">
                         <MudLink Href="@($"/admin/sync-rules/{context.SyncRuleId}")">@context.SyncRuleName</MudLink>
                     </MudTd>
-                    <MudTd DataLabel="Reason" Class="jim-fill-column">
+                    <MudTd DataLabel="@MetaverseText.MncReason" Class="jim-fill-column">
                         <div class="jim-one-line-list">
                             <MudChip T="string" Variant="Variant.Text" Color="@ReasonColour(context.Reason)" Class="ma-0"
                                      data-testid="jim-not-connected-reason" data-reason="@context.Reason">@ReasonLabel(context.Reason)</MudChip>
@@ -73,8 +74,8 @@
                     <MudTd Class="jim-nowrap">
                         <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy"
                                    OnClick="@(() => CopySummaryAsync(context))"
-                                   aria-label="@($"Copy a summary of why this Metaverse Object is not in {context.ConnectedSystemName}")"
-                                   data-testid="jim-not-connected-copy">Copy summary</MudButton>
+                                   aria-label="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MncCopySummaryAria, context.ConnectedSystemName)"
+                                   data-testid="jim-not-connected-copy">@MetaverseText.MncCopySummary</MudButton>
                     </MudTd>
                 </RowTemplate>
                 <ChildRowContent>
@@ -90,7 +91,7 @@
                                     @if (ShowsScopingTree(context.Reason))
                                     {
                                         <section class="jim-connection-detail-section">
-                                            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">Scoping</MudText>
+                                            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@MetaverseText.MncScoping</MudText>
                                             <ScopingExplanationView Explanation="context.Scoping" />
                                         </section>
                                     }
@@ -176,21 +177,21 @@
 
         if (copied)
         {
-            Snackbar.Add("Summary copied to the clipboard.", Severity.Success);
+            Snackbar.Add(MetaverseText.MncSummaryCopied, Severity.Success);
             return;
         }
 
         var parameters = new DialogParameters<CopyTextDialog> { { d => d.Text, entry.Summary } };
-        await DialogService.ShowAsync<CopyTextDialog>("Copy summary", parameters,
+        await DialogService.ShowAsync<CopyTextDialog>(MetaverseText.MncCopySummary, parameters,
             new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
     }
 
     private static string ReasonLabel(NotConnectedReason reason) => reason switch
     {
-        NotConnectedReason.NotInScope => "Not in scope",
-        NotConnectedReason.ProvisioningDisabled => "Rule doesn't provision",
-        NotConnectedReason.RuleMisconfigured => "Rule misconfigured",
-        NotConnectedReason.NotYetProvisioned => "Not yet provisioned",
+        NotConnectedReason.NotInScope => MetaverseText.MncReasonNotInScope,
+        NotConnectedReason.ProvisioningDisabled => MetaverseText.MncReasonProvisioningDisabled,
+        NotConnectedReason.RuleMisconfigured => MetaverseText.MncReasonRuleMisconfigured,
+        NotConnectedReason.NotYetProvisioned => MetaverseText.MncReasonNotYetProvisioned,
         _ => reason.ToString()
     };
 

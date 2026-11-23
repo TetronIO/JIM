@@ -6,6 +6,8 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using MudBlazor;
+using System.Globalization;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -206,10 +208,10 @@ public static class PasswordHistoryTimelineModel
             change.ActivityId,
             change.Created.ToLocalTime(),
             change.Origin,
-            InitiatorLead: apiKey ? "via" : "by",
+            InitiatorLead: apiKey ? MetaverseText.PhmLeadVia : MetaverseText.PhmLeadBy,
             InitiatorName: initiatorKnown ? change.InitiatedByName : null,
-            InitiatorTrail: initiatorKnown && apiKey ? "(API key)" : null,
-            Scope: explicitChange && targets.Count > 1 ? $"on {targets.Count} Connected Systems" : null,
+            InitiatorTrail: initiatorKnown && apiKey ? MetaverseText.PhmApiKeyTrail : null,
+            Scope: explicitChange && targets.Count > 1 ? string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmScope, targets.Count) : null,
             DotColour: note == null ? WorstColour(targets) : NoteColour(change.Status),
             Targets: targets,
             Note: note);
@@ -258,19 +260,21 @@ public static class PasswordHistoryTimelineModel
 
         var detail = state switch
         {
-            TargetState.Parked => Sentence(Fault(row) ?? "parked; JIM has stopped trying until somebody retries it"),
-            TargetState.Retrying => Sentence(Fault(row) ?? "retrying") + NextAttempt(row, nowUtc),
-            TargetState.Held => "held until Password Synchronisation is switched on for this Connected System.",
-            TargetState.Queued => "queued, not yet attempted.",
-            TargetState.Delivering => "delivering now.",
-            TargetState.Expired => "expired before it could be delivered.",
-            TargetState.Cancelled => row.CancelledByName == null ? "cancelled by an administrator." : $"cancelled by {row.CancelledByName}.",
+            TargetState.Parked => Sentence(Fault(row) ?? MetaverseText.PhmParkedDefault),
+            TargetState.Retrying => Sentence(Fault(row) ?? MetaverseText.PhmRetrying) + NextAttempt(row, nowUtc),
+            TargetState.Held => MetaverseText.PhmHeld,
+            TargetState.Queued => MetaverseText.PhmQueued,
+            TargetState.Delivering => MetaverseText.PhmDelivering,
+            TargetState.Expired => MetaverseText.PhmExpired,
+            TargetState.Cancelled => row.CancelledByName == null
+                ? MetaverseText.PhmCancelledByAdmin
+                : string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmCancelledBy, row.CancelledByName),
             _ => null
         };
 
         var when = row.LastAttemptedAt is { } lastAttemptedAt
-            ? $"Last attempted {lastAttemptedAt.ToLocalTime().ToFriendlyDate()}."
-            : $"Queued {row.CreatedAt.ToLocalTime().ToFriendlyDate()}.";
+            ? string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmLastAttempted, lastAttemptedAt.ToLocalTime().ToFriendlyDate())
+            : string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmQueuedOn, row.CreatedAt.ToLocalTime().ToFriendlyDate());
         var words = PendingPasswordChangeDisplay.Detail(row) ?? PendingPasswordChangeDisplay.Status(row);
 
         return new Target(
@@ -279,7 +283,7 @@ public static class PasswordHistoryTimelineModel
             state,
             Modifier(state),
             Suffix(state),
-            $"{Sentence(words)} {when}",
+            string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmJoin, Sentence(words), when),
             detail,
             CanRetry: state == TargetState.Parked,
             CanStopTrying: state == TargetState.Retrying);
@@ -302,11 +306,11 @@ public static class PasswordHistoryTimelineModel
         string? detail = state switch
         {
             TargetState.Set when setWithWarning =>
-                Sentence(FirstNonBlank(outcome.Message) ?? "set, but not everything asked for could be applied"),
+                Sentence(FirstNonBlank(outcome.Message) ?? MetaverseText.PhmSetWithWarningDefault),
             TargetState.Set when outcome.OccurredAt - requestedAt > UnremarkableLag =>
-                $"delivered {outcome.OccurredAt.ToLocalTime().ToFriendlyTime()}, {(outcome.OccurredAt - requestedAt).ToAbbreviatedString(1)} after the request.",
-            TargetState.Failed => Sentence(FirstNonBlank(outcome.ErrorMessage, outcome.Message) ?? "did not take the password"),
-            TargetState.Delivering => "delivering now.",
+                string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmDeliveredLate, outcome.OccurredAt.ToLocalTime().ToFriendlyTime(), (outcome.OccurredAt - requestedAt).ToAbbreviatedString(1)),
+            TargetState.Failed => Sentence(FirstNonBlank(outcome.ErrorMessage, outcome.Message) ?? MetaverseText.PhmDidNotTake),
+            TargetState.Delivering => MetaverseText.PhmDelivering,
             _ => null
         };
 
@@ -314,8 +318,8 @@ public static class PasswordHistoryTimelineModel
         // must not read as an administrator or a propagation resetting an existing password (#1697).
         var words = FirstNonBlank(outcome.ErrorMessage, outcome.Message) ?? state switch
         {
-            TargetState.Set => isProvisioned ? "Initial password set" : "Password set",
-            _ => "The attempt is still running"
+            TargetState.Set => isProvisioned ? MetaverseText.PhmInitialSet : MetaverseText.PhmPasswordSet,
+            _ => MetaverseText.PhmStillRunning
         };
 
         return new Target(
@@ -323,8 +327,8 @@ public static class PasswordHistoryTimelineModel
             outcome.ConnectedSystemName,
             state,
             setWithWarning ? "warn" : Modifier(state),
-            setWithWarning ? "warning" : Suffix(state),
-            $"{Sentence(words)} Recorded {outcome.OccurredAt.ToLocalTime().ToFriendlyDate()}.",
+            setWithWarning ? MetaverseText.PhmSuffixWarning : Suffix(state),
+            string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmRecorded, Sentence(words), outcome.OccurredAt.ToLocalTime().ToFriendlyDate()),
             detail,
             CanRetry: false,
             CanStopTrying: false);
@@ -344,7 +348,7 @@ public static class PasswordHistoryTimelineModel
 
         return (reason, message) switch
         {
-            (not null, not null) => $"{reason}, {message}",
+            (not null, not null) => string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmFaultJoin, reason, message),
             (not null, null) => reason,
             (null, not null) => message,
             _ => null
@@ -362,7 +366,7 @@ public static class PasswordHistoryTimelineModel
 
         var local = nextRetryAt.ToLocalTime();
         var when = local.Date == nowUtc.ToLocalTime().Date ? local.ToFriendlyTime() : local.ToFriendlyDate();
-        return $" Next attempt {when}.";
+        return string.Format(CultureInfo.CurrentCulture, MetaverseText.PhmNextAttempt, when);
     }
 
     private static string Modifier(TargetState state) => state switch
@@ -376,14 +380,14 @@ public static class PasswordHistoryTimelineModel
     private static string? Suffix(TargetState state) => state switch
     {
         TargetState.Set => null,
-        TargetState.Failed => "failed",
-        TargetState.Queued => "queued",
-        TargetState.Delivering => "delivering",
-        TargetState.Retrying => "retrying",
-        TargetState.Held => "held",
-        TargetState.Parked => "parked",
-        TargetState.Expired => "expired",
-        TargetState.Cancelled => "cancelled",
+        TargetState.Failed => MetaverseText.PhmSuffixFailed,
+        TargetState.Queued => MetaverseText.PhmSuffixQueued,
+        TargetState.Delivering => MetaverseText.PhmSuffixDelivering,
+        TargetState.Retrying => MetaverseText.PhmSuffixRetrying,
+        TargetState.Held => MetaverseText.PhmSuffixHeld,
+        TargetState.Parked => MetaverseText.PhmSuffixParked,
+        TargetState.Expired => MetaverseText.PhmSuffixExpired,
+        TargetState.Cancelled => MetaverseText.PhmSuffixCancelled,
         _ => state.ToString().ToLowerInvariant()
     };
 

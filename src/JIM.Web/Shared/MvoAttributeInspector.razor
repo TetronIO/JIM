@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using Utilities
+@using System.Globalization
 @using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -16,17 +17,17 @@
         <div>
             <MudText Typo="Typo.h6">@Provenance.AttributeName</MudText>
             <span class="jim-inspector-subtle">
-                @Provenance.AttributeType · @(Provenance.AttributePlurality == AttributePlurality.MultiValued ? "Multi" : "Single")
+                @Provenance.AttributeType · @(Provenance.AttributePlurality == AttributePlurality.MultiValued ? MetaverseText.MaiMulti : MetaverseText.MaiSingle)
             </span>
         </div>
-        <MudTooltip Text="Close" Arrow="true" Placement="Placement.Top">
-            <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Close" OnClick="@(() => OnClose.InvokeAsync())" />
+        <MudTooltip Text="@CommonText.Close" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@CommonText.Close" OnClick="@(() => OnClose.InvokeAsync())" />
         </MudTooltip>
     </header>
 
     @* ─── Current value and where it came from ─── *@
     <div class="jim-inspector-section">
-        <span class="jim-inspector-label">Current value</span>
+        <span class="jim-inspector-label">@MetaverseText.MaiCurrentValue</span>
         <div class="jim-inspector-value">
             @if (Provenance.CurrentValues.Count == 0)
             {
@@ -56,7 +57,7 @@
                 @if (Provenance.CurrentValueTotalCount > Provenance.CurrentValues.Count)
                 {
                     <span class="jim-inspector-subtle">
-                        +@((Provenance.CurrentValueTotalCount - Provenance.CurrentValues.Count).ToString("N0")) more
+                        @string.Format(CultureInfo.CurrentCulture, MetaverseText.MaiMoreCount, (Provenance.CurrentValueTotalCount - Provenance.CurrentValues.Count).ToString("N0"))
                     </span>
                 }
             }
@@ -65,25 +66,25 @@
         @{ var primaryOrigin = Provenance.CurrentValues.FirstOrDefault()?.Origin ?? ValueOrigin.NotRecorded; }
         @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded && ContributingConnectedSystemObject == null && Provenance.LastSet == null)
         {
-            <span class="jim-inspector-subtle">Source not recorded</span>
+            <span class="jim-inspector-subtle">@MetaverseText.MaiSourceNotRecorded</span>
         }
         else
         {
             <dl class="jim-inspector-facts">
                 @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded)
                 {
-                    <dt>Source</dt>
-                    <dd><span class="jim-inspector-subtle">Source not recorded</span></dd>
+                    <dt>@MetaverseText.MaiSource</dt>
+                    <dd><span class="jim-inspector-subtle">@MetaverseText.MaiSourceNotRecorded</span></dd>
                 }
                 @if (primaryOrigin.Kind is ValueOriginKind.SignInClaim or ValueOriginKind.System)
                 {
                     @* Set outside synchronisation (#2472): read from a sign-in token (and which claim), or fixed by JIM. *@
-                    <dt>Source</dt>
+                    <dt>@MetaverseText.MaiSource</dt>
                     <dd><ValueOriginChip Origin="@primaryOrigin" /></dd>
                 }
                 @if (primaryOrigin.Kind == ValueOriginKind.SetByPerson)
                 {
-                    <dt>Set by</dt>
+                    <dt>@MetaverseText.MaiSetBy</dt>
                     <dd>@primaryOrigin.PersonName</dd>
                 }
                 @if (primaryOrigin.ConnectedSystemId.HasValue)
@@ -92,7 +93,7 @@
                        the panel's one pill-weight statement of the source; the list below it names sources quietly. *@
                     var connectedSystemId = primaryOrigin.ConnectedSystemId.Value;
                     var syncRuleHref = primaryOrigin.SyncRuleId is { } syncRuleId ? $"/admin/sync-rules/{syncRuleId}" : null;
-                    <dt>Source</dt>
+                    <dt>@MetaverseText.MaiSource</dt>
                     <dd>
                         <SystemRuleChip ConnectedSystemName="@primaryOrigin.ConnectedSystemName"
                                         ConnectedSystemHref="@($"/admin/connected-systems/{connectedSystemId}")"
@@ -104,23 +105,23 @@
                 {
                     @* The last step of the path: the Attribute Flow generated the value rather than reading it from the
                        Connected System, which is also why there is no "From" object below. *@
-                    <dt>Source type</dt>
+                    <dt>@MetaverseText.MaiSourceType</dt>
                     <dd>
                         @ValueOriginGrouping.GeneratedValueLabel
                         @if (primaryOrigin.Corrected)
                         {
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">Corrected</MudChip>
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">@MetaverseText.MaiCorrected</MudChip>
                         }
                     </dd>
                 }
                 @if (primaryOrigin.AssertsNoValue)
                 {
-                    <dt>Asserts</dt>
-                    <dd>No value (Null is a value)</dd>
+                    <dt>@MetaverseText.MaiAsserts</dt>
+                    <dd>@MetaverseText.MaiNoValueNullIsValue</dd>
                 }
                 @if (ContributingConnectedSystemObject != null)
                 {
-                    <dt>From</dt>
+                    <dt>@MetaverseText.MaiFrom</dt>
                     <dd>
                         <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
                                     TypeName="@ContributingConnectedSystemObject.TypeName"
@@ -130,15 +131,15 @@
                 }
                 @if (Provenance.LastSet != null)
                 {
-                    <dt>Last set</dt>
+                    <dt>@MetaverseText.MaiLastSet</dt>
                     <dd>
                         <MudTooltip Text="@Provenance.LastSet.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                             <span>@Provenance.LastSet.ChangeTime.ToLocalTime().ToRelativeTime()</span>
                         </MudTooltip>
                         @if (ActivityHref != null)
                         {
-                            <span>by</span>
-                            <MudLink Href="@ActivityHref">@(Provenance.LastSet.ActivityDescription ?? "the Activity")</MudLink>
+                            <span>@MetaverseText.MaiBy</span>
+                            <MudLink Href="@ActivityHref">@(Provenance.LastSet.ActivityDescription ?? MetaverseText.MaiTheActivity)</MudLink>
                         }
                     </dd>
                 }
@@ -150,12 +151,12 @@
     @if (Provenance.Sources.Count > 0)
     {
         <div class="jim-inspector-section">
-            <span class="jim-inspector-label">Every source <em>in priority order</em></span>
+            <span class="jim-inspector-label">@((MarkupString)MetaverseText.MaiEverySource)</span>
             <ol class="jim-inspector-sources">
                 @foreach (var source in Provenance.Sources)
                 {
                     <li @key="source.MappingId" class="jim-inspector-source @(source.State == AttributeSourceState.InUse ? "jim-inspector-source-in-use" : null)">
-                        <span class="jim-inspector-rank" aria-label="@($"Priority {source.Rank}")">@source.Rank</span>
+                        <span class="jim-inspector-rank" aria-label="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MaiPriorityRank, source.Rank)">@source.Rank</span>
                         @* Named quietly (a dot in the system's bar colour, then text links), so the pill above stays the
                            panel's one strong statement of where the value came from. *@
                         <span class="jim-inspector-source-who">
@@ -184,8 +185,8 @@
                 }
             </ol>
             <span class="jim-inspector-subtle">
-                Priority is set on the @Provenance.AttributeName attribute.
-                <MudLink Href="@($"/admin/schema/object-types/{Provenance.MetaverseObjectTypeId}")">Change priority</MudLink>
+                @string.Format(CultureInfo.CurrentCulture, MetaverseText.MaiPrioritySetOn, Provenance.AttributeName)
+                <MudLink Href="@($"/admin/schema/object-types/{Provenance.MetaverseObjectTypeId}")">@MetaverseText.MaiChangePriority</MudLink>
             </span>
         </div>
     }
@@ -193,18 +194,18 @@
     @* ─── History ─── *@
     <div class="jim-inspector-section">
         <div class="jim-inspector-label-row">
-            <span class="jim-inspector-label">History</span>
+            <span class="jim-inspector-label">@MetaverseText.MaiHistory</span>
             <span class="d-flex gap-3">
-                <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
+                <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">@MetaverseText.MaiOpenInTimeline</MudLink>
                 @if (CausalityExplorerHref != null)
                 {
-                    <MudLink Href="@CausalityExplorerHref" data-testid="jim-mvo-inspector-explore-causality">Explore causality</MudLink>
+                    <MudLink Href="@CausalityExplorerHref" data-testid="jim-mvo-inspector-explore-causality">@MetaverseText.MaiExploreCausality</MudLink>
                 }
             </span>
         </div>
         @if (Provenance.History.Count == 0)
         {
-            <span class="jim-inspector-subtle">No changes recorded for this attribute.</span>
+            <span class="jim-inspector-subtle">@MetaverseText.MaiNoChanges</span>
         }
         else
         {
@@ -217,11 +218,11 @@
                             @* A generated value's two events worth naming (#242, release 4) read as what they were. *@
                             @if (generatedEvent == GeneratedValueHistoryEvent.Corrected)
                             {
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">Value corrected</MudChip>
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">@MetaverseText.MaiValueCorrected</MudChip>
                             }
                             else if (generatedEvent == GeneratedValueHistoryEvent.Generated)
                             {
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="ma-0">Value generated</MudChip>
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="ma-0">@MetaverseText.MaiValueGenerated</MudChip>
                             }
                             else
                             {
@@ -243,7 +244,7 @@
                             @if (activityHref != null)
                             {
                                 <span>·</span>
-                                <MudLink Href="@activityHref">@(entry.Change.ActivityDescription ?? "Activity")</MudLink>
+                                <MudLink Href="@activityHref">@(entry.Change.ActivityDescription ?? MetaverseText.MaiActivityFallback)</MudLink>
                             }
                             @if (!string.IsNullOrEmpty(entry.SyncRuleName))
                             {
@@ -277,7 +278,7 @@
             </ol>
             @if (Provenance.HistoryTruncated)
             {
-                <span class="jim-inspector-subtle">Showing the most recent changes only.</span>
+                <span class="jim-inspector-subtle">@MetaverseText.MaiShowingRecent</span>
             }
         }
     </div>
@@ -336,12 +337,12 @@
 
     private static string StateLabel(AttributeSourceState state) => state switch
     {
-        AttributeSourceState.InUse => "In use",
-        AttributeSourceState.Outranked => "Outranked",
-        AttributeSourceState.NoValue => "No value",
-        AttributeSourceState.NotJoined => "Not joined",
-        AttributeSourceState.Disabled => "Disabled",
-        _ => "Not evaluated"
+        AttributeSourceState.InUse => MetaverseText.MaiStateInUse,
+        AttributeSourceState.Outranked => MetaverseText.MaiStateOutranked,
+        AttributeSourceState.NoValue => MetaverseText.MaiStateNoValue,
+        AttributeSourceState.NotJoined => MetaverseText.MaiStateNotJoined,
+        AttributeSourceState.Disabled => CommonText.Disabled,
+        _ => MetaverseText.MaiStateNotEvaluated
     };
 
     private static Color StateColour(AttributeSourceState state) => state switch

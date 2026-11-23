@@ -1,6 +1,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using System.Globalization
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -19,7 +20,7 @@ else if (IsLoaded && Connections.Count == 0)
 {
     <MudPaper Outlined="true" Elevation="0" Class="jim-empty-state-panel">
         <TableEmptyState Icon="@Icons.Material.Filled.Hub"
-                         PrimaryText="This Metaverse Object has no Connected System Objects joined to it." />
+                         PrimaryText="@MetaverseText.MvcNoConnections" />
     </MudPaper>
 }
 else if (IsLoaded)
@@ -27,16 +28,16 @@ else if (IsLoaded)
     <MudTable Items="Connections" Hover="true" Dense="@Dense" Outlined="true" Elevation="0" data-testid="jim-mvo-connections-table">
         <ToolBarContent>
             <TableDensityToggle Dense="@Dense" DenseChanged="@DenseChanged" />
-            <TableObjectCount Count="@Connections.Count" SingularName="connection" PluralName="connections" ShowSeparator="true" />
+            <TableObjectCount Count="@Connections.Count" SingularName="@MetaverseText.MvcConnectionSingular" PluralName="@MetaverseText.MvcConnectionPlural" ShowSeparator="true" />
         </ToolBarContent>
         <HeaderContent>
             <MudTh Class="jim-expand-column"></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.ConnectedSystemName)" InitialDirection="SortDirection.Ascending">Connected System</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => GetObjectSortKey(c))">Object</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => GetRoleSortKey(c))">Role</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.JoinType)">Join</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.State)">State</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.LastSynchronised ?? DateTime.MinValue)">Last synchronised</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.ConnectedSystemName)" InitialDirection="SortDirection.Ascending">@MetaverseText.MvcConnectedSystem</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => GetObjectSortKey(c))">@MetaverseText.MvcObject</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => GetRoleSortKey(c))">@MetaverseText.MvcRole</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.JoinType)">@MetaverseText.MvcJoin</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.State)">@MetaverseText.MvcState</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.LastSynchronised ?? DateTime.MinValue)">@MetaverseText.MvcLastSynchronised</MudTableSortLabel></MudTh>
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -44,17 +45,17 @@ else if (IsLoaded)
                 @{ var expanded = ExpandedIds.Contains(context.ConnectedSystemObjectId); }
                 <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                                Size="Size.Small" aria-expanded="@(expanded ? "true" : "false")"
-                               aria-label="@($"Why this Metaverse Object is connected to {context.ConnectedSystemName}")"
+                               aria-label="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvcWhyConnected, context.ConnectedSystemName)"
                                OnClick="@(() => ToggleExpanded(context))"
                                data-testid="jim-mvo-connection-expand" />
             </MudTd>
-            <MudTd DataLabel="Connected System">
+            <MudTd DataLabel="@MetaverseText.MvcConnectedSystem">
                 <MudLink Href="@Utilities.GetConnectedSystemHref(context.ConnectedSystemId)">@context.ConnectedSystemName</MudLink>
             </MudTd>
             @* The Secondary External ID (an LDAP DN) leads where the Connected System has one, being the identifier a
                person can read; the External ID (often a GUID) sits beneath it for troubleshooting. A value only a
                Pending Export carries so far is shown as pending. With neither, the object's type names the link. *@
-            <MudTd DataLabel="Object">
+            <MudTd DataLabel="@MetaverseText.MvcObject">
                 @{
                     var objectHref = Utilities.GetConnectedSystemObjectHref(context.ConnectedSystemId, context.ConnectedSystemObjectId);
                     var leadsWithSecondary = context.SecondaryExternalId != null || context.PendingSecondaryExternalId != null;
@@ -95,15 +96,15 @@ else if (IsLoaded)
                     }
                 </div>
             </MudTd>
-            <MudTd DataLabel="Role">
+            <MudTd DataLabel="@MetaverseText.MvcRole">
                 <MudStack Row="true" Spacing="1">
                     @if (context.IsSource)
                     {
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="ma-0">Source</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="ma-0">@MetaverseText.MvcSource</MudChip>
                     }
                     @if (context.IsTarget)
                     {
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary" Class="ma-0">Target</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary" Class="ma-0">@MetaverseText.MvcTarget</MudChip>
                     }
                     @if (!context.IsSource && !context.IsTarget)
                     {
@@ -111,23 +112,23 @@ else if (IsLoaded)
                     }
                 </MudStack>
             </MudTd>
-            <MudTd DataLabel="Join">
+            <MudTd DataLabel="@MetaverseText.MvcJoin">
                 <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetJoinTypeColor(context.JoinType)" Class="ma-0">
                     @context.JoinType
                 </MudChip>
             </MudTd>
-            <MudTd DataLabel="State">
+            <MudTd DataLabel="@MetaverseText.MvcState">
                 <MudStack Spacing="0">
                     <ConnectionStateChip State="context.State" />
                     @if (context.State == ConnectedSystemObjectConnectionState.UpdatePending && context.PendingAttributeChangeCount is { } count)
                     {
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            @count attribute@(count == 1 ? "" : "s")
+                            @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, MetaverseText.MvcAttributeCountOne, MetaverseText.MvcAttributeCountOther), count)
                         </MudText>
                     }
                 </MudStack>
             </MudTd>
-            <MudTd DataLabel="Last synchronised">
+            <MudTd DataLabel="@MetaverseText.MvcLastSynchronised">
                 @if (context.LastSynchronised.HasValue)
                 {
                     <MudTooltip Text="@context.LastSynchronised.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -144,7 +145,7 @@ else if (IsLoaded)
                            StartIcon="@Icons.Material.Filled.Visibility"
                            Disabled="@PreviewLoading"
                            OnClick="@(() => OnPreview.InvokeAsync(context))"
-                           data-testid="jim-mvo-connection-preview">Preview Sync</MudButton>
+                           data-testid="jim-mvo-connection-preview">@MetaverseText.MvcPreviewSync</MudButton>
             </MudTd>
         </RowTemplate>
         <ChildRowContent>
@@ -239,7 +240,7 @@ else if (IsLoaded)
     private static string GetRoleSortKey(MetaverseObjectConnectionExplanation connection) =>
         (connection.IsSource, connection.IsTarget) switch
         {
-            (true, true) => "1 source and target",
+            (true, true) => "1 source and target", // i18n: exempt - sort key, never shown to a reader
             (true, false) => "0 source",
             (false, true) => "2 target",
             _ => "3 none"

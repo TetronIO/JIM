@@ -10,16 +10,16 @@
     @if (Pending)
     {
         <MudAlert Severity="Severity.Info" Class="mt-2 mb-6" data-testid="jim-export-review-banner">
-            <MudText Typo="Typo.body1" Style="font-weight: 500;">Awaiting export review</MudText>
+            <MudText Typo="Typo.body1" Style="font-weight: 500;">@MetaverseText.ErpbTitle</MudText>
             <MudText Typo="Typo.body2" Class="mt-1">
                 @if (ChangedAttributeNames.Count > 0)
                 {
-                    <span data-testid="jim-export-review-changed-attributes">Changed outside synchronisation: @string.Join(", ", ChangedAttributeNames).</span>
-                    @:The next synchronisation of any Connected System reviews this Metaverse Object against every export rule and sends the changed values to the accounts it already has.
+                    <span data-testid="jim-export-review-changed-attributes">@string.Format(System.Globalization.CultureInfo.CurrentCulture, MetaverseText.ErpbChanged, string.Join(", ", ChangedAttributeNames))</span>
+                    @MetaverseText.ErpbReviewChanged
                 }
                 else
                 {
-                    @:The next synchronisation of any Connected System reviews this Metaverse Object against every export rule.
+                    @MetaverseText.ErpbReview
                 }
             </MudText>
         </MudAlert>
