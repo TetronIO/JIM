@@ -84,7 +84,7 @@
                     {
                         <MudProgressLinear Value="@ProgressPercentage" Color="Color.Info" Rounded="true" Class="mt-4" />
                         <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">
-                            @activity.ObjectsProcessed.ToString("N0") / @activity.ObjectsToProcess.ToString("N0")@(string.IsNullOrEmpty(activity.Message) ? "" : $" - {activity.Message}")
+                            @activity.ObjectsProcessed.ToString("N0") / @activity.ObjectsToProcess.ToString("N0")@(string.IsNullOrEmpty(activity.Message) ? "" : $" - {MessageDisplay.Show(activity.MessageDetail, activity.Message)}")
                         </MudText>
                     }
                     else
@@ -92,7 +92,7 @@
                         <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" Class="mt-4" />
                         @if (!string.IsNullOrEmpty(activity.Message))
                         {
-                            <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">@activity.Message</MudText>
+                            <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">@MessageDisplay.Show(activity.MessageDetail, activity.Message)</MudText>
                         }
                     }
                 }
@@ -583,13 +583,16 @@
     /// </summary>
     private static IEnumerable<FindingMessagePart> FindingMessageParts(PreviewValidationFinding finding)
     {
+        // The message in the viewer's language, or the stored English where the finding has no message (#3030). A
+        // translation keeps the attribute's name in straight quotes so the split below finds it in any language.
+        var text = MessageDisplay.Show(finding.Detail, finding.Message) ?? finding.Message;
         if (string.IsNullOrEmpty(finding.MetaverseAttributeName))
-            return [new FindingMessagePart(finding.Message, false)];
+            return [new FindingMessagePart(text, false)];
 
         var token = $"'{finding.MetaverseAttributeName}'";
-        var segments = finding.Message.Split(token);
+        var segments = text.Split(token);
         if (segments.Length == 1)
-            return [new FindingMessagePart(finding.Message, false)];
+            return [new FindingMessagePart(text, false)];
 
         var parts = new List<FindingMessagePart>();
         for (var i = 0; i < segments.Length; i++)

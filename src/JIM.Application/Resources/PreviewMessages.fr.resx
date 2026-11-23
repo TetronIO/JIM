@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FullSyncSystemGone" xml:space="preserve">
+    <value>Ce système connecté n’existe plus ; il n’y a donc aucune synchronisation complète à prévisualiser.</value>
+  </data>
+  <data name="FullSyncSystemDeleting" xml:space="preserve">
+    <value>Ce système connecté est en cours de suppression ; il ne sera donc plus synchronisé.</value>
+  </data>
+  <data name="FullSyncCapTooLow" xml:space="preserve">
+    <value>Un aperçu limité à moins d’un objet n’évaluerait rien. Supprimez la limite pour évaluer tous les objets.</value>
+  </data>
+  <data name="FullSyncNoRunProfile" xml:space="preserve">
+    <value>Ce système connecté n’a aucun profil d’exécution de synchronisation complète ; une synchronisation complète ne peut donc pas être exécutée. Créez-en un dans l’onglet Profils d’exécution, puis prévisualisez-le.</value>
+  </data>
+  <data name="FullSyncDerivedFlowCycle" xml:space="preserve">
+    <value>Une synchronisation complète refuserait de démarrer, car les flux d’attributs dérivés activés forment un cycle de dépendances : {0}</value>
+  </data>
+  <data name="FullSyncCapped" xml:space="preserve">
+    <value>Cet aperçu n’évalue que les {0} premiers des {1} objets du système. Ses totaux décrivent ces objets, et non l’ensemble du système ; une synchronisation complète pourrait donc faire plus que ce qu’il montre.</value>
+  </data>
+  <data name="DeletionSystemGone" xml:space="preserve">
+    <value>Ce système connecté n’existe plus ; il n’y a donc aucune suppression à prévisualiser.</value>
+  </data>
+  <data name="DeletionAlreadyDeleting" xml:space="preserve">
+    <value>Ce système connecté est déjà en cours de suppression. Une partie de ce qu’un aperçu décrirait s’est déjà produite ; il ne peut donc pas être prévisualisé. Son activité de suppression indique la progression.</value>
+  </data>
+  <data name="DeletionDerivedFlowsRead" xml:space="preserve">
+    <value>Des flux dérivés sur {0} lisent l’attribut '{1}', que cette suppression efface ou modifie. La suppression marque les objets concernés afin que ces flux soient recalculés à la prochaine synchronisation du système qui les héberge ; cet aperçu montre la modification de '{1}', mais pas les valeurs dérivées qui en découlent.</value>
+  </data>
+  <data name="DeletionDerivedFlowCycle" xml:space="preserve">
+    <value>Les flux dérivés des règles de synchronisation restantes forment un cycle, avec lequel le déprovisionnement synchronisé refuse de s’exécuter : {0}</value>
+  </data>
+  <data name="ScopeSelectionNoPartitions" xml:space="preserve">
+    <value>'{0}' utilise un connecteur sans partitions ; il n’y a donc aucune sélection de partitions ou de conteneurs à prévisualiser.</value>
+  </data>
+  <data name="ScopeSelectionNothingSelected" xml:space="preserve">
+    <value>Cette sélection ne laisse rien à gérer à JIM sur ce système connecté : {0}. Les profils d’exécution ne peuvent pas être exécutés sur celui-ci, et chaque objet déjà importé serait sorti du périmètre.</value>
+  </data>
+  <data name="ScopeSelectionInoperableRunProfiles" xml:space="preserve">
+    <value>{0} profil(s) d’exécution ciblent une partition que cette sélection désélectionne et seraient refusés à l’exécution : {1}. Dirigez-les vers une partition sélectionnée, ou conservez la partition sélectionnée.</value>
+  </data>
+  <data name="ScopeSelectionContainersNotMeasured" xml:space="preserve">
+    <value>Le connecteur '{0}' possède des conteneurs mais ne peut pas indiquer si un objet se trouve dans l’un d’eux ; cet aperçu ne compte donc que ce que changerait la modification de la sélection des partitions. Les modifications de conteneurs ne sont pas mesurées, et les totaux ci-dessous ne constituent pas une réponse complète.</value>
+  </data>
+  <data name="ScopeSelectionBringsNewScope" xml:space="preserve">
+    <value>Cette sélection fait entrer dans JIM un périmètre qu’il n’importe pas actuellement. Les objets que JIM détient déjà à cet endroit sont comptés ci-dessous ; ceux qu’il n’a jamais importés ne peuvent pas l’être, car il n’y a rien à compter tant qu’une importation complète ne les a pas découverts.</value>
+  </data>
+  <data name="ActivityValidating" xml:space="preserve">
+    <value>Validation de la configuration proposée</value>
+  </data>
+  <data name="ActivityCannotBeApplied" xml:space="preserve">
+    <value>La configuration proposée ne peut pas être appliquée</value>
+  </data>
+  <data name="ActivityCounting" xml:space="preserve">
+    <value>Comptage des objets concernés</value>
+  </data>
+  <data name="ActivityEvaluating" xml:space="preserve">
+    <value>Évaluation de ce que ferait la modification</value>
+  </data>
+  <data name="ActivityComplete" xml:space="preserve">
+    <value>Aperçu terminé</value>
+  </data>
+  <data name="ActivityCancelled" xml:space="preserve">
+    <value>L’aperçu a été annulé</value>
+  </data>
+  <data name="ActivityFailedWhile" xml:space="preserve">
+    <value>L’aperçu a échoué pendant {0}</value>
+  </data>
+  <data name="ActivityWhileValidating" xml:space="preserve">
+    <value>la validation de la configuration proposée</value>
+  </data>
+  <data name="ActivityWhileCounting" xml:space="preserve">
+    <value>le comptage des objets que la modification affecterait</value>
+  </data>
+  <data name="ActivityWhileEvaluating" xml:space="preserve">
+    <value>l’évaluation de ce que ferait la modification</value>
+  </data>
+  <data name="EnglishFromElsewhere" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="ObjectMatchingSameAsStored" xml:space="preserve">
+    <value>Les règles de correspondance d’objets proposées sont identiques à celles que ce système connecté possède déjà ; aucun objet ne serait donc joint différemment et aucun impact n’est compté ci-dessous.</value>
+  </data>
+  <data name="ObjectMatchingOnlyUnjoined" xml:space="preserve">
+    <value>Les règles de correspondance d’objets ne sont évaluées que pour les objets qui ne sont pas déjà joints à un objet Metaverse. Les objets déjà joints conservent leur objet Metaverse, quelle que soit cette modification ; l’impact ci-dessous ne couvre donc que les objets non joints.</value>
+  </data>
+  <data name="ObjectMatchingSwitchToAdvanced" xml:space="preserve">
+    <value>La proposition fait passer ce système connecté à la correspondance avancée ; les règles associées à chaque type d’objet de système connecté ne sont donc plus utilisées et ce sont les règles propres à chaque règle de synchronisation qui s’appliquent. Une règle de synchronisation sans règles propres ne joint rien.</value>
+  </data>
+  <data name="ObjectMatchingSwitchToSimple" xml:space="preserve">
+    <value>La proposition fait passer ce système connecté à la correspondance simple ; les règles propres à chaque règle de synchronisation ne sont donc plus utilisées et ce sont les règles associées à chaque type d’objet de système connecté qui s’appliquent. Un type d’objet sans règles propres ne joint rien.</value>
+  </data>
+  <data name="ObjectMatchingTypeLeftWithNoRule" xml:space="preserve">
+    <value>La proposition ne laisse aucune règle de correspondance d’objets à '{0}' ; aucun objet de ce type ne serait donc jamais joint à un objet Metaverse existant. Chaque objet non joint projetterait à la place une nouvelle identité, ce qui est la cause des identités en double.</value>
+  </data>
+  <data name="ObjectMatchingThisType" xml:space="preserve">
+    <value>ce type</value>
+  </data>
+  <data name="ObjectMatchingOwnerSyncRule" xml:space="preserve">
+    <value>une règle de synchronisation</value>
+  </data>
+  <data name="ObjectMatchingOwnerObjectType" xml:space="preserve">
+    <value>un type d’objet</value>
+  </data>
+  <data name="ObjectMatchingRuleNamed" xml:space="preserve">
+    <value>Règle de correspondance d’objets {0} sur '{1}'</value>
+  </data>
+  <data name="ObjectMatchingNoMetaverseObjectType" xml:space="preserve">
+    <value>{0} ne désigne aucun type d’objet Metaverse à rechercher. Les règles du mode simple doivent en désigner un ; en mode avancé, c’est la règle de synchronisation qui le fournit.</value>
+  </data>
+  <data name="ObjectMatchingRuleProblem" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="ObjectMatchingTargetAttributeGone" xml:space="preserve">
+    <value>Elle cible un attribut Metaverse qui n’existe plus.</value>
+  </data>
+  <data name="ObjectMatchingTypeNotInSchema" xml:space="preserve">
+    <value>Elle appartient à un type d’objet de système connecté qui ne fait pas partie du schéma de ce système.</value>
+  </data>
+  <data name="DirectionImport" xml:space="preserve">
+    <value>Importation</value>
+  </data>
+  <data name="DirectionExport" xml:space="preserve">
+    <value>Exportation</value>
+  </data>
+  <data name="BehaviourSameSettings" xml:space="preserve">
+    <value>Les paramètres proposés sont identiques à ceux que cette règle de synchronisation possède déjà ; rien ne changerait donc et aucun impact n’est compté ci-dessous.</value>
+  </data>
+  <data name="BehaviourDirectionImmutable" xml:space="preserve">
+    <value>Le sens ne peut pas être modifié sur une règle de synchronisation enregistrée. Les mappages de flux d’attributs et les règles de correspondance d’objets de cette règle sont écrits pour le sens « {0} » et viseraient tous le mauvais côté avec le sens « {1} ». Créez plutôt une règle dans le sens dont vous avez besoin.</value>
+  </data>
+  <data name="BehaviourEnabling" xml:space="preserve">
+    <value>L’activation de cette règle de synchronisation la fait contribuer dès la prochaine synchronisation : elle commence à appliquer ses mappages de flux d’attributs, et tout ce qu’elle projette ou provisionne commence à être créé.</value>
+  </data>
+  <data name="BehaviourDisabling" xml:space="preserve">
+    <value>La désactivation de cette règle de synchronisation l’empêche de contribuer dès la prochaine synchronisation. Les valeurs d’attributs dont elle est actuellement propriétaire passent à un autre contributeur s’il y en a un, et sont conservées, prêtes pour une réactivation de la règle, si elle était la seule. Elle cesse de projeter et de provisionner.</value>
+  </data>
+  <data name="BehaviourProjectOn" xml:space="preserve">
+    <value>L’activation de « Projeter vers le Metaverse » crée un nouvel objet Metaverse pour chaque objet dans le périmètre que gère cette règle et qui ne correspond à aucun objet existant, ce qui est la façon dont des identités sont créées en masse.</value>
+  </data>
+  <data name="BehaviourProvisionOn" xml:space="preserve">
+    <value>L’activation de « Provisionner vers le système connecté » crée un objet de système connecté dans le système cible pour chaque objet Metaverse dans le périmètre qui n’en a aucun. Il s’agit d’une création d’objets à grande échelle, et le total ci-dessous indique combien.</value>
+  </data>
+  <data name="BehaviourEnforceStateOff" xml:space="preserve">
+    <value>La désactivation de « Appliquer l’état » empêche cette règle de corriger la dérive ; les objets qu’elle gère peuvent donc s’écarter de ce que JIM détient dès l’enregistrement. Rien n’est corrigé tant qu’elle n’est pas réactivée.</value>
+  </data>
+  <data name="BehaviourRuleDisabled" xml:space="preserve">
+    <value>Cette règle de synchronisation est désactivée ; aucune synchronisation ne l’applique donc aujourd’hui. L’impact ci-dessous décrit ce que ferait la prochaine synchronisation une fois la règle activée.</value>
+  </data>
+  <data name="BehaviourEnforceStateImportOnly" xml:space="preserve">
+    <value>« Appliquer l’état » ne régit la correction de dérive que pour les règles d’exportation ; la modifier sur cette règle d’importation n’a donc aucun effet.</value>
+  </data>
+  <data name="BehaviourProvisionExportOnly" xml:space="preserve">
+    <value>« Provisionner vers le système connecté » ne s’applique qu’aux règles d’exportation ; le modifier sur cette règle d’importation n’a donc aucun effet.</value>
+  </data>
+  <data name="BehaviourProjectImportOnly" xml:space="preserve">
+    <value>« Projeter vers le Metaverse » ne s’applique qu’aux règles d’importation ; le modifier sur cette règle d’exportation n’a donc aucun effet.</value>
+  </data>
+  <data name="DestructiveNoChange" xml:space="preserve">
+    <value>Aucun des deux paramètres destructifs ne change avec cette proposition ; le sort d’aucun objet ne change donc et aucun impact n’est compté ci-dessous.</value>
+  </data>
+  <data name="DestructiveOutboundOnExport" xml:space="preserve">
+    <value>L’action de déprovisionnement sortant n’est lue que par les règles de synchronisation d’exportation ; la modifier sur cette règle d’importation ne change donc le sort d’aucun objet et n’est pas comptée ci-dessous.</value>
+  </data>
+  <data name="DestructiveInboundOnImport" xml:space="preserve">
+    <value>L’action hors périmètre entrante n’est lue que par les règles de synchronisation d’importation ; la modifier sur cette règle d’exportation ne change donc le sort d’aucun objet et n’est pas comptée ci-dessous.</value>
+  </data>
+  <data name="DestructiveRuleDisabled" xml:space="preserve">
+    <value>Cette règle de synchronisation est désactivée ; aucune synchronisation n’applique donc ses paramètres aujourd’hui. Les totaux ci-dessous décrivent ce que ferait la prochaine synchronisation une fois la règle activée.</value>
+  </data>
+  <data name="DestructiveSiblingKeepsJoin" xml:space="preserve">
+    <value>{0} couvre aussi ce type d’objet et garde ses objets joints (Rester joint). Lorsqu’un objet quitte toutes les règles de synchronisation d’importation, ce sont les règles qui le détenaient qui décident, et « Rester joint » de l’une d’elles conserve la jointure ; cette modification ne déconnecte donc que les objets que ces règles n’ont jamais détenus. Les totaux ci-dessous ne comptent que ceux-là.</value>
+  </data>
+  <data name="DeletionSettingsNeedsAuthoritativeSource" xml:space="preserve">
+    <value>La suppression à la déconnexion d’une source faisant autorité nécessite qu’au moins un système connecté soit désigné comme source faisant autorité. Sans cela, la synchronisation se rabat sur la suppression à la déconnexion du dernier connecteur, ce qui est une règle différente de celle sélectionnée.</value>
+  </data>
+  <data name="DeletionSettingsNegativeGracePeriod" xml:space="preserve">
+    <value>Un délai de grâce de suppression ne peut pas être négatif.</value>
+  </data>
+  <data name="DeletionSettingsSourcesChanged" xml:space="preserve">
+    <value>Les sources faisant autorité ont changé. Cela décide de ce qui se passe à la prochaine déconnexion d’un objet de système connecté ; cela ne déplace donc la date de suppression d’aucun objet Metaverse aujourd’hui et n’est pas compté ci-dessous.</value>
+  </data>
+  <data name="ScopingProposalSameAsStored" xml:space="preserve">
+    <value>Les critères de périmètre proposés sont identiques à ceux que cette règle de synchronisation possède déjà ; aucun objet ne change donc de périmètre et aucun impact n’est compté ci-dessous.</value>
+  </data>
+  <data name="ScopingProposalRemovesEveryCriterion" xml:space="preserve">
+    <value>La proposition supprime tous les critères de périmètre ; cette règle de synchronisation gérerait donc chaque objet de type '{0}' plutôt qu’une population choisie.</value>
+  </data>
+  <data name="ScopingConfiguredType" xml:space="preserve">
+    <value>le type configuré</value>
+  </data>
+  <data name="ScopingProposalRuleDisabled" xml:space="preserve">
+    <value>Cette règle de synchronisation est désactivée ; aucune synchronisation n’applique donc son périmètre aujourd’hui. Les totaux ci-dessous décrivent ce que ferait la prochaine synchronisation une fois la règle activée.</value>
+  </data>
+  <data name="ScopingProposalUnscopedSiblingDisconnect" xml:space="preserve">
+    <value>La règle de synchronisation d’importation '{0}' couvre ce type d’objet sans aucun critère de périmètre ; chaque objet reste donc joint quoi que dise cette règle : restreindre les critères de cette règle ne déconnecte rien. Un objet qui sort du périmètre de cette règle cesse de recevoir son flux d’attributs ; avec son action hors périmètre, Déconnecter, les valeurs que cette règle a apportées sont transmises aux règles qui couvrent encore l’objet.</value>
+  </data>
+  <data name="ScopingProposalUnscopedSiblingRemainJoined" xml:space="preserve">
+    <value>La règle de synchronisation d’importation '{0}' couvre ce type d’objet sans aucun critère de périmètre ; chaque objet reste donc joint quoi que dise cette règle : restreindre les critères de cette règle ne déconnecte rien. Un objet qui sort du périmètre de cette règle cesse de recevoir son flux d’attributs ; avec son action hors périmètre, Rester joint, les valeurs que cette règle a apportées restent telles quelles.</value>
+  </data>
+  <data name="ScopingProposalExpressionReadsMetaverseOnImport" xml:space="preserve">
+    <value>L’expression d’un critère de périmètre proposé lit {0}, mais une règle de synchronisation d’importation évalue son périmètre sur les attributs du système connecté (cs["..."]) ; cette entrée n’aurait donc jamais de valeur.</value>
+  </data>
+  <data name="ScopingProposalExpressionReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>L’expression d’un critère de périmètre proposé lit {0}, mais une règle de synchronisation d’exportation évalue son périmètre sur les attributs Metaverse (mv["..."]) ; cette entrée n’aurait donc jamais de valeur.</value>
+  </data>
+  <data name="ScopingProposalNamesNoAttribute" xml:space="preserve">
+    <value>Un critère de périmètre proposé ne désigne aucun attribut ; il n’a donc rien à évaluer et ne restreindrait rien.</value>
+  </data>
+  <data name="ScopingProposalReadsMetaverseOnImport" xml:space="preserve">
+    <value>Un critère de périmètre proposé lit un attribut Metaverse, mais une règle de synchronisation d’importation évalue son périmètre sur les attributs du système connecté ; le critère ne correspondrait donc jamais et le périmètre serait plus large qu’il n’y paraît.</value>
+  </data>
+  <data name="ScopingProposalReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>Un critère de périmètre proposé lit un attribut de système connecté, mais une règle de synchronisation d’exportation évalue son périmètre sur les attributs Metaverse ; le critère ne correspondrait donc jamais et le périmètre serait plus large qu’il n’y paraît.</value>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} et {1}</value>
+  </data>
+  <data name="MetaverseAttributeNumbered" xml:space="preserve">
+    <value>Attribut Metaverse {0}</value>
+  </data>
+  <data name="RuleNamesOne" xml:space="preserve">
+    <value>règle de synchronisation '{0}'</value>
+  </data>
+  <data name="RuleNamesOther" xml:space="preserve">
+    <value>règles de synchronisation {0}</value>
+  </data>
+  <data name="AttributeFlowSameAsStored" xml:space="preserve">
+    <value>Le flux d’attributs proposé est identique aux mappages que cette règle de synchronisation possède déjà ; aucun objet ne change donc et aucun impact n’est compté ci-dessous.</value>
+  </data>
+  <data name="AttributeFlowRemovesEveryMapping" xml:space="preserve">
+    <value>La proposition supprime tous les mappages ; cette règle de synchronisation ne ferait donc rien circuler.</value>
+  </data>
+  <data name="AttributeFlowRuleDisabled" xml:space="preserve">
+    <value>Cette règle de synchronisation est désactivée ; aucune synchronisation n’applique donc son flux d’attributs aujourd’hui. Les valeurs ci-dessous décrivent ce qu’écrirait la prochaine synchronisation une fois la règle activée.</value>
+  </data>
+  <data name="AttributeFlowRemovedKeepValues" xml:space="preserve">
+    <value>La proposition supprime le flux d’attributs de cette règle de synchronisation vers '{0}', et vous avez choisi de conserver les valeurs qu’il a apportées. Elles restent en place sans trace de leur origine, et aucune synchronisation ne les rappellera jamais ; aucune modification de valeur n’est comptée ci-dessous pour elles.</value>
+  </data>
+  <data name="AttributeFlowKeptAlsoWrittenBy" xml:space="preserve">
+    <value>'{0}' est aussi écrit par {1}. Les valeurs conservées restent jusqu’à ce que l’une de ces règles écrive l’attribut et remporte la priorité des attributs ; ce qu’elle écrirait n’est pas compté ci-dessous.</value>
+  </data>
+  <data name="AttributeFlowRemovedRecalled" xml:space="preserve">
+    <value>La proposition supprime le flux d’attributs de cette règle de synchronisation vers '{0}'. Les valeurs qu’il a apportées sont rappelées lors de la prochaine synchronisation du système connecté contributeur, delta ou complète : lorsqu’un autre flux d’attributs apporte aussi l’attribut, sa valeur prend le relais ; sinon l’attribut est effacé. Aucune modification de valeur n’est comptée ci-dessous pour elles, car le rappel a lieu lors de cette synchronisation et non lors de cet enregistrement.</value>
+  </data>
+  <data name="AttributeFlowRecallReElects" xml:space="preserve">
+    <value>'{0}' est aussi écrit par {1} ; le rappel désigne donc à nouveau un contributeur parmi elles au lieu d’effacer l’attribut ; ce qu’elles écriraient à la place des valeurs retirées n’est pas compté ci-dessous.</value>
+  </data>
+  <data name="AttributeFlowBelowPriority" xml:space="preserve">
+    <value>Le mappage proposé pour '{0}' se classe sous {1} dans la priorité des attributs ; une synchronisation l’évaluerait donc puis n’écrirait rien. Augmentez sa priorité pour en faire le contributeur qui remporte l’attribut.</value>
+  </data>
+  <data name="AttributeFlowDependantMissingInput" xml:space="preserve">
+    <value>Une fois cette proposition enregistrée, il manquerait une entrée au flux d’attributs vers '{0}' de la règle de synchronisation '{1}' : il lit {2}. Son comportement en cas d’entrée manquante détermine alors ce qu’il écrit.</value>
+  </data>
+  <data name="AttributeFlowMissingInputThroughDerived" xml:space="preserve">
+    <value>'{0}', dont les seuls contributeurs restants manquent eux-mêmes d’une entrée</value>
+  </data>
+  <data name="AttributeFlowMissingInputNoFlow" xml:space="preserve">
+    <value>'{0}', qui n’aurait aucun flux d’attributs activé pour l’alimenter</value>
+  </data>
+  <data name="AttributeFlowReadsChangedDirect" xml:space="preserve">
+    <value>lit '{0}'</value>
+  </data>
+  <data name="AttributeFlowReadsChangedThrough" xml:space="preserve">
+    <value>dépend de '{0}', par l’intermédiaire d’autres attributs dérivés</value>
+  </data>
+  <data name="AttributeFlowOtherSystemReader" xml:space="preserve">
+    <value>Le flux d’attributs vers '{0}' de la règle de synchronisation '{1}' {2}, que cette proposition modifie. Il s’exécute dans le système connecté propre à cette règle de synchronisation ; il est donc réévalué à la prochaine synchronisation de ce système connecté ; ce qu’il écrirait n’est pas compté ci-dessous.</value>
+  </data>
+  <data name="AttributeFlowNoTargetAttribute" xml:space="preserve">
+    <value>Un mappage de flux d’attributs proposé ne désigne aucun attribut cible ; il n’a donc nulle part où écrire.</value>
+  </data>
+  <data name="AttributeFlowWritesConnectedSystemOnImport" xml:space="preserve">
+    <value>Un mappage de flux d’attributs proposé écrit un attribut de système connecté, mais une règle de synchronisation d’importation alimente le Metaverse ; le mappage n’écrirait donc rien.</value>
+  </data>
+  <data name="AttributeFlowWritesMetaverseOnExport" xml:space="preserve">
+    <value>Un mappage de flux d’attributs proposé écrit un attribut Metaverse, mais une règle de synchronisation d’exportation alimente un système connecté ; le mappage n’écrirait donc rien.</value>
+  </data>
+  <data name="AttributeFlowNoSource" xml:space="preserve">
+    <value>Un mappage de flux d’attributs proposé n’a aucune source ; il n’a donc aucune valeur à écrire.</value>
+  </data>
+</root>

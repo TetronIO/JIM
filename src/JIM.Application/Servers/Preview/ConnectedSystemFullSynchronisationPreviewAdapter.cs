@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using System.Runtime.CompilerServices;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
@@ -48,32 +51,30 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(ConnectedSystemId(context));
         if (connectedSystem == null)
         {
-            return [Blocking("This Connected System no longer exists, so there is no Full Synchronisation to preview.")];
+            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncSystemGone)))];
         }
 
         if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
         {
-            return [Blocking("This Connected System is being deleted, so it will not be synchronised again.", nameof(connectedSystem.Status))];
+            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncSystemDeleting)), nameof(connectedSystem.Status))];
         }
 
         var proposal = Proposal(context);
         if (proposal.MaxObjects is < 1)
         {
-            return [Blocking("A preview capped at fewer than one object would evaluate nothing. Leave the cap out to evaluate every object.",
+            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncCapTooLow)),
                 nameof(proposal.MaxObjects))];
         }
 
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
         if (!runProfiles.Exists(profile => profile.RunType == ConnectedSystemRunType.FullSynchronisation))
         {
-            return [Blocking("This Connected System has no Full Synchronisation Run Profile, so a Full Synchronisation cannot be run. " +
-                "Create one on its Run Profiles tab, then preview it.")];
+            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncNoRunProfile)))];
         }
 
         if (await _application.ConnectedSystems.GetDerivedFlowCycleAsync() is { } cycle)
         {
-            return [Blocking("A Full Synchronisation would refuse to start, because the enabled derived Attribute Flows form a " +
-                $"dependency cycle: {cycle}")];
+            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncDerivedFlowCycle), cycle))];
         }
 
         // A stopped import (#2521) is warned of by the framework, from GetEvaluatedConnectorSpacesAsync (#3014).
@@ -83,9 +84,8 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
             var population = await _application.SyncPreview.GetFullSyncPopulationAsync(connectedSystem.Id);
             if (cap < population)
             {
-                findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Warning,
-                    $"This preview evaluates only the first {cap:N0} of the system's {population:N0} objects. Its counts describe " +
-                    "those objects, not the whole system, and a Full Synchronisation could do more than it shows.",
+                findings.Add(PreviewValidationFinding.Of(PreviewValidationSeverity.Warning,
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncCapped), cap, population),
                     nameof(proposal.MaxObjects)));
             }
         }
@@ -177,8 +177,8 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
         }
     }
 
-    private static PreviewValidationFinding Blocking(string message, string? field = null) =>
-        new(PreviewValidationSeverity.Blocking, message, field);
+    private static PreviewValidationFinding Blocking(JimMessage message, string? field = null) =>
+        PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking, message, field);
 
     private static ConnectedSystemFullSynchronisationProposal Proposal(PreviewContext context) =>
         context.ProposedConfiguration as ConnectedSystemFullSynchronisationProposal ?? new ConnectedSystemFullSynchronisationProposal();

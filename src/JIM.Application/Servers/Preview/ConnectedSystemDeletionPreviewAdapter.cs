@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using System.Runtime.CompilerServices;
 using JIM.Application.Exceptions;
 using JIM.Models.Activities;
@@ -64,8 +67,8 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
         {
             return
             [
-                new PreviewValidationFinding(PreviewValidationSeverity.Blocking,
-                    "This Connected System no longer exists, so there is no deletion to preview.")
+                PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking,
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionSystemGone)))
             ];
         }
 
@@ -73,9 +76,8 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
         {
             return
             [
-                new PreviewValidationFinding(PreviewValidationSeverity.Blocking,
-                    "This Connected System is already being deleted. Part of what a preview would describe has " +
-                    "already happened, so it cannot be previewed; its deletion Activity reports the progress.",
+                PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking,
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionAlreadyDeleting)),
                     nameof(connectedSystem.Status))
             ];
         }
@@ -85,22 +87,18 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
             var derivedReaders = await _application.ConnectedSystems.GetDerivedFlowsReadingDeprovisionedAttributesAsync(connectedSystem.Id);
             return
             [
-                .. derivedReaders.Select(reader => new PreviewValidationFinding(
+                .. derivedReaders.Select(reader => PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    $"Derived flows on {string.Join(", ", reader.HostingSystemNames)} read '{reader.MetaverseAttributeName}', " +
-                    "which this deletion clears or changes. The deletion marks the objects affected so those flows " +
-                    "recompute at the next synchronisation of the system hosting them; this preview shows the change " +
-                    $"to '{reader.MetaverseAttributeName}' but not the derived values that follow from it.",
-                    MetaverseAttributeName: reader.MetaverseAttributeName))
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionDerivedFlowsRead), string.Join(", ", reader.HostingSystemNames), reader.MetaverseAttributeName),
+                    metaverseAttributeName: reader.MetaverseAttributeName))
             ];
         }
         catch (DerivedFlowCycleException exception)
         {
             return
             [
-                new PreviewValidationFinding(PreviewValidationSeverity.Blocking,
-                    "The remaining Synchronisation Rules' derived flows form a cycle, which Synchronised Deprovisioning " +
-                    $"refuses to run with: {exception.Message}")
+                PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking,
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionDerivedFlowCycle), exception.Message))
             ];
         }
     }

@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Interfaces;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -91,29 +94,26 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
 
         if (!outboundChanged && !inboundChanged)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "Neither destructive setting changes under this proposal, so no object's fate changes and no impact " +
-                "is counted below.",
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveNoChange)),
                 nameof(SyncRule.OutboundDeprovisionAction)));
             return findings;
         }
 
         if (outboundChanged && rule.Direction != SyncRuleDirection.Export)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The Outbound Deprovision Action is read only by export Synchronisation Rules, so changing it on " +
-                "this import rule changes no object's fate and is not counted below.",
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveOutboundOnExport)),
                 nameof(SyncRule.OutboundDeprovisionAction)));
         }
 
         if (inboundChanged && rule.Direction != SyncRuleDirection.Import)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The Inbound Out-of-Scope Action is read only by import Synchronisation Rules, so changing it on " +
-                "this export rule changes no object's fate and is not counted below.",
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveInboundOnImport)),
                 nameof(SyncRule.InboundOutOfScopeAction)));
         }
 
@@ -121,10 +121,9 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
 
         if (effectiveChange && !rule.Enabled)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "This Synchronisation Rule is disabled, so no synchronisation applies its settings today. The " +
-                "counts below describe what the next synchronisation would do once it is enabled.",
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -141,12 +140,9 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             if (keepingSiblings.Count > 0)
             {
                 var names = string.Join(", ", SyncEngine.InNameOrder(keepingSiblings).Select(sibling => $"'{sibling.Name}'"));
-                findings.Add(new PreviewValidationFinding(
+                findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    $"{names} also covers this object type and keeps its objects joined (Remain Joined). Where an object " +
-                    "leaves every import Synchronisation Rule, the rules that held it decide, and Remain Joined from any of " +
-                    "them keeps the join, so this change disconnects only objects those rules never held. The counts below " +
-                    "include only those.",
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveSiblingKeepsJoin), names),
                     nameof(SyncRule.InboundOutOfScopeAction)));
             }
         }

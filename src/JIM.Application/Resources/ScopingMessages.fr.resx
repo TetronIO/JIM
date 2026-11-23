@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExpressionBothAttributeAndExpression" xml:space="preserve">
+    <value>Un critère de périmètre compare soit un attribut, soit une expression, mais pas les deux.</value>
+  </data>
+  <data name="ExpressionNeedsCompareAs" xml:space="preserve">
+    <value>Un critère à expression nécessite un type « Comparer en tant que », le type selon lequel sa valeur calculée est comparée : texte, nombre, nombre long, décimal, date, booléen ou GUID.</value>
+  </data>
+  <data name="ExpressionTooLong" xml:space="preserve">
+    <value>L’expression compte {0} caractères ; une expression ne peut pas en compter plus de {1}.</value>
+  </data>
+  <data name="ExpressionDoesNotParse" xml:space="preserve">
+    <value>L’expression ne peut pas être analysée : {0}</value>
+  </data>
+  <data name="ExpressionReadsMetaverseOnImport" xml:space="preserve">
+    <value>L’expression lit {0}, mais une règle de synchronisation d’importation évalue le périmètre d’objets de système connecté, lus sous la forme cs["..."] ; cette entrée n’aurait donc jamais de valeur.</value>
+  </data>
+  <data name="ExpressionReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>L’expression lit {0}, mais une règle de synchronisation d’exportation évalue le périmètre d’objets Metaverse, lus sous la forme mv["..."] ; cette entrée n’aurait donc jamais de valeur.</value>
+  </data>
+  <data name="ExpressionReadsNoAttributeOnImport" xml:space="preserve">
+    <value>L’expression ne lit aucun attribut ; elle calculerait donc la même valeur pour chaque objet et les placerait tous dans le même périmètre. Lisez au moins un attribut, sous la forme cs["attributeName"].</value>
+  </data>
+  <data name="ExpressionReadsNoAttributeOnExport" xml:space="preserve">
+    <value>L’expression ne lit aucun attribut ; elle calculerait donc la même valeur pour chaque objet et les placerait tous dans le même périmètre. Lisez au moins un attribut, sous la forme mv["attributeName"].</value>
+  </data>
+  <data name="ExpressionUnknownAttribute" xml:space="preserve">
+    <value>L’expression lit {0}, mais '{1}' n’a aucun attribut de ce nom.</value>
+  </data>
+  <data name="ExpressionNonRepeatable" xml:space="preserve">
+    <value>L’expression appelle {0}, qui renvoie une valeur différente à chaque exécution ; le périmètre d’un objet changerait donc sans que l’objet change et rien n’agirait en conséquence. Pour définir un périmètre selon une date, comparez l’expression en tant que date à une date relative (par exemple, il y a plus de 30 jours).</value>
+  </data>
+</root>

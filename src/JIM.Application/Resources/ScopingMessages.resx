@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExpressionBothAttributeAndExpression" xml:space="preserve">
+    <value>A Scoping Criterion compares either an attribute or an expression, not both.</value>
+  </data>
+  <data name="ExpressionNeedsCompareAs" xml:space="preserve">
+    <value>An expression criterion needs a Compare As type, the type its computed value is compared as: Text, Number, Long Number, Decimal, Date, Boolean or Guid.</value>
+  </data>
+  <data name="ExpressionTooLong" xml:space="preserve">
+    <value>The expression is {0} characters long; an expression can be at most {1}.</value>
+    <comment>{0} is the expression's length; {1} is the maximum length.</comment>
+  </data>
+  <data name="ExpressionDoesNotParse" xml:space="preserve">
+    <value>The expression does not parse: {0}</value>
+    <comment>{0} is the parser's own message, English produced by the expression library, shown as it is.</comment>
+  </data>
+  <data name="ExpressionReadsMetaverseOnImport" xml:space="preserve">
+    <value>The expression reads {0}, but an import Synchronisation Rule scopes Connected System Objects, read as cs["..."], so that input would never hold a value.</value>
+    <comment>{0} is an expression accessor such as mv["name"].</comment>
+  </data>
+  <data name="ExpressionReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>The expression reads {0}, but an export Synchronisation Rule scopes Metaverse Objects, read as mv["..."], so that input would never hold a value.</value>
+    <comment>{0} is an expression accessor such as cs["name"].</comment>
+  </data>
+  <data name="ExpressionReadsNoAttributeOnImport" xml:space="preserve">
+    <value>The expression reads no attribute, so it would compute the same value for every object and scope them all alike. Read at least one attribute, as cs["attributeName"].</value>
+  </data>
+  <data name="ExpressionReadsNoAttributeOnExport" xml:space="preserve">
+    <value>The expression reads no attribute, so it would compute the same value for every object and scope them all alike. Read at least one attribute, as mv["attributeName"].</value>
+  </data>
+  <data name="ExpressionUnknownAttribute" xml:space="preserve">
+    <value>The expression reads {0}, but '{1}' has no attribute of that name.</value>
+    <comment>{0} is an expression accessor; {1} is the Object Type's name.</comment>
+  </data>
+  <data name="ExpressionNonRepeatable" xml:space="preserve">
+    <value>The expression calls {0}, which returns a different value each time it runs, so an object's scope would change with no change to the object and nothing would act on it. To scope by date, compare the expression as a Date against a relative date (for example, more than 30 days ago).</value>
+    <comment>{0} is a comma-separated list of function names.</comment>
+  </data>
+</root>

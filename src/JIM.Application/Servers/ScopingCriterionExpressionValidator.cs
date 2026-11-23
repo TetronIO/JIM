@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -48,6 +51,14 @@ public sealed class ScopingCriterionExpressionValidator
     /// <param name="attributeNames">The names of the scoped object type's attributes.</param>
     /// <param name="objectTypeName">The scoped object type's name, for the message.</param>
     public string? DescribeProblem(SyncRuleScopingCriteria criterion, SyncRuleDirection direction,
+        IReadOnlyCollection<string> attributeNames, string objectTypeName) =>
+        DescribeProblemDetail(criterion, direction, attributeNames, objectTypeName)?.ToEnglish();
+
+    /// <summary>
+    /// <see cref="DescribeProblem"/> as a message, for the portal to show in the viewer's language (#3030); its
+    /// British English is what <see cref="DescribeProblem"/> returns, so the REST API and logs read what they always did.
+    /// </summary>
+    public JimMessage? DescribeProblemDetail(SyncRuleScopingCriteria criterion, SyncRuleDirection direction,
         IReadOnlyCollection<string> attributeNames, string objectTypeName)
     {
         ArgumentNullException.ThrowIfNull(criterion);
@@ -59,19 +70,17 @@ public sealed class ScopingCriterionExpressionValidator
         var expression = criterion.Expression!;
         if (criterion.MetaverseAttributeId.HasValue || criterion.MetaverseAttribute != null ||
             criterion.ConnectedSystemAttributeId.HasValue || criterion.ConnectedSystemAttribute != null)
-            return "A Scoping Criterion compares either an attribute or an expression, not both.";
+            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionBothAttributeAndExpression));
 
         if (criterion.CompareAs is not { } compareAs || !CompareAsTypes.Contains(compareAs))
-            return "An expression criterion needs a Compare As type, the type its computed value is compared as: Text, Number, " +
-                   "Long Number, Decimal, Date, Boolean or Guid.";
+            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionNeedsCompareAs));
 
         if (expression.Length > DynamicExpressoEvaluator.MaxExpressionLength)
-            return $"The expression is {expression.Length:N0} characters long; an expression can be at most " +
-                   $"{DynamicExpressoEvaluator.MaxExpressionLength:N0}.";
+            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionTooLong), expression.Length, DynamicExpressoEvaluator.MaxExpressionLength);
 
         var parsed = _expressionEvaluator.Validate(expression);
         if (!parsed.IsValid)
-            return $"The expression does not parse: {parsed.ErrorMessage}";
+            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionDoesNotParse), parsed.ErrorMessage);
 
         var exporting = direction == SyncRuleDirection.Export;
         var scopedSide = exporting ? ExpressionInputSource.Metaverse : ExpressionInputSource.ConnectedSystem;
@@ -79,28 +88,27 @@ public sealed class ScopingCriterionExpressionValidator
 
         var otherSideInput = inputs.FirstOrDefault(input => input.Source != scopedSide);
         if (otherSideInput != null)
-            return $"The expression reads {otherSideInput.Accessor}, but an {(exporting ? "export" : "import")} Synchronisation " +
-                   $"Rule scopes {(exporting ? "Metaverse Objects, read as mv[\"...\"]" : "Connected System Objects, read as cs[\"...\"]")}, " +
-                   "so that input would never hold a value.";
+            return exporting
+                ? JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsConnectedSystemOnExport), otherSideInput.Accessor)
+                : JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsMetaverseOnImport), otherSideInput.Accessor);
 
         var scopedInputs = inputs.Where(input => input.Source == scopedSide).ToList();
         if (scopedInputs.Count == 0)
-            return $"The expression reads no attribute, so it would compute the same value for every object and scope them all " +
-                   $"alike. Read at least one attribute, as {(exporting ? "mv" : "cs")}[\"attributeName\"].";
+            return exporting
+                ? JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsNoAttributeOnExport))
+                : JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsNoAttributeOnImport));
 
         // Inputs are looked up ignoring case when the expression runs, so they are here too.
         var unknown = scopedInputs.FirstOrDefault(input =>
             !attributeNames.Any(name => string.Equals(name, input.AttributeName, StringComparison.OrdinalIgnoreCase)));
         if (unknown != null)
-            return $"The expression reads {unknown.Accessor}, but '{objectTypeName}' has no attribute of that name.";
+            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionUnknownAttribute), unknown.Accessor, objectTypeName);
 
         // An expression that reads the clock would put objects in and out of scope with nothing to notice it: no
         // change arrives, and temporal reconciliation only revisits criteria compared against a relative date.
         var nonRepeatable = NonRepeatableFunctionDetector.Find(expression);
         if (nonRepeatable.Count > 0)
-            return $"The expression calls {string.Join(", ", nonRepeatable)}, which returns a different value each time it runs, so " +
-                   "an object's scope would change with no change to the object and nothing would act on it. To scope by date, " +
-                   "compare the expression as a Date against a relative date (for example, more than 30 days ago).";
+            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionNonRepeatable), string.Join(", ", nonRepeatable));
 
         return null;
     }
