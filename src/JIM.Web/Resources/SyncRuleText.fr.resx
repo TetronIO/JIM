@@ -1661,4 +1661,52 @@
   <data name="GateSaveAnyway" xml:space="preserve">
     <value>Enregistrer malgré tout</value>
   </data>
+  <data name="CoverageObjectMatchingRuleOn" xml:space="preserve">
+    <value>Règle de correspondance d’objets sur {0}</value>
+  </data>
+  <data name="CoverageObjectMatchingRuleId" xml:space="preserve">
+    <value>Règle de correspondance d’objets {0}</value>
+  </data>
+  <data name="CoverageGeneratedValueId" xml:space="preserve">
+    <value>Valeur générée {0}</value>
+  </data>
+  <data name="CoverageAttributeFlowId" xml:space="preserve">
+    <value>Flux d’attributs {0}</value>
+  </data>
+  <data name="CoverageGeneratedValueFor" xml:space="preserve">
+    <value>Valeur générée pour {0}</value>
+  </data>
+  <data name="CoverageAttributeFlowTo" xml:space="preserve">
+    <value>Flux d’attributs vers {0}</value>
+  </data>
+  <data name="QuotedText" xml:space="preserve">
+    <value>« {0} »</value>
+  </data>
+  <data name="ExpectationValuesInOrder" xml:space="preserve">
+    <value>{0}, dans cet ordre</value>
+  </data>
+  <data name="ExpectationTheseValues" xml:space="preserve">
+    <value>Ces valeurs</value>
+  </data>
+  <data name="ExpectNoValue" xml:space="preserve">
+    <value>Aucune valeur</value>
+  </data>
+  <data name="ExpectError" xml:space="preserve">
+    <value>Une erreur</value>
+  </data>
+  <data name="ExpectAnyValue" xml:space="preserve">
+    <value>N’importe quelle valeur</value>
+  </data>
+  <data name="ExpectInScope" xml:space="preserve">
+    <value>Dans le périmètre</value>
+  </data>
+  <data name="ExpectOutOfScope" xml:space="preserve">
+    <value>Hors du périmètre</value>
+  </data>
+  <data name="AcceptBlockedOne" xml:space="preserve">
+    <value>{0} ne peut pas prendre son nouveau résultat comme prévu : modifiez le cas, ou enregistrez malgré tout.</value>
+  </data>
+  <data name="AcceptBlockedOther" xml:space="preserve">
+    <value>{0} ne peuvent pas prendre leurs nouveaux résultats comme prévu : modifiez les cas, ou enregistrez malgré tout.</value>
+  </data>
 </root>

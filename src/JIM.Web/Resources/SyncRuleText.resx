@@ -2184,4 +2184,68 @@
     <value>Save anyway</value>
     <comment>Button saving despite the failing test cases.</comment>
   </data>
+  <data name="CoverageObjectMatchingRuleOn" xml:space="preserve">
+    <value>Object Matching Rule on {0}</value>
+    <comment>Coverage of a test case: an Object Matching Rule on a Metaverse Attribute. {0} is the attribute name.</comment>
+  </data>
+  <data name="CoverageObjectMatchingRuleId" xml:space="preserve">
+    <value>Object Matching Rule {0}</value>
+    <comment>Coverage of a test case when the rule's target is not known. {0} is the rule's id.</comment>
+  </data>
+  <data name="CoverageGeneratedValueId" xml:space="preserve">
+    <value>Generated Value {0}</value>
+    <comment>Coverage of a test case when the target is not known. {0} is the mapping's id.</comment>
+  </data>
+  <data name="CoverageAttributeFlowId" xml:space="preserve">
+    <value>Attribute Flow {0}</value>
+    <comment>Coverage of a test case when the target is not known. {0} is the mapping's id.</comment>
+  </data>
+  <data name="CoverageGeneratedValueFor" xml:space="preserve">
+    <value>Generated Value for {0}</value>
+    <comment>Coverage of a Generated Value test case. {0} is the target attribute.</comment>
+  </data>
+  <data name="CoverageAttributeFlowTo" xml:space="preserve">
+    <value>Attribute Flow to {0}</value>
+    <comment>Coverage of an Attribute Flow test case. {0} is the target attribute.</comment>
+  </data>
+  <data name="QuotedText" xml:space="preserve">
+    <value>'{0}'</value>
+    <comment>Puts a value or a name in quotation marks. {0} is the text.</comment>
+  </data>
+  <data name="ExpectationValuesInOrder" xml:space="preserve">
+    <value>{0}, in this order</value>
+    <comment>Expected values that must come in order. {0} is the list of values.</comment>
+  </data>
+  <data name="ExpectationTheseValues" xml:space="preserve">
+    <value>These values</value>
+    <comment>Label of the expectation: the case expects these values.</comment>
+  </data>
+  <data name="ExpectNoValue" xml:space="preserve">
+    <value>No value</value>
+    <comment>Expectation: no value.</comment>
+  </data>
+  <data name="ExpectError" xml:space="preserve">
+    <value>An error</value>
+    <comment>Expectation: an error.</comment>
+  </data>
+  <data name="ExpectAnyValue" xml:space="preserve">
+    <value>Any value</value>
+    <comment>Expectation: any value.</comment>
+  </data>
+  <data name="ExpectInScope" xml:space="preserve">
+    <value>In scope</value>
+    <comment>Expectation: the object is in scope.</comment>
+  </data>
+  <data name="ExpectOutOfScope" xml:space="preserve">
+    <value>Out of scope</value>
+    <comment>Expectation: the object is out of scope.</comment>
+  </data>
+  <data name="AcceptBlockedOne" xml:space="preserve">
+    <value>{0} cannot take its new result as expected: edit the case, or save anyway.</value>
+    <comment>Shown when one test case cannot accept its new result. {0} is the case name.</comment>
+  </data>
+  <data name="AcceptBlockedOther" xml:space="preserve">
+    <value>{0} cannot take their new results as expected: edit the cases, or save anyway.</value>
+    <comment>Shown when several test cases cannot accept their new results. {0} is the list of case names.</comment>
+  </data>
 </root>
