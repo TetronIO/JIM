@@ -389,4 +389,178 @@
   <data name="StartAgainLabel" xml:space="preserve">
     <value>Recommencer</value>
   </data>
+  <data name="AvailabilityPanelHelper" xml:space="preserve">
+    <value>Chaque système connecté vers lequel cette valeur est exportée. Lorsqu’elle est exportée sans modification, JIM vérifie ses propres enregistrements de ce système avant de choisir une valeur et, lorsque le connecteur le permet, interroge aussi la cible : il lui demande directement si la valeur est déjà utilisée, ce qui permet de détecter les comptes que JIM n’importe pas. Cette liste se met à jour automatiquement lorsque les règles de synchronisation d’exportation changent.</value>
+  </data>
+  <data name="AvailabilityNoParticipants" xml:space="preserve">
+    <value>Aucune règle de synchronisation d’exportation n’envoie encore cette valeur à un système connecté ; JIM ne vérifie donc que les valeurs qu’il a déjà générées.</value>
+  </data>
+  <data name="AvailabilityCheckRecordsAndProbe" xml:space="preserve">
+    <value>Enregistrements de JIM + sondage</value>
+  </data>
+  <data name="AvailabilityCheckRecordsOnly" xml:space="preserve">
+    <value>Enregistrements de JIM uniquement</value>
+  </data>
+  <data name="AvailabilityNotChecked" xml:space="preserve">
+    <value>Non vérifiée</value>
+  </data>
+  <data name="AvailabilityReasonCannotProbe" xml:space="preserve">
+    <value>Ce connecteur ne peut pas interroger sa cible.</value>
+  </data>
+  <data name="AvailabilityReasonAttributeNotProbed" xml:space="preserve">
+    <value>JIM n’interroge pas cet attribut : il identifie le compte dans ce système (son identifiant externe ou son DN), ou ses valeurs doivent seulement être uniques dans leur conteneur.</value>
+  </data>
+  <data name="AvailabilityReasonNotText" xml:space="preserve">
+    <value>Seules les valeurs de texte sont interrogées.</value>
+  </data>
+  <data name="AvailabilityReasonExpression" xml:space="preserve">
+    <value>Exportée par une expression : la valeur ici diffère de la valeur générée. JIM ne la vérifie pas ; si elle est déjà utilisée ici, l’exportation échoue.</value>
+  </data>
+  <data name="AvailabilityReasonCombined" xml:space="preserve">
+    <value>Exportée combinée à d’autres valeurs : la valeur ici diffère de la valeur générée. JIM ne la vérifie pas ; si elle est déjà utilisée ici, l’exportation échoue.</value>
+  </data>
+  <data name="AvailabilityReasonExcluded" xml:space="preserve">
+    <value>Exclu : les valeurs déjà utilisées ici n’empêchent pas JIM de les choisir.</value>
+  </data>
+  <data name="AvailabilityPronounIt" xml:space="preserve">
+    <value>ce système</value>
+  </data>
+  <data name="AvailabilityPronounEither" xml:space="preserve">
+    <value>l’un ou l’autre</value>
+  </data>
+  <data name="AvailabilityPronounAny" xml:space="preserve">
+    <value>l’un d’eux</value>
+  </data>
+  <data name="SyncProbeBuiltBefore" xml:space="preserve">
+    <value>Cet aperçu ne vérifie que les enregistrements propres à JIM. Lorsque la synchronisation s’exécute, JIM interroge aussi {0} pour l’attribut {1} construit à partir de {2}. Si {3} possède déjà un compte utilisant </value>
+  </data>
+  <data name="SyncProbeBuiltAfter" xml:space="preserve">
+    <value> (un compte que JIM n’importe pas), la synchronisation générera à la place une valeur différente pour {0}.</value>
+  </data>
+  <data name="SyncProbeBefore" xml:space="preserve">
+    <value>Cet aperçu ne vérifie que les enregistrements propres à JIM. Lorsque la synchronisation s’exécute, JIM interroge aussi {0}. Si {1} possède déjà un compte utilisant </value>
+  </data>
+  <data name="SyncProbeAfter" xml:space="preserve">
+    <value> (un compte que JIM n’importe pas), la synchronisation générera à la place une valeur différente.</value>
+  </data>
+  <data name="PreviewSequenceTaken" xml:space="preserve">
+    <value>ignoré ; le suivant est utilisé et le numéro ignoré n’est pas réutilisé</value>
+  </data>
+  <data name="PreviewRandomCryptographic" xml:space="preserve">
+    <value>cryptographique</value>
+  </data>
+  <data name="PreviewSampleExample" xml:space="preserve">
+    <value>un exemple, où chaque entrée tient lieu de son propre nom ; saisissez des valeurs pour voir les vôtres</value>
+  </data>
+  <data name="PreviewSampleEntered" xml:space="preserve">
+    <value>avec les valeurs d’exemple saisies ci-dessus</value>
+  </data>
+  <data name="PreviewTriedValues" xml:space="preserve">
+    <value>à partir des valeurs essayées</value>
+  </data>
+  <data name="PreviewNothingWaits" xml:space="preserve">
+    <value>Rien n’est généré pour {0} tant que chaque entrée lue par l’expression de base n’a pas de valeur.</value>
+  </data>
+  <data name="PreviewNothingFailed" xml:space="preserve">
+    <value>La base n’a pas pu être déterminée à partir de ces valeurs ; rien ne serait donc généré pour {0}.</value>
+  </data>
+  <data name="PreviewExistingAllHaveValue" xml:space="preserve">
+    <value>Chaque objet Metaverse existant a déjà une valeur pour {0}.</value>
+  </data>
+  <data name="PreviewExistingNoValueOne" xml:space="preserve">
+    <value>{0} objet Metaverse existant n’a pas de {1} et recevrait une valeur à la prochaine synchronisation.</value>
+  </data>
+  <data name="PreviewExistingNoValueOther" xml:space="preserve">
+    <value>{0} objets Metaverse existants n’ont pas de {1} et recevraient une valeur à la prochaine synchronisation.</value>
+  </data>
+  <data name="PreviewAssignedSoFar" xml:space="preserve">
+    <value>Attribués jusqu’ici : {0} · appartient à {1}, et non à ce flux · jamais en dessous de la valeur initiale de chaque flux</value>
+  </data>
+  <data name="PreviewUnseeded" xml:space="preserve">
+    <value>Ce compteur n’a pas encore attribué de numéro. Le premier numéro généré sera {0}.</value>
+  </data>
+  <data name="PreviewRetiredOne" xml:space="preserve">
+    <value>{0} valeur retirée</value>
+  </data>
+  <data name="PreviewRetiredOther" xml:space="preserve">
+    <value>{0} valeurs retirées</value>
+  </data>
+  <data name="PreviewStartAgainNoOp" xml:space="preserve">
+    <value>Le compteur est déjà à sa valeur initiale ({0}) ; recommencer ne change rien.</value>
+  </data>
+  <data name="PreviewNoBaseValue" xml:space="preserve">
+    <value>aucune valeur de base : la valeur est le {0} seul</value>
+  </data>
+  <data name="PreviewNounNumber" xml:space="preserve">
+    <value>numéro</value>
+  </data>
+  <data name="PreviewNounToken" xml:space="preserve">
+    <value>jeton</value>
+  </data>
+  <data name="PreviewPlacementBeforeAt" xml:space="preserve">
+    <value>avant le @ (la valeur a la forme d’une adresse e-mail)</value>
+  </data>
+  <data name="PreviewPlacementAtEnd" xml:space="preserve">
+    <value>à la fin</value>
+  </data>
+  <data name="PreviewRestartStarted" xml:space="preserve">
+    <value>Recommencé pour {0} : le compteur est passé de {1} à {2}.</value>
+  </data>
+  <data name="PreviewRestartNotSeeded" xml:space="preserve">
+    <value>« Recommencer » a été demandé pour {0}, mais son compteur n’avait encore attribué aucun numéro ; rien n’a donc bougé.</value>
+  </data>
+  <data name="PreviewRestartForgottenOne" xml:space="preserve">
+    <value>{0} valeur retirée a été oubliée et peut de nouveau être attribuée.</value>
+  </data>
+  <data name="PreviewRestartForgottenOther" xml:space="preserve">
+    <value>{0} valeurs retirées ont été oubliées et peuvent de nouveau être attribuées.</value>
+  </data>
+  <data name="PreviewResult" xml:space="preserve">
+    <value>Résultat</value>
+  </data>
+  <data name="PreviewFirstValue" xml:space="preserve">
+    <value>Première valeur</value>
+  </data>
+  <data name="PreviewIfTaken" xml:space="preserve">
+    <value>Si elle est prise</value>
+  </data>
+  <data name="PreviewNextValues" xml:space="preserve">
+    <value>Valeurs suivantes</value>
+  </data>
+  <data name="PreviewIfNumberTaken" xml:space="preserve">
+    <value>Si un numéro est pris</value>
+  </data>
+  <data name="PreviewExample" xml:space="preserve">
+    <value>Exemple</value>
+  </data>
+  <data name="PreviewSourceOfRandomness" xml:space="preserve">
+    <value>Source d’aléatoire</value>
+  </data>
+  <data name="PreviewCheckedWithEach" xml:space="preserve">
+    <value>Vérifié avec chaque candidat</value>
+  </data>
+  <data name="PreviewValueColumn" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="PreviewCouldNotWorkOut" xml:space="preserve">
+    <value>Impossible à déterminer</value>
+  </data>
+  <data name="PreviewWhereNumberGoes" xml:space="preserve">
+    <value>Emplacement du numéro</value>
+  </data>
+  <data name="PreviewEvaluationError" xml:space="preserve">
+    <value>La valeur de base d’exemple n’a pas pu être évaluée ({0}) ; aperçu du jeton seul.</value>
+  </data>
+  <data name="PreviewCountingExisting" xml:space="preserve">
+    <value>Comptage des objets Metaverse existants</value>
+  </data>
+  <data name="PreviewSequenceState" xml:space="preserve">
+    <value>État du compteur</value>
+  </data>
+  <data name="PreviewNextNumber" xml:space="preserve">
+    <value>Numéro suivant</value>
+  </data>
+  <data name="PreviewWidthExceeded" xml:space="preserve">
+    <value>Le numéro suivant ne tient plus dans la largeur configurée ; la génération échouera pour cet attribut tant que la largeur ou le compteur ne sera pas corrigé.</value>
+  </data>
 </root>

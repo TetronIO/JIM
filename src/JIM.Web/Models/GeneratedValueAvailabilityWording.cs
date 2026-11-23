@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Logic;
 using JIM.Models.Transactional;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -10,40 +12,34 @@ namespace JIM.Web.Models;
 /// What the portal says about where a generated value is checked for availability (Unique Value Generation, #242,
 /// release 3), in one place: the "Checked for availability in" panel on the generated Attribute Flow form, and the Sync
 /// Preview note about probing. Plain strings, rendered through Blazor's encoder, because Connected System names and
-/// generated values are administrator data.
+/// generated values are administrator data. Written in the viewer's language (#3030): the words come from
+/// <c>GeneratedValueText</c>.
 /// </summary>
 public static class GeneratedValueAvailabilityWording
 {
     /// <summary>The panel's explanation, under its title.</summary>
-    public const string PanelHelperText =
-        "Every Connected System this value is exported to. Where it is exported unchanged, JIM checks its own records of that system " +
-        "before choosing a value and, where the Connector supports it, also probes the target: it asks the target directly whether " +
-        "the value is already in use, which catches accounts JIM doesn't import. This list updates itself as export Synchronisation " +
-        "Rules change.";
+    public static string PanelHelperText => GeneratedValueText.AvailabilityPanelHelper;
 
     /// <summary>The panel's text when no export Synchronisation Rule sends the value anywhere.</summary>
-    public const string NoParticipantsText =
-        "No export Synchronisation Rule sends this value to a Connected System yet, so JIM checks only the values it has already generated.";
+    public static string NoParticipantsText => GeneratedValueText.AvailabilityNoParticipants;
 
     /// <summary>The Checked column's chip.</summary>
     public static string CheckLabel(GeneratedValueParticipantCheck check) => check switch
     {
-        GeneratedValueParticipantCheck.JimRecordsAndProbe => "JIM's records + probe",
-        GeneratedValueParticipantCheck.JimRecordsOnly => "JIM's records only",
-        _ => "Not checked"
+        GeneratedValueParticipantCheck.JimRecordsAndProbe => GeneratedValueText.AvailabilityCheckRecordsAndProbe,
+        GeneratedValueParticipantCheck.JimRecordsOnly => GeneratedValueText.AvailabilityCheckRecordsOnly,
+        _ => GeneratedValueText.AvailabilityNotChecked
     };
 
     /// <summary>The line beneath the Checked column's chip; null when there is nothing to explain.</summary>
     public static string? ReasonText(GeneratedValueParticipantReason reason) => reason switch
     {
-        GeneratedValueParticipantReason.ConnectorCannotProbe => "This Connector can't probe its target.",
-        GeneratedValueParticipantReason.AttributeNotProbed => "JIM doesn't probe this attribute: it identifies the account in this system (its external ID or DN), or its values only need to be unique within their container.",
-        GeneratedValueParticipantReason.NotTextValue => "Only text values are probed.",
-        GeneratedValueParticipantReason.ExportedThroughExpression =>
-            "Exported through an expression, so the value here differs from the generated one. JIM doesn't check it; if it's already in use here, the export fails.",
-        GeneratedValueParticipantReason.CombinedWithOtherSources =>
-            "Exported combined with other values, so the value here differs from the generated one. JIM doesn't check it; if it's already in use here, the export fails.",
-        GeneratedValueParticipantReason.Excluded => "Excluded: values already in use here don't stop JIM choosing them.",
+        GeneratedValueParticipantReason.ConnectorCannotProbe => GeneratedValueText.AvailabilityReasonCannotProbe,
+        GeneratedValueParticipantReason.AttributeNotProbed => GeneratedValueText.AvailabilityReasonAttributeNotProbed,
+        GeneratedValueParticipantReason.NotTextValue => GeneratedValueText.AvailabilityReasonNotText,
+        GeneratedValueParticipantReason.ExportedThroughExpression => GeneratedValueText.AvailabilityReasonExpression,
+        GeneratedValueParticipantReason.CombinedWithOtherSources => GeneratedValueText.AvailabilityReasonCombined,
+        GeneratedValueParticipantReason.Excluded => GeneratedValueText.AvailabilityReasonExcluded,
         _ => null
     };
 
@@ -58,26 +54,26 @@ public static class GeneratedValueAvailabilityWording
         var names = probe.ConnectedSystemNames;
         var pronoun = names.Count switch
         {
-            1 => "it",
-            2 => "either",
-            _ => "any of them"
+            1 => GeneratedValueText.AvailabilityPronounIt,
+            2 => GeneratedValueText.AvailabilityPronounEither,
+            _ => GeneratedValueText.AvailabilityPronounAny
         };
+        var joinedNames = DerivedFlowWording.JoinNames(names);
 
         // A value built from the generated value (Generated Value Forms, #2023): a collision on it makes JIM draw another
         // value for the attribute it is built from, so the note names both.
         if (probe.BuiltFromAttributeName != null)
         {
             return (
-                $"This preview checks JIM's own records only. When the synchronisation runs, JIM also probes {DerivedFlowWording.JoinNames(names)} " +
-                $"for the {probe.AttributeName} built from {probe.BuiltFromAttributeName}. If {pronoun} already has an account using ",
+                string.Format(CultureInfo.CurrentCulture, GeneratedValueText.SyncProbeBuiltBefore,
+                    joinedNames, probe.AttributeName, probe.BuiltFromAttributeName, pronoun),
                 probe.Value,
-                $" (one JIM doesn't import), the synchronisation will generate a different {probe.BuiltFromAttributeName} instead.");
+                string.Format(CultureInfo.CurrentCulture, GeneratedValueText.SyncProbeBuiltAfter, probe.BuiltFromAttributeName));
         }
 
         return (
-            $"This preview checks JIM's own records only. When the synchronisation runs, JIM also probes {DerivedFlowWording.JoinNames(names)}. " +
-            $"If {pronoun} already has an account using ",
+            string.Format(CultureInfo.CurrentCulture, GeneratedValueText.SyncProbeBefore, joinedNames, pronoun),
             probe.Value,
-            " (one JIM doesn't import), the synchronisation will generate a different value instead.");
+            GeneratedValueText.SyncProbeAfter);
     }
 }

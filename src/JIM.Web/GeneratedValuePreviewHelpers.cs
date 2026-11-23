@@ -5,7 +5,9 @@ using System.Globalization;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Transactional;
+using JIM.Web.Localisation;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -15,15 +17,16 @@ namespace JIM.Web;
 /// #242, Phase 3, Work Package D2). Kept free of Blazor/MudBlazor, <c>IExpressionEvaluator</c> and
 /// <c>JimApplication</c> so it is directly unit-testable; see <c>GeneratedValuePreviewHelpersTests</c>. The
 /// component wiring (evaluating the base expression, calling <c>DescribeGeneratedCandidates</c>) lives in
-/// <c>GeneratedValuePreviewPanel.razor</c>.
+/// <c>GeneratedValuePreviewPanel.razor</c>. Written in the viewer's language (#3030): the words come from
+/// <c>GeneratedValueText</c>.
 /// </summary>
 public static class GeneratedValuePreviewHelpers
 {
     /// <summary>The mockup's static explanation for a Sequence token's "If a number is taken" line.</summary>
-    public const string SequenceTakenExplanation = "skipped; the next one is used and the skipped number is not reused";
+    public static string SequenceTakenExplanation => GeneratedValueText.PreviewSequenceTaken;
 
     /// <summary>The mockup's static "Source of randomness" line for a Random token's example.</summary>
-    public const string RandomSourceOfRandomness = "cryptographic";
+    public static string RandomSourceOfRandomness => GeneratedValueText.PreviewRandomCryptographic;
 
     /// <summary>
     /// Whether the administrator has typed anything into any of "Test this Expression"'s sample inputs.
@@ -79,20 +82,20 @@ public static class GeneratedValuePreviewHelpers
         !hasInputs
             ? string.Empty
             : usedNeutralSample
-                ? "an example, with each input standing in as its own name; enter values to see yours"
-                : "using the sample values entered above";
+                ? GeneratedValueText.PreviewSampleExample
+                : GeneratedValueText.PreviewSampleEntered;
 
     /// <summary>
     /// The preview's caption when its candidates come from the base the tester's values give generation (#2471).
     /// </summary>
-    public const string TriedValuesCaption = "from the values tried";
+    public static string TriedValuesCaption => GeneratedValueText.PreviewTriedValues;
 
     /// <summary>
     /// Why the values tried give generation nothing (#2471): the base waits for an input, or could not be worked out.
     /// </summary>
     public static string DescribeNothingGenerated(GeneratedBaseOutcome outcome, string? targetName) => outcome == GeneratedBaseOutcome.Waits
-        ? $"Nothing is generated for {targetName ?? "this attribute"} until every input the base expression reads has a value."
-        : $"The base could not be worked out from these values, so nothing would be generated for {targetName ?? "this attribute"}.";
+        ? Format(GeneratedValueText.PreviewNothingWaits, targetName ?? GeneratedValueText.ImportTargetFallback)
+        : Format(GeneratedValueText.PreviewNothingFailed, targetName ?? GeneratedValueText.ImportTargetFallback);
 
     /// <summary>
     /// Joins a list of candidate values with the mockup's trailing ellipsis ("joe.bloggs1, joe.bloggs2,
@@ -109,10 +112,12 @@ public static class GeneratedValuePreviewHelpers
     public static string DescribeExistingObjectCount(int count, string attributeName)
     {
         if (count == 0)
-            return $"Every existing Metaverse Object already has a value for {attributeName}.";
+            return Format(GeneratedValueText.PreviewExistingAllHaveValue, attributeName);
 
-        var noun = count == 1 ? "Metaverse Object has" : "Metaverse Objects have";
-        return $"{count:N0} existing {noun} no {attributeName} and would receive one at the next synchronisation.";
+        var formatted = count.ToString("N0", CultureInfo.CurrentCulture);
+        return Format(
+            PluralRules.Choose(count, GeneratedValueText.PreviewExistingNoValueOne, GeneratedValueText.PreviewExistingNoValueOther),
+            formatted, attributeName);
     }
 
     /// <summary>
@@ -127,14 +132,14 @@ public static class GeneratedValuePreviewHelpers
     /// "Assigned so far: N · belongs to Employee Number, not this flow · never below any flow's Start at".
     /// </summary>
     public static string DescribeAssignedSoFar(long assignedCount, string attributeName) =>
-        $"Assigned so far: {assignedCount:N0} · belongs to {attributeName}, not this flow · never below any flow's Start at";
+        Format(GeneratedValueText.PreviewAssignedSoFar, assignedCount.ToString("N0", CultureInfo.CurrentCulture), attributeName);
 
     /// <summary>
     /// The statement shown instead of a "next number" for a Sequence mapping whose counter has never been
     /// seeded: what the first number generated will be, per the mockup's own seeding rule.
     /// </summary>
     public static string DescribeUnseededCounter(string nextNumberFormatted) =>
-        $"This counter has not issued a number yet. The first number generated will be {nextNumberFormatted}.";
+        Format(GeneratedValueText.PreviewUnseeded, nextNumberFormatted);
 
     /// <summary>
     /// Formats a sequence counter value for display as an identifier, not a quantity (QA fix, #242 Phase 3 D2):
@@ -171,14 +176,15 @@ public static class GeneratedValuePreviewHelpers
     /// values" or "1 retired value".
     /// </summary>
     public static string DescribeRetiredValueCount(int count) =>
-        $"{count:N0} retired {(count == 1 ? "value" : "values")}";
+        PluralRules.Choose(count, Format(GeneratedValueText.PreviewRetiredOne, count.ToString("N0", CultureInfo.CurrentCulture)),
+            Format(GeneratedValueText.PreviewRetiredOther, count.ToString("N0", CultureInfo.CurrentCulture)));
 
     /// <summary>
     /// The mockup's "nothing will change" message for <see cref="IsStartAgainNoOp"/>, shown in place of the
     /// usual "Counter returns to X from Y" line and paired with disabling the confirm action.
     /// </summary>
     public static string DescribeStartAgainNoOp(long configuredStart, int? fixedWidth) =>
-        $"The counter is already at Start at ({FormatSequenceIdentifier(configuredStart, fixedWidth)}); starting again changes nothing.";
+        Format(GeneratedValueText.PreviewStartAgainNoOp, FormatSequenceIdentifier(configuredStart, fixedWidth));
 
     /// <summary>
     /// The live preview's terse "Where the number goes" row (QA fix, #242 Phase 3 D2): "at the end", "before the
@@ -192,11 +198,13 @@ public static class GeneratedValuePreviewHelpers
     {
         if (!hasBaseValue)
         {
-            var noun = tokenKind == GeneratedValueTokenKind.Random ? "token" : "number";
-            return $"no base value: the value is the {noun} on its own";
+            var noun = tokenKind == GeneratedValueTokenKind.Random
+                ? GeneratedValueText.PreviewNounToken
+                : GeneratedValueText.PreviewNounNumber;
+            return Format(GeneratedValueText.PreviewNoBaseValue, noun);
         }
 
-        return baseValueIsEmailShaped ? "before the @ (the value is email-shaped)" : "at the end";
+        return baseValueIsEmailShaped ? GeneratedValueText.PreviewPlacementBeforeAt : GeneratedValueText.PreviewPlacementAtEnd;
     }
 
     /// <summary>
@@ -226,12 +234,21 @@ public static class GeneratedValuePreviewHelpers
     public static string DescribeRestartResult(string attributeName, GeneratedValueRestartResult result, int? fixedWidth)
     {
         var counter = result.CounterFrom.HasValue
-            ? $"Started {attributeName} again: the counter moved from {FormatSequenceIdentifier(result.CounterFrom.Value, fixedWidth)} to {FormatSequenceIdentifier(result.CounterTo!.Value, fixedWidth)}."
-            : $"\"Start again\" was requested for {attributeName}, but its counter had not issued any numbers yet, so nothing moved.";
+            ? Format(GeneratedValueText.PreviewRestartStarted, attributeName,
+                FormatSequenceIdentifier(result.CounterFrom.Value, fixedWidth),
+                FormatSequenceIdentifier(result.CounterTo!.Value, fixedWidth))
+            : Format(GeneratedValueText.PreviewRestartNotSeeded, attributeName);
 
         // #242, Phase 6: what was forgotten is part of the outcome, and the counter sentence alone would hide it.
-        return result.RetiredValuesForgotten > 0
-            ? $"{counter} {DescribeRetiredValueCount(result.RetiredValuesForgotten)} {(result.RetiredValuesForgotten == 1 ? "was" : "were")} forgotten and can be issued again."
-            : counter;
+        if (result.RetiredValuesForgotten <= 0)
+            return counter;
+
+        var forgotten = Format(
+            PluralRules.Choose(result.RetiredValuesForgotten, GeneratedValueText.PreviewRestartForgottenOne, GeneratedValueText.PreviewRestartForgottenOther),
+            result.RetiredValuesForgotten.ToString("N0", CultureInfo.CurrentCulture));
+        return $"{counter} {forgotten}";
     }
+
+    private static string Format(string template, params object?[] arguments) =>
+        string.Format(CultureInfo.CurrentCulture, template, arguments);
 }

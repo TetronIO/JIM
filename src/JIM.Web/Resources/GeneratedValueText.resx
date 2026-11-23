@@ -490,4 +490,236 @@
     <value>Start again</value>
     <comment>Action name, used in sentences and buttons</comment>
   </data>
+  <data name="AvailabilityPanelHelper" xml:space="preserve">
+    <value>Every Connected System this value is exported to. Where it is exported unchanged, JIM checks its own records of that system before choosing a value and, where the Connector supports it, also probes the target: it asks the target directly whether the value is already in use, which catches accounts JIM doesn't import. This list updates itself as export Synchronisation Rules change.</value>
+    <comment>Panel explanation under its title</comment>
+  </data>
+  <data name="AvailabilityNoParticipants" xml:space="preserve">
+    <value>No export Synchronisation Rule sends this value to a Connected System yet, so JIM checks only the values it has already generated.</value>
+    <comment>Panel text when nothing exports the value</comment>
+  </data>
+  <data name="AvailabilityCheckRecordsAndProbe" xml:space="preserve">
+    <value>JIM's records + probe</value>
+    <comment>Checked column chip</comment>
+  </data>
+  <data name="AvailabilityCheckRecordsOnly" xml:space="preserve">
+    <value>JIM's records only</value>
+    <comment>Checked column chip</comment>
+  </data>
+  <data name="AvailabilityNotChecked" xml:space="preserve">
+    <value>Not checked</value>
+    <comment>Checked column chip</comment>
+  </data>
+  <data name="AvailabilityReasonCannotProbe" xml:space="preserve">
+    <value>This Connector can't probe its target.</value>
+    <comment>Line beneath the Checked column's chip</comment>
+  </data>
+  <data name="AvailabilityReasonAttributeNotProbed" xml:space="preserve">
+    <value>JIM doesn't probe this attribute: it identifies the account in this system (its external ID or DN), or its values only need to be unique within their container.</value>
+    <comment>Line beneath the Checked column's chip</comment>
+  </data>
+  <data name="AvailabilityReasonNotText" xml:space="preserve">
+    <value>Only text values are probed.</value>
+    <comment>Line beneath the Checked column's chip</comment>
+  </data>
+  <data name="AvailabilityReasonExpression" xml:space="preserve">
+    <value>Exported through an expression, so the value here differs from the generated one. JIM doesn't check it; if it's already in use here, the export fails.</value>
+    <comment>Line beneath the Checked column's chip</comment>
+  </data>
+  <data name="AvailabilityReasonCombined" xml:space="preserve">
+    <value>Exported combined with other values, so the value here differs from the generated one. JIM doesn't check it; if it's already in use here, the export fails.</value>
+    <comment>Line beneath the Checked column's chip</comment>
+  </data>
+  <data name="AvailabilityReasonExcluded" xml:space="preserve">
+    <value>Excluded: values already in use here don't stop JIM choosing them.</value>
+    <comment>Line beneath the Checked column's chip</comment>
+  </data>
+  <data name="AvailabilityPronounIt" xml:space="preserve">
+    <value>it</value>
+    <comment>Stands in for 'it' in the probe note: one Connected System</comment>
+  </data>
+  <data name="AvailabilityPronounEither" xml:space="preserve">
+    <value>either</value>
+    <comment>Stands in for 'either' in the probe note: two Connected Systems</comment>
+  </data>
+  <data name="AvailabilityPronounAny" xml:space="preserve">
+    <value>any of them</value>
+    <comment>Stands in for 'any of them' in the probe note: three or more</comment>
+  </data>
+  <data name="SyncProbeBuiltBefore" xml:space="preserve">
+    <value>This preview checks JIM's own records only. When the synchronisation runs, JIM also probes {0} for the {1} built from {2}. If {3} already has an account using </value>
+    <comment>{0} the Connected System names; {1} the attribute; {2} the attribute it is built from; {3} the pronoun; the value follows</comment>
+  </data>
+  <data name="SyncProbeBuiltAfter" xml:space="preserve">
+    <value> (one JIM doesn't import), the synchronisation will generate a different {0} instead.</value>
+    <comment>{0} the attribute it is built from; follows the value</comment>
+  </data>
+  <data name="SyncProbeBefore" xml:space="preserve">
+    <value>This preview checks JIM's own records only. When the synchronisation runs, JIM also probes {0}. If {1} already has an account using </value>
+    <comment>{0} the Connected System names; {1} the pronoun; the value follows</comment>
+  </data>
+  <data name="SyncProbeAfter" xml:space="preserve">
+    <value> (one JIM doesn't import), the synchronisation will generate a different value instead.</value>
+    <comment>Follows the value</comment>
+  </data>
+  <data name="PreviewSequenceTaken" xml:space="preserve">
+    <value>skipped; the next one is used and the skipped number is not reused</value>
+    <comment>Mockup line: If a number is taken</comment>
+  </data>
+  <data name="PreviewRandomCryptographic" xml:space="preserve">
+    <value>cryptographic</value>
+    <comment>Mockup line: Source of randomness</comment>
+  </data>
+  <data name="PreviewSampleExample" xml:space="preserve">
+    <value>an example, with each input standing in as its own name; enter values to see yours</value>
+    <comment>Caption beside Preview when no sample values are entered</comment>
+  </data>
+  <data name="PreviewSampleEntered" xml:space="preserve">
+    <value>using the sample values entered above</value>
+    <comment>Caption beside Preview when sample values are entered</comment>
+  </data>
+  <data name="PreviewTriedValues" xml:space="preserve">
+    <value>from the values tried</value>
+    <comment>Caption when candidates come from the values tried</comment>
+  </data>
+  <data name="PreviewNothingWaits" xml:space="preserve">
+    <value>Nothing is generated for {0} until every input the base expression reads has a value.</value>
+    <comment>{0} is the target attribute name</comment>
+  </data>
+  <data name="PreviewNothingFailed" xml:space="preserve">
+    <value>The base could not be worked out from these values, so nothing would be generated for {0}.</value>
+    <comment>{0} is the target attribute name</comment>
+  </data>
+  <data name="PreviewExistingAllHaveValue" xml:space="preserve">
+    <value>Every existing Metaverse Object already has a value for {0}.</value>
+    <comment>{0} is the attribute name</comment>
+  </data>
+  <data name="PreviewExistingNoValueOne" xml:space="preserve">
+    <value>{0} existing Metaverse Object has no {1} and would receive one at the next synchronisation.</value>
+    <comment>{0} is the count; {1} is the attribute name</comment>
+  </data>
+  <data name="PreviewExistingNoValueOther" xml:space="preserve">
+    <value>{0} existing Metaverse Objects have no {1} and would receive one at the next synchronisation.</value>
+    <comment>{0} is the count; {1} is the attribute name</comment>
+  </data>
+  <data name="PreviewAssignedSoFar" xml:space="preserve">
+    <value>Assigned so far: {0} · belongs to {1}, not this flow · never below any flow's Start at</value>
+    <comment>{0} is the formatted count; {1} is the attribute name</comment>
+  </data>
+  <data name="PreviewUnseeded" xml:space="preserve">
+    <value>This counter has not issued a number yet. The first number generated will be {0}.</value>
+    <comment>{0} is the number</comment>
+  </data>
+  <data name="PreviewRetiredOne" xml:space="preserve">
+    <value>{0} retired value</value>
+    <comment>{0} is the formatted count</comment>
+  </data>
+  <data name="PreviewRetiredOther" xml:space="preserve">
+    <value>{0} retired values</value>
+    <comment>{0} is the formatted count</comment>
+  </data>
+  <data name="PreviewStartAgainNoOp" xml:space="preserve">
+    <value>The counter is already at Start at ({0}); starting again changes nothing.</value>
+    <comment>{0} is the configured start number</comment>
+  </data>
+  <data name="PreviewNoBaseValue" xml:space="preserve">
+    <value>no base value: the value is the {0} on its own</value>
+    <comment>{0} is 'number' or 'token'</comment>
+  </data>
+  <data name="PreviewNounNumber" xml:space="preserve">
+    <value>number</value>
+    <comment>Noun used in the no base value line</comment>
+  </data>
+  <data name="PreviewNounToken" xml:space="preserve">
+    <value>token</value>
+    <comment>Noun used in the no base value line</comment>
+  </data>
+  <data name="PreviewPlacementBeforeAt" xml:space="preserve">
+    <value>before the @ (the value is email-shaped)</value>
+    <comment>Where the number goes</comment>
+  </data>
+  <data name="PreviewPlacementAtEnd" xml:space="preserve">
+    <value>at the end</value>
+    <comment>Where the number goes</comment>
+  </data>
+  <data name="PreviewRestartStarted" xml:space="preserve">
+    <value>Started {0} again: the counter moved from {1} to {2}.</value>
+    <comment>{0} attribute name; {1} and {2} are formatted numbers</comment>
+  </data>
+  <data name="PreviewRestartNotSeeded" xml:space="preserve">
+    <value>"Start again" was requested for {0}, but its counter had not issued any numbers yet, so nothing moved.</value>
+    <comment>{0} is the attribute name</comment>
+  </data>
+  <data name="PreviewRestartForgottenOne" xml:space="preserve">
+    <value>{0} retired value was forgotten and can be issued again.</value>
+    <comment>{0} is the formatted count</comment>
+  </data>
+  <data name="PreviewRestartForgottenOther" xml:space="preserve">
+    <value>{0} retired values were forgotten and can be issued again.</value>
+    <comment>{0} is the formatted count</comment>
+  </data>
+  <data name="PreviewResult" xml:space="preserve">
+    <value>Result</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="PreviewFirstValue" xml:space="preserve">
+    <value>First value</value>
+    <comment>Caption of the first value</comment>
+  </data>
+  <data name="PreviewIfTaken" xml:space="preserve">
+    <value>If taken</value>
+    <comment>Caption of the value if the first is taken</comment>
+  </data>
+  <data name="PreviewNextValues" xml:space="preserve">
+    <value>Next values</value>
+    <comment>Caption of the next candidate values</comment>
+  </data>
+  <data name="PreviewIfNumberTaken" xml:space="preserve">
+    <value>If a number is taken</value>
+    <comment>Caption of the sequence collision line</comment>
+  </data>
+  <data name="PreviewExample" xml:space="preserve">
+    <value>Example</value>
+    <comment>Caption of the random example</comment>
+  </data>
+  <data name="PreviewSourceOfRandomness" xml:space="preserve">
+    <value>Source of randomness</value>
+    <comment>Caption of the random source line</comment>
+  </data>
+  <data name="PreviewCheckedWithEach" xml:space="preserve">
+    <value>Checked with each candidate</value>
+    <comment>Caption of the table of values checked with each candidate</comment>
+  </data>
+  <data name="PreviewValueColumn" xml:space="preserve">
+    <value>Value</value>
+    <comment>Table column heading when there is no target name</comment>
+  </data>
+  <data name="PreviewCouldNotWorkOut" xml:space="preserve">
+    <value>Could not be worked out</value>
+    <comment>Table cell when a built value fails</comment>
+  </data>
+  <data name="PreviewWhereNumberGoes" xml:space="preserve">
+    <value>Where the number goes</value>
+    <comment>Caption of the placement line</comment>
+  </data>
+  <data name="PreviewEvaluationError" xml:space="preserve">
+    <value>The sample base value could not be evaluated ({0}); previewing the token on its own.</value>
+    <comment>{0} is the evaluation error message</comment>
+  </data>
+  <data name="PreviewCountingExisting" xml:space="preserve">
+    <value>Counting existing Metaverse Objects</value>
+    <comment>Shown while counting</comment>
+  </data>
+  <data name="PreviewSequenceState" xml:space="preserve">
+    <value>Sequence state</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="PreviewNextNumber" xml:space="preserve">
+    <value>Next number</value>
+    <comment>Caption of the next number</comment>
+  </data>
+  <data name="PreviewWidthExceeded" xml:space="preserve">
+    <value>The next number no longer fits the configured width; generation will fail for this attribute until the width or the counter is corrected.</value>
+    <comment>Warning alert</comment>
+  </data>
 </root>
