@@ -1786,4 +1786,352 @@
     <value>Trust this certificate?</value>
     <comment>Accessible title of the trust dialog</comment>
   </data>
+  <data name="PwSyncHeading" xml:space="preserve">
+    <value>Password Synchronisation</value>
+    <comment>Heading of the password synchronisation panel and its info popover title</comment>
+  </data>
+  <data name="PwSyncInfo" xml:space="preserve">
+    <value>When a password changes for a Metaverse Object, JIM delivers it to every Connected System configured and enabled here, retrying automatically if the system is unavailable. Passwords are held encrypted until they are delivered and are never readable, shown in a preview, or written to a change record.</value>
+    <comment>Info popover text of the password synchronisation panel</comment>
+  </data>
+  <data name="PwSyncDeliverSwitch" xml:space="preserve">
+    <value>Deliver password changes to this Connected System</value>
+    <comment>Switch that turns password delivery on or off</comment>
+  </data>
+  <data name="PwSyncEnabledNote" xml:space="preserve">
+    <value>Password changes are delivered as they happen. Switching this off does not discard them: they queue up and are delivered when you switch it back on.</value>
+    <comment>Note under the switch while delivery is on</comment>
+  </data>
+  <data name="PwSyncDisabledNote" xml:space="preserve">
+    <value>Password changes for Metaverse Objects with a Connected System Object here are queued but not delivered. Switch this on to deliver everything that has accumulated, oldest first.</value>
+    <comment>Note under the switch while delivery is off</comment>
+  </data>
+  <data name="PwSyncObjectTypeLabel" xml:space="preserve">
+    <value>Object Type that receives passwords</value>
+    <comment>Label of the Object Type field</comment>
+  </data>
+  <data name="PwSyncObjectTypeHelp" xml:space="preserve">
+    <value>The Connected System Object Type whose objects receive passwords.</value>
+    <comment>Helper text of the Object Type field</comment>
+  </data>
+  <data name="PwSyncDelivery" xml:space="preserve">
+    <value>Delivery</value>
+    <comment>Heading of the delivery settings</comment>
+  </data>
+  <data name="PwSyncDeliveryIntro" xml:space="preserve">
+    <value>How hard JIM tries before it stops and asks you to look. A password change that runs out of attempts is kept and stays retryable; it is never silently dropped.</value>
+    <comment>Intro under the Delivery heading</comment>
+  </data>
+  <data name="PwSyncMaxAttempts" xml:space="preserve">
+    <value>Maximum attempts</value>
+    <comment>Label of the maximum attempts field</comment>
+  </data>
+  <data name="PwSyncMaxAttemptsDefault" xml:space="preserve">
+    <value>0 uses JIM's default of {0}.</value>
+    <comment>Helper text of the maximum attempts field; {0} is JIM's default number of attempts</comment>
+  </data>
+  <data name="PwSyncBackoffLabel" xml:space="preserve">
+    <value>First retry after (minutes)</value>
+    <comment>Label of the first retry delay field</comment>
+  </data>
+  <data name="PwSyncBackoffHelp" xml:space="preserve">
+    <value>Each further attempt waits twice as long as the one before.</value>
+    <comment>Helper text of the first retry delay field</comment>
+  </data>
+  <data name="PwSyncWaitsBefore" xml:space="preserve">
+    <value>A queued password change waits</value>
+    <comment>Start of the sentence about how long a queued change waits</comment>
+  </data>
+  <data name="PwSyncWaitsAfter" xml:space="preserve">
+    <value>for this system before JIM expires it rather than delivering a password that has since been superseded.</value>
+    <comment>End of the sentence about how long a queued change waits; the duration is emphasised before it</comment>
+  </data>
+  <data name="PwSyncSecureBefore" xml:space="preserve">
+    <value>Passwords are</value>
+    <comment>Start of the sentence about encrypted delivery</comment>
+  </data>
+  <data name="PwSyncSecureStrong" xml:space="preserve">
+    <value>only sent over an encrypted connection</value>
+    <comment>Emphasised part when delivery needs encryption</comment>
+  </data>
+  <data name="PwSyncSecureAfter" xml:space="preserve">
+    <value>to this system. If JIM cannot confirm the connection is encrypted, nothing is sent and queued changes wait.</value>
+    <comment>End of the sentence about encrypted delivery</comment>
+  </data>
+  <data name="PwSyncPlainBefore" xml:space="preserve">
+    <value>Passwords may be sent to this system</value>
+    <comment>Start of the warning that passwords may go unencrypted</comment>
+  </data>
+  <data name="PwSyncPlainStrong" xml:space="preserve">
+    <value>over an unencrypted connection</value>
+    <comment>Emphasised part of the unencrypted warning</comment>
+  </data>
+  <data name="PwSyncPlainAfter" xml:space="preserve">
+    <value>, where anyone on the network path can read them.</value>
+    <comment>End of the unencrypted warning</comment>
+  </data>
+  <data name="PwSyncChangeBefore" xml:space="preserve">
+    <value>Change either on the</value>
+    <comment>Start of the sentence that says where the two shared settings are changed</comment>
+  </data>
+  <data name="PwSyncChangeAfter" xml:space="preserve">
+    <value>tab, under {0}; both are shared with initial password provisioning and with setting a password by hand.</value>
+    <comment>End of the sentence naming the section; {0} is the Passwords section's name on the Settings tab</comment>
+  </data>
+  <data name="PwSyncProblemsHeading" xml:space="preserve">
+    <value>These settings cannot be saved:</value>
+    <comment>Heading of the list of reasons the settings cannot be saved</comment>
+  </data>
+  <data name="PwSyncSaving" xml:space="preserve">
+    <value>Saving...</value>
+    <comment>Save button text while saving</comment>
+  </data>
+  <data name="PwSyncOnSnackbar" xml:space="preserve">
+    <value>Password Synchronisation is on for this Connected System. Anything queued while it was off will be delivered.</value>
+    <comment>Snackbar after password synchronisation is switched on</comment>
+  </data>
+  <data name="PwSyncSavedSnackbar" xml:space="preserve">
+    <value>Your Password Synchronisation settings have been saved.</value>
+    <comment>Snackbar after saving with delivery off</comment>
+  </data>
+  <data name="DangerDeletionImpactHeading" xml:space="preserve">
+    <value>Deletion impact</value>
+    <comment>Heading of the deletion impact panel</comment>
+  </data>
+  <data name="DangerDeletionImpactIntro" xml:space="preserve">
+    <value>See what deleting this system would do before you do it: which attribute values would be cleared or taken over by another Connected System, which Metaverse Objects would become eligible for deletion, and what would be exported downstream. Nothing changes while the preview runs, and you can leave this page while it does.</value>
+    <comment>Intro of the deletion impact panel</comment>
+  </data>
+  <data name="DangerPreviewButton" xml:space="preserve">
+    <value>Preview deletion impact</value>
+    <comment>Button that runs the first deletion impact preview</comment>
+  </data>
+  <data name="DangerNotPreviewed" xml:space="preserve">
+    <value>Not previewed yet</value>
+    <comment>Caption when no deletion impact preview has been run</comment>
+  </data>
+  <data name="DangerStaleBody" xml:space="preserve">
+    <value>It may no longer be accurate, so run it again before deleting; a deletion now records that the preview informing it was out of date.</value>
+    <comment>Explains a stale preview on the Danger Zone; begins after the reason and the component</comment>
+  </data>
+  <data name="DangerDeleteSystem" xml:space="preserve">
+    <value>Delete Connected System</value>
+    <comment>Heading and button that open the delete dialog</comment>
+  </data>
+  <data name="DangerDeleteIntro" xml:space="preserve">
+    <value>Permanently delete this Connected System and all its related data, including:</value>
+    <comment>Introduction to the list of what deletion removes</comment>
+  </data>
+  <data name="DangerListObjects" xml:space="preserve">
+    <value>All Connected System Objects</value>
+    <comment>Item in the list of what deletion removes</comment>
+  </data>
+  <data name="DangerListRules" xml:space="preserve">
+    <value>All Synchronisation Rules</value>
+    <comment>Item in the list of what deletion removes</comment>
+  </data>
+  <data name="DangerListProfiles" xml:space="preserve">
+    <value>All Run Profiles</value>
+    <comment>Item in the list of what deletion removes</comment>
+  </data>
+  <data name="DangerListPartitions" xml:space="preserve">
+    <value>All Partitions and Containers</value>
+    <comment>Item in the list of what deletion removes</comment>
+  </data>
+  <data name="DangerListExports" xml:space="preserve">
+    <value>All Pending Exports</value>
+    <comment>Item in the list of what deletion removes</comment>
+  </data>
+  <data name="DangerJoinedText" xml:space="preserve">
+    <value>Metaverse Objects joined to this system are disconnected from it. Any for which it is the last connector are then subject to their Object Type's deletion rule; the deletion impact preview above names them.</value>
+    <comment>Explains what happens to Metaverse Objects joined to the system</comment>
+  </data>
+  <data name="DangerFencedNote" xml:space="preserve">
+    <value>A deletion is already underway or stopped partway for this system. Deleting again offers the exits: {0} resumes the run, and {1} completes the deletion at once.</value>
+    <comment>Explains the exits when a deletion is already under way; {0} and {1} are the two deletion options</comment>
+  </data>
+  <data name="DangerPreviewStartFailed" xml:space="preserve">
+    <value>Failed to start the preview: {0}</value>
+    <comment>Snackbar when the preview could not start; {0} is the reason</comment>
+  </data>
+  <data name="WatermarkNextDeltaLabel" xml:space="preserve">
+    <value>Next Delta Import Reads Changes After</value>
+    <comment>Label of the reading for a Full Import: where the next Delta Import starts</comment>
+  </data>
+  <data name="WatermarkReadChangesLabel" xml:space="preserve">
+    <value>Read Changes</value>
+    <comment>Label of the reading for a Delta Import</comment>
+  </data>
+  <data name="WatermarkNote" xml:space="preserve">
+    <value>No new watermark was recorded, so the next Delta Import reads from the same point.</value>
+    <comment>Note when a Delta Import recorded no new watermark</comment>
+  </data>
+  <data name="WatermarkHideState" xml:space="preserve">
+    <value>Hide Connector state</value>
+    <comment>Button that hides what the Connector recorded</comment>
+  </data>
+  <data name="WatermarkShowState" xml:space="preserve">
+    <value>Show Connector state</value>
+    <comment>Button that shows what the Connector recorded</comment>
+  </data>
+  <data name="WatermarkLabelColon" xml:space="preserve">
+    <value>{0}:</value>
+    <comment>Label of the reading followed by a colon; {0} is the label</comment>
+  </data>
+  <data name="WatermarkPerPartition" xml:space="preserve">
+    <value>Watermark recorded for each partition:</value>
+    <comment>Caption above the table of watermarks per partition</comment>
+  </data>
+  <data name="WatermarkBeforeHeader" xml:space="preserve">
+    <value>Before this run</value>
+    <comment>Column heading for the watermark an import started from</comment>
+  </data>
+  <data name="WatermarkAfterHeader" xml:space="preserve">
+    <value>After this run</value>
+    <comment>Column heading for the watermark an import recorded</comment>
+  </data>
+  <data name="WatermarkBeforeLabel" xml:space="preserve">
+    <value>Before this run:</value>
+    <comment>Label above the recorded state an import started from</comment>
+  </data>
+  <data name="WatermarkAfterLabel" xml:space="preserve">
+    <value>After this run:</value>
+    <comment>Label above the recorded state an import recorded</comment>
+  </data>
+  <data name="WatermarkNoWatermark" xml:space="preserve">
+    <value>No watermark</value>
+    <comment>Cell for a partition with no watermark</comment>
+  </data>
+  <data name="WatermarkUnchanged" xml:space="preserve">
+    <value>Unchanged</value>
+    <comment>Cell for a partition whose watermark did not change</comment>
+  </data>
+  <data name="WatermarkCleared" xml:space="preserve">
+    <value>Cleared</value>
+    <comment>Cell for a partition whose watermark was cleared</comment>
+  </data>
+  <data name="WatermarkNothingRecorded" xml:space="preserve">
+    <value>Nothing recorded</value>
+    <comment>Cell for a partition whose watermark was not recorded</comment>
+  </data>
+  <data name="WatermarkFullReading" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>Watermark value and its kind; {0} is the value, {1} the kind</comment>
+  </data>
+  <data name="WatermarkScopedLine" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>A line naming the scope it belongs to; {0} is the scope, {1} the sentence</comment>
+  </data>
+  <data name="WatermarkNoChanges" xml:space="preserve">
+    <value>No changes after {0} ({1})</value>
+    <comment>Delta reading when nothing changed; {0} is the watermark, {1} its kind</comment>
+  </data>
+  <data name="WatermarkAfterSame" xml:space="preserve">
+    <value>After {0}, up to {1} ({2})</value>
+    <comment>Delta reading between two points of the same kind; {0} is the start, {1} the end, {2} the kind</comment>
+  </data>
+  <data name="WatermarkAfterDifferent" xml:space="preserve">
+    <value>After {0} ({1}), up to {2} ({3})</value>
+    <comment>Delta reading between two points of different kinds; {0} and {2} are the points, {1} and {3} their kinds</comment>
+  </data>
+  <data name="WatermarkFromStart" xml:space="preserve">
+    <value>From the start, up to {0} ({1})</value>
+    <comment>Delta reading from the start of the data to a point; {0} is the point, {1} its kind</comment>
+  </data>
+  <data name="WatermarkAfterOnly" xml:space="preserve">
+    <value>After {0} ({1})</value>
+    <comment>Delta reading from a point with nothing recorded after it; {0} is the point, {1} its kind</comment>
+  </data>
+  <data name="SettingFieldRequired" xml:space="preserve">
+    <value>A {0} is required</value>
+    <comment>Validation message for an empty setting; {0} is the setting's name</comment>
+  </data>
+  <data name="SettingFieldDiscoverTooltip" xml:space="preserve">
+    <value>Enter the connectivity settings above before discovering {0}.</value>
+    <comment>Tooltip on the disabled Discover button; {0} is what the Connector calls the servers</comment>
+  </data>
+  <data name="SettingFieldDiscover" xml:space="preserve">
+    <value>Discover...</value>
+    <comment>Button that opens the directory server discovery dialog</comment>
+  </data>
+  <data name="SettingFieldTogglePassword" xml:space="preserve">
+    <value>Toggle password visibility</value>
+    <comment>Accessible label of the button that shows or hides an encrypted setting</comment>
+  </data>
+  <data name="SettingFieldExample" xml:space="preserve">
+    <value>Example</value>
+    <comment>Caption above a setting's example</comment>
+  </data>
+  <data name="SettingFieldUnknownType" xml:space="preserve">
+    <value>Oops. Unknown setting type!</value>
+    <comment>Shown when a setting has a type JIM does not recognise</comment>
+  </data>
+  <data name="SettingFieldExampleCopied" xml:space="preserve">
+    <value>Example copied to clipboard.</value>
+    <comment>Snackbar after copying a setting's example</comment>
+  </data>
+  <data name="SettingFieldCopyFailed" xml:space="preserve">
+    <value>Failed to copy to clipboard. Please copy manually.</value>
+    <comment>Snackbar when the browser refuses the copy of an example</comment>
+  </data>
+  <data name="SettingFieldSelectExport" xml:space="preserve">
+    <value>Select Export Location</value>
+    <comment>Title of the file browser when choosing where to export</comment>
+  </data>
+  <data name="SettingFieldSelectFile" xml:space="preserve">
+    <value>Select File</value>
+    <comment>Title of the file browser when choosing a file</comment>
+  </data>
+  <data name="FullSyncStaleBody" xml:space="preserve">
+    <value>It may no longer be accurate, so run it again before running a Full Synchronisation; a run started now records that the preview informing it was out of date.</value>
+    <comment>Explains a stale full synchronisation preview; begins after the reason and the component</comment>
+  </data>
+  <data name="FullSyncPreviewTitle" xml:space="preserve">
+    <value>Full Synchronisation preview</value>
+    <comment>Title of the full synchronisation preview panel</comment>
+  </data>
+  <data name="FullSyncAllDisabled" xml:space="preserve">
+    <value>Every Full Synchronisation Run Profile of this Connected System is disabled. Enable one on the Run Profiles tab to run it.</value>
+    <comment>Why the Run button is unavailable when every Run Profile is disabled</comment>
+  </data>
+  <data name="FullSyncRunButton" xml:space="preserve">
+    <value>Run Full Synchronisation</value>
+    <comment>Button that queues a full synchronisation; also the menu label when several Run Profiles can run</comment>
+  </data>
+  <data name="FullSyncQueued" xml:space="preserve">
+    <value>{0} queued.</value>
+    <comment>Snackbar after a run is queued; {0} is the Run Profile's name</comment>
+  </data>
+  <data name="FullSyncQueueFailed" xml:space="preserve">
+    <value>Failed to queue the Full Synchronisation.</value>
+    <comment>Snackbar when the run could not be queued</comment>
+  </data>
+  <data name="FullSyncQueueFailedDetail" xml:space="preserve">
+    <value>Failed to queue the Full Synchronisation: {0}</value>
+    <comment>Snackbar when queuing failed with an error; {0} is the reason</comment>
+  </data>
+  <data name="FullSyncView" xml:space="preserve">
+    <value>View</value>
+    <comment>Action on the queued snackbar that opens the run's Activity</comment>
+  </data>
+  <data name="FullSyncOutOfDateTitle" xml:space="preserve">
+    <value>Preview out of date</value>
+    <comment>Title of the dialog asking whether to preview again or run anyway</comment>
+  </data>
+  <data name="FullSyncThisObject" xml:space="preserve">
+    <value>This object</value>
+    <comment>Stands in for an object's name when it has none</comment>
+  </data>
+  <data name="FullSyncNoObject" xml:space="preserve">
+    <value>{0} has no Connected System Object in {1} to preview.</value>
+    <comment>Snackbar when an object has nothing to preview in the system; {0} is the object, {1} the Connected System's name</comment>
+  </data>
+  <data name="FullSyncRunProfileName" xml:space="preserve">
+    <value>Full Synchronization</value>
+    <comment>Run Profile name shown in the one-object preview's causality context</comment>
+  </data>
+  <data name="FullSyncObjectPreviewFailed" xml:space="preserve">
+    <value>The Sync Preview failed: {0}</value>
+    <comment>Snackbar when a one-object preview fails; {0} is the reason</comment>
+  </data>
 </root>

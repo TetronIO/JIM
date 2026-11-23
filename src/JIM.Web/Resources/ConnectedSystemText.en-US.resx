@@ -125,4 +125,37 @@
   <data name="CsListTrackingOff" xml:space="preserve">
     <value>Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration changes waiting for a Full Synchronization.</value>
   </data>
+  <data name="PwSyncHeading" xml:space="preserve">
+    <value>Password Synchronization</value>
+  </data>
+  <data name="PwSyncOnSnackbar" xml:space="preserve">
+    <value>Password Synchronization is on for this Connected System. Anything queued while it was off will be delivered.</value>
+  </data>
+  <data name="PwSyncSavedSnackbar" xml:space="preserve">
+    <value>Your Password Synchronization settings have been saved.</value>
+  </data>
+  <data name="DangerListRules" xml:space="preserve">
+    <value>All Synchronization Rules</value>
+  </data>
+  <data name="FullSyncStaleBody" xml:space="preserve">
+    <value>It may no longer be accurate, so run it again before running a Full Synchronization; a run started now records that the preview informing it was out of date.</value>
+  </data>
+  <data name="FullSyncPreviewTitle" xml:space="preserve">
+    <value>Full Synchronization preview</value>
+  </data>
+  <data name="FullSyncAllDisabled" xml:space="preserve">
+    <value>Every Full Synchronization Run Profile of this Connected System is disabled. Enable one on the Run Profiles tab to run it.</value>
+  </data>
+  <data name="FullSyncRunButton" xml:space="preserve">
+    <value>Run Full Synchronization</value>
+  </data>
+  <data name="FullSyncQueueFailed" xml:space="preserve">
+    <value>Failed to queue the Full Synchronization.</value>
+  </data>
+  <data name="FullSyncQueueFailedDetail" xml:space="preserve">
+    <value>Failed to queue the Full Synchronization: {0}</value>
+  </data>
+  <data name="FullSyncRunProfileName" xml:space="preserve">
+    <value>Full Synchronization</value>
+  </data>
 </root>

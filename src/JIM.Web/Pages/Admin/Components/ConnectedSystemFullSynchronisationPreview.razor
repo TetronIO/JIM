@@ -33,14 +33,12 @@ else if (_previewActivityId is { } previewActivityId)
     @if (_previewState.Status == ConnectedSystemPreviewStatus.Stale)
     {
         <MudAlert Severity="Severity.Warning" Class="mb-6" data-testid="jim-full-sync-preview-stale">
-            @_previewState.StaleReason since this preview ran: <PreviewOvertakenBy Staleness="@_previewState.Staleness" />. It may
-            no longer be accurate, so run it again before running a Full Synchronisation; a run started now records that the
-            preview informing it was out of date.
+            @_previewState.StaleReason @ConnectedSystemText.DeleteSystemSinceThisPreviewRan <PreviewOvertakenBy Staleness="@_previewState.Staleness" />. @ConnectedSystemText.FullSyncStaleBody
         </MudAlert>
     }
 
     <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
-                                     Title="Full Synchronisation preview"
+                                     Title="@ConnectedSystemText.FullSyncPreviewTitle"
                                      OnPreviewChanged="OnPreviewChangedAsync"
                                      OnClose="DiscardPreview"
                                      HeaderActions="@HeaderActions"
@@ -121,7 +119,7 @@ else if (_previewActivityId is { } previewActivityId)
     /// </summary>
     private string AllDisabledExplanation => CandidateProfiles is [var only]
         ? RunProfileEnablement.DescribeRunRefusal(only)
-        : "Every Full Synchronisation Run Profile of this Connected System is disabled. Enable one on the Run Profiles tab to run it.";
+        : ConnectedSystemText.FullSyncAllDisabled;
 
     private RenderFragment HeaderActions => @<text>
         @if (CanRun)
@@ -134,7 +132,7 @@ else if (_previewActivityId is { } previewActivityId)
                     <ChildContent>
                         <MudButton Variant="Variant.Filled" DropShadow="false" StartIcon="@Icons.Material.Filled.PlayArrow"
                                    Disabled="true" data-testid="jim-full-sync-run-disabled">
-                            Run Full Synchronisation
+                            @ConnectedSystemText.FullSyncRunButton
                         </MudButton>
                     </ChildContent>
                 </MudTooltip>
@@ -147,12 +145,12 @@ else if (_previewActivityId is { } previewActivityId)
                 <MudButton Variant="Variant.Filled" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.PlayArrow" Disabled="@_queueing"
                            OnClick="@(() => RunAsync(only))" data-testid="jim-full-sync-run">
-                    Run Full Synchronisation
+                    @ConnectedSystemText.FullSyncRunButton
                 </MudButton>
             }
             else
             {
-                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Filled" DropShadow="false"
+                <MudMenu Label="@ConnectedSystemText.FullSyncRunButton" Variant="Variant.Filled" DropShadow="false"
                          StartIcon="@Icons.Material.Filled.PlayArrow" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                          Disabled="@_queueing" data-testid="jim-full-sync-run-menu">
                     @foreach (var profile in runnable)
@@ -166,7 +164,7 @@ else if (_previewActivityId is { } previewActivityId)
         {
             <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
                        Disabled="@_starting" OnClick="StartPreviewAsync" data-testid="jim-full-sync-preview-again">
-                Run again
+                @ConnectedSystemText.DeleteSystemRunAgain
             </MudButton>
         }
     </text>;
@@ -268,7 +266,7 @@ else if (_previewActivityId is { } previewActivityId)
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
         {
             Log.Error(ex, "Failed to start a Full Synchronisation preview of Connected System {ConnectedSystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DangerPreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -310,7 +308,7 @@ else if (_previewActivityId is { } previewActivityId)
             if (askedAboutStaleness)
             {
                 StateHasChanged();
-                var dialog = await DialogService.ShowAsync<OutOfDatePreviewDialog>("Preview out of date",
+                var dialog = await DialogService.ShowAsync<OutOfDatePreviewDialog>(ConnectedSystemText.FullSyncOutOfDateTitle,
                     new DialogParameters<OutOfDatePreviewDialog>
                     {
                         { x => x.StaleReason, _previewState.StaleReason },
@@ -335,7 +333,7 @@ else if (_previewActivityId is { } previewActivityId)
 
             if (!result.Success)
             {
-                Snackbar.Add(result.ErrorMessage ?? "Failed to queue the Full Synchronisation.", Severity.Error);
+                Snackbar.Add(result.ErrorMessage ?? ConnectedSystemText.FullSyncQueueFailed, Severity.Error);
                 return;
             }
 
@@ -347,12 +345,12 @@ else if (_previewActivityId is { } previewActivityId)
                 Snackbar.Add(previewWarning, Severity.Warning);
 
             var runActivityId = task.Activity?.Id;
-            Snackbar.Add($"{runProfile.Name} queued.", Severity.Success, config =>
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.FullSyncQueued, runProfile.Name), Severity.Success, config =>
             {
                 if (runActivityId is not { } activityId)
                     return;
 
-                config.Action = "View";
+                config.Action = ConnectedSystemText.FullSyncView;
                 config.OnClick = _ =>
                 {
                     NavManager.NavigateTo($"/activity/{activityId}");
@@ -363,7 +361,7 @@ else if (_previewActivityId is { } previewActivityId)
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
         {
             Log.Error(ex, "Failed to queue a Full Synchronisation of Connected System {ConnectedSystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to queue the Full Synchronisation: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.FullSyncQueueFailedDetail, ex.Message), Severity.Error);
         }
         finally
         {
@@ -391,7 +389,7 @@ else if (_previewActivityId is { } previewActivityId)
 
             if (subject == null)
             {
-                Snackbar.Add($"{row.ObjectDisplayName ?? "This object"} has no Connected System Object in {ConnectedSystem.Name} to preview.", Severity.Info);
+                Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.FullSyncNoObject, row.ObjectDisplayName ?? ConnectedSystemText.FullSyncThisObject, ConnectedSystem.Name), Severity.Info);
                 return;
             }
 
@@ -399,7 +397,7 @@ else if (_previewActivityId is { } previewActivityId)
             _objectPreviewContext = new CausalityPageContext(
                 ConnectedSystemId: ConnectedSystem.Id,
                 ConnectedSystemName: ConnectedSystem.Name,
-                RunProfileName: "Full Synchronisation",
+                RunProfileName: ConnectedSystemText.FullSyncRunProfileName,
                 CsoId: subject.Id,
                 CsoConnectedSystemId: ConnectedSystem.Id,
                 CsoConnectedSystemName: ConnectedSystem.Name,
@@ -412,7 +410,7 @@ else if (_previewActivityId is { } previewActivityId)
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.FullSyncObjectPreviewFailed, ex.Message), Severity.Error);
         }
         finally
         {

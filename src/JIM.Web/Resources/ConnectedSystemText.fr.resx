@@ -1343,4 +1343,265 @@
   <data name="TrustDialogTitle" xml:space="preserve">
     <value>Approuver ce certificat ?</value>
   </data>
+  <data name="PwSyncHeading" xml:space="preserve">
+    <value>Synchronisation des mots de passe</value>
+  </data>
+  <data name="PwSyncInfo" xml:space="preserve">
+    <value>Lorsqu’un mot de passe change pour un objet Metaverse, JIM le remet à chaque système connecté configuré et activé ici, en réessayant automatiquement si le système est indisponible. Les mots de passe sont conservés chiffrés jusqu’à leur remise, et ne sont jamais lisibles, affichés dans un aperçu ni écrits dans un enregistrement de modification.</value>
+  </data>
+  <data name="PwSyncDeliverSwitch" xml:space="preserve">
+    <value>Remettre les modifications de mot de passe à ce système connecté</value>
+  </data>
+  <data name="PwSyncEnabledNote" xml:space="preserve">
+    <value>Les modifications de mot de passe sont remises au fur et à mesure. Les désactiver ne les supprime pas : elles s’accumulent et sont remises lorsque vous les réactivez.</value>
+  </data>
+  <data name="PwSyncDisabledNote" xml:space="preserve">
+    <value>Les modifications de mot de passe des objets Metaverse qui ont ici un objet de système connecté sont mises en file d’attente, mais non remises. Activez cette option pour remettre tout ce qui s’est accumulé, du plus ancien au plus récent.</value>
+  </data>
+  <data name="PwSyncObjectTypeLabel" xml:space="preserve">
+    <value>Type d’objet qui reçoit les mots de passe</value>
+  </data>
+  <data name="PwSyncObjectTypeHelp" xml:space="preserve">
+    <value>Le type d’objet de système connecté dont les objets reçoivent les mots de passe.</value>
+  </data>
+  <data name="PwSyncDelivery" xml:space="preserve">
+    <value>Remise</value>
+  </data>
+  <data name="PwSyncDeliveryIntro" xml:space="preserve">
+    <value>Le nombre de tentatives de JIM avant qu’il s’arrête et vous demande de vérifier. Une modification de mot de passe qui épuise ses tentatives est conservée et peut être réessayée ; elle n’est jamais abandonnée silencieusement.</value>
+  </data>
+  <data name="PwSyncMaxAttempts" xml:space="preserve">
+    <value>Nombre maximal de tentatives</value>
+  </data>
+  <data name="PwSyncMaxAttemptsDefault" xml:space="preserve">
+    <value>0 correspond à la valeur par défaut de JIM, soit {0}.</value>
+  </data>
+  <data name="PwSyncBackoffLabel" xml:space="preserve">
+    <value>Première nouvelle tentative après (minutes)</value>
+  </data>
+  <data name="PwSyncBackoffHelp" xml:space="preserve">
+    <value>Chaque tentative suivante attend deux fois plus longtemps que la précédente.</value>
+  </data>
+  <data name="PwSyncWaitsBefore" xml:space="preserve">
+    <value>Une modification de mot de passe en file d’attente patiente</value>
+  </data>
+  <data name="PwSyncWaitsAfter" xml:space="preserve">
+    <value>pendant ce délai avant que JIM ne l’expire, plutôt que de remettre un mot de passe depuis remplacé.</value>
+  </data>
+  <data name="PwSyncSecureBefore" xml:space="preserve">
+    <value>Les mots de passe sont</value>
+  </data>
+  <data name="PwSyncSecureStrong" xml:space="preserve">
+    <value>envoyés uniquement par une connexion chiffrée</value>
+  </data>
+  <data name="PwSyncSecureAfter" xml:space="preserve">
+    <value>à ce système. Si JIM ne peut pas confirmer que la connexion est chiffrée, rien n’est envoyé et les modifications en attente patientent.</value>
+  </data>
+  <data name="PwSyncPlainBefore" xml:space="preserve">
+    <value>Les mots de passe peuvent être envoyés à ce système</value>
+  </data>
+  <data name="PwSyncPlainStrong" xml:space="preserve">
+    <value>par une connexion non chiffrée</value>
+  </data>
+  <data name="PwSyncPlainAfter" xml:space="preserve">
+    <value>, où toute personne située sur le chemin réseau peut les lire.</value>
+  </data>
+  <data name="PwSyncChangeBefore" xml:space="preserve">
+    <value>Modifiez l’un ou l’autre dans l’onglet</value>
+  </data>
+  <data name="PwSyncChangeAfter" xml:space="preserve">
+    <value>sous {0} ; les deux sont partagés avec le provisionnement du mot de passe initial et avec la définition d’un mot de passe manuellement.</value>
+  </data>
+  <data name="PwSyncProblemsHeading" xml:space="preserve">
+    <value>Ces paramètres ne peuvent pas être enregistrés :</value>
+  </data>
+  <data name="PwSyncSaving" xml:space="preserve">
+    <value>Enregistrement…</value>
+  </data>
+  <data name="PwSyncOnSnackbar" xml:space="preserve">
+    <value>La synchronisation des mots de passe est activée pour ce système connecté. Tout ce qui a été mis en file d’attente pendant qu’elle était désactivée sera remis.</value>
+  </data>
+  <data name="PwSyncSavedSnackbar" xml:space="preserve">
+    <value>Vos paramètres de synchronisation des mots de passe ont été enregistrés.</value>
+  </data>
+  <data name="DangerDeletionImpactHeading" xml:space="preserve">
+    <value>Impact de la suppression</value>
+  </data>
+  <data name="DangerDeletionImpactIntro" xml:space="preserve">
+    <value>Consultez ce que ferait la suppression de ce système avant de la lancer : les valeurs d’attributs qui seraient effacées ou reprises par un autre système connecté, les objets Metaverse qui deviendraient éligibles à la suppression, et ce qui serait exporté en aval. Rien ne change pendant l’exécution de l’aperçu, et vous pouvez quitter cette page pendant qu’il s’exécute.</value>
+  </data>
+  <data name="DangerPreviewButton" xml:space="preserve">
+    <value>Prévisualiser l’impact de la suppression</value>
+  </data>
+  <data name="DangerNotPreviewed" xml:space="preserve">
+    <value>Pas encore prévisualisé</value>
+  </data>
+  <data name="DangerStaleBody" xml:space="preserve">
+    <value>Il n’est peut-être plus exact : relancez-le avant de supprimer ; une suppression enregistre désormais que l’aperçu qui l’a éclairée était périmé.</value>
+  </data>
+  <data name="DangerDeleteSystem" xml:space="preserve">
+    <value>Supprimer le système connecté</value>
+  </data>
+  <data name="DangerDeleteIntro" xml:space="preserve">
+    <value>Supprimer définitivement ce système connecté et toutes ses données associées, notamment :</value>
+  </data>
+  <data name="DangerListObjects" xml:space="preserve">
+    <value>Tous les objets de systèmes connectés</value>
+  </data>
+  <data name="DangerListRules" xml:space="preserve">
+    <value>Toutes les règles de synchronisation</value>
+  </data>
+  <data name="DangerListProfiles" xml:space="preserve">
+    <value>Tous les profils d’exécution</value>
+  </data>
+  <data name="DangerListPartitions" xml:space="preserve">
+    <value>Toutes les partitions et tous les conteneurs</value>
+  </data>
+  <data name="DangerListExports" xml:space="preserve">
+    <value>Toutes les exportations en attente</value>
+  </data>
+  <data name="DangerJoinedText" xml:space="preserve">
+    <value>Les objets Metaverse rattachés à ce système en sont déconnectés. Ceux dont il est le dernier connecteur sont alors soumis à la règle de suppression de leur type d’objet ; l’aperçu de l’impact de la suppression ci-dessus les désigne.</value>
+  </data>
+  <data name="DangerFencedNote" xml:space="preserve">
+    <value>Une suppression est déjà en cours ou s’est arrêtée en cours de route pour ce système. Supprimer de nouveau propose les sorties : {0} reprend l’exécution, et {1} termine la suppression immédiatement.</value>
+  </data>
+  <data name="DangerPreviewStartFailed" xml:space="preserve">
+    <value>Échec du démarrage de l’aperçu : {0}</value>
+  </data>
+  <data name="WatermarkNextDeltaLabel" xml:space="preserve">
+    <value>La prochaine importation delta lit les modifications après</value>
+  </data>
+  <data name="WatermarkReadChangesLabel" xml:space="preserve">
+    <value>Modifications lues</value>
+  </data>
+  <data name="WatermarkNote" xml:space="preserve">
+    <value>Aucun nouveau repère n’a été enregistré ; la prochaine importation delta lit donc depuis le même point.</value>
+  </data>
+  <data name="WatermarkHideState" xml:space="preserve">
+    <value>Masquer l’état du connecteur</value>
+  </data>
+  <data name="WatermarkShowState" xml:space="preserve">
+    <value>Afficher l’état du connecteur</value>
+  </data>
+  <data name="WatermarkLabelColon" xml:space="preserve">
+    <value>{0} :</value>
+  </data>
+  <data name="WatermarkPerPartition" xml:space="preserve">
+    <value>Repère enregistré pour chaque partition :</value>
+  </data>
+  <data name="WatermarkBeforeHeader" xml:space="preserve">
+    <value>Avant cette exécution</value>
+  </data>
+  <data name="WatermarkAfterHeader" xml:space="preserve">
+    <value>Après cette exécution</value>
+  </data>
+  <data name="WatermarkBeforeLabel" xml:space="preserve">
+    <value>Avant cette exécution :</value>
+  </data>
+  <data name="WatermarkAfterLabel" xml:space="preserve">
+    <value>Après cette exécution :</value>
+  </data>
+  <data name="WatermarkNoWatermark" xml:space="preserve">
+    <value>Aucun repère</value>
+  </data>
+  <data name="WatermarkUnchanged" xml:space="preserve">
+    <value>Inchangé</value>
+  </data>
+  <data name="WatermarkCleared" xml:space="preserve">
+    <value>Effacé</value>
+  </data>
+  <data name="WatermarkNothingRecorded" xml:space="preserve">
+    <value>Rien d’enregistré</value>
+  </data>
+  <data name="WatermarkFullReading" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="WatermarkScopedLine" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="WatermarkNoChanges" xml:space="preserve">
+    <value>Aucune modification après {0} ({1})</value>
+  </data>
+  <data name="WatermarkAfterSame" xml:space="preserve">
+    <value>Après {0}, jusqu’à {1} ({2})</value>
+  </data>
+  <data name="WatermarkAfterDifferent" xml:space="preserve">
+    <value>Après {0} ({1}), jusqu’à {2} ({3})</value>
+  </data>
+  <data name="WatermarkFromStart" xml:space="preserve">
+    <value>Depuis le début, jusqu’à {0} ({1})</value>
+  </data>
+  <data name="WatermarkAfterOnly" xml:space="preserve">
+    <value>Après {0} ({1})</value>
+  </data>
+  <data name="SettingFieldRequired" xml:space="preserve">
+    <value>{0} est requis</value>
+  </data>
+  <data name="SettingFieldDiscoverTooltip" xml:space="preserve">
+    <value>Renseignez d’abord les paramètres de connexion ci-dessus avant de rechercher {0}.</value>
+  </data>
+  <data name="SettingFieldDiscover" xml:space="preserve">
+    <value>Rechercher…</value>
+  </data>
+  <data name="SettingFieldTogglePassword" xml:space="preserve">
+    <value>Afficher ou masquer le mot de passe</value>
+  </data>
+  <data name="SettingFieldExample" xml:space="preserve">
+    <value>Exemple</value>
+  </data>
+  <data name="SettingFieldUnknownType" xml:space="preserve">
+    <value>Oups. Type de paramètre inconnu !</value>
+  </data>
+  <data name="SettingFieldExampleCopied" xml:space="preserve">
+    <value>Exemple copié dans le presse-papiers.</value>
+  </data>
+  <data name="SettingFieldCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers. Copiez-le manuellement.</value>
+  </data>
+  <data name="SettingFieldSelectExport" xml:space="preserve">
+    <value>Sélectionner l’emplacement d’exportation</value>
+  </data>
+  <data name="SettingFieldSelectFile" xml:space="preserve">
+    <value>Sélectionner un fichier</value>
+  </data>
+  <data name="FullSyncStaleBody" xml:space="preserve">
+    <value>Il n’est peut-être plus exact : relancez-le avant de lancer une synchronisation complète ; une exécution lancée maintenant enregistre que l’aperçu qui la renseigne était périmé.</value>
+  </data>
+  <data name="FullSyncPreviewTitle" xml:space="preserve">
+    <value>Aperçu de la synchronisation complète</value>
+  </data>
+  <data name="FullSyncAllDisabled" xml:space="preserve">
+    <value>Tous les profils d’exécution de synchronisation complète de ce système connecté sont désactivés. Activez-en un dans l’onglet Profils d’exécution pour le lancer.</value>
+  </data>
+  <data name="FullSyncRunButton" xml:space="preserve">
+    <value>Lancer la synchronisation complète</value>
+  </data>
+  <data name="FullSyncQueued" xml:space="preserve">
+    <value>{0} mis en file d’attente.</value>
+  </data>
+  <data name="FullSyncQueueFailed" xml:space="preserve">
+    <value>Échec de la mise en file d’attente de la synchronisation complète.</value>
+  </data>
+  <data name="FullSyncQueueFailedDetail" xml:space="preserve">
+    <value>Échec de la mise en file d’attente de la synchronisation complète : {0}</value>
+  </data>
+  <data name="FullSyncView" xml:space="preserve">
+    <value>Afficher</value>
+  </data>
+  <data name="FullSyncOutOfDateTitle" xml:space="preserve">
+    <value>Aperçu périmé</value>
+  </data>
+  <data name="FullSyncThisObject" xml:space="preserve">
+    <value>Cet objet</value>
+  </data>
+  <data name="FullSyncNoObject" xml:space="preserve">
+    <value>{0} n’a pas d’objet de système connecté dans {1} à prévisualiser.</value>
+  </data>
+  <data name="FullSyncRunProfileName" xml:space="preserve">
+    <value>Synchronisation complète</value>
+  </data>
+  <data name="FullSyncObjectPreviewFailed" xml:space="preserve">
+    <value>L’aperçu de synchronisation a échoué : {0}</value>
+  </data>
 </root>
