@@ -1342,4 +1342,92 @@
     <value>This explanation reflects the deletion policy recorded when this Activity ran.</value>
     <comment>Footer of the explanation</comment>
   </data>
+  <data name="DpvLeadTyped" xml:space="preserve">
+    <value>{0} objects were configured with the following deletion rule when this Activity ran:</value>
+    <comment>{0} is the Object Type, in bold</comment>
+  </data>
+  <data name="DpvLeadUntyped" xml:space="preserve">
+    <value>The following deletion rule was configured when this Activity ran:</value>
+    <comment>No Object Type known</comment>
+  </data>
+  <data name="DpvManualLabel" xml:space="preserve">
+    <value>Manual deletion only.</value>
+    <comment>Bold lead of the manual rule</comment>
+  </data>
+  <data name="DpvManualBody" xml:space="preserve">
+    <value>The Metaverse Object would not be automatically deleted even when all connectors were removed; an administrator must delete it manually.</value>
+    <comment>Text after the manual rule's lead</comment>
+  </data>
+  <data name="DpvLastLabel" xml:space="preserve">
+    <value>Delete when last connector disconnects.</value>
+    <comment>Bold lead of the last-connector rule</comment>
+  </data>
+  <data name="DpvFateGraceLast" xml:space="preserve">
+    <value>The Metaverse Object would be marked for deletion with a {0} grace period when all Connected System Objects are removed.</value>
+    <comment>{0} is the grace period, in bold</comment>
+  </data>
+  <data name="DpvFateImmediateLast" xml:space="preserve">
+    <value>The Metaverse Object would be deleted immediately when all Connected System Objects are removed.</value>
+    <comment>Last-connector rule with no grace period</comment>
+  </data>
+  <data name="DpvAuthLabel" xml:space="preserve">
+    <value>Delete when authoritative source disconnects.</value>
+    <comment>Bold lead of the authoritative source rule</comment>
+  </data>
+  <data name="DpvFateGrace" xml:space="preserve">
+    <value>The Metaverse Object would be marked for deletion with a {0} grace period.</value>
+    <comment>{0} is the grace period, in bold</comment>
+  </data>
+  <data name="DpvFateImmediate" xml:space="preserve">
+    <value>The Metaverse Object would be deleted immediately.</value>
+    <comment>Authoritative source rule with no grace period</comment>
+  </data>
+  <data name="DpvTriggerMode" xml:space="preserve">
+    <value>Trigger mode: {0}; {1}</value>
+    <comment>{0} is the trigger mode, in bold; {1} is the description that follows</comment>
+  </data>
+  <data name="DpvModeAll" xml:space="preserve">
+    <value>deletion occurs only once every selected source has disconnected.</value>
+    <comment>Description of the all-sources trigger mode</comment>
+  </data>
+  <data name="DpvModeAny" xml:space="preserve">
+    <value>deletion occurs when any one of the selected sources disconnects.</value>
+    <comment>Description of the specific-sources trigger mode</comment>
+  </data>
+  <data name="DpvModeSpecific" xml:space="preserve">
+    <value>Specific source(s) disconnect</value>
+    <comment>Trigger mode label</comment>
+  </data>
+  <data name="DpvTriggeredBy" xml:space="preserve">
+    <value>Evaluation triggered by the disconnection of {0}.</value>
+    <comment>{0} is the system's name, in bold</comment>
+  </data>
+  <data name="DpvStillConnected" xml:space="preserve">
+    <value>Selected sources still connected at decision time: {0}.</value>
+    <comment>{0} is the list of names, in bold</comment>
+  </data>
+  <data name="DpvNoneConnected" xml:space="preserve">
+    <value>No selected sources remained connected at decision time.</value>
+    <comment>Nothing remained connected</comment>
+  </data>
+  <data name="DpvRecorded" xml:space="preserve">
+    <value>Recorded when this Activity ran.</value>
+    <comment>Caption</comment>
+  </data>
+  <data name="DpvHourOne" xml:space="preserve">
+    <value>{0} hour</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
+  <data name="DpvHourOther" xml:space="preserve">
+    <value>{0} hours</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
+  <data name="DpvMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
+  <data name="DpvMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
 </root>

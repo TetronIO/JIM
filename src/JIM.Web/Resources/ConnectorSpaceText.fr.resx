@@ -1010,4 +1010,70 @@
   <data name="DelExplainFooter" xml:space="preserve">
     <value>Cette explication reflète la politique de suppression enregistrée lors de l’exécution de cette activité.</value>
   </data>
+  <data name="DpvLeadTyped" xml:space="preserve">
+    <value>Les objets {0} ont été configurés avec la règle de suppression suivante lors de l’exécution de cette activité :</value>
+  </data>
+  <data name="DpvLeadUntyped" xml:space="preserve">
+    <value>La règle de suppression suivante a été configurée lors de l’exécution de cette activité :</value>
+  </data>
+  <data name="DpvManualLabel" xml:space="preserve">
+    <value>Suppression manuelle uniquement.</value>
+  </data>
+  <data name="DpvManualBody" xml:space="preserve">
+    <value>L’objet Metaverse ne serait pas supprimé automatiquement, même lorsque tous les connecteurs ont été retirés ; un administrateur doit le supprimer manuellement.</value>
+  </data>
+  <data name="DpvLastLabel" xml:space="preserve">
+    <value>Suppression lorsque le dernier connecteur se déconnecte.</value>
+  </data>
+  <data name="DpvFateGraceLast" xml:space="preserve">
+    <value>L’objet Metaverse serait marqué pour suppression avec un délai de grâce de {0} lorsque tous les objets de systèmes connectés auront été retirés.</value>
+  </data>
+  <data name="DpvFateImmediateLast" xml:space="preserve">
+    <value>L’objet Metaverse serait supprimé immédiatement lorsque tous les objets de systèmes connectés auront été retirés.</value>
+  </data>
+  <data name="DpvAuthLabel" xml:space="preserve">
+    <value>Suppression lorsqu’une source faisant autorité se déconnecte.</value>
+  </data>
+  <data name="DpvFateGrace" xml:space="preserve">
+    <value>L’objet Metaverse serait marqué pour suppression avec un délai de grâce de {0}.</value>
+  </data>
+  <data name="DpvFateImmediate" xml:space="preserve">
+    <value>L’objet Metaverse serait supprimé immédiatement.</value>
+  </data>
+  <data name="DpvTriggerMode" xml:space="preserve">
+    <value>Mode de déclenchement : {0} ; {1}</value>
+  </data>
+  <data name="DpvModeAll" xml:space="preserve">
+    <value>la suppression n’intervient qu’une fois que toutes les sources sélectionnées se sont déconnectées.</value>
+  </data>
+  <data name="DpvModeAny" xml:space="preserve">
+    <value>la suppression intervient lorsque l’une des sources sélectionnées se déconnecte.</value>
+  </data>
+  <data name="DpvModeSpecific" xml:space="preserve">
+    <value>Source(s) spécifique(s) se déconnectent</value>
+  </data>
+  <data name="DpvTriggeredBy" xml:space="preserve">
+    <value>Évaluation déclenchée par la déconnexion de {0}.</value>
+  </data>
+  <data name="DpvStillConnected" xml:space="preserve">
+    <value>Sources sélectionnées encore connectées au moment de la décision : {0}.</value>
+  </data>
+  <data name="DpvNoneConnected" xml:space="preserve">
+    <value>Aucune source sélectionnée n’était encore connectée au moment de la décision.</value>
+  </data>
+  <data name="DpvRecorded" xml:space="preserve">
+    <value>Enregistré lors de l’exécution de cette activité.</value>
+  </data>
+  <data name="DpvHourOne" xml:space="preserve">
+    <value>{0} heure</value>
+  </data>
+  <data name="DpvHourOther" xml:space="preserve">
+    <value>{0} heures</value>
+  </data>
+  <data name="DpvMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+  </data>
+  <data name="DpvMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+  </data>
 </root>
