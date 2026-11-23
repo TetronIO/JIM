@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Connectors" xml:space="preserve">
+    <value>Connectors</value>
+    <comment>Page title, heading, breadcrumb and PageInfo title: the plural name of the list page.</comment>
+  </data>
+  <data name="Connector" xml:space="preserve">
+    <value>Connector</value>
+    <comment>Singular name: grid noun and PageInfo title on the detail page.</comment>
+  </data>
+  <data name="ListPageInfo" xml:space="preserve">
+    <value>JIM uses Connectors to connect to external systems and import or export data. A number are pre-supplied as built-in Connectors for common system types, but you can also install third-party Connectors. From here you can see which are installed and if any have updates that can be applied.</value>
+    <comment>PageInfo popover on the list page.</comment>
+  </data>
+  <data name="SiblingPagesAriaLabel" xml:space="preserve">
+    <value>Connected Systems or Connectors</value>
+    <comment>Accessible name of the toggle between the two sibling pages.</comment>
+  </data>
+  <data name="ColumnDescription" xml:space="preserve">
+    <value>Description</value>
+    <comment>Table column heading and field label.</comment>
+  </data>
+  <data name="ColumnBuiltIn" xml:space="preserve">
+    <value>Built-in?</value>
+    <comment>Table column heading and field label: whether the Connector ships with JIM.</comment>
+  </data>
+  <data name="ColumnInUse" xml:space="preserve">
+    <value>In-use?</value>
+    <comment>Table column heading: whether any Connected System uses the Connector.</comment>
+  </data>
+  <data name="ColumnVersion" xml:space="preserve">
+    <value>Version</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Yes</value>
+    <comment>Boolean cell value.</comment>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>No</value>
+    <comment>Boolean cell value.</comment>
+  </data>
+  <data name="NoConnectorsMatch" xml:space="preserve">
+    <value>No Connectors match "{0}"</value>
+    <comment>Empty state of the list. {0} is the text the user typed.</comment>
+  </data>
+  <data name="NoConnectorsInstalled" xml:space="preserve">
+    <value>No Connectors installed</value>
+    <comment>Empty state of the list when there are none.</comment>
+  </data>
+  <data name="NoConnectorsInstalledHint" xml:space="preserve">
+    <value>Built-in Connectors appear here once JIM has initialised.</value>
+    <comment>Hint under the empty state.</comment>
+  </data>
+  <data name="DetailHeading" xml:space="preserve">
+    <value>Connector:</value>
+    <comment>Heading prefix on the detail page; the Connector's name follows.</comment>
+  </data>
+  <data name="DetailPageTitle" xml:space="preserve">
+    <value>Connector: {0}</value>
+    <comment>Browser tab title. {0} is the Connector's name.</comment>
+  </data>
+  <data name="DetailPageInfo" xml:space="preserve">
+    <value>A Connector is how JIM talks to one kind of system, such as a directory or a database. This page shows what it is and what it can do.</value>
+    <comment>PageInfo popover on the detail page.</comment>
+  </data>
+  <data name="Details" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab text and heading of the details panel.</comment>
+  </data>
+  <data name="Changes" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab text: the configuration change history.</comment>
+  </data>
+  <data name="ConnectorDefinition" xml:space="preserve">
+    <value>Connector Definition</value>
+    <comment>Label naming what the Changes tab lists the history of.</comment>
+  </data>
+  <data name="Url" xml:space="preserve">
+    <value>Url</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="Capabilities" xml:space="preserve">
+    <value>Capabilities</value>
+    <comment>Heading of the panel of what the Connector supports.</comment>
+  </data>
+  <data name="Import" xml:space="preserve">
+    <value>Import</value>
+    <comment>Group heading in the capabilities panel.</comment>
+  </data>
+  <data name="FullImport" xml:space="preserve">
+    <value>Full import</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="DeltaImport" xml:space="preserve">
+    <value>Delta import</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="Export" xml:space="preserve">
+    <value>Export</value>
+    <comment>Group heading and capability checkbox.</comment>
+  </data>
+  <data name="AutoConfirmExport" xml:space="preserve">
+    <value>Auto-confirm export</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="ParallelExport" xml:space="preserve">
+    <value>Parallel export</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="Disable" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Capability checkbox: whether the Connector can disable an account in the connected system, not a command.</comment>
+  </data>
+  <data name="Hierarchy" xml:space="preserve">
+    <value>Hierarchy</value>
+    <comment>Group heading in the capabilities panel.</comment>
+  </data>
+  <data name="Partitions" xml:space="preserve">
+    <value>Partitions</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="PartitionContainers" xml:space="preserve">
+    <value>Partition containers</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="DataHandling" xml:space="preserve">
+    <value>Data Handling</value>
+    <comment>Group heading in the capabilities panel.</comment>
+  </data>
+  <data name="FilePaths" xml:space="preserve">
+    <value>File paths</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="Paging" xml:space="preserve">
+    <value>Paging</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="SecondaryExternalId" xml:space="preserve">
+    <value>Secondary external ID</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="UserSelectedExternalId" xml:space="preserve">
+    <value>User selected external ID</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="UserSelectedAttributeTypes" xml:space="preserve">
+    <value>User selected attribute types</value>
+    <comment>Capability checkbox.</comment>
+  </data>
+  <data name="SearchFilesPlaceholder" xml:space="preserve">
+    <value>Search files</value>
+    <comment>Placeholder of the files search box.</comment>
+  </data>
+  <data name="Files" xml:space="preserve">
+    <value>Files</value>
+    <comment>Title of the Connector's files table.</comment>
+  </data>
+  <data name="ColumnFilename" xml:space="preserve">
+    <value>Filename</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnFilesizeKb" xml:space="preserve">
+    <value>Filesize (kb)</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnInterfaces" xml:space="preserve">
+    <value>Interfaces</value>
+    <comment>Table column heading: the interfaces the file implements.</comment>
+  </data>
+  <data name="NoFilesMatch" xml:space="preserve">
+    <value>No files match "{0}"</value>
+    <comment>Empty state of the files table. {0} is the text the user typed.</comment>
+  </data>
+  <data name="NoFiles" xml:space="preserve">
+    <value>No files</value>
+    <comment>Empty state of the files table.</comment>
+  </data>
+  <data name="NoFilesBuiltInHint" xml:space="preserve">
+    <value>This is a built-in Connector, so it ships inside JIM rather than as uploaded files.</value>
+    <comment>Hint under the empty files state.</comment>
+  </data>
+  <data name="NoFilesUploadHint" xml:space="preserve">
+    <value>Upload the Connector's assemblies to make it functional.</value>
+    <comment>Hint under the empty files state.</comment>
+  </data>
+</root>

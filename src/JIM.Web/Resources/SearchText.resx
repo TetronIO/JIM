@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PredefinedSearches" xml:space="preserve">
+    <value>Predefined Searches</value>
+    <comment>Page title, heading, breadcrumb and PageInfo title: the plural name of the list page.</comment>
+  </data>
+  <data name="PredefinedSearch" xml:space="preserve">
+    <value>Predefined Search</value>
+    <comment>Singular name of the object: grid noun, PageInfo title on the detail page, and the label of the Changes tab.</comment>
+  </data>
+  <data name="ListPageInfo" xml:space="preserve">
+    <value>Predefined Searches make it easy to find objects and control what attributes are returned.</value>
+    <comment>PageInfo popover on the list page.</comment>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>Search by name or URI</value>
+    <comment>Placeholder of the list's search box.</comment>
+  </data>
+  <data name="ColumnUri" xml:space="preserve">
+    <value>URI</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnObjectType" xml:space="preserve">
+    <value>Object Type</value>
+    <comment>Table column heading and field label: the Metaverse Object Type the search is over.</comment>
+  </data>
+  <data name="ColumnDefault" xml:space="preserve">
+    <value>Default?</value>
+    <comment>Table column heading: whether this is the default Predefined Search for its Object Type.</comment>
+  </data>
+  <data name="ColumnBuiltIn" xml:space="preserve">
+    <value>Built-in?</value>
+    <comment>Table column heading and field label: whether the Predefined Search ships with JIM. Feminine, agrees with recherche.</comment>
+  </data>
+  <data name="ColumnAttributes" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Table column heading: the number of attributes the search shows.</comment>
+  </data>
+  <data name="ColumnCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Table column heading: when the search was created.</comment>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Yes</value>
+    <comment>Boolean cell value.</comment>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>No</value>
+    <comment>Boolean cell value.</comment>
+  </data>
+  <data name="NoSearchesMatch" xml:space="preserve">
+    <value>No Predefined Searches match "{0}"</value>
+    <comment>Empty state of the list. {0} is the text the user typed.</comment>
+  </data>
+  <data name="NoSearchesYet" xml:space="preserve">
+    <value>No Predefined Searches yet</value>
+    <comment>Empty state of the list when there are none.</comment>
+  </data>
+  <data name="NoSearchesYetHint" xml:space="preserve">
+    <value>Built-in Predefined Searches are created when the service initialises.</value>
+    <comment>Hint under the empty state.</comment>
+  </data>
+  <data name="SearchNoLongerExists" xml:space="preserve">
+    <value>Predefined search no longer exists.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="SearchEnabledSnackbar" xml:space="preserve">
+    <value>Predefined search '{0}' enabled.</value>
+    <comment>Success snackbar. {0} is the search's name.</comment>
+  </data>
+  <data name="SearchDisabledSnackbar" xml:space="preserve">
+    <value>Predefined search '{0}' disabled.</value>
+    <comment>Success snackbar. {0} is the search's name.</comment>
+  </data>
+  <data name="UpdateFailed" xml:space="preserve">
+    <value>Failed to update predefined search: {0}</value>
+    <comment>Error snackbar. {0} is the reason.</comment>
+  </data>
+  <data name="DetailHeading" xml:space="preserve">
+    <value>Predefined Search:</value>
+    <comment>Heading prefix on the detail page; the search's name follows.</comment>
+  </data>
+  <data name="DetailPageTitle" xml:space="preserve">
+    <value>Predefined Search: {0}</value>
+    <comment>Browser tab title. {0} is the search's name.</comment>
+  </data>
+  <data name="DetailPageInfo" xml:space="preserve">
+    <value>A Predefined Search is a saved search over one Metaverse Object Type: the criteria that choose its objects, and the attributes it shows for each.</value>
+    <comment>PageInfo popover on the detail page.</comment>
+  </data>
+  <data name="Details" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab text and heading of the details panel.</comment>
+  </data>
+  <data name="Changes" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab text: the configuration change history.</comment>
+  </data>
+  <data name="FieldUri" xml:space="preserve">
+    <value>Uri</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="IsDefaultForObjectType" xml:space="preserve">
+    <value>Is default for Object Type?</value>
+    <comment>Field label: whether this is the default Predefined Search for its Object Type.</comment>
+  </data>
+  <data name="DisabledSearchesHint" xml:space="preserve">
+    <value>Disabled searches don't appear on the portal.</value>
+    <comment>Caption under the Enabled switch.</comment>
+  </data>
+  <data name="MetaverseAttributes" xml:space="preserve">
+    <value>Metaverse Attributes</value>
+    <comment>Heading of the panel listing the attributes shown in results.</comment>
+  </data>
+  <data name="MetaverseAttributesIntro" xml:space="preserve">
+    <value>These will be the attributes shown in the search results:</value>
+    <comment>Caption under the Metaverse Attributes heading.</comment>
+  </data>
+  <data name="Criteria" xml:space="preserve">
+    <value>Criteria</value>
+    <comment>Heading of the criteria panel.</comment>
+  </data>
+  <data name="CriteriaIntro" xml:space="preserve">
+    <value>Criteria filter the objects this search returns. All criteria are combined with AND.</value>
+    <comment>AND is the logical operator, matching the logic types of a Criteria Group.</comment>
+  </data>
+  <data name="AddCriteriaGroup" xml:space="preserve">
+    <value>Add Criteria Group</value>
+    <comment>Button text and dialog title.</comment>
+  </data>
+  <data name="NoCriteriaAlert" xml:space="preserve">
+    <value>This search has no criteria; it returns all {0} objects. Add a Criteria Group to start filtering.</value>
+    <comment>{0} is the name of the Metaverse Object Type, such as User.</comment>
+  </data>
+  <data name="BuiltInCriteriaTooltip" xml:space="preserve">
+    <value>Built-in Predefined Searches cannot be modified</value>
+    <comment>Tooltip on disabled editing buttons.</comment>
+  </data>
+  <data name="LogicType" xml:space="preserve">
+    <value>Logic type</value>
+    <comment>Dialog field label: how the criteria of a group combine (All or Any).</comment>
+  </data>
+  <data name="AddGroup" xml:space="preserve">
+    <value>Add Group</value>
+    <comment>Confirming button of the Add Criteria Group dialog.</comment>
+  </data>
+  <data name="EditCriteria" xml:space="preserve">
+    <value>Edit Criteria</value>
+    <comment>Dialog title when editing one criterion.</comment>
+  </data>
+  <data name="AddCriteria" xml:space="preserve">
+    <value>Add Criteria</value>
+    <comment>Button text and dialog title when adding one criterion.</comment>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+    <comment>Confirming button when saving an edited criterion.</comment>
+  </data>
+  <data name="MetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Field label and tooltip of the attribute chip.</comment>
+  </data>
+  <data name="SelectMetaverseAttribute" xml:space="preserve">
+    <value>Please select a Metaverse attribute</value>
+    <comment>Placeholder of the attribute picker.</comment>
+  </data>
+  <data name="ComparisonType" xml:space="preserve">
+    <value>Comparison Type</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="SelectComparisonType" xml:space="preserve">
+    <value>Please select the type of comparison to make</value>
+    <comment>Placeholder of the comparison picker.</comment>
+  </data>
+  <data name="CriteriaGroupHeading" xml:space="preserve">
+    <value>CRITERIA GROUP. LOGIC TYPE:</value>
+    <comment>Upper-case overline above a group; the logic type (ALL or ANY) follows.</comment>
+  </data>
+  <data name="DeleteGroupTooltip" xml:space="preserve">
+    <value>Delete group</value>
+    <comment>Tooltip.</comment>
+  </data>
+  <data name="DeleteGroupAriaLabel" xml:space="preserve">
+    <value>delete group</value>
+    <comment>Accessible name of the icon button.</comment>
+  </data>
+  <data name="NoCriteriaInGroup" xml:space="preserve">
+    <value>No criteria in this group yet.</value>
+    <comment>Alert inside an empty group.</comment>
+  </data>
+  <data name="EditCriteriaTooltip" xml:space="preserve">
+    <value>Edit criteria</value>
+    <comment>Tooltip.</comment>
+  </data>
+  <data name="EditCriteriaAriaLabel" xml:space="preserve">
+    <value>edit criteria</value>
+    <comment>Accessible name of the icon button.</comment>
+  </data>
+  <data name="DeleteCriteriaTooltip" xml:space="preserve">
+    <value>Delete criteria</value>
+    <comment>Tooltip.</comment>
+  </data>
+  <data name="DeleteCriteriaAriaLabel" xml:space="preserve">
+    <value>delete criteria</value>
+    <comment>Accessible name of the icon button.</comment>
+  </data>
+  <data name="CriteriaGroupAdded" xml:space="preserve">
+    <value>Criteria group added.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AddGroupFailed" xml:space="preserve">
+    <value>Failed to add criteria group: {0}</value>
+    <comment>Error snackbar. {0} is the reason.</comment>
+  </data>
+  <data name="CriteriaGroupDeleted" xml:space="preserve">
+    <value>Criteria group deleted.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="DeleteGroupFailed" xml:space="preserve">
+    <value>Failed to delete criteria group: {0}</value>
+    <comment>Error snackbar. {0} is the reason.</comment>
+  </data>
+  <data name="CriteriaUpdated" xml:space="preserve">
+    <value>Criteria updated.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="CriteriaAdded" xml:space="preserve">
+    <value>Criteria added.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="SaveCriteriaFailed" xml:space="preserve">
+    <value>Failed to save criteria: {0}</value>
+    <comment>Error snackbar. {0} is the reason.</comment>
+  </data>
+  <data name="CriteriaDeleted" xml:space="preserve">
+    <value>Criteria deleted.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="DeleteCriteriaFailed" xml:space="preserve">
+    <value>Failed to delete criteria: {0}</value>
+    <comment>Error snackbar. {0} is the reason.</comment>
+  </data>
+</root>
