@@ -16,7 +16,7 @@
 <div class="@Class" data-testid="jim-sql-object-types-editor">
     <div class="d-flex align-center flex-wrap gap-2">
         <div>
-            <MudText Typo="Typo.h6">@SettingValue.Setting.Name</MudText>
+            <MudText Typo="Typo.h6">@SettingLabel</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 @if (_jsonView)
                 {
@@ -58,7 +58,7 @@
     @if (_jsonView)
     {
         <SqlObjectTypesJsonView Value="@SettingValue.StringValue" ValueChanged="OnJsonChangedAsync" Problems="@_problems"
-                                Label="@SettingValue.Setting.Name" Class="mt-4" />
+                                Label="@SettingLabel" Class="mt-4" />
     }
     else if (_model != null)
     {
@@ -122,6 +122,12 @@
     public ConnectedSystemSettingValue SettingValue { get; set; } = null!;
 
     /// <summary>All the Connected System's settings as they stand on screen, for the Delta Import Mode.</summary>
+    /// <summary>The name of the Connector definition the setting belongs to, so its label reads in the viewer's language.</summary>
+    [Parameter]
+    public string? ConnectorDefinitionName { get; set; }
+
+    private string SettingLabel => ConnectorSettingDisplay.Label(ConnectorDefinitionName, SettingValue.Setting.Name);
+
     [Parameter]
     public IReadOnlyList<ConnectedSystemSettingValue> SettingValues { get; set; } = [];
 
@@ -438,7 +444,7 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", SettingValue.StringValue ?? string.Empty);
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SqlText.SettingCopied, SettingValue.Setting.Name), Severity.Info);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SqlText.SettingCopied, SettingLabel), Severity.Info);
         }
         catch (JSException)
         {

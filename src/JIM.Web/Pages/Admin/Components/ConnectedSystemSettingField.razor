@@ -8,7 +8,7 @@
 
 @if (SettingValue.Setting.Type == ConnectedSystemSettingType.Heading)
 {
-    <MudText Typo="Typo.h6" Class="@CssClass">@SettingValue.Setting.Name</MudText>
+    <MudText Typo="Typo.h6" Class="@CssClass">@SettingLabel</MudText>
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Divider)
 {
@@ -21,13 +21,13 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowD
        the dialog ever writes to it. *@
     <div class="d-flex align-start @CssClass">
         <MudTextField T="string"
-                      Label="@SettingValue.Setting.Name"
+                      Label="@SettingLabel"
                       @bind-Value="SettingValue.StringValue"
                       @bind-Value:after="NotifyValueChangedAsync"
                       Immediate="@Immediate"
                       Required="@IsRequired"
-                      RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingValue.Setting.Name)"
-                      HelperText="@SettingValue.Setting.Description"
+                      RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingLabel)"
+                      HelperText="@SettingDescription"
                       Variant="Variant.Outlined"
                       Class="flex-grow-1" />
         <MudTooltip Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldDiscoverTooltip, DirectoryServerTerm)" Arrow="true" Placement="Placement.Top" Disabled="@DirectoryServerDiscoveryEnabled">
@@ -44,26 +44,26 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowD
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String)
 {
     <MudTextField T="string"
-                  Label="@SettingValue.Setting.Name"
+                  Label="@SettingLabel"
                   @bind-Value="SettingValue.StringValue"
                   @bind-Value:after="NotifyValueChangedAsync"
                   Immediate="@Immediate"
                   Required="@IsRequired"
-                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingValue.Setting.Name)"
-                  HelperText="@SettingValue.Setting.Description"
+                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingLabel)"
+                  HelperText="@SettingDescription"
                   Variant="Variant.Outlined"
                   Class="@CssClass" />
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
 {
     <MudTextField T="string"
-                  Label="@SettingValue.Setting.Name"
+                  Label="@SettingLabel"
                   @bind-Value="SettingValue.StringEncryptedValue"
                   @bind-Value:after="NotifyValueChangedAsync"
                   Immediate="@Immediate"
                   Required="@IsRequired"
-                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingValue.Setting.Name)"
-                  HelperText="@SettingValue.Setting.Description"
+                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingLabel)"
+                  HelperText="@SettingDescription"
                   InputType="@(_passwordVisible ? InputType.Text : InputType.Password)"
                   Adornment="Adornment.End"
                   AdornmentIcon="@(_passwordVisible ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
@@ -75,13 +75,13 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Integer)
 {
     <MudTextField T="int?"
-                  Label="@SettingValue.Setting.Name"
+                  Label="@SettingLabel"
                   @bind-Value="SettingValue.IntValue"
                   @bind-Value:after="NotifyValueChangedAsync"
                   Immediate="@Immediate"
                   Required="@IsRequired"
-                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingValue.Setting.Name)"
-                  HelperText="@SettingValue.Setting.Description"
+                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingLabel)"
+                  HelperText="@SettingDescription"
                   InputType="InputType.Number"
                   Variant="Variant.Outlined"
                   Class="@CssClass" />
@@ -89,10 +89,10 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Integer)
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
 {
     <div class="@CssClass">
-        <MudSwitch @bind-Value="SettingValue.CheckboxValue" @bind-Value:after="NotifyValueChangedAsync" Color="Color.Primary" Label="@SettingValue.Setting.Name" />
-        @if (!string.IsNullOrEmpty(SettingValue.Setting.Description))
+        <MudSwitch @bind-Value="SettingValue.CheckboxValue" @bind-Value:after="NotifyValueChangedAsync" Color="Color.Primary" Label="@SettingLabel" />
+        @if (!string.IsNullOrEmpty(SettingDescription))
         {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">@SettingValue.Setting.Description</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">@SettingDescription</MudText>
         }
     </div>
 }
@@ -102,13 +102,13 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Text)
        the field is monospaced, grows with its content and does not spell-check what is code, not prose. *@
     <div class="@CssClass">
         <MudTextField T="string"
-                      Label="@SettingValue.Setting.Name"
+                      Label="@SettingLabel"
                       @bind-Value="SettingValue.StringValue"
                       @bind-Value:after="NotifyValueChangedAsync"
                       Immediate="@Immediate"
                       Required="@IsRequired"
-                      RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingValue.Setting.Name)"
-                      HelperText="@SettingValue.Setting.Description"
+                      RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingLabel)"
+                      HelperText="@SettingDescription"
                       Lines="10"
                       Sizing="InputSizing.Auto"
                       MaxLines="30"
@@ -123,14 +123,14 @@ else if (SettingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, Dr
     <div class="@CssClass">
         <MudSelect @bind-Value="SettingValue.StringValue"
                    @bind-Value:after="NotifyValueChangedAsync"
-                   HelperText="@SettingValue.Setting.Description"
-                   Label="@SettingValue.Setting.Name"
+                   HelperText="@SettingDescription"
+                   Label="@SettingLabel"
                    Variant="Variant.Outlined"
                    Required="@SettingValue.Setting.Required"
-                   RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingValue.Setting.Name)">
+                   RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingLabel)">
             @foreach (var dropDownValue in SettingValue.Setting.DropDownValues)
             {
-                <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
+                <MudSelectItem T="string" Value="@dropDownValue">@OptionText(dropDownValue)</MudSelectItem>
             }
         </MudSelect>
         @SettingExample
@@ -139,17 +139,17 @@ else if (SettingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, Dr
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Label)
 {
     <MudText Class="@CssClass">
-        @SettingValue.Setting.Description
+        @SettingDescription
     </MudText>
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.File)
 {
     <MudTextField T="string"
-                  Label="@SettingValue.Setting.Name"
+                  Label="@SettingLabel"
                   @bind-Value="SettingValue.StringValue"
                   Required="@IsRequired"
-                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingValue.Setting.Name)"
-                  HelperText="@SettingValue.Setting.Description"
+                  RequiredError="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingFieldRequired, SettingLabel)"
+                  HelperText="@SettingDescription"
                   Variant="Variant.Outlined"
                   ReadOnly="true"
                   Adornment="Adornment.End"
@@ -247,6 +247,21 @@ else
     /// </summary>
     [Parameter]
     public string? DirectoryServerTerm { get; set; }
+
+    /// <summary>
+    /// The name of the Connector definition the setting belongs to (for instance "JIM LDAP Connector"). Settings are
+    /// copied into the database in English and their English name is an identifier, so the label, description and
+    /// choices shown here are looked up by definition and setting name and fall back to the stored English where no
+    /// translation exists (a third-party or future Connector).
+    /// </summary>
+    [Parameter]
+    public string? ConnectorDefinitionName { get; set; }
+
+    private string SettingLabel => ConnectorSettingDisplay.Label(ConnectorDefinitionName, SettingValue.Setting.Name);
+
+    private string? SettingDescription => ConnectorSettingDisplay.Description(ConnectorDefinitionName, SettingValue.Setting.Name, SettingValue.Setting.Description);
+
+    private string OptionText(string value) => ConnectorSettingDisplay.Option(ConnectorDefinitionName, SettingValue.Setting.Name, value);
 
     private bool _passwordVisible;
 

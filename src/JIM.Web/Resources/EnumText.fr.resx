@@ -35,4 +35,22 @@
   <data name="ActivityStatus_Cancelled" xml:space="preserve">
     <value>Annulée</value>
   </data>
+  <data name="ConnectedSystemSettingCategory_Connectivity" xml:space="preserve">
+    <value>Connectivité</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_General" xml:space="preserve">
+    <value>Général</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Capabilities" xml:space="preserve">
+    <value>Capacités</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Schema" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Import" xml:space="preserve">
+    <value>Importation</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Export" xml:space="preserve">
+    <value>Exportation</value>
+  </data>
 </root>
