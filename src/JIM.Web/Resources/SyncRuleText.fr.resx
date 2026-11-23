@@ -1946,4 +1946,31 @@
   <data name="AddBindingTitle" xml:space="preserve">
     <value>Ajouter des attributs à « {0} »</value>
   </data>
+  <data name="ExRecipHeading" xml:space="preserve">
+    <value>Destinataires Exchange</value>
+  </data>
+  <data name="ExRecipNotSetUp" xml:space="preserve">
+    <value>Les objets que cette règle provisionne ne sont pas des destinataires Exchange.</value>
+  </data>
+  <data name="ExRecipNotSetUpHelp" xml:space="preserve">
+    <value>Déclarez ce que chacun doit être dans Exchange : une boîte aux lettres, une boîte partagée, de salle ou d’équipement, un utilisateur de messagerie, un contact de messagerie ou un groupe activé pour la messagerie. Son système connecté gère les destinataires Exchange.</value>
+  </data>
+  <data name="ExRecipSetUp" xml:space="preserve">
+    <value>Configurer les destinataires</value>
+  </data>
+  <data name="ExRecipAttributeColumn" xml:space="preserve">
+    <value>Attribut Exchange</value>
+  </data>
+  <data name="ExRecipSetByColumn" xml:space="preserve">
+    <value>Défini par</value>
+  </data>
+  <data name="ExRecipSet" xml:space="preserve">
+    <value>Définir</value>
+  </data>
+  <data name="ExRecipOwnFlows" xml:space="preserve">
+    <value>Ce sont les flux d’attributs propres à cette règle, également listés ci-dessous.</value>
+  </data>
+  <data name="ExRecipStop" xml:space="preserve">
+    <value>Arrêter le provisionnement des destinataires</value>
+  </data>
 </root>

@@ -2564,4 +2564,40 @@
     <value>Add Attributes to "{0}"</value>
     <comment>Dialog title. {0} is the Metaverse Object Type name.</comment>
   </data>
+  <data name="ExRecipHeading" xml:space="preserve">
+    <value>Exchange recipients</value>
+    <comment>Heading of the Exchange recipients panel.</comment>
+  </data>
+  <data name="ExRecipNotSetUp" xml:space="preserve">
+    <value>Objects this rule provisions are not Exchange recipients.</value>
+    <comment>Shown before the recipients are set up.</comment>
+  </data>
+  <data name="ExRecipNotSetUpHelp" xml:space="preserve">
+    <value>Declare what each one should be in Exchange: a mailbox, a shared, room or equipment mailbox, a mail user, a mail contact or a mail-enabled group. Its Connected System manages Exchange recipients.</value>
+    <comment>Explains what recipient types are.</comment>
+  </data>
+  <data name="ExRecipSetUp" xml:space="preserve">
+    <value>Set up recipients</value>
+    <comment>Button starting the Exchange recipients set up.</comment>
+  </data>
+  <data name="ExRecipAttributeColumn" xml:space="preserve">
+    <value>Exchange attribute</value>
+    <comment>Table heading: the Exchange attribute.</comment>
+  </data>
+  <data name="ExRecipSetByColumn" xml:space="preserve">
+    <value>Set by</value>
+    <comment>Table heading: the Attribute Flow that sets the attribute.</comment>
+  </data>
+  <data name="ExRecipSet" xml:space="preserve">
+    <value>Set</value>
+    <comment>Row action: add an Attribute Flow to the attribute.</comment>
+  </data>
+  <data name="ExRecipOwnFlows" xml:space="preserve">
+    <value>These are this rule's own Attribute Flows, also listed below.</value>
+    <comment>Note beside the stop button.</comment>
+  </data>
+  <data name="ExRecipStop" xml:space="preserve">
+    <value>Stop provisioning recipients</value>
+    <comment>Button removing every Attribute Flow to an Exchange attribute.</comment>
+  </data>
 </root>

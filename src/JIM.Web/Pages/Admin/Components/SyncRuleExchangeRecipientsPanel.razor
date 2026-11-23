@@ -14,21 +14,20 @@
 <MudPaper Class="pa-4" Outlined="true" data-testid="jim-exchange-recipients-panel">
     <div class="d-flex align-center">
         <MudIcon Icon="@Icons.Material.Filled.Email" Color="Color.Info" Class="mr-2" />
-        <MudText Typo="Typo.h6">Exchange recipients</MudText>
+        <MudText Typo="Typo.h6">@SyncRuleText.ExRecipHeading</MudText>
     </div>
 
     @if (!Flows.IsSetUp)
     {
         <div class="d-flex align-center justify-space-between flex-wrap gap-4 mt-3">
             <div>
-                <MudText>Objects this rule provisions are not Exchange recipients.</MudText>
+                <MudText>@SyncRuleText.ExRecipNotSetUp</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Declare what each one should be in Exchange: a mailbox, a shared, room or equipment mailbox, a mail user, a mail
-                    contact or a mail-enabled group. Its Connected System manages Exchange recipients.
+                    @SyncRuleText.ExRecipNotSetUpHelp
                 </MudText>
             </div>
             <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" DropShadow="false"
-                       OnClick="SetUpAsync" data-testid="jim-exchange-recipients-set-up">Set up recipients</MudButton>
+                       OnClick="SetUpAsync" data-testid="jim-exchange-recipients-set-up">@SyncRuleText.ExRecipSetUp</MudButton>
         </div>
     }
     else
@@ -36,8 +35,8 @@
         <MudSimpleTable Outlined="true" Class="mt-3">
             <thead>
                 <tr>
-                    <th>Exchange attribute</th>
-                    <th>Set by</th>
+                    <th>@SyncRuleText.ExRecipAttributeColumn</th>
+                    <th>@SyncRuleText.ExRecipSetByColumn</th>
                     <th></th>
                 </tr>
             </thead>
@@ -69,7 +68,7 @@
                                     }
                                     @if (!mapping.Enabled)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Disabled</MudChip>
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@SyncRuleText.ChipDisabled</MudChip>
                                     }
                                 </div>
                             }
@@ -82,14 +81,14 @@
                             @if (row.Mapping is { } setMapping)
                             {
                                 <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                           OnClick="@(() => OnEdit.InvokeAsync(setMapping))" data-testid="jim-exchange-recipients-edit">Edit</MudButton>
+                                           OnClick="@(() => OnEdit.InvokeAsync(setMapping))" data-testid="jim-exchange-recipients-edit">@CommonText.Edit</MudButton>
                                 <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                           OnClick="@(() => OnRemove.InvokeAsync(setMapping))" data-testid="jim-exchange-recipients-remove">Remove</MudButton>
+                                           OnClick="@(() => OnRemove.InvokeAsync(setMapping))" data-testid="jim-exchange-recipients-remove">@CommonText.Remove</MudButton>
                             }
                             else
                             {
                                 <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                           OnClick="@(() => OnSet.InvokeAsync(row.Attribute))" data-testid="jim-exchange-recipients-set">Set</MudButton>
+                                           OnClick="@(() => OnSet.InvokeAsync(row.Attribute))" data-testid="jim-exchange-recipients-set">@SyncRuleText.ExRecipSet</MudButton>
                             }
                         </td>
                     </tr>
@@ -97,9 +96,9 @@
             </tbody>
         </MudSimpleTable>
         <div class="d-flex align-center justify-space-between flex-wrap gap-4 mt-3">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">These are this rule's own Attribute Flows, also listed below.</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@SyncRuleText.ExRecipOwnFlows</MudText>
             <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Block" DropShadow="false"
-                       OnClick="StopAsync" data-testid="jim-exchange-recipients-stop">Stop provisioning recipients</MudButton>
+                       OnClick="StopAsync" data-testid="jim-exchange-recipients-stop">@SyncRuleText.ExRecipStop</MudButton>
         </div>
     }
 </MudPaper>
