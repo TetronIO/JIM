@@ -362,6 +362,25 @@ public class GraphConnectorExportTests
     }
 
     [Test]
+    public async Task Update_RemovingAMemberDeletedFromTheTenant_CountsAsRemovedAsync()
+    {
+        // A user deleted from Entra ID leaves its groups with it, so removing it from one afterwards finds nothing to
+        // remove: what the removal wanted is already so. Found by Scenario 036, where a leaver deleted by one export left
+        // the group's removal of them, in the same run, refused.
+        _tenant.AddUser("u2", "u2");
+        _tenant.AddGroup("g1", "Engineering");
+        _tenant.Members["g1"] = [("user", "u2")];
+
+        var result = (await ExportAsync(Against("g1", GroupType, PendingExportChangeType.Update, Remove("members", "deleted-user")))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(_tenant.Members["g1"].Select(m => m.Id), Is.EqualTo(new[] { "u2" }));
+        }
+    }
+
+    [Test]
     public async Task Update_MemberThatDoesNotExistYet_FailsAsAMissingDependencyAsync()
     {
         _tenant.AddUser("u1", "u1");

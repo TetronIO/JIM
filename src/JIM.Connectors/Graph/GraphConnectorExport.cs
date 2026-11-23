@@ -241,7 +241,7 @@ internal sealed class GraphConnectorExport
                 return [];
 
             case GraphExportStepKind.RemoveManager or GraphExportStepKind.RemoveReference:
-                if (!response.IsSuccess && response.StatusCode != HttpStatusCode.NotFound)
+                if (!response.IsSuccess && !GraphExportErrorClassifier.IsAlreadyAbsent(response))
                     state.FollowUpFailures.Add(GraphExportErrorClassifier.Classify(response, Describe(step)));
                 return [];
 

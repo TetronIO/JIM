@@ -160,9 +160,14 @@ internal sealed partial class FakeGraphTenant
         var removed = relationship == "members"
             ? (Members.GetValueOrDefault(groupId)?.RemoveAll(m => m.Id == reference) ?? 0)
             : (Owners.GetValueOrDefault(groupId)?.RemoveAll(o => o == reference) ?? 0);
-        return removed == 0
+        if (removed > 0)
+            return (204, null);
+
+        // As Graph answers it: a member deleted from the tenant (which also leaves its groups) is refused as a removed
+        // reference that does not exist; one that exists but is not a member, as not found.
+        return Exists(reference)
             ? Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{reference}' does not exist or one of its queried reference-property objects are not present.")
-            : (204, null);
+            : Error(HttpStatusCode.BadRequest, "Request_BadRequest", $"One or more removed object references do not exist for the following modified properties: '{relationship}'.");
     }
 
     private (int, JsonNode?) SetManager(string userId, string managerId)
