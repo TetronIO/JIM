@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DriftThisConnectedSystem" xml:space="preserve">
+    <value>Dieses verbundene System</value>
+  </data>
+  <data name="DriftThisConnectedSystemMidSentence" xml:space="preserve">
+    <value>dieses verbundene System</value>
+  </data>
+  <data name="DriftNeverFullySynchronised" xml:space="preserve">
+    <value>{0} hat noch nie eine vollständige Synchronisierung abgeschlossen, daher wurde die Konfiguration noch nie vollständig angewendet.</value>
+  </data>
+  <data name="DriftChangesOne" xml:space="preserve">
+    <value>{0} Konfigurationsänderung</value>
+  </data>
+  <data name="DriftChangesOther" xml:space="preserve">
+    <value>{0} Konfigurationsänderungen</value>
+  </data>
+  <data name="DriftDestructiveSince" xml:space="preserve">
+    <value>{0} seit der letzten vollständigen Synchronisierung ({1}), darunter eine destruktive Änderung. Prüfen Sie dies vor einer vollständigen Synchronisierung.</value>
+  </data>
+  <data name="DriftDestructiveSinceNoDate" xml:space="preserve">
+    <value>{0} seit der letzten vollständigen Synchronisierung, darunter eine destruktive Änderung. Prüfen Sie dies vor einer vollständigen Synchronisierung.</value>
+  </data>
+  <data name="DriftApplySinceOne" xml:space="preserve">
+    <value>{0} seit der letzten vollständigen Synchronisierung ({1}). Führen Sie eine vollständige Synchronisierung aus, um sie anzuwenden.</value>
+  </data>
+  <data name="DriftApplySinceOther" xml:space="preserve">
+    <value>{0} seit der letzten vollständigen Synchronisierung ({1}). Führen Sie eine vollständige Synchronisierung aus, um sie anzuwenden.</value>
+  </data>
+  <data name="DriftApplySinceNoDateOne" xml:space="preserve">
+    <value>{0} seit der letzten vollständigen Synchronisierung. Führen Sie eine vollständige Synchronisierung aus, um sie anzuwenden.</value>
+  </data>
+  <data name="DriftApplySinceNoDateOther" xml:space="preserve">
+    <value>{0} seit der letzten vollständigen Synchronisierung. Führen Sie eine vollständige Synchronisierung aus, um sie anzuwenden.</value>
+  </data>
+  <data name="DriftAwaitingOneChangeOneType" xml:space="preserve">
+    <value>1 gespeicherte Änderung wartet auf die nächste Synchronisierung von {0}, bei der jedes Objekt vom Typ {1} verarbeitet wird.</value>
+  </data>
+  <data name="DriftAwaitingOneChangeSeveralTypes" xml:space="preserve">
+    <value>1 gespeicherte Änderung wartet auf die nächste Synchronisierung von {0}, bei der jedes Objekt der Typen {1} und {2} verarbeitet wird.</value>
+  </data>
+  <data name="DriftAwaitingManyChangesOneType" xml:space="preserve">
+    <value>{0} gespeicherte Änderungen warten auf die nächste Synchronisierung von {1}, bei der jedes Objekt vom Typ {2} verarbeitet wird.</value>
+  </data>
+  <data name="DriftAwaitingManyChangesSeveralTypes" xml:space="preserve">
+    <value>{0} gespeicherte Änderungen warten auf die nächste Synchronisierung von {1}, bei der jedes Objekt der Typen {2} und {3} verarbeitet wird.</value>
+  </data>
+  <data name="TrustDialogIntro" xml:space="preserve">
+    <value>Ihr Identitätsanbieter {0} hat diese Kette vorgelegt. JIM vertraut dem von Ihnen gewählten Zertifikat für die Anmeldung, bis Sie es unter {1} entfernen. Prüfen Sie den Fingerabdruck anhand desjenigen, den Ihre Zertifizierungsstelle veröffentlicht, bevor Sie fortfahren.</value>
+  </data>
+  <data name="TrustDialogTrustedCertificatesLink" xml:space="preserve">
+    <value>Vertrauenswürdige Zertifikate</value>
+  </data>
+  <data name="TrustDialogRecommended" xml:space="preserve">
+    <value>Empfohlen</value>
+  </data>
+  <data name="TrustDialogUnsentIssuer" xml:space="preserve">
+    <value>{0} hat {1}, den Aussteller des obersten Glieds dieser Kette, nicht gesendet. Das Hochladen von Ihrer Zertifizierungsstelle, als vertrauenswürdig für die Anmeldung festgelegt, hält länger als alles hier.</value>
+  </data>
+  <data name="TrustDialogThumbprintToCheck" xml:space="preserve">
+    <value>Zu prüfender Fingerabdruck</value>
+  </data>
+  <data name="TrustDialogChangeReason" xml:space="preserve">
+    <value>Änderungsgrund</value>
+  </data>
+  <data name="TrustDialogChangeReasonHelper" xml:space="preserve">
+    <value>Wird zusammen mit Ihrem Namen in der Aktivität erfasst.</value>
+  </data>
+  <data name="TrustDialogChangeReasonDefault" xml:space="preserve">
+    <value>Anmeldung über {0} wiederherstellen.</value>
+  </data>
+  <data name="TrustDialogTrusting" xml:space="preserve">
+    <value>Wird festgelegt</value>
+  </data>
+  <data name="TrustDialogTrustForSignIn" xml:space="preserve">
+    <value>Für Anmeldung vertrauen</value>
+  </data>
+  <data name="TrustDialogTitleFailed" xml:space="preserve">
+    <value>JIM konnte diesem Zertifikat nicht vertrauen</value>
+  </data>
+  <data name="TrustDialogTitleConfirm" xml:space="preserve">
+    <value>{0} für die Anmeldung als vertrauenswürdig festlegen?</value>
+  </data>
+  <data name="TrustDialogThisCertificate" xml:space="preserve">
+    <value>dieses Zertifikat</value>
+  </data>
+  <data name="TrustDialogFailureMessage" xml:space="preserve">
+    <value>JIM konnte diesem Zertifikat nicht vertrauen.</value>
+  </data>
+  <data name="TrustDialogOpenTitle" xml:space="preserve">
+    <value>Einem Zertifikat für die Anmeldung vertrauen?</value>
+  </data>
+  <data name="TrustDialogDurabilityServer" xml:space="preserve">
+    <value>Das eigene Zertifikat dieses Identitätsanbieters. Muss nach der Erneuerung am {0} erneut als vertrauenswürdig festgelegt werden.</value>
+  </data>
+  <data name="TrustDialogDurabilityAuthority" xml:space="preserve">
+    <value>Deckt jedes Zertifikat ab, das diese Zertifizierungsstelle ausstellt, bis ihr eigenes Zertifikat am {0} abläuft.</value>
+  </data>
+  <data name="OutOfDateCause" xml:space="preserve">
+    <value>{0} seit Beginn dieser Vorschau: {1}{2}.</value>
+  </data>
+  <data name="OutOfDateWhen" xml:space="preserve">
+    <value> ({0})</value>
+  </data>
+  <data name="OutOfDateExplanation" xml:space="preserve">
+    <value>Die Vorschau beschreibt möglicherweise nicht mehr, was der Lauf tun würde. Erstellen Sie die Vorschau erneut, um eine aktuelle Antwort zu erhalten, oder führen Sie ihn trotzdem aus; die Aktivität des Laufs hält fest, dass die zugrunde liegende Vorschau veraltet war.</value>
+  </data>
+  <data name="OutOfDateRunAnyway" xml:space="preserve">
+    <value>Trotzdem ausführen</value>
+  </data>
+  <data name="OutOfDatePreviewAgain" xml:space="preserve">
+    <value>Vorschau erneut erstellen</value>
+  </data>
+  <data name="CsvErrorTitle" xml:space="preserve">
+    <value>CSV-Analysefehler</value>
+  </data>
+  <data name="CsvErrorRow" xml:space="preserve">
+    <value>Zeile:</value>
+  </data>
+  <data name="CsvErrorColumn" xml:space="preserve">
+    <value>Spalte:</value>
+  </data>
+  <data name="CsvErrorRawData" xml:space="preserve">
+    <value>Rohdaten:</value>
+  </data>
+  <data name="CsvErrorSuggestion" xml:space="preserve">
+    <value>Vorschlag:</value>
+  </data>
+  <data name="CsvErrorOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="ChangeReasonDescription" xml:space="preserve">
+    <value>Beschreiben Sie optional, warum Sie diese Änderung vornehmen. Der Grund wird zur Änderung im Konfigurationsänderungsverlauf erfasst.</value>
+  </data>
+  <data name="ChangeReasonLabel" xml:space="preserve">
+    <value>Grund (optional)</value>
+  </data>
+  <data name="ChangeReasonDialogTitle" xml:space="preserve">
+    <value>Änderungsgrund</value>
+  </data>
+  <data name="AuditCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="AuditUpdated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="AuditBy" xml:space="preserve">
+    <value>von</value>
+  </data>
+  <data name="ObjectCountOf" xml:space="preserve">
+    <value>{0} von {1}</value>
+  </data>
+  <data name="ObjectCountOfNoun" xml:space="preserve">
+    <value>{0} von {1} {2}</value>
+  </data>
+  <data name="RunAsOfDateLabel" xml:space="preserve">
+    <value>Ausführen zum Stand (UTC)</value>
+  </data>
+  <data name="RunAsOfNow" xml:space="preserve">
+    <value>Jetzt</value>
+  </data>
+  <data name="RunAsOfTimeLabel" xml:space="preserve">
+    <value>Uhrzeit (UTC)</value>
+  </data>
+  <data name="InfoAbout" xml:space="preserve">
+    <value>Informationen zu {0}</value>
+  </data>
+  <data name="InfoDocumentation" xml:space="preserve">
+    <value>Dokumentation</value>
+  </data>
+  <data name="InfoGlossary" xml:space="preserve">
+    <value>Glossar</value>
+  </data>
+  <data name="CopyTextExplanation" xml:space="preserve">
+    <value>Ihr Browser hat JIM das Kopieren in die Zwischenablage nicht erlaubt. Der Text ist unten markiert; drücken Sie Strg+C (Cmd+C auf einem Mac), um ihn zu kopieren.</value>
+  </data>
+  <data name="CopyTextAriaLabel" xml:space="preserve">
+    <value>Zu kopierender Text</value>
+  </data>
+  <data name="CopyTextDone" xml:space="preserve">
+    <value>Fertig</value>
+  </data>
+  <data name="ConsequenceTypeToConfirm" xml:space="preserve">
+    <value>Geben Sie {0} zur Bestätigung ein</value>
+  </data>
+  <data name="ConsequenceEvaluating" xml:space="preserve">
+    <value>Auswirkungen werden ausgewertet...</value>
+  </data>
+  <data name="ConsequenceWorking" xml:space="preserve">
+    <value>Wird ausgeführt...</value>
+  </data>
+  <data name="DensityNormal" xml:space="preserve">
+    <value>Normaler Zeilenabstand</value>
+  </data>
+  <data name="DensityCompact" xml:space="preserve">
+    <value>Kompakter Zeilenabstand</value>
+  </data>
+  <data name="StackTraceShow" xml:space="preserve">
+    <value>Stacktrace anzeigen</value>
+  </data>
+  <data name="StackTraceHide" xml:space="preserve">
+    <value>Stacktrace ausblenden</value>
+  </data>
+  <data name="OverflowMore" xml:space="preserve">
+    <value>+{0} weitere</value>
+  </data>
+  <data name="GridLoading" xml:space="preserve">
+    <value>Wird geladen…</value>
+  </data>
+  <data name="GridSearching" xml:space="preserve">
+    <value>Suche läuft…</value>
+  </data>
+  <data name="GridSearchPlaceholder" xml:space="preserve">
+    <value>Suchen...</value>
+  </data>
+  <data name="TechnicalDetails" xml:space="preserve">
+    <value>Technische Details</value>
+  </data>
+  <data name="UnhandledErrorTitle" xml:space="preserve">
+    <value>Etwas ist schiefgelaufen</value>
+  </data>
+  <data name="UnhandledErrorSubtitle" xml:space="preserve">
+    <value>Das war so nicht vorgesehen. Ein Zahnrad ist abgerutscht!</value>
+  </data>
+  <data name="UnhandledErrorLabel" xml:space="preserve">
+    <value>Fehler</value>
+  </data>
+  <data name="UnhandledErrorMessage" xml:space="preserve">
+    <value>Meldung</value>
+  </data>
+  <data name="UnhandledErrorTryAgain" xml:space="preserve">
+    <value>Erneut versuchen</value>
+  </data>
+  <data name="UnhandledErrorGoToDashboard" xml:space="preserve">
+    <value>Zum Dashboard</value>
+  </data>
+  <data name="NotAuthorisedTitle" xml:space="preserve">
+    <value>Zugriff verweigert</value>
+  </data>
+  <data name="NotAuthorisedSubtitle" xml:space="preserve">
+    <value>Hoppla! Anscheinend haben Sie keinen Schlüssel für diese Tür.</value>
+  </data>
+  <data name="NotAuthorisedNoPermission" xml:space="preserve">
+    <value>Sie sind angemeldet, haben aber keine Berechtigung für den Zugriff auf diese Seite.</value>
+  </data>
+  <data name="NotAuthorisedUserLabel" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="NotAuthorisedRolesLabel" xml:space="preserve">
+    <value>Ihre Rollen</value>
+  </data>
+  <data name="NotAuthorisedRolesNone" xml:space="preserve">
+    <value>(keine)</value>
+  </data>
+  <data name="NotAuthorisedAdminNote" xml:space="preserve">
+    <value>Hinweis für Administratoren:</value>
+  </data>
+  <data name="NotAuthorisedMissingRoleNote" xml:space="preserve">
+    <value>Dieser Benutzer ist authentifiziert und in JIM vorhanden, hat aber nicht die für diese Seite erforderliche Rolle. Prüfen Sie die Rollenzuweisungen des Benutzers.</value>
+  </data>
+  <data name="NotAuthorisedNotFound" xml:space="preserve">
+    <value>Sie wurden authentifiziert, aber Ihr Konto konnte in JIM nicht gefunden werden.</value>
+  </data>
+  <data name="NotAuthorisedTokenNameLabel" xml:space="preserve">
+    <value>Tokenname</value>
+  </data>
+  <data name="NotAuthorisedClaimTypeLabel" xml:space="preserve">
+    <value>Claim-Typ</value>
+  </data>
+  <data name="NotAuthorisedClaimValueLabel" xml:space="preserve">
+    <value>Claim-Wert</value>
+  </data>
+  <data name="NotAuthorisedUnmappedClaimNote" xml:space="preserve">
+    <value>Dieser Claim konnte keinem Metaverse-Benutzer zugeordnet werden. Prüfen Sie, ob der Benutzer in JIM vorhanden ist und einen Wert für das SSO-Attribut {0} hat.</value>
+  </data>
+  <data name="NotAuthorisedGoToHome" xml:space="preserve">
+    <value>Zur Startseite</value>
+  </data>
+</root>

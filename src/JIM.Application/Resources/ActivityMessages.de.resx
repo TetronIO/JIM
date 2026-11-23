@@ -1,0 +1,655 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FailureWithCause" xml:space="preserve">
+    <value>{0} --&gt; {1}</value>
+  </data>
+  <data name="Verbatim" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="JoinedBySpace" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="JoinedByComma" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="RoleCreated" xml:space="preserve">
+    <value>Rolle „{0}“ erstellt</value>
+  </data>
+  <data name="RoleMemberAdded" xml:space="preserve">
+    <value>„{0}“ zur Rolle „{1}“ hinzugefügt</value>
+  </data>
+  <data name="RoleMemberRemoved" xml:space="preserve">
+    <value>„{0}“ aus der Rolle „{1}“ entfernt</value>
+  </data>
+  <data name="ApiKeyCreated" xml:space="preserve">
+    <value>API-Schlüssel „{0}“ erstellt</value>
+  </data>
+  <data name="ApiKeyUpdated" xml:space="preserve">
+    <value>API-Schlüssel „{0}“ aktualisiert</value>
+  </data>
+  <data name="ApiKeyDeleted" xml:space="preserve">
+    <value>API-Schlüssel „{0}“ gelöscht</value>
+  </data>
+  <data name="PredefinedSearchUpdated" xml:space="preserve">
+    <value>Vordefinierte Suche „{0}“ aktualisiert</value>
+  </data>
+  <data name="SearchCriteriaGroupAdded" xml:space="preserve">
+    <value>Kriteriengruppe zur vordefinierten Suche „{0}“ hinzugefügt</value>
+  </data>
+  <data name="SearchCriteriaGroupUpdated" xml:space="preserve">
+    <value>Kriteriengruppe der vordefinierten Suche „{0}“ aktualisiert</value>
+  </data>
+  <data name="SearchCriteriaGroupDeleted" xml:space="preserve">
+    <value>Kriteriengruppe aus der vordefinierten Suche „{0}“ gelöscht</value>
+  </data>
+  <data name="SearchCriteriaGroupNotFound" xml:space="preserve">
+    <value>Keine zu löschende Kriteriengruppe in der vordefinierten Suche „{0}“ gefunden</value>
+  </data>
+  <data name="SearchCriterionAdded" xml:space="preserve">
+    <value>Kriterium zur vordefinierten Suche „{0}“ hinzugefügt</value>
+  </data>
+  <data name="SearchCriterionUpdated" xml:space="preserve">
+    <value>Kriterium der vordefinierten Suche „{0}“ aktualisiert</value>
+  </data>
+  <data name="SearchCriterionDeleted" xml:space="preserve">
+    <value>Kriterium aus der vordefinierten Suche „{0}“ gelöscht</value>
+  </data>
+  <data name="SearchCriterionNotFound" xml:space="preserve">
+    <value>Kein zu löschendes Kriterium in der vordefinierten Suche „{0}“ gefunden</value>
+  </data>
+  <data name="CertificateAdded" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat „{0}“ hinzugefügt (Antragsteller: {1})</value>
+  </data>
+  <data name="CertificateAddedFromFile" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat „{0}“ aus Datei hinzugefügt (Antragsteller: {1})</value>
+  </data>
+  <data name="CertificateUpdated" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat aktualisiert: {0}</value>
+  </data>
+  <data name="CertificateUnchanged" xml:space="preserve">
+    <value>Keine Änderungen am vertrauenswürdigen Zertifikat vorgenommen</value>
+  </data>
+  <data name="CertificateDeleted" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat „{0}“ gelöscht</value>
+  </data>
+  <data name="InitialAdministratorRoleAssigned" xml:space="preserve">
+    <value>Rolle {0} dem ursprünglichen Administrator zugewiesen</value>
+  </data>
+  <data name="InitialAdministratorCreated" xml:space="preserve">
+    <value>Ursprünglichen Administrator „{0}“ erstellt</value>
+  </data>
+  <data name="BuiltInConfigurationApplied" xml:space="preserve">
+    <value>Integrierte Konfiguration angewendet</value>
+  </data>
+  <data name="SynchronisedDeprovisioningAbandoned" xml:space="preserve">
+    <value>Ein synchronisierter Deprovisionierungslauf wurde auf halbem Weg abgebrochen, und die Löschung wurde sofort abgeschlossen. Die verbleibenden beigetragenen Attributwerte wurden ohne Herkunftsnachweis beibehalten (sie lassen sich nicht mehr zurückrufen), verbleibende Beitragsquellen wurden nicht neu bestimmt, und nachgelagerte Systeme wurden nicht korrigiert.</value>
+  </data>
+  <data name="JoinedByLine" xml:space="preserve">
+    <value>{0}
+{1}</value>
+  </data>
+  <data name="SchemaRefreshRemovalCompleted" xml:space="preserve">
+    <value>{0} Objekte im verbundenen System als veraltet markiert, {1} ausstehende Exporte entfernt und {2} gespeicherte Attributwerte gelöscht.</value>
+  </data>
+  <data name="ContainersAutoSelected" xml:space="preserve">
+    <value>{0} beim Export erstellte Container automatisch ausgewählt</value>
+  </data>
+  <data name="HierarchyAdded" xml:space="preserve">
+    <value>{0} hinzugefügt</value>
+  </data>
+  <data name="HierarchyRemoved" xml:space="preserve">
+    <value>{0} entfernt</value>
+  </data>
+  <data name="HierarchyUpdated" xml:space="preserve">
+    <value>{0} aktualisiert</value>
+  </data>
+  <data name="HierarchyPartitionsSelectedOne" xml:space="preserve">
+    <value>{0} Partition ausgewählt</value>
+  </data>
+  <data name="HierarchyPartitionsSelectedOther" xml:space="preserve">
+    <value>{0} Partitionen ausgewählt</value>
+  </data>
+  <data name="HierarchyNoChanges" xml:space="preserve">
+    <value>Keine Änderungen</value>
+  </data>
+  <data name="ContributedValuesKept" xml:space="preserve">
+    <value>Beigetragene Attributwerte wurden beibehalten: {0} Werte in {1} Metaverse-Objekten bleiben ohne Herkunftsnachweis einer Synchronisierungsregel bestehen.</value>
+  </data>
+  <data name="ContributedValuesKeptForFlow" xml:space="preserve">
+    <value>Beigetragene Attributwerte wurden für den entfernten Attributfluss {0} beibehalten: {1} Werte in {2} Metaverse-Objekten bleiben ohne Herkunftsnachweis einer Synchronisierungsregel bestehen.</value>
+  </data>
+  <data name="SyncRuleDeletionRecalled" xml:space="preserve">
+    <value>{0} Attributwerte in {1} Metaverse-Objekten zurückgerufen: {2} auf eine verbleibende Beitragsquelle neu bestimmt, {3} geleert (keine Beitragsquelle mehr); {4} ausstehende Exporte vorgemerkt. Die Synchronisierungsregel wurde gelöscht.</value>
+  </data>
+  <data name="AllItemsFailed" xml:space="preserve">
+    <value>Bei allen Ausführungselementen des Ausführungsprofils ist ein Fehler aufgetreten. Prüfen Sie die Elemente für weitere Informationen.</value>
+  </data>
+  <data name="UnhandledErrors" xml:space="preserve">
+    <value>Bei der Verarbeitung sind {0} nicht behandelte Fehler aufgetreten. Prüfen Sie die Elemente für weitere Informationen.</value>
+  </data>
+  <data name="PartitionCountOne" xml:space="preserve">
+    <value>{0} Partition</value>
+  </data>
+  <data name="PartitionCountOther" xml:space="preserve">
+    <value>{0} Partitionen</value>
+  </data>
+  <data name="DeltaImportResetBoth" xml:space="preserve">
+    <value>Das Deltaimport-Wasserzeichen des verbundenen Systems und die Wasserzeichen von {0} wurden entfernt, damit der nächste Deltaimport jedes Objekt liest, wie es ein vollständiger Import tut.</value>
+  </data>
+  <data name="DeltaImportResetSystem" xml:space="preserve">
+    <value>Das Deltaimport-Wasserzeichen des verbundenen Systems wurde entfernt, damit der nächste Deltaimport jedes Objekt liest, wie es ein vollständiger Import tut.</value>
+  </data>
+  <data name="DeltaImportResetPartitions" xml:space="preserve">
+    <value>Die Deltaimport-Wasserzeichen von {0} wurden entfernt, damit der nächste Deltaimport jedes Objekt darin liest, wie es ein vollständiger Import tut.</value>
+  </data>
+  <data name="ScopeReconciliationFullPass" xml:space="preserve">
+    <value>{0} Objekte wurden vollständig für {1} Synchronisierungsregeln ausgewertet, deren Ausdruckskriterien mit einem relativen Datum vergleichen, was sich durch keinen gespeicherten Wert eingrenzen lässt.</value>
+  </data>
+  <data name="ScopeReconciliationUndecidable" xml:space="preserve">
+    <value>{0} Objekte blieben unverändert, weil ein Geltungsbereichskriterium für sie nicht ausgewertet werden konnte; das Dienstprotokoll nennt jedes einzelne und den Grund.</value>
+  </data>
+  <data name="RetentionRemoved" xml:space="preserve">
+    <value>{0} entfernt.</value>
+  </data>
+  <data name="RetentionNothing" xml:space="preserve">
+    <value>Nichts hatte seine Aufbewahrungsfrist erreicht.</value>
+  </data>
+  <data name="RetentionCsoChangesOne" xml:space="preserve">
+    <value>{0} Änderung eines Objekts im verbundenen System</value>
+  </data>
+  <data name="RetentionCsoChangesOther" xml:space="preserve">
+    <value>{0} Änderungen an Objekten im verbundenen System</value>
+  </data>
+  <data name="RetentionMvoChangesOne" xml:space="preserve">
+    <value>{0} Änderung eines Metaverse-Objekts</value>
+  </data>
+  <data name="RetentionMvoChangesOther" xml:space="preserve">
+    <value>{0} Änderungen an Metaverse-Objekten</value>
+  </data>
+  <data name="RetentionPreviewsOne" xml:space="preserve">
+    <value>{0} Konfigurationsänderungsvorschau</value>
+  </data>
+  <data name="RetentionPreviewsOther" xml:space="preserve">
+    <value>{0} Konfigurationsänderungsvorschauen</value>
+  </data>
+  <data name="RetentionActivitiesOne" xml:space="preserve">
+    <value>{0} Aktivität</value>
+  </data>
+  <data name="RetentionActivitiesOther" xml:space="preserve">
+    <value>{0} Aktivitäten</value>
+  </data>
+  <data name="RetentionConfigurationActivitiesOne" xml:space="preserve">
+    <value>{0} Aktivität zu Konfigurationsänderungen</value>
+  </data>
+  <data name="RetentionConfigurationActivitiesOther" xml:space="preserve">
+    <value>{0} Aktivitäten zu Konfigurationsänderungen</value>
+  </data>
+  <data name="RetentionSecurityActivitiesOne" xml:space="preserve">
+    <value>{0} Aktivität zu Sicherheitsereignissen</value>
+  </data>
+  <data name="RetentionSecurityActivitiesOther" xml:space="preserve">
+    <value>{0} Aktivitäten zu Sicherheitsereignissen</value>
+  </data>
+  <data name="RetentionPasswordActivitiesOne" xml:space="preserve">
+    <value>{0} Kennwortsynchronisierungsaktivität</value>
+  </data>
+  <data name="RetentionPasswordActivitiesOther" xml:space="preserve">
+    <value>{0} Kennwortsynchronisierungsaktivitäten</value>
+  </data>
+  <data name="RetentionPasswordQueueOne" xml:space="preserve">
+    <value>{0} Kennwortänderung in der Warteschlange</value>
+  </data>
+  <data name="RetentionPasswordQueueOther" xml:space="preserve">
+    <value>{0} Kennwortänderungen in der Warteschlange</value>
+  </data>
+  <data name="RetentionExchangeQueueOne" xml:space="preserve">
+    <value>{0} Exchange-Änderung in der Warteschlange</value>
+  </data>
+  <data name="RetentionExchangeQueueOther" xml:space="preserve">
+    <value>{0} Exchange-Änderungen in der Warteschlange</value>
+  </data>
+  <data name="RunRefusal" xml:space="preserve">
+    <value>Das Ausführungsprofil „{0}“ ist deaktiviert und kann daher nicht ausgeführt werden. {1} {2}</value>
+  </data>
+  <data name="DisabledPartitionRemoved" xml:space="preserve">
+    <value>Eine Hierarchieaktualisierung hat die Partition „{0}“, auf die es abzielte, entfernt, weil das verbundene System sie nicht mehr enthält.</value>
+  </data>
+  <data name="DisabledByAdministrator" xml:space="preserve">
+    <value>Ein Administrator hat es deaktiviert.</value>
+  </data>
+  <data name="RemedyEnableChoosingPartition" xml:space="preserve">
+    <value>Aktivieren Sie es erneut und wählen Sie die Partition, die es liest, um es auszuführen.</value>
+  </data>
+  <data name="RemedyEnable" xml:space="preserve">
+    <value>Aktivieren Sie es erneut, um es auszuführen.</value>
+  </data>
+  <data name="ImportIncompleteRefusal" xml:space="preserve">
+    <value>Das Ausführungsprofil „{0}“ kann nicht ausgeführt werden: Ein Import des verbundenen Systems „{1}“ wurde beim Speichern der gelesenen Daten{2} unterbrochen, daher enthält der Connectorbereich nur einen Teil dieses Imports. Würde jetzt synchronisiert, könnten Metaverse-Verweise auf Objekte entfernt werden, die der Import noch nicht gespeichert hatte, und diese Entfernungen würden exportiert. {3}</value>
+  </data>
+  <data name="ImportIncompleteBeganWriting" xml:space="preserve">
+    <value> (Schreibbeginn: {0})</value>
+  </data>
+  <data name="ImportIncompleteRemedy" xml:space="preserve">
+    <value>Führen Sie einen vollständigen Import dieses verbundenen Systems bis zum Abschluss aus{0}; danach kann die Synchronisierung laufen.</value>
+  </data>
+  <data name="ImportIncompleteRemedyPartitions" xml:space="preserve">
+    <value>, wobei alle ausgewählten Partitionen gelesen werden (ein Ausführungsprofil für nur eine Partition genügt nicht)</value>
+  </data>
+  <data name="ImportStillIncomplete" xml:space="preserve">
+    <value>Ein früherer Import wurde beim Speichern der gelesenen Daten{0} unterbrochen, daher wird die Synchronisierung dieses verbundenen Systems verweigert. {1}, daher kann er das nicht beheben. {2}</value>
+  </data>
+  <data name="ImportStillIncompleteDelta" xml:space="preserve">
+    <value>Dieser Deltaimport hat nur gelesen, was sich geändert hat</value>
+  </data>
+  <data name="ImportStillIncompleteOnePartition" xml:space="preserve">
+    <value>Dieser Import hat nur eine Partition gelesen</value>
+  </data>
+  <data name="ImportStillIncompleteNoObjects" xml:space="preserve">
+    <value>Dieser Import hat keine Objekte gelesen</value>
+  </data>
+  <data name="AuxiliaryClassDiscoveryCompleted" xml:space="preserve">
+    <value>{0} Objekte gelesen und {1} Vorschläge für Hilfsklassen gefunden.</value>
+  </data>
+  <data name="ImportCreated" xml:space="preserve">
+    <value>{0} erstellt</value>
+  </data>
+  <data name="ImportUpdated" xml:space="preserve">
+    <value>{0} aktualisiert</value>
+  </data>
+  <data name="ImportUnchanged" xml:space="preserve">
+    <value>{0} unverändert</value>
+  </data>
+  <data name="ImportDeleted" xml:space="preserve">
+    <value>{0} gelöscht</value>
+  </data>
+  <data name="ImportWithheldOne" xml:space="preserve">
+    <value>{0} Löschung zurückgehalten</value>
+  </data>
+  <data name="ImportWithheldOther" xml:space="preserve">
+    <value>{0} Löschungen zurückgehalten</value>
+  </data>
+  <data name="ImportErrorsOne" xml:space="preserve">
+    <value>{0} Fehler</value>
+  </data>
+  <data name="ImportErrorsOther" xml:space="preserve">
+    <value>{0} Fehler</value>
+  </data>
+  <data name="ImportDetectedDeletions" xml:space="preserve">
+    <value>; {0} nicht mehr gefunden und als gelöscht markiert</value>
+  </data>
+  <data name="ImportCompleteOne" xml:space="preserve">
+    <value>Import abgeschlossen: {0} Objekt ({1}){2}{3}</value>
+  </data>
+  <data name="ImportCompleteOther" xml:space="preserve">
+    <value>Import abgeschlossen: {0} Objekte ({1}){2}{3}</value>
+  </data>
+  <data name="LimitBoth" xml:space="preserve">
+    <value>{0} und {1} %</value>
+  </data>
+  <data name="LimitCount" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="LimitPercent" xml:space="preserve">
+    <value>{0} %</value>
+  </data>
+  <data name="LimitConfigured" xml:space="preserve">
+    <value>konfiguriertes Limit</value>
+  </data>
+  <data name="DeletionDetectionNextDelta" xml:space="preserve">
+    <value>oder erhöhen Sie das Limit. Jeder Deltaimport liest jedes Objekt und prüft erneut, bis dies behoben ist.</value>
+  </data>
+  <data name="DeletionDetectionNextFull" xml:space="preserve">
+    <value>oder erhöhen Sie das Limit und führen Sie den vollständigen Import erneut aus.</value>
+  </data>
+  <data name="DeletionDetectionRefusedOne" xml:space="preserve">
+    <value>Die Löschungserkennung hat {0} Objekt ({1} % von {2}) gefunden, das nicht mehr im verbundenen System ist, über den Limits dieses Ausführungsprofils ({3}); keines wurde als gelöscht markiert. Prüfen Sie den Geltungsbereich des verbundenen Systems und die Filter des Connectors, {4}</value>
+  </data>
+  <data name="DeletionDetectionRefusedOther" xml:space="preserve">
+    <value>Die Löschungserkennung hat {0} Objekte ({1} % von {2}) gefunden, die nicht mehr im verbundenen System sind, über den Limits dieses Ausführungsprofils ({3}); keines wurde als gelöscht markiert. Prüfen Sie den Geltungsbereich des verbundenen Systems und die Filter des Connectors, {4}</value>
+  </data>
+  <data name="DeletesWithheldOne" xml:space="preserve">
+    <value>Das verbundene System hat {0} Objekt ({1} % von {2}) als gelöscht gemeldet, über den Limits dieses Ausführungsprofils ({3}); keines wurde als gelöscht markiert. Jeder Deltaimport meldet es erneut, bis dies behoben ist. Prüfen Sie im verbundenen System, was es gelöscht hat. Sind die Löschungen beabsichtigt, erhöhen Sie das Limit oder führen Sie ein Ausführungsprofil für den Deltaimport ohne diese Limits aus, um sie durchzulassen.</value>
+  </data>
+  <data name="DeletesWithheldOther" xml:space="preserve">
+    <value>Das verbundene System hat {0} Objekte ({1} % von {2}) als gelöscht gemeldet, über den Limits dieses Ausführungsprofils ({3}); keines wurde als gelöscht markiert. Jeder Deltaimport meldet sie erneut, bis dies behoben ist. Prüfen Sie im verbundenen System, was sie gelöscht hat. Sind die Löschungen beabsichtigt, erhöhen Sie das Limit oder führen Sie ein Ausführungsprofil für den Deltaimport ohne diese Limits aus, um sie durchzulassen.</value>
+  </data>
+  <data name="DeselectedBecauseOne" xml:space="preserve">
+    <value>eine aktivierte Synchronisierungsregel es noch verwaltet: {1}.</value>
+  </data>
+  <data name="DeselectedBecauseOther" xml:space="preserve">
+    <value>{0} aktivierte Synchronisierungsregeln es noch verwalten: {1}.</value>
+  </data>
+  <data name="DeselectedDisableOne" xml:space="preserve">
+    <value>diese Synchronisierungsregel</value>
+  </data>
+  <data name="DeselectedDisableOther" xml:space="preserve">
+    <value>diese Synchronisierungsregeln</value>
+  </data>
+  <data name="DeselectedHeldBack" xml:space="preserve">
+    <value>Der Objekttyp „{0}“ ist abgewählt, aber seine Objekte wurden nicht auf Löschung geprüft, weil {1} Sie bleiben verknüpft und werden nicht mehr aktualisiert. Deaktivieren Sie {2}, um den Objekttyp aus der Verwaltung zu nehmen, oder wählen Sie den Objekttyp erneut aus.</value>
+  </data>
+  <data name="UnresolvedOnAttribute" xml:space="preserve">
+    <value>{0} bei {1}</value>
+  </data>
+  <data name="UnresolvedMissingOne" xml:space="preserve">
+    <value>{0} entspricht keinem Objekt im verbundenen System, zum Beispiel {1}.</value>
+  </data>
+  <data name="UnresolvedMissingOther" xml:space="preserve">
+    <value>{0} entsprechen keinem Objekt im verbundenen System, zum Beispiel {1}.</value>
+  </data>
+  <data name="UnresolvedExample" xml:space="preserve">
+    <value>Zum Beispiel: {0}.</value>
+  </data>
+  <data name="UnresolvedAmbiguousAll" xml:space="preserve">
+    <value>Jeder davon entspricht Objekten mehrerer Objekttypen ({0}) bei einem Attribut, das nicht angibt, auf welchen Objekttyp es verweist.</value>
+  </data>
+  <data name="UnresolvedAmbiguousSomeOne" xml:space="preserve">
+    <value>{0} entspricht Objekten mehrerer Objekttypen ({1}) bei einem Attribut, das nicht angibt, auf welchen Objekttyp es verweist.</value>
+  </data>
+  <data name="UnresolvedAmbiguousSomeOther" xml:space="preserve">
+    <value>{0} entsprechen Objekten mehrerer Objekttypen ({1}) bei einem Attribut, das nicht angibt, auf welchen Objekttyp es verweist.</value>
+  </data>
+  <data name="UnresolvedSingleMissing" xml:space="preserve">
+    <value>Ein Verweis bei {0} ließ sich nicht zu einem Objekt im verbundenen System auflösen: {1}. {2}</value>
+  </data>
+  <data name="UnresolvedSingleAmbiguous" xml:space="preserve">
+    <value>Ein Verweiswert ({0}) entspricht Objekten mehrerer Objekttypen ({1}), und das Attribut „{2}“ gibt nicht an, auf welchen Objekttyp es verweist; der Verweis lässt sich daher nicht auflösen. {3}</value>
+  </data>
+  <data name="UnresolvedMany" xml:space="preserve">
+    <value>{0} Verweise auf Objekte im verbundenen System ließen sich nicht auflösen ({1}).</value>
+  </data>
+  <data name="UnresolvedListsEvery" xml:space="preserve">
+    <value>Das Objekt im verbundenen System listet jeden nicht aufgelösten Wert auf.</value>
+  </data>
+  <data name="UnresolvedScopeRemedyOne" xml:space="preserve">
+    <value>Stellen Sie sicher, dass der Containergeltungsbereich für das verbundene System den Speicherort des referenzierten Objekts enthält und dass kein Container es ausschließt.</value>
+  </data>
+  <data name="UnresolvedScopeRemedyOther" xml:space="preserve">
+    <value>Stellen Sie sicher, dass der Containergeltungsbereich für das verbundene System die Speicherorte der referenzierten Objekte enthält und dass kein Container sie ausschließt.</value>
+  </data>
+  <data name="UnresolvedSchemaRemedy" xml:space="preserve">
+    <value>Deklarieren Sie den Zielobjekttyp des Verweises in der Schemakonfiguration des verbundenen Systems, sofern der Connector dies unterstützt.</value>
+  </data>
+  <data name="VerbImport" xml:space="preserve">
+    <value>importieren</value>
+  </data>
+  <data name="VerbRead" xml:space="preserve">
+    <value>lesen</value>
+  </data>
+  <data name="UnreadableValuesMany" xml:space="preserve">
+    <value>{1} Werte ({2}) ließen sich nicht {0}, daher hat JIM diese Attribute so belassen, wie es sie bereits hielt.</value>
+  </data>
+  <data name="UnreadableAndMore" xml:space="preserve">
+    <value>Und {0} weitere.</value>
+  </data>
+  <data name="UnreadableCorrectMany" xml:space="preserve">
+    <value>Korrigieren Sie die Werte im verbundenen System und führen Sie den Import dann erneut aus.</value>
+  </data>
+  <data name="ExternalIdsNextDelta" xml:space="preserve">
+    <value>Korrigieren Sie die externen IDs im verbundenen System. Jeder Deltaimport liest jedes Objekt und prüft erneut, bis sie gelesen werden können.</value>
+  </data>
+  <data name="ExternalIdsNextFull" xml:space="preserve">
+    <value>Korrigieren Sie die externen IDs im verbundenen System und führen Sie den vollständigen Import dann erneut aus.</value>
+  </data>
+  <data name="ObjectsCountOne" xml:space="preserve">
+    <value>{0} Objekt</value>
+  </data>
+  <data name="ObjectsCountOther" xml:space="preserve">
+    <value>{0} Objekten</value>
+  </data>
+  <data name="ExternalIdsUnreadable" xml:space="preserve">
+    <value>Der Objekttyp „{0}“ wurde nicht auf gelöschte Objekte geprüft, weil die externe ID von {1} nicht gelesen werden konnte und JIM nicht feststellen konnte, um welche Objekte es sich handelte. Keines seiner Objekte wurde als gelöscht markiert. {2}</value>
+  </data>
+  <data name="ExternalIdsMissingOne" xml:space="preserve">
+    <value>Der Objekttyp „{0}“ wurde nicht auf gelöschte Objekte geprüft, weil 1 Objekt ohne externe ID eintraf und JIM nicht feststellen konnte, um welches Objekt es sich handelte. Keines seiner Objekte wurde als gelöscht markiert. {1}</value>
+  </data>
+  <data name="ExternalIdsMissingOther" xml:space="preserve">
+    <value>Der Objekttyp „{0}“ wurde nicht auf gelöschte Objekte geprüft, weil {2} Objekte ohne externe ID eintrafen und JIM nicht feststellen konnte, um welche Objekte es sich handelte. Keines seiner Objekte wurde als gelöscht markiert. {1}</value>
+  </data>
+  <data name="ExternalIdsMissingNextDeltaOne" xml:space="preserve">
+    <value>Weisen Sie ihm im verbundenen System eine externe ID zu. Jeder Deltaimport liest jedes Objekt und prüft erneut, bis jedes Objekt eine hat.</value>
+  </data>
+  <data name="ExternalIdsMissingNextDeltaOther" xml:space="preserve">
+    <value>Weisen Sie ihnen im verbundenen System externe IDs zu. Jeder Deltaimport liest jedes Objekt und prüft erneut, bis jedes Objekt eine hat.</value>
+  </data>
+  <data name="ExternalIdsMissingNextFullOne" xml:space="preserve">
+    <value>Weisen Sie ihm im verbundenen System eine externe ID zu und führen Sie den vollständigen Import dann erneut aus.</value>
+  </data>
+  <data name="ExternalIdsMissingNextFullOther" xml:space="preserve">
+    <value>Weisen Sie ihnen im verbundenen System externe IDs zu und führen Sie den vollständigen Import dann erneut aus.</value>
+  </data>
+  <data name="ExternalIdMissing" xml:space="preserve">
+    <value>Das Objekt hat keinen Wert für sein Attribut „{0}“ der externen ID, daher kann JIM nicht feststellen, um welches Objekt es sich handelt, und es wurde nicht importiert. Weisen Sie ihm im verbundenen System einen Wert zu und führen Sie den Import dann erneut aus.</value>
+  </data>
+  <data name="AmbiguousReferencesWarning" xml:space="preserve">
+    <value>{0} Verweiswerte entsprachen Objekten mehrerer Objekttypen und ließen sich nicht auflösen. Deklarieren Sie den Zielobjekttyp jedes Referenzattributs in der Schemakonfiguration des verbundenen Systems, sofern der Connector dies unterstützt.</value>
+  </data>
+  <data name="UnresolvedReferencesWarning" xml:space="preserve">
+    <value>{0} Verweiswerte ließen sich nicht zu Objekten im verbundenen System auflösen. Die referenzierten Objekte liegen möglicherweise außerhalb des konfigurierten Containergeltungsbereichs oder in einem davon ausgeschlossenen Container. Zeigen Sie die betroffenen Objekte im verbundenen System an, um Details zu sehen.</value>
+  </data>
+  <data name="ThroughputCompletion" xml:space="preserve">
+    <value> in {0} (Ø {1} Obj./s)</value>
+  </data>
+  <data name="DurationSeconds" xml:space="preserve">
+    <value>{0} Sek.</value>
+  </data>
+  <data name="DurationMinutesSeconds" xml:space="preserve">
+    <value>{0} Min. {1} Sek.</value>
+  </data>
+  <data name="DurationMinutes" xml:space="preserve">
+    <value>{0} Min.</value>
+  </data>
+  <data name="DurationHoursMinutes" xml:space="preserve">
+    <value>{0} Std. {1} Min.</value>
+  </data>
+  <data name="DurationHours" xml:space="preserve">
+    <value>{0} Std.</value>
+  </data>
+  <data name="SyncComplete" xml:space="preserve">
+    <value>Synchronisierung abgeschlossen: {0} Objekte{1}</value>
+  </data>
+  <data name="NoChangesToProcess" xml:space="preserve">
+    <value>Keine Änderungen zu verarbeiten</value>
+  </data>
+  <data name="NoExportsToProcess" xml:space="preserve">
+    <value>Keine Exporte zu verarbeiten</value>
+  </data>
+  <data name="ExportCancelledBeforeStart" xml:space="preserve">
+    <value>Vor dem Export abgebrochen</value>
+  </data>
+  <data name="ExportCancelled" xml:space="preserve">
+    <value>Export abgebrochen</value>
+  </data>
+  <data name="ExportComplete" xml:space="preserve">
+    <value>Export abgeschlossen: {0} erfolgreich, {1} fehlgeschlagen, {2} zurückgestellt{3}</value>
+  </data>
+  <data name="ExportCompleteWithPartial" xml:space="preserve">
+    <value>Export abgeschlossen: {0} erfolgreich ({1} teilweise geschrieben, warten auf Verweise), {2} fehlgeschlagen, {3} zurückgestellt{4}</value>
+  </data>
+  <data name="PreviewComplete" xml:space="preserve">
+    <value>Vorschau abgeschlossen: {0} Exporte würden verarbeitet</value>
+  </data>
+  <data name="ConnectorDoesNotSupportExport" xml:space="preserve">
+    <value>Der Connector {0} unterstützt keine Exportvorgänge</value>
+  </data>
+  <data name="ExportFailedAfterAttempts" xml:space="preserve">
+    <value>Export nach {0} Versuchen fehlgeschlagen: {1}</value>
+  </data>
+  <data name="ExportFailed" xml:space="preserve">
+    <value>Export fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ExportWithheldCreatesOne" xml:space="preserve">
+    <value>Die maximale Zahl an Erstellungen ist {0}, aber 1 Erstellung war ausstehend; sie wurde daher nicht versucht und bleibt ausstehend. Prüfen Sie, was sie vorgemerkt hat, und erhöhen oder entfernen Sie dann das Limit in diesem Ausführungsprofil oder führen Sie ein Ausführungsprofil für den Export ohne das Limit aus.</value>
+  </data>
+  <data name="ExportWithheldCreatesOther" xml:space="preserve">
+    <value>Die maximale Zahl an Erstellungen ist {0}, aber {1} Erstellungen waren ausstehend; keine wurde daher versucht, und alle {1} bleiben ausstehend. Prüfen Sie, was sie vorgemerkt hat, und erhöhen oder entfernen Sie dann das Limit in diesem Ausführungsprofil oder führen Sie ein Ausführungsprofil für den Export ohne das Limit aus.</value>
+  </data>
+  <data name="ExportWithheldUpdatesOne" xml:space="preserve">
+    <value>Die maximale Zahl an Aktualisierungen ist {0}, aber 1 Aktualisierung war ausstehend; sie wurde daher nicht versucht und bleibt ausstehend. Prüfen Sie, was sie vorgemerkt hat, und erhöhen oder entfernen Sie dann das Limit in diesem Ausführungsprofil oder führen Sie ein Ausführungsprofil für den Export ohne das Limit aus.</value>
+  </data>
+  <data name="ExportWithheldUpdatesOther" xml:space="preserve">
+    <value>Die maximale Zahl an Aktualisierungen ist {0}, aber {1} Aktualisierungen waren ausstehend; keine wurde daher versucht, und alle {1} bleiben ausstehend. Prüfen Sie, was sie vorgemerkt hat, und erhöhen oder entfernen Sie dann das Limit in diesem Ausführungsprofil oder führen Sie ein Ausführungsprofil für den Export ohne das Limit aus.</value>
+  </data>
+  <data name="ExportWithheldDeletesOne" xml:space="preserve">
+    <value>Die maximale Zahl an Löschungen ist {0}, aber 1 Löschung oder Deaktivierung war ausstehend; sie wurde daher nicht versucht und bleibt ausstehend. Prüfen Sie, was sie vorgemerkt hat, und erhöhen oder entfernen Sie dann das Limit in diesem Ausführungsprofil oder führen Sie ein Ausführungsprofil für den Export ohne das Limit aus.</value>
+  </data>
+  <data name="ExportWithheldDeletesOther" xml:space="preserve">
+    <value>Die maximale Zahl an Löschungen ist {0}, aber {1} Löschungen und Deaktivierungen waren ausstehend; keine wurde daher versucht, und alle {1} bleiben ausstehend. Prüfen Sie, was sie vorgemerkt hat, und erhöhen oder entfernen Sie dann das Limit in diesem Ausführungsprofil oder führen Sie ein Ausführungsprofil für den Export ohne das Limit aus.</value>
+  </data>
+  <data name="ExportWithdrawnOne" xml:space="preserve">
+    <value>1 vorgemerkte Änderung wurde zurückgezogen statt exportiert, weil keine aktivierte Synchronisierungsregel und kein Attributfluss sie mehr autorisierte oder das Objekt nicht mehr verknüpft war{1}</value>
+  </data>
+  <data name="ExportWithdrawnOther" xml:space="preserve">
+    <value>{0} vorgemerkte Änderungen wurden zurückgezogen statt exportiert, weil keine aktivierte Synchronisierungsregel und kein Attributfluss sie mehr autorisierte oder das Objekt nicht mehr verknüpft war{1}</value>
+  </data>
+  <data name="ExportWithdrawnEnd" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="ExportWithdrawnRemovalOne" xml:space="preserve">
+    <value>; 1 leer gebliebener ausstehender Export wurde entfernt.</value>
+  </data>
+  <data name="ExportWithdrawnRemovalOther" xml:space="preserve">
+    <value>; {0} leer gebliebene ausstehende Exporte wurden entfernt.</value>
+  </data>
+  <data name="ExportUnrecordedOne" xml:space="preserve">
+    <value>1 Export wurde geschrieben, aber JIM konnte die geschriebenen Werte nicht erfassen; er blieb daher unbestätigt, und der nächste Exportlauf sendet ihn erneut. Das Dienstprotokoll nennt die Ursache.</value>
+  </data>
+  <data name="ExportUnrecordedOther" xml:space="preserve">
+    <value>{0} Exporte wurden geschrieben, aber JIM konnte die geschriebenen Werte nicht erfassen; sie blieben daher unbestätigt, und der nächste Exportlauf sendet sie erneut. Das Dienstprotokoll nennt die Ursache.</value>
+  </data>
+  <data name="InitialPasswordsNotStagedOne" xml:space="preserve">
+    <value>Für 1 neu provisioniertes Konto steht möglicherweise ein Initialkennwort aus, das JIM nicht erfassen konnte; es wird daher keines zugestellt, und ein erneuter Export reiht auch keines ein. Legen Sie das Kennwort mit der Aktion zum Festlegen des Kennworts am Objekt im verbundenen System fest; das Dienstprotokoll nennt das Konto und die Ursache.</value>
+  </data>
+  <data name="InitialPasswordsNotStagedOther" xml:space="preserve">
+    <value>Für {0} neu provisionierte Konten stehen möglicherweise Initialkennwörter aus, die JIM nicht erfassen konnte; es wird ihnen daher keines zugestellt, und ein erneuter Export reiht auch keines ein. Legen Sie das Kennwort jedes Kontos mit der Aktion zum Festlegen des Kennworts an dessen Objekt im verbundenen System fest; das Dienstprotokoll nennt die Konten und die Ursache.</value>
+  </data>
+  <data name="ExchangeChangesNotStagedOne" xml:space="preserve">
+    <value>1 exportiertes Objekt deklariert einen Exchange-Empfängerzustand, den JIM weder einreihen noch melden konnte; für dieses Objekt erreicht Exchange daher nichts, bis sein deklarierter Zustand erneut exportiert wird. Das Dienstprotokoll nennt das Objekt und die Ursache.</value>
+  </data>
+  <data name="ExchangeChangesNotStagedOther" xml:space="preserve">
+    <value>{0} exportierte Objekte deklarieren einen Exchange-Empfängerzustand, den JIM weder einreihen noch melden konnte; für diese Objekte erreicht Exchange daher nichts, bis ihr deklarierter Zustand erneut exportiert wird. Das Dienstprotokoll nennt die Objekte und die Ursache.</value>
+  </data>
+  <data name="PartitionsNotRecordedOne" xml:space="preserve">
+    <value>1 von einem Export erstelltes oder umbenanntes Objekt wurde geschrieben, aber JIM konnte nicht erfassen, in welcher Partition es liegt; ein auf eine Partition ausgerichteter Import sieht es dort daher nicht, bis der nächste Import, der es liest, erfasst, wo es liegt. Das Dienstprotokoll nennt das Objekt und die Ursache.</value>
+  </data>
+  <data name="PartitionsNotRecordedOther" xml:space="preserve">
+    <value>{0} von einem Export erstellte oder umbenannte Objekte wurden geschrieben, aber JIM konnte nicht erfassen, in welcher Partition sie liegen; ein auf eine Partition ausgerichteter Import sieht sie dort daher nicht, bis der nächste Import, der sie liest, erfasst, wo sie liegen. Das Dienstprotokoll nennt die Objekte und die Ursache.</value>
+  </data>
+  <data name="InitialPasswordMarkingFailedOne" xml:space="preserve">
+    <value>Bei 1 Konto wurde der Aktivierungsstatus durch diesen Export geschrieben, aber JIM konnte nicht prüfen, ob ihm noch ein Initialkennwort zusteht. Falls ja, folgt die Zustellung möglicherweise der Synchronisierungsregel statt dem Attributfluss; das Dienstprotokoll nennt das Konto, und unter Vorgänge &gt; Kennwörter ist zu sehen, ob ein Kennwort auf es wartet.</value>
+  </data>
+  <data name="InitialPasswordMarkingFailedOther" xml:space="preserve">
+    <value>Bei {0} Konten wurde der Aktivierungsstatus durch diesen Export geschrieben, aber JIM konnte nicht prüfen, ob ihnen noch ein Initialkennwort zusteht. Wo dies der Fall ist, folgt die Zustellung möglicherweise der Synchronisierungsregel statt dem Attributfluss; das Dienstprotokoll nennt die Konten, und unter Vorgänge &gt; Kennwörter ist zu sehen, bei welchen ein Kennwort wartet.</value>
+  </data>
+  <data name="UnresolvableReferencesWarning" xml:space="preserve">
+    <value>{0} Verweiswerte konnten nicht geschrieben werden, weil das referenzierte Metaverse-Objekt kein Objekt im verbundenen System hat. Die referenzierten Objekte liegen außerhalb des Geltungsbereichs jeder Synchronisierungsregel in dieses System oder wurden noch nicht provisioniert; zeigen Sie die betroffenen ausstehenden Exporte an, um Details zu sehen.</value>
+  </data>
+  <data name="UnreadableSingleValue" xml:space="preserve">
+    <value>Ein Wert von {1}{2} ließ sich nicht {0}: {3} JIM hat {1} so belassen, wie es bereits vorlag. Korrigieren Sie den Wert im verbundenen System und führen Sie den Import dann erneut aus.</value>
+  </data>
+  <data name="WorkerTaskAbandoned" xml:space="preserve">
+    <value>Die Aufgabe wurde wegen eines Worker-Absturzes oder -Neustarts abgebrochen. Die Aufgabe war in Bearbeitung, als der Worker nicht mehr reagierte. {0}Das weist nicht auf ein Problem mit der Datenintegrität hin; der nächste Synchronisierungslauf verarbeitet ab dem aktuellen Stand.</value>
+  </data>
+  <data name="NotQueued" xml:space="preserve">
+    <value>Konnte nicht in die Warteschlange gestellt werden: {0}</value>
+  </data>
+  <data name="CleanupFailed" xml:space="preserve">
+    <value>Bereinigung fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ConfigurationChangeNotRecorded" xml:space="preserve">
+    <value>Die Änderung wurde gespeichert, aber JIM konnte nicht festhalten, dass die nächste Synchronisierung von {0} jedes {1}-Objekt verarbeiten muss; daher erreicht sie möglicherweise die bereits vorhandenen Objekte nicht. Führen Sie eine vollständige Synchronisierung von {0} aus, um sie anzuwenden.</value>
+  </data>
+  <data name="StepNotRunEarlierStepStopped" xml:space="preserve">
+    <value>Nicht ausgeführt: Ein früherer Schritt hat den Zeitplan angehalten.</value>
+  </data>
+  <data name="StepNotRunScheduleCouldNotStart" xml:space="preserve">
+    <value>Nicht ausgeführt: Der Zeitplan konnte nicht gestartet werden.</value>
+  </data>
+  <data name="StepNotRunExecutionCancelled" xml:space="preserve">
+    <value>Nicht ausgeführt: Die Zeitplanausführung wurde abgebrochen.</value>
+  </data>
+  <data name="GeneratedValuesHeldBackOne" xml:space="preserve">
+    <value>JIM hat {0} Wert von {1} zurückgehalten, bis sich die daraus gebildeten Werte ermitteln lassen. Er wartet auf {2}{3}.</value>
+  </data>
+  <data name="GeneratedValuesHeldBackOther" xml:space="preserve">
+    <value>JIM hat {0} Werte von {1} zurückgehalten, bis sich die daraus gebildeten Werte ermitteln lassen. Sie warten auf {2}{3}.</value>
+  </data>
+  <data name="GeneratedValuesAndMore" xml:space="preserve">
+    <value>; und weitere</value>
+  </data>
+  <data name="UnreadableRecordsOne" xml:space="preserve">
+    <value>1 Metaverse-Objekt hat außerhalb der Synchronisierung vorgenommene Änderungen erfasst, die nicht gelesen werden konnten; es wurde nur auf Exportgeltungsbereich geprüft, und diese Änderungen wurden nicht an verbundene Systeme zugestellt. Bearbeiten Sie das betroffene Objekt erneut, um seine Werte zuzustellen.</value>
+  </data>
+  <data name="UnreadableRecordsOther" xml:space="preserve">
+    <value>{0} Metaverse-Objekte haben außerhalb der Synchronisierung vorgenommene Änderungen erfasst, die nicht gelesen werden konnten; sie wurden nur auf Exportgeltungsbereich geprüft, und diese Änderungen wurden nicht an verbundene Systeme zugestellt. Bearbeiten Sie die betroffenen Objekte erneut, um ihre Werte zuzustellen.</value>
+  </data>
+  <data name="DeselectedAttributeStillRead" xml:space="preserve">
+    <value>Ein abgewähltes Attribut wird weiterhin gelesen von: {0}. Es wird nicht mehr importiert, daher lesen diese Werte, die nie aktualisiert werden, und für ab jetzt importierte Objekte gar keinen Wert.</value>
+  </data>
+  <data name="CreatedBuiltInServiceSetting" xml:space="preserve">
+    <value>Integrierte Diensteinstellung „{0}“ erstellt</value>
+  </data>
+  <data name="CreatedBuiltInExampleDataSet" xml:space="preserve">
+    <value>Integrierten Beispieldaten-Datensatz „{0}“ erstellt</value>
+  </data>
+  <data name="CreatedBuiltInExampleDataTemplate" xml:space="preserve">
+    <value>Integrierte Beispieldatenvorlage „{0}“ erstellt</value>
+  </data>
+  <data name="CreatedBuiltInPredefinedSearch" xml:space="preserve">
+    <value>Integrierte vordefinierte Suche „{0}“ erstellt</value>
+  </data>
+  <data name="CreatedBuiltInMetaverseObjectType" xml:space="preserve">
+    <value>Integrierten Metaverse-Objekttyp „{0}“ erstellt</value>
+  </data>
+  <data name="CreatedBuiltInMetaverseAttribute" xml:space="preserve">
+    <value>Integriertes Metaverse-Attribut „{0}“ erstellt</value>
+  </data>
+  <data name="CreatedBuiltInConnectorDefinition" xml:space="preserve">
+    <value>Integrierte Connectordefinition „{0}“ erstellt</value>
+  </data>
+  <data name="CreatedBuiltInRole" xml:space="preserve">
+    <value>Integrierte Rolle „{0}“ erstellt</value>
+  </data>
+  <data name="TargetBuiltInConfiguration" xml:space="preserve">
+    <value>Integrierte Konfiguration</value>
+  </data>
+  <data name="TargetFactoryReset" xml:space="preserve">
+    <value>Zurücksetzen auf Werkseinstellungen</value>
+  </data>
+  <data name="TargetInteractiveSignInSucceeded" xml:space="preserve">
+    <value>Interaktive Anmeldung erfolgreich</value>
+  </data>
+  <data name="TargetTemporalScopeReconciliation" xml:space="preserve">
+    <value>Abgleich des zeitlichen Geltungsbereichs</value>
+  </data>
+  <data name="TargetHistoryRetentionCleanup" xml:space="preserve">
+    <value>Bereinigung der Verlaufsaufbewahrung</value>
+  </data>
+  <data name="TargetMappingTo" xml:space="preserve">
+    <value>Zuordnung zu {0}</value>
+  </data>
+  <data name="TargetTestCase" xml:space="preserve">
+    <value>Testfall „{0}“</value>
+  </data>
+  <data name="TargetAttributePriorityOrder" xml:space="preserve">
+    <value>Attributprioritätsreihenfolge für {0}</value>
+  </data>
+  <data name="TargetRuleFor" xml:space="preserve">
+    <value>Regel für {0}</value>
+  </data>
+  <data name="TargetRuleForUnknownType" xml:space="preserve">
+    <value>Regel für Objekttyp</value>
+  </data>
+</root>

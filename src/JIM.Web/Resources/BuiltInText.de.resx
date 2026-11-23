@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Schedule_TemporalScopeReconciliation" xml:space="preserve">
+    <value>Abgleich des zeitlichen Geltungsbereichs</value>
+  </data>
+  <data name="Schedule_TemporalScopeReconciliation_Description" xml:space="preserve">
+    <value>Integrierter Zeitplan, der den Geltungsbereich mit relativem Datum für Objekte neu auswertet, deren Zugehörigkeit zum Geltungsbereich sich mit der Zeit ändert (zum Beispiel eine ausscheidende Person, deren Enddatum verstreicht), deren Quelldaten sich aber nicht geändert haben, sodass die Synchronisierungs- und Exportpfade sie sonst überspringen würden.</value>
+  </data>
+  <data name="Schedule_HistoryRetentionCleanup" xml:space="preserve">
+    <value>Bereinigung der Verlaufsaufbewahrung</value>
+  </data>
+  <data name="Schedule_HistoryRetentionCleanup_Description" xml:space="preserve">
+    <value>Integrierter Zeitplan, der Änderungsverlauf, Aktivitäten, Initialkennwort-Datensätze und abgeschlossene ausstehende Kennwortänderungen entfernt, sobald die für ihre Art festgelegte Aufbewahrungsfrist verstrichen ist. Datensätze, die noch bearbeitet werden, werden nie entfernt, egal wie alt sie sind.</value>
+  </data>
+  <data name="Role_Administrator" xml:space="preserve">
+    <value>Administrator</value>
+  </data>
+</root>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NeverStarted" xml:space="preserve">
+    <value>Nie gestartet</value>
+  </data>
+  <data name="NoHeartbeat" xml:space="preserve">
+    <value>Kein Heartbeat seit {0}</value>
+  </data>
+  <data name="Stalled" xml:space="preserve">
+    <value>Hängt: kein Fortschritt bei {0} seit {1}</value>
+  </data>
+  <data name="MemoryLow" xml:space="preserve">
+    <value>Wenig Arbeitsspeicher: {0} von {1} belegt</value>
+  </data>
+  <data name="HeartbeatOverdue" xml:space="preserve">
+    <value>Heartbeat überfällig: zuletzt vor {0} gesehen, erwartet alle {1} Sekunden</value>
+  </data>
+  <data name="Heartbeating" xml:space="preserve">
+    <value>Heartbeat vor {0}</value>
+  </data>
+  <data name="DurationSecondsOne" xml:space="preserve">
+    <value>{0} Sekunde</value>
+  </data>
+  <data name="DurationSecondsOther" xml:space="preserve">
+    <value>{0} Sekunden</value>
+  </data>
+  <data name="DurationMinutesOne" xml:space="preserve">
+    <value>{0} Minute</value>
+  </data>
+  <data name="DurationMinutesOther" xml:space="preserve">
+    <value>{0} Minuten</value>
+  </data>
+  <data name="DurationHoursOne" xml:space="preserve">
+    <value>{0} Stunde</value>
+  </data>
+  <data name="DurationHoursOther" xml:space="preserve">
+    <value>{0} Stunden</value>
+  </data>
+  <data name="DurationDaysOne" xml:space="preserve">
+    <value>{0} Tag</value>
+  </data>
+  <data name="DurationDaysOther" xml:space="preserve">
+    <value>{0} Tage</value>
+  </data>
+</root>
