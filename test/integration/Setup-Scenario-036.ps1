@@ -345,8 +345,8 @@ if ($InitialPassword) {
     # enabled state comes from HR through the accountEnabled flow, so the Initial Password leaves it alone.
     Set-JIMSyncRuleInitialPassword -Id $userExportRule.id -Enable -Source Discovered -ExpiryBehaviour RequireChangeAtNextSignIn `
         -EnableAccount $false -ChangeReason "Integration test: every user JIM creates in Entra ID is given an Initial Password" | Out-Null
-    $initialPassword = Get-JIMSyncRuleInitialPassword -Id $userExportRule.id
-    if (-not $initialPassword.enabled) { throw "The Initial Password is not enabled on '$($script:Scenario036UserExportRuleName)'." }
+    $initialPasswordSettings = Get-JIMSyncRuleInitialPassword -Id $userExportRule.id
+    if (-not $initialPasswordSettings.enabled) { throw "The Initial Password is not enabled on '$($script:Scenario036UserExportRuleName)'." }
     Write-Host "  OK Initial Password enabled (Source: Discovered, Expiry: RequireChangeAtNextSignIn)" -ForegroundColor Green
 }
 
