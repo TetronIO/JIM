@@ -104,4 +104,27 @@ public static partial class ActivityMessage
 
         return Listed(parts) ?? Create(nameof(ActivityMessages.Verbatim), string.Empty);
     }
+
+    /// <summary>How a password change last failed, named in the reader's language; its English is the failure's own name (#3094).</summary>
+    public static JimMessage PasswordFailureReason(JIM.Models.Staging.PasswordSetFailureReason reason) => Create(reason switch
+    {
+        JIM.Models.Staging.PasswordSetFailureReason.None => nameof(ActivityMessages.PasswordFailureNone),
+        JIM.Models.Staging.PasswordSetFailureReason.Transient => nameof(ActivityMessages.PasswordFailureTransient),
+        JIM.Models.Staging.PasswordSetFailureReason.ConfigurationFault => nameof(ActivityMessages.PasswordFailureConfigurationFault),
+        JIM.Models.Staging.PasswordSetFailureReason.PolicyRejection => nameof(ActivityMessages.PasswordFailurePolicyRejection),
+        JIM.Models.Staging.PasswordSetFailureReason.TargetObjectNotFound => nameof(ActivityMessages.PasswordFailureTargetObjectNotFound),
+        JIM.Models.Staging.PasswordSetFailureReason.UnsupportedOperation => nameof(ActivityMessages.PasswordFailureUnsupportedOperation),
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "A password failure reason with no message.")
+    });
+
+    /// <summary>A password change's queue status, named in the reader's language; its English is the status's own name (#3094).</summary>
+    public static JimMessage PasswordChangeStatus(JIM.Models.Transactional.PendingPasswordChangeStatus status) => Create(status switch
+    {
+        JIM.Models.Transactional.PendingPasswordChangeStatus.Pending => nameof(ActivityMessages.PasswordStatusPending),
+        JIM.Models.Transactional.PendingPasswordChangeStatus.Delivering => nameof(ActivityMessages.PasswordStatusDelivering),
+        JIM.Models.Transactional.PendingPasswordChangeStatus.Parked => nameof(ActivityMessages.PasswordStatusParked),
+        JIM.Models.Transactional.PendingPasswordChangeStatus.Expired => nameof(ActivityMessages.PasswordStatusExpired),
+        JIM.Models.Transactional.PendingPasswordChangeStatus.Cancelled => nameof(ActivityMessages.PasswordStatusCancelled),
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, "A password change status with no message.")
+    });
 }

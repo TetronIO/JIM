@@ -1773,4 +1773,52 @@
     <value>{0}; {1}</value>
     <comment>Two items of a list, separated by a semicolon.</comment>
   </data>
+  <data name="PasswordFilterChangesNamed" xml:space="preserve">
+    <value>{0} password changes</value>
+    <comment>The target of an administrator's action over the password queue, naming the statuses and failure reasons that were chosen. {0}: those, comma separated (the PasswordStatus... and PasswordFailure... messages). English shows the value names as they have always been written; the other languages put the list after a colon so no word has to agree with it.</comment>
+  </data>
+  <data name="PasswordStatusPending" xml:space="preserve">
+    <value>Pending</value>
+    <comment>A password change's queue status, inside a list of chosen filters (PasswordFilterChangesNamed). English is the status's name. Lower case in French and German: it follows a colon.</comment>
+  </data>
+  <data name="PasswordStatusParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>A password change's queue status: held until an administrator acts on it. English is the status's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordStatusExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>A password change's queue status: it ran out of time before it could be delivered. English is the status's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordStatusCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>A password change's queue status: it was cancelled. English is the status's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordFailureNone" xml:space="preserve">
+    <value>None</value>
+    <comment>How a password change last failed: it has not. English is the failure reason's name. Lower case: it follows a colon in PasswordNotSet and PasswordFilterChangesNamed.</comment>
+  </data>
+  <data name="PasswordFailureTransient" xml:space="preserve">
+    <value>Transient</value>
+    <comment>How a password change last failed: a temporary condition (network, timeout, a busy target); trying again is expected to work. English is the failure reason's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordFailureConfigurationFault" xml:space="preserve">
+    <value>ConfigurationFault</value>
+    <comment>How a password change last failed: the Connected System's configuration prevents it (credentials, rights, an unencrypted channel); trying again helps only once an administrator corrects it. English is the failure reason's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordFailurePolicyRejection" xml:space="preserve">
+    <value>PolicyRejection</value>
+    <comment>How a password change last failed: the target refused the password itself because it breaks the password policy. English is the failure reason's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordFailureTargetObjectNotFound" xml:space="preserve">
+    <value>TargetObjectNotFound</value>
+    <comment>How a password change last failed: the object to set the password on is not in the Connected System. English is the failure reason's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordFailureUnsupportedOperation" xml:space="preserve">
+    <value>UnsupportedOperation</value>
+    <comment>How a password change last failed: the Connected System cannot set a password for this object at all. English is the failure reason's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="PasswordStatusDelivering" xml:space="preserve">
+    <value>Delivering</value>
+    <comment>A password change's queue status: JIM is delivering it now. English is the status's name. Lower case: it follows a colon.</comment>
+  </data>
 </root>

@@ -1348,4 +1348,40 @@
   <data name="JoinedBySemicolon" xml:space="preserve">
     <value>{0}; {1}</value>
   </data>
+  <data name="PasswordFilterChangesNamed" xml:space="preserve">
+    <value>Kennwortänderungen: {0}</value>
+  </data>
+  <data name="PasswordStatusPending" xml:space="preserve">
+    <value>wartend</value>
+  </data>
+  <data name="PasswordStatusParked" xml:space="preserve">
+    <value>zurückgestellt</value>
+  </data>
+  <data name="PasswordStatusExpired" xml:space="preserve">
+    <value>abgelaufen</value>
+  </data>
+  <data name="PasswordStatusCancelled" xml:space="preserve">
+    <value>abgebrochen</value>
+  </data>
+  <data name="PasswordFailureNone" xml:space="preserve">
+    <value>keine</value>
+  </data>
+  <data name="PasswordFailureTransient" xml:space="preserve">
+    <value>Ziel nicht verfügbar</value>
+  </data>
+  <data name="PasswordFailureConfigurationFault" xml:space="preserve">
+    <value>Konfigurationsfehler</value>
+  </data>
+  <data name="PasswordFailurePolicyRejection" xml:space="preserve">
+    <value>Ablehnung durch Richtlinie</value>
+  </data>
+  <data name="PasswordFailureTargetObjectNotFound" xml:space="preserve">
+    <value>Objekt im verbundenen System nicht gefunden</value>
+  </data>
+  <data name="PasswordFailureUnsupportedOperation" xml:space="preserve">
+    <value>nicht unterstützter Vorgang</value>
+  </data>
+  <data name="PasswordStatusDelivering" xml:space="preserve">
+    <value>wird zugestellt</value>
+  </data>
 </root>

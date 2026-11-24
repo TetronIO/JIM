@@ -1422,15 +1422,15 @@ public class PasswordSynchronisationServer
         };
     }
 
-    private static JimMessage DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
+    internal static JimMessage DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
     {
         var disposition = change.Status == PendingPasswordChangeStatus.Parked
             ? ActivityMessage.Create(nameof(ActivityMessages.PasswordRetryParked))
             : ActivityMessage.Create(nameof(ActivityMessages.PasswordRetryAgain));
 
-        // The target's own words stay as it wrote them; the name of a failure is an identifier, not wording to translate.
+        // The target's own words stay as it wrote them; JIM's name for a failure is a message of its own.
         MessageArgument reason = string.IsNullOrWhiteSpace(change.TargetMessage)
-            ? change.FailureReason?.ToString() is { } failureName ? failureName : ActivityMessage.Create(nameof(ActivityMessages.PasswordReasonUnknown))
+            ? change.FailureReason is { } failure ? ActivityMessage.PasswordFailureReason(failure) : ActivityMessage.Create(nameof(ActivityMessages.PasswordReasonUnknown))
             : change.TargetMessage;
 
         return ActivityMessage.Create(nameof(ActivityMessages.PasswordNotSet), connectedSystem.Name, reason, disposition);
@@ -1863,23 +1863,23 @@ public class PasswordSynchronisationServer
     /// Names what an action ran over, for the Activity's target. Says what the administrator chose rather than
     /// what it resolved to, because that is what they will look for later.
     /// </summary>
-    private static JimMessage DescribeFilter(PendingPasswordChangeFilter filter)
+    internal static JimMessage DescribeFilter(PendingPasswordChangeFilter filter)
     {
         if (filter.TargetsSpecificChanges)
             return filter.Ids!.Count == 1
                 ? ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterOneChange))
                 : ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterChanges), ActivityMessage.Plain(filter.Ids!.Count));
 
-        var parts = new List<string>();
+        var parts = new List<JimMessage>();
 
         if (filter.Status.HasValue)
-            parts.Add(filter.Status.Value.ToString());
+            parts.Add(ActivityMessage.PasswordChangeStatus(filter.Status.Value));
 
         if (filter.FailureReason.HasValue)
-            parts.Add(filter.FailureReason.Value.ToString());
+            parts.Add(ActivityMessage.PasswordFailureReason(filter.FailureReason.Value));
 
-        return parts.Count == 0
-            ? ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterWholeQueue))
-            : ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterChanges), string.Join(", ", parts));
+        return ActivityMessage.Listed(parts) is { } chosen
+            ? ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterChangesNamed), chosen)
+            : ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterWholeQueue));
     }
 }
