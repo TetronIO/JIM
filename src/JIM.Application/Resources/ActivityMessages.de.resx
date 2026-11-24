@@ -1327,4 +1327,25 @@
   <data name="ExportNotConfirmedByImport" xml:space="preserve">
     <value>Wir haben eine Änderung exportiert, aber bei einem bestätigenden Import keine Bestätigung dafür erhalten. Details: {0} Attribut(e): {1}. Die Änderung wird beim nächsten Exportlauf erneut durchgesetzt.</value>
   </data>
+  <data name="ImportAmbiguity" xml:space="preserve">
+    <value>Dieses Objekt entspricht {0} Metaverse-Objekten, daher gilt: {1}. Ein Objekt im verbundenen System kann nur mit einem Metaverse-Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ImportAmbiguityOnRule" xml:space="preserve">
+    <value>Dieses Objekt entspricht {0} Metaverse-Objekten bei {1} ({2}), daher gilt: {3}. Ein Objekt im verbundenen System kann nur mit einem Metaverse-Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ImportOutcomeWasNot" xml:space="preserve">
+    <value>wurde es weder verknüpft noch projiziert</value>
+  </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>würde eine Synchronisierung es weder verknüpfen noch projizieren</value>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>Die Synchronisierungsregeln für den Import dieses Objekts entsprechen {0} verschiedenen Metaverse-Objekten: {1}. JIM wählt nicht zwischen ihnen aus, daher gilt: {2}. Korrigieren Sie die Daten oder die Objektabgleichsregeln dieser Synchronisierungsregeln, sodass sie genau ein Metaverse-Objekt identifizieren.</value>
+  </data>
+  <data name="ImportRuleDisagreementItem" xml:space="preserve">
+    <value>„{0}“ entspricht {1} bei {2} („{3}“)</value>
+  </data>
+  <data name="JoinedBySemicolon" xml:space="preserve">
+    <value>{0}; {1}</value>
+  </data>
 </root>

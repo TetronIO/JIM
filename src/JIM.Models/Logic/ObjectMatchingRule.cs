@@ -5,6 +5,8 @@ using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
@@ -157,14 +159,20 @@ public class ObjectMatchingRule : IAuditable
     /// a matching join records (#2052). An attribute that has not been loaded is named by its id, so the description
     /// never leaves a side blank.
     /// </remarks>
-    public string DescribeComparison()
+    public string DescribeComparison() => DescribeComparisonMessage().ToEnglish();
+
+    /// <summary>
+    /// <see cref="DescribeComparison"/> as a message, so a longer message that names the rule (an ambiguous match) reads in
+    /// the reader's language around it. The attribute names and the expression stay as written, passed as arguments (#3094).
+    /// </summary>
+    public JimMessage DescribeComparisonMessage()
     {
         var source = Sources.OrderBy(s => s.Order).FirstOrDefault();
         var sourceText = string.IsNullOrWhiteSpace(source?.Expression)
             ? source?.ConnectedSystemAttribute?.Name ?? source?.ConnectedSystemAttributeId?.ToString(CultureInfo.InvariantCulture)
             : source.Expression;
         var target = TargetMetaverseAttribute?.Name ?? TargetMetaverseAttributeId?.ToString(CultureInfo.InvariantCulture);
-        return $"{target} equals {sourceText}";
+        return JimMessage.Create(MessageCatalogues.ObjectMatching, nameof(ObjectMatchingMessages.ComparisonEquals), target, sourceText);
     }
 
     /// <summary>

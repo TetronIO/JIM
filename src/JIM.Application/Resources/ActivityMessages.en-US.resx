@@ -167,4 +167,10 @@
   <data name="PasswordFilterWholeQueue" xml:space="preserve">
     <value>The Password Synchronization queue</value>
   </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronization would neither join nor project it</value>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>This object's import Synchronization Rules match {0} different Metaverse Objects: {1}. JIM does not choose between them, so {2}. Correct the data, or the rules' Object Matching Rules, so that they identify one Metaverse Object.</value>
+  </data>
 </root>

@@ -28,4 +28,7 @@ public static class MessageCatalogues
 
     /// <summary>What a factory reset's Activity says it removed (<c>SystemResetMessages.resx</c>).</summary>
     public const string SystemReset = "JIM.Models:SystemResetMessages";
+
+    /// <summary>How an Object Matching Rule's comparison and an ambiguous or disagreeing match read (<c>ObjectMatchingMessages.resx</c>).</summary>
+    public const string ObjectMatching = "JIM.Models:ObjectMatchingMessages";
 }

@@ -1329,4 +1329,25 @@
   <data name="ExportNotConfirmedByImport" xml:space="preserve">
     <value>Nous avons exporté une modification, mais nous n’en avons pas reçu la confirmation lors d’une importation de confirmation. Détails : {0} attribut(s) : {1}. Une nouvelle tentative d’application de la modification aura lieu lors de la prochaine exécution d’exportation.</value>
   </data>
+  <data name="ImportAmbiguity" xml:space="preserve">
+    <value>Cet objet correspond à {0} objets Metaverse ; {1}. Un objet de système connecté ne peut être joint qu’à un seul objet Metaverse : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ImportAmbiguityOnRule" xml:space="preserve">
+    <value>Cet objet correspond à {0} objets Metaverse selon {1} ({2}) ; {3}. Un objet de système connecté ne peut être joint qu’à un seul objet Metaverse : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ImportOutcomeWasNot" xml:space="preserve">
+    <value>il n’a été ni joint ni projeté</value>
+  </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>une synchronisation ne le joindrait ni ne le projetterait</value>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>Les règles de synchronisation d’importation de cet objet correspondent à {0} objets Metaverse différents : {1}. JIM ne choisit pas entre eux, donc {2}. Corrigez les données, ou la règle de correspondance d’objets de chacune de ces règles, afin qu’elles identifient un seul objet Metaverse.</value>
+  </data>
+  <data name="ImportRuleDisagreementItem" xml:space="preserve">
+    <value>« {0} » correspond à {1} selon {2} (« {3} »)</value>
+  </data>
+  <data name="JoinedBySemicolon" xml:space="preserve">
+    <value>{0} ; {1}</value>
+  </data>
 </root>

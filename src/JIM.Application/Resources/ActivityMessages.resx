@@ -1745,4 +1745,32 @@
     <value>We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {0} attribute(s): {1}. Will attempt to reassert the change on the next export run.</value>
     <comment>An error on an item of a confirming import. {0}: how many attributes, as plain digits, {1}: their names, comma separated, with '(x2)' after a name that changed twice.</comment>
   </data>
+  <data name="ImportAmbiguity" xml:space="preserve">
+    <value>This object matches {0} Metaverse Objects, so {1}. A Connected System Object can join only one Metaverse Object: correct the data, or the Object Matching Rule, so that its values identify one.</value>
+    <comment>An error when an import's matching found several Metaverse Objects for one Connected System Object. {0}: how many, as plain digits, {1}: one of ImportOutcomeWasNot and ImportOutcomeWouldNot (starts lower case, no full stop).</comment>
+  </data>
+  <data name="ImportAmbiguityOnRule" xml:space="preserve">
+    <value>This object matches {0} Metaverse Objects on {1} ({2}), so {3}. A Connected System Object can join only one Metaverse Object: correct the data, or the Object Matching Rule, so that its values identify one.</value>
+    <comment>As ImportAmbiguity, where the Object Matching Rule is known. {1}: what the rule compares (ComparisonEquals, for example 'Employee ID equals employeeNumber'), {2}: the matched values (quoted, comma separated), {3}: the outcome.</comment>
+  </data>
+  <data name="ImportOutcomeWasNot" xml:space="preserve">
+    <value>it was neither joined nor projected</value>
+    <comment>The outcome inside ImportAmbiguity and ImportRuleDisagreement. Lower case, no full stop. The German is a main clause with the verb first, because it follows 'daher gilt:'.</comment>
+  </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronisation would neither join nor project it</value>
+    <comment>The outcome inside ImportAmbiguity and ImportRuleDisagreement, when a preview describes what a synchronisation would do. Lower case, no full stop.</comment>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>This object's import Synchronisation Rules match {0} different Metaverse Objects: {1}. JIM does not choose between them, so {2}. Correct the data, or the rules' Object Matching Rules, so that they identify one Metaverse Object.</value>
+    <comment>An error when an object's import Synchronisation Rules found different Metaverse Objects. {0}: how many different Metaverse Objects, as plain digits, {1}: one ImportRuleDisagreementItem per rule, joined (JoinedBySemicolon), {2}: one of ImportOutcomeWasNot and ImportOutcomeWouldNot.</comment>
+  </data>
+  <data name="ImportRuleDisagreementItem" xml:space="preserve">
+    <value>'{0}' matches {1} on {2} ("{3}")</value>
+    <comment>One rule's match inside ImportRuleDisagreement. {0}: the Synchronisation Rule's name, {1}: the Metaverse Object's name (or its id), {2}: what the rule compares (ComparisonEquals), {3}: the value it matched on.</comment>
+  </data>
+  <data name="JoinedBySemicolon" xml:space="preserve">
+    <value>{0}; {1}</value>
+    <comment>Two items of a list, separated by a semicolon.</comment>
+  </data>
 </root>

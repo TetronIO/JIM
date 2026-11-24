@@ -7351,7 +7351,7 @@ public abstract class SyncTaskProcessorBase
         // Rules that find different Metaverse Objects: JIM never chooses between them, so nothing is joined or projected.
         var disagreement = ObjectMatchingServer.DescribeImportRuleDisagreement(matches);
         if (disagreement != null)
-            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.Message)
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.MessageDetail)
             {
                 MatchCandidates = disagreement.Candidates
             };
@@ -7457,7 +7457,7 @@ public abstract class SyncTaskProcessorBase
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {
             // The candidates are recorded with the item, so the message describes the collision rather than listing ids.
-            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguity(ex))
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguityMessage(ex))
             {
                 MatchCandidates = ex.Candidates
             };
