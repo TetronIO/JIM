@@ -17,6 +17,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -1266,17 +1267,17 @@ public class ExportExecutionServer
         var missingMvoIds = new HashSet<Guid>();
         var preparationLock = new object();
 
-        Task ReportPassProgressAsync(string message) => ReportProgressAsync(progressCallback, new ExportProgressInfo
+        Task ReportPassProgressAsync(JimMessage message) => ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
             Phase = ExportPhase.ResolvingReferences,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = immediateProcessedCount + Volatile.Read(ref written),
             PassTotal = passTotal,
             PassProcessed = Volatile.Read(ref written) + Volatile.Read(ref finishedUnwritten),
-            Message = message
+            MessageDetail = message
         });
 
-        await ReportPassProgressAsync($"Resolving {passTotal} deferred exports");
+        await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportResolvingDeferred), ActivityMessage.Plain(passTotal)));
 
         // The order the pass works in (#2905): the largest work first, so the longest batch starts while the others can
         // still overlap it, and every export after any export of the pass it waits on for an anchor, in a later stage. Read
@@ -1315,7 +1316,7 @@ public class ExportExecutionServer
         async Task<List<PendingExport>> PrepareChunkAsync(Guid[] chunkIds, int chunkStart, ISyncRepository repository, bool reportProgress)
         {
             if (reportProgress)
-                await ReportPassProgressAsync($"Loading deferred exports {chunkStart + 1} to {chunkStart + chunkIds.Length} of {passTotal}");
+                await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportLoadingDeferred), ActivityMessage.Plain(chunkStart + 1), ActivityMessage.Plain(chunkStart + chunkIds.Length), ActivityMessage.Plain(passTotal)));
 
             List<PendingExport> chunkExports;
             using (Diagnostics.Diagnostics.Database.StartSpan("LoadDeferredChunk")
@@ -1371,7 +1372,7 @@ public class ExportExecutionServer
 
                 // Nothing else this chunk does may report again (all of it may have been finished with here), so say so now.
                 if (reportProgress)
-                    await ReportPassProgressAsync($"Withdrew references to deleted objects from {withdrawal.FinishedExportIds.Count} deferred exports");
+                    await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportWithdrewDeferredReferences), ActivityMessage.Plain(withdrawal.FinishedExportIds.Count)));
             }
 
             // Separate resolved from still-unresolved exports. A still-unresolved export that has something it can write
@@ -1444,7 +1445,7 @@ public class ExportExecutionServer
                     .ToList();
 
                 if (reportProgress)
-                    await ReportPassProgressAsync($"Saving resolved references for {exportsToWrite.Count} deferred exports");
+                    await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportSavingResolvedReferences), ActivityMessage.Plain(exportsToWrite.Count)));
                 using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedReferences")
                     .SetTag("count", exportsToWrite.Count)
                     .SetTag("changeCount", changesToSave.Count))
@@ -1488,7 +1489,7 @@ public class ExportExecutionServer
             }
 
             if (reportProgress && deferredWholeExports.Count > 0)
-                await ReportPassProgressAsync("Recording exports that are still waiting on their references");
+                await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportRecordingWaiting)));
 
             return exportsToWrite;
         }
@@ -1600,7 +1601,7 @@ public class ExportExecutionServer
                     if (!ahead.IsCompleted)
                     {
                         var chunkIds = chunks[nextChunk];
-                        await ReportPassProgressAsync($"Loading deferred exports {chunkStarts[nextChunk] + 1} to {chunkStarts[nextChunk] + chunkIds.Length} of {passTotal}");
+                        await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportLoadingDeferred), ActivityMessage.Plain(chunkStarts[nextChunk] + 1), ActivityMessage.Plain(chunkStarts[nextChunk] + chunkIds.Length), ActivityMessage.Plain(passTotal)));
                         var waited = System.Diagnostics.Stopwatch.StartNew();
                         using (Diagnostics.Diagnostics.Database.StartSpan("AwaitDeferredChunkPreparedAhead")
                             .SetTag("chunk", nextChunk))
@@ -2338,7 +2339,7 @@ public class ExportExecutionServer
             // item names its Pending Export and change alone: reported thinly, but never silently.
             async Task<List<ProcessedExportItem>> DescribeUnloadedBatchAsync(List<ExecutableExportSummary> unloaded, Exception loadFailure)
             {
-                var errorMessage = $"Batch export failed: {loadFailure.Message}";
+                var errorMessage = ActivityMessage.ExportBatchFailed(ActivityMessage.CauseOf(loadFailure));
                 Dictionary<Guid, PendingExport> loaded;
                 try
                 {
@@ -2361,7 +2362,7 @@ public class ExportExecutionServer
                         AttributeChangeCount = export.AttributeValueChanges.Count,
                         AttributeValueChanges = export.AttributeValueChanges.ToList(),
                         Succeeded = false,
-                        ErrorMessage = errorMessage,
+                        ErrorMessageDetail = errorMessage,
                         ErrorCount = export.ErrorCount,
                         ErrorType = ConnectedSystemExportErrorType.General
                     }.WithCauseFrom(export)
@@ -2370,7 +2371,7 @@ public class ExportExecutionServer
                         ChangeType = summary.ChangeType,
                         PendingExportId = summary.Id,
                         Succeeded = false,
-                        ErrorMessage = errorMessage,
+                        ErrorMessageDetail = errorMessage,
                         ErrorType = ConnectedSystemExportErrorType.General
                     }).ToList();
             }
@@ -2417,7 +2418,7 @@ public class ExportExecutionServer
                     PassTotal = passTotal,
                     PassProcessed = passTotal.HasValue ? processedSoFar + (passProcessedOffset?.Invoke() ?? 0) : null,
                     CurrentBatchSize = Volatile.Read(ref latestBatchSize),
-                    Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
+                    MessageDetail = ActivityMessage.Create(passTotal.HasValue ? nameof(ActivityMessages.ExportExecutingDeferred) : nameof(ActivityMessages.ExportExecuting))
                 });
                 return true;
             });
@@ -2458,7 +2459,7 @@ public class ExportExecutionServer
                         {
                             ChangeType = PendingExportChangeType.Update,
                             Succeeded = false,
-                            ErrorMessage = $"A batch's results were recorded, but closing its connection failed: {ex.Message}",
+                            ErrorMessageDetail = ActivityMessage.ExportBatchCloseFailed(ActivityMessage.CauseOf(ex)),
                             ErrorType = ConnectedSystemExportErrorType.General
                         });
                     }
@@ -2609,7 +2610,7 @@ public class ExportExecutionServer
         ISyncRepository repository,
         string connectedSystemName)
     {
-        var itemMessage = $"Batch export failed: {exception.Message}";
+        var itemMessage = ActivityMessage.ExportBatchFailed(ActivityMessage.CauseOf(exception));
 
         IReadOnlySet<Guid>? failed = null;
         if (mark != null)
@@ -2653,7 +2654,7 @@ public class ExportExecutionServer
                 AttributeChangeCount = export.AttributeValueChanges.Count,
                 AttributeValueChanges = export.AttributeValueChanges.ToList(),
                 Succeeded = false,
-                ErrorMessage = itemMessage,
+                ErrorMessageDetail = itemMessage,
                 ErrorCount = export.ErrorCount,
                 ErrorType = ConnectedSystemExportErrorType.General
             }.WithCauseFrom(export));
@@ -2665,7 +2666,7 @@ public class ExportExecutionServer
             {
                 ChangeType = PendingExportChangeType.Update,
                 Succeeded = false,
-                ErrorMessage = $"The batch's results were recorded, but JIM failed while finishing them: {exception.Message}",
+                ErrorMessageDetail = ActivityMessage.ExportBatchFinishFailed(ActivityMessage.CauseOf(exception)),
                 ErrorType = ConnectedSystemExportErrorType.General
             });
         }
@@ -3378,6 +3379,7 @@ public class ExportExecutionServer
             AttributeValueChanges = writtenChanges,
             Succeeded = false,
             ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+            ErrorMessageDetail = exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null,
             ErrorCount = export.ErrorCount,
             ErrorType = exportResult.ErrorType,
             RejectedAttributeName = exportResult.RejectedAttributeName
@@ -3412,6 +3414,7 @@ public class ExportExecutionServer
             AttributeValueChanges = collisionChanges,
             Succeeded = false,
             ErrorMessage = collision.Handling == GeneratedValueCollisionHandling.NeedsDecision ? collision.Message : null,
+            ErrorMessageDetail = collision.Handling == GeneratedValueCollisionHandling.NeedsDecision ? collision.MessageDetail : null,
             ErrorCount = export.ErrorCount,
             ErrorType = rejection.ErrorType,
             RejectedAttributeName = rejection.RejectedAttributeName,
@@ -3909,16 +3912,13 @@ public class ExportExecutionServer
                 {
                     case ProvisionedPasswordStagingDisposition.Coalesced:
                         carriedCount++;
-                        activity.Message = InitialPasswordStagingMessages.Carried(connectedSystemName, outcome);
+                        activity.MessageDetail = InitialPasswordStagingMessages.Carried(connectedSystemName, outcome);
                         break;
 
                     default:
                         stagedCount++;
                         var replaced = InitialPasswordStagingMessages.ReplacedWaitingChange(connectedSystemName, outcome);
-                        activity.Message = replaced == null
-                            ? $"Initial password queued for delivery to {connectedSystemName}."
-                            : $"Initial password queued for delivery to {connectedSystemName}, in place of a password change for this person " +
-                              $"that was waiting there: {replaced}";
+                        activity.MessageDetail = InitialPasswordStagingMessages.Queued(connectedSystemName, replaced);
                         if (replaced == null)
                             break;
 
@@ -3927,8 +3927,7 @@ public class ExportExecutionServer
                         activity.Status = ActivityStatus.CompleteWithWarning;
                         if (outcome.ExistingActivityId is { } replacedChangeActivityId)
                         {
-                            var notSet = $"Password not set on {connectedSystemName}: replaced by the Initial Password of a Connected System Object " +
-                                         $"JIM has just provisioned there, because this change {replaced}";
+                            var notSet = InitialPasswordStagingMessages.NotSet(connectedSystemName, replaced);
                             activities.Add(new Activity
                             {
                                 Id = TimeOrderedIds.New(),
@@ -3943,8 +3942,8 @@ public class ExportExecutionServer
                                 InitiatedByType = ActivityInitiatorType.System,
                                 InitiatedByName = "System",
                                 Status = ActivityStatus.CompleteWithError,
-                                Message = notSet,
-                                ErrorMessage = notSet,
+                                MessageDetail = notSet,
+                                ErrorMessageDetail = notSet,
                                 Created = now,
                                 Executed = now,
                                 ExecutionTime = TimeSpan.Zero,
@@ -4970,6 +4969,7 @@ public class ExportExecutionServer
                         AttributeValueChanges = export.AttributeValueChanges.ToList(),
                         Succeeded = false,
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+                        ErrorMessageDetail = exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null,
                         ErrorCount = export.ErrorCount,
                         ErrorType = exportResult.ErrorType,
                         RejectedAttributeName = exportResult.RejectedAttributeName
@@ -5125,7 +5125,7 @@ public class ExportExecutionServer
                     AttributeChangeCount = export.AttributeValueChanges.Count,
                     AttributeValueChanges = export.AttributeValueChanges.ToList(),
                     Succeeded = false,
-                    ErrorMessage = $"Export failed: {ex.Message}",
+                    ErrorMessageDetail = ActivityMessage.ExportRunFailed(ActivityMessage.CauseOf(ex)),
                     ErrorCount = export.ErrorCount,
                     ErrorType = ConnectedSystemExportErrorType.General
                 }.WithCauseFrom(export));

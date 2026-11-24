@@ -397,4 +397,32 @@
     <value>The {0} contribution mode is not available for a {1} attribute.</value>
     <comment>{0} is the contribution mode; {1} is a data type.</comment>
   </data>
+  <data name="TrustThumbprintRequired" xml:space="preserve">
+    <value>A thumbprint is required. JIM will not trust whatever a server happens to be presenting.</value>
+    <comment>Refusal when trusting a server certificate without the confirmed thumbprint.</comment>
+  </data>
+  <data name="TrustServerUnreachable" xml:space="preserve">
+    <value>{0}:{1} could not be reached, so nothing was trusted.</value>
+    <comment>Result of trusting a server certificate. {0}: host name, {1}: port number.</comment>
+  </data>
+  <data name="TrustServerOfferedNothing" xml:space="preserve">
+    <value>{0}:{1} offered no certificate, so there is nothing to trust.</value>
+    <comment>Result of trusting a server certificate. {0}: host name, {1}: port number.</comment>
+  </data>
+  <data name="TrustThumbprintMismatch" xml:space="preserve">
+    <value>{0} is presenting a different certificate from the one you confirmed, so nothing has been trusted. This is expected if the certificate was renewed; investigate if it was not.</value>
+    <comment>Result of trusting a server certificate. {0}: host name.</comment>
+  </data>
+  <data name="TrustRootRequiredWithRoot" xml:space="preserve">
+    <value>This connection to the {0} accepts only the root of the certificate chain, so trusting '{1}' would not make it work, and nothing was trusted. Trust '{2}' instead.</value>
+    <comment>Result of trusting a server certificate. {0}: what the far end is called, in English, by the Connector (for example 'directory server'), {1}: the certificate chosen, {2}: the root certificate.</comment>
+  </data>
+  <data name="TrustRootRequiredNoRoot" xml:space="preserve">
+    <value>This connection to the {0} accepts only the root of the certificate chain, and JIM could not find it, so nothing was trusted. Get the root certificate from whoever runs your PKI and add it under Admin &gt; Certificates.</value>
+    <comment>Result of trusting a server certificate. {0}: what the far end is called, in English, by the Connector (for example 'directory server'). Admin &gt; Certificates is the portal's menu path.</comment>
+  </data>
+  <data name="TrustAlreadyInStore" xml:space="preserve">
+    <value>'{0}' is already in the JIM certificate store.</value>
+    <comment>Result of trusting a server certificate. {0}: the certificate's common name.</comment>
+  </data>
 </root>

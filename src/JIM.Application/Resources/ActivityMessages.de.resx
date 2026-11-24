@@ -1045,4 +1045,109 @@
   <data name="MetaverseObjectTypeRemoved" xml:space="preserve">
     <value>Metaverse-Objekttyp „{0}“ entfernt</value>
   </data>
+  <data name="ExportResolvingDeferred" xml:space="preserve">
+    <value>{0} zurückgestellte Exporte werden aufgelöst</value>
+  </data>
+  <data name="ExportLoadingDeferred" xml:space="preserve">
+    <value>Zurückgestellte Exporte {0} bis {1} von {2} werden geladen</value>
+  </data>
+  <data name="ExportWithdrewDeferredReferences" xml:space="preserve">
+    <value>Verweise auf gelöschte Objekte aus {0} zurückgestellten Exporten entfernt</value>
+  </data>
+  <data name="ExportSavingResolvedReferences" xml:space="preserve">
+    <value>Aufgelöste Verweise für {0} zurückgestellte Exporte werden gespeichert</value>
+  </data>
+  <data name="ExportRecordingWaiting" xml:space="preserve">
+    <value>Exporte, die noch auf ihre Verweise warten, werden erfasst</value>
+  </data>
+  <data name="ExportBatchFailed" xml:space="preserve">
+    <value>Export des Stapels fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ExportBatchCloseFailed" xml:space="preserve">
+    <value>Die Ergebnisse eines Stapels wurden erfasst, aber das Schließen seiner Verbindung ist fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ExportBatchFinishFailed" xml:space="preserve">
+    <value>Die Ergebnisse des Stapels wurden erfasst, aber JIM ist bei ihrem Abschluss fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ExportFailedNoReason" xml:space="preserve">
+    <value>Export fehlgeschlagen</value>
+  </data>
+  <data name="CollisionRemediated" xml:space="preserve">
+    <value>{0} enthält den Wert „{2}“ für das Attribut {1} bereits für ein anderes Objekt, daher hat JIM ihn auf „{3}“ korrigiert.</value>
+  </data>
+  <data name="CollisionNeedsDecision" xml:space="preserve">
+    <value>{0} hat den Wert „{2}“ für das Attribut {1} abgelehnt, weil ein anderes Objekt ihn dort bereits enthält, und JIM hat ihn nicht geändert: {3}. Erlauben Sie die Umbenennung, versuchen Sie es erneut, sobald der Konflikt in {0} gelöst ist, oder lassen Sie ihn unverändert.</value>
+  </data>
+  <data name="CollisionWhyLimitReached" xml:space="preserve">
+    <value>er wurde bereits {0}-mal korrigiert, daher korrigiert JIM ihn nicht mehr</value>
+  </data>
+  <data name="CollisionWhyAnchored" xml:space="preserve">
+    <value>{0} hat {1} für dieses Objekt bereits akzeptiert, daher würde eine Änderung ein bereits verwendetes Konto umbenennen</value>
+  </data>
+  <data name="CollisionWhyCannotTell" xml:space="preserve">
+    <value>JIM kann nicht feststellen, ob {0} {1} bereits enthält, weil {0} seit dem Leeren seines Connectorbereichs keinen vollständigen Import abgeschlossen hat</value>
+  </data>
+  <data name="CollisionWhyNoValue" xml:space="preserve">
+    <value>es konnte kein anderer Wert dafür gefunden werden: {0}</value>
+  </data>
+  <data name="CollisionItself" xml:space="preserve">
+    <value>ihn</value>
+  </data>
+  <data name="CollisionBuiltFromIt" xml:space="preserve">
+    <value>den daraus gebildeten Wert {0}</value>
+  </data>
+  <data name="InitialPasswordCarried" xml:space="preserve">
+    <value>Initialkennwort für {0} nicht in die Warteschlange gestellt: Eine für diese Person dort bereits wartende Kennwortänderung wird stattdessen das erste Kennwort dieses Objekts im verbundenen System und behält ihr eigenes Kennwort und ihr Ablaufdatum. Bei der Zustellung gelten die Initialkennwort-Einstellungen dieser Synchronisierungsregel für das Aktivieren des Objekts im verbundenen System und dafür, ob sein Kennwort nie abläuft, außer wenn ein Export diese selbst geschrieben hat.</value>
+  </data>
+  <data name="InitialPasswordCarriedParked" xml:space="preserve">
+    <value>{0} Sie war zurückgestellt worden ({1}) und ist nun wieder fällig, da das Objekt im verbundenen System existiert.</value>
+  </data>
+  <data name="InitialPasswordCarriedDelivering" xml:space="preserve">
+    <value>{0} Sie wurde gerade zugestellt, als das Objekt im verbundenen System erstellt wurde, und wird mit diesen Einstellungen erneut zugestellt.</value>
+  </data>
+  <data name="InitialPasswordCarriedWaiting" xml:space="preserve">
+    <value>{0} Sie wartete darauf, dass das Objekt im verbundenen System existiert, und ist jetzt fällig.</value>
+  </data>
+  <data name="InitialPasswordQueued" xml:space="preserve">
+    <value>Initialkennwort für die Zustellung an {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="InitialPasswordQueuedReplacing" xml:space="preserve">
+    <value>Initialkennwort für die Zustellung an {0} in die Warteschlange gestellt, anstelle einer dort wartenden Kennwortänderung dieser Person: {1}</value>
+  </data>
+  <data name="PasswordNotSetReplaced" xml:space="preserve">
+    <value>Kennwort auf {0} nicht gesetzt: ersetzt durch das Initialkennwort eines Objekts im verbundenen System, das JIM dort soeben bereitgestellt hat. Grund: {1}</value>
+  </data>
+  <data name="PasswordReplacedHeld" xml:space="preserve">
+    <value>Sie wird zurückgehalten, solange die Kennwortsynchronisierung für {0} ausgeschaltet ist, hatte es also nicht erreicht, und das erste Kennwort eines Objekts im verbundenen System wird unabhängig von der Pause zugestellt.</value>
+  </data>
+  <data name="PasswordReplacedAccountGone" xml:space="preserve">
+    <value>Sie wurde für ein Objekt im verbundenen System festgelegt, das dort nicht mehr existiert oder nicht mehr dieser Person gehört.</value>
+  </data>
+  <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
+    <value>Sie gilt für den Objekttyp, für den die Kennwortsynchronisierung in {0} Kennwörter setzt; dieses Objekt im verbundenen System gehört nicht dazu, daher konnte sie es nicht erreichen, und auch kein anderes Objekt dieser Person dort, solange dieses ihr gehört.</value>
+  </data>
+  <data name="PasswordReplacedStoppedTrying" xml:space="preserve">
+    <value>JIM hatte aufgehört, sie zuzustellen ({0}).</value>
+  </data>
+  <data name="PasswordParkedPolicy" xml:space="preserve">
+    <value>das Kennwort die Kennwortrichtlinie des Systems nicht erfüllte</value>
+  </data>
+  <data name="PasswordParkedConfiguration" xml:space="preserve">
+    <value>ein Konfigurationsproblem verhinderte, dass es gesetzt wurde</value>
+  </data>
+  <data name="PasswordParkedUnsupported" xml:space="preserve">
+    <value>das System auf ihm kein Kennwort setzen kann</value>
+  </data>
+  <data name="PasswordParkedObjectMissing" xml:space="preserve">
+    <value>das Objekt im verbundenen System noch nicht existierte</value>
+  </data>
+  <data name="PasswordParkedUnreachable" xml:space="preserve">
+    <value>das System nicht erreichbar war</value>
+  </data>
+  <data name="PasswordParkedUnrecorded" xml:space="preserve">
+    <value>aus einem Grund, den JIM nicht erfasst hat</value>
+  </data>
+  <data name="PasswordParkedWithTargetMessage" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
 </root>

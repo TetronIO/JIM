@@ -119,4 +119,13 @@
   <data name="QueueHeldOther" xml:space="preserve">
     <value>Held until Password Synchronization is enabled on {0}; the changes will be delivered then, or expire first.</value>
   </data>
+  <data name="InitialPasswordCarried" xml:space="preserve">
+    <value>Initial password not queued for {0}: a password change already waiting for this person there will be this Connected System Object's first password instead, keeping its own password and expiry. Its delivery applies this Synchronization Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires, except where an export has written those itself.</value>
+  </data>
+  <data name="PasswordReplacedHeld" xml:space="preserve">
+    <value>it is held while Password Synchronization is switched off for {0}, so it had not reached it, and a Connected System Object's first password is delivered whatever the pause.</value>
+  </data>
+  <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
+    <value>it is for the Object Type that Password Synchronization sets passwords on in {0}, which this Connected System Object is not, so it could not reach it, nor any other of this person's there while this one is theirs.</value>
+  </data>
 </root>

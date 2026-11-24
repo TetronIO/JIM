@@ -1369,4 +1369,144 @@
     <value>Removed Metaverse Object Type '{0}'</value>
     <comment>Activity summary of removing a Metaverse Object Type. {0}: the Object Type's name.</comment>
   </data>
+  <data name="ExportResolvingDeferred" xml:space="preserve">
+    <value>Resolving {0} deferred exports</value>
+    <comment>Progress narration while an export run resolves the references of deferred exports. {0}: how many, as plain digits.</comment>
+  </data>
+  <data name="ExportLoadingDeferred" xml:space="preserve">
+    <value>Loading deferred exports {0} to {1} of {2}</value>
+    <comment>Progress narration. {0}: first export in the chunk, {1}: last, {2}: the total, all as plain digits.</comment>
+  </data>
+  <data name="ExportWithdrewDeferredReferences" xml:space="preserve">
+    <value>Withdrew references to deleted objects from {0} deferred exports</value>
+    <comment>Progress narration. {0}: how many deferred exports, as plain digits.</comment>
+  </data>
+  <data name="ExportSavingResolvedReferences" xml:space="preserve">
+    <value>Saving resolved references for {0} deferred exports</value>
+    <comment>Progress narration. {0}: how many deferred exports, as plain digits.</comment>
+  </data>
+  <data name="ExportRecordingWaiting" xml:space="preserve">
+    <value>Recording exports that are still waiting on their references</value>
+    <comment>Progress narration of an export run.</comment>
+  </data>
+  <data name="ExportBatchFailed" xml:space="preserve">
+    <value>Batch export failed: {0}</value>
+    <comment>An error on an export item whose batch failed. {0}: the cause, which another system may word.</comment>
+  </data>
+  <data name="ExportBatchCloseFailed" xml:space="preserve">
+    <value>A batch's results were recorded, but closing its connection failed: {0}</value>
+    <comment>An error on an export item. {0}: the cause, which another system may word.</comment>
+  </data>
+  <data name="ExportBatchFinishFailed" xml:space="preserve">
+    <value>The batch's results were recorded, but JIM failed while finishing them: {0}</value>
+    <comment>An error on an export item. {0}: the cause.</comment>
+  </data>
+  <data name="ExportFailedNoReason" xml:space="preserve">
+    <value>Export failed</value>
+    <comment>What an export item says when the Connector refused it and gave no reason; it is the argument of the longer 'Export failed' messages.</comment>
+  </data>
+  <data name="CollisionRemediated" xml:space="preserve">
+    <value>{0} already holds the {1} "{2}" for another object, so JIM corrected it to "{3}".</value>
+    <comment>Collision Remediation outcome on an export item. {0}: the Connected System's name, {1}: the attribute's name, {2}: the rejected value, {3}: the value JIM issued instead.</comment>
+  </data>
+  <data name="CollisionNeedsDecision" xml:space="preserve">
+    <value>{0} rejected the {1} "{2}" because another object there already holds it, and JIM has not changed it: {3}. Allow the rename, retry once the conflict is resolved in {0}, or leave it.</value>
+    <comment>Collision Remediation error on an export item whose Generated Value needs a decision. {0}: the Connected System's name, {1}: the attribute's name, {2}: the rejected value, {3}: why JIM did not change it (a message, with no full stop).</comment>
+  </data>
+  <data name="CollisionWhyLimitReached" xml:space="preserve">
+    <value>it has already been corrected {0} times, so JIM has stopped correcting it</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: how many corrections, as plain digits. No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionWhyAnchored" xml:space="preserve">
+    <value>{0} has already accepted {1} for this object, so changing it would rename an account already in use</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: a Connected System's name, {1}: what it accepted (a message such as 'it' or 'the X built from it'). No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionWhyCannotTell" xml:space="preserve">
+    <value>JIM cannot tell whether {0} already holds {1}, because {0} has not completed a Full Import since its connector space was cleared</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: a Connected System's name, {1}: what it may hold (a message such as 'it' or 'the X built from it'). No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionWhyNoValue" xml:space="preserve">
+    <value>no other value could be found for it: {0}</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: why value generation failed (a message). No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionItself" xml:space="preserve">
+    <value>it</value>
+    <comment>What a Connected System has accepted or may hold, inside 'CollisionWhyAnchored' and 'CollisionWhyCannotTell': the value itself. Lower case; it is the object of 'accepted' and 'holds', so German takes the accusative.</comment>
+  </data>
+  <data name="CollisionBuiltFromIt" xml:space="preserve">
+    <value>the {0} built from it</value>
+    <comment>What a Connected System has accepted or may hold, inside 'CollisionWhyAnchored' and 'CollisionWhyCannotTell': a value built from the generated one. {0}: the built value's name.</comment>
+  </data>
+  <data name="InitialPasswordCarried" xml:space="preserve">
+    <value>Initial password not queued for {0}: a password change already waiting for this person there will be this Connected System Object's first password instead, keeping its own password and expiry. Its delivery applies this Synchronisation Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires, except where an export has written those itself.</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="InitialPasswordCarriedParked" xml:space="preserve">
+    <value>{0} It had been parked ({1}), and is due again now that the Connected System Object exists.</value>
+    <comment>Follows 'InitialPasswordCarried'. {0}: that message, {1}: why the password change had been parked (a message). 'It' is the waiting password change.</comment>
+  </data>
+  <data name="InitialPasswordCarriedDelivering" xml:space="preserve">
+    <value>{0} It was being delivered as the Connected System Object was created, and is delivered again with these settings.</value>
+    <comment>Follows 'InitialPasswordCarried'. {0}: that message. 'It' is the waiting password change.</comment>
+  </data>
+  <data name="InitialPasswordCarriedWaiting" xml:space="preserve">
+    <value>{0} It was waiting for the Connected System Object to exist, and is due now.</value>
+    <comment>Follows 'InitialPasswordCarried'. {0}: that message. 'It' is the waiting password change.</comment>
+  </data>
+  <data name="InitialPasswordQueued" xml:space="preserve">
+    <value>Initial password queued for delivery to {0}.</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="InitialPasswordQueuedReplacing" xml:space="preserve">
+    <value>Initial password queued for delivery to {0}, in place of a password change for this person that was waiting there: {1}</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name, {1}: why the waiting change was replaced (a message ending in a full stop).</comment>
+  </data>
+  <data name="PasswordNotSetReplaced" xml:space="preserve">
+    <value>Password not set on {0}: replaced by the Initial Password of a Connected System Object JIM has just provisioned there, because this change {1}</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name, {1}: why the waiting change was replaced, as a message that continues the sentence (English: it starts 'it ...' and ends in a full stop, so this change 'it is held ...'). French and German put the reason after 'Motif :' and 'Grund:' as a sentence of its own.</comment>
+  </data>
+  <data name="PasswordReplacedHeld" xml:space="preserve">
+    <value>it is held while Password Synchronisation is switched off for {0}, so it had not reached it, and a Connected System Object's first password is delivered whatever the pause.</value>
+    <comment>Why a waiting password change was replaced. Starts lower case in English and ends in a full stop; it follows a colon in 'InitialPasswordQueuedReplacing' and completes the sentence 'because this change ...' in 'PasswordNotSetReplaced'. {0}: the Connected System's name. The translations are sentences of their own that read after a colon.</comment>
+  </data>
+  <data name="PasswordReplacedAccountGone" xml:space="preserve">
+    <value>it was set on a Connected System Object that no longer exists there, or is no longer this person's.</value>
+    <comment>Why a waiting password change was replaced. See 'PasswordReplacedHeld' for the shape.</comment>
+  </data>
+  <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
+    <value>it is for the Object Type that Password Synchronisation sets passwords on in {0}, which this Connected System Object is not, so it could not reach it, nor any other of this person's there while this one is theirs.</value>
+    <comment>Why a waiting password change was replaced. See 'PasswordReplacedHeld' for the shape. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="PasswordReplacedStoppedTrying" xml:space="preserve">
+    <value>JIM had stopped trying to deliver it ({0}).</value>
+    <comment>Why a waiting password change was replaced. See 'PasswordReplacedHeld' for the shape. {0}: why it had been parked (a message).</comment>
+  </data>
+  <data name="PasswordParkedPolicy" xml:space="preserve">
+    <value>the password did not meet the system's password policy</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedConfiguration" xml:space="preserve">
+    <value>a configuration problem stopped it being set</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedUnsupported" xml:space="preserve">
+    <value>the system cannot set a password on it</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedObjectMissing" xml:space="preserve">
+    <value>the Connected System Object did not exist yet</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedUnreachable" xml:space="preserve">
+    <value>the system could not be reached</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedUnrecorded" xml:space="preserve">
+    <value>for a reason JIM did not record</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedWithTargetMessage" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>A reason a password change was parked, followed by what the target system said. {0}: the reason (a message), {1}: the system's own words.</comment>
+  </data>
 </root>

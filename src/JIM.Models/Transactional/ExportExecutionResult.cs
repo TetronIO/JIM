@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Transactional;
@@ -358,6 +359,24 @@ public class ProcessedExportItem
     /// Error message if the export failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// <see cref="ErrorMessage"/> as a message, where JIM worded it itself, so the portal shows it in the reader's
+    /// language (#3084). Setting it also sets <see cref="ErrorMessage"/> to its British English. Null where the error is
+    /// another system's own words.
+    /// </summary>
+    public JimMessage? ErrorMessageDetail
+    {
+        get => _errorMessageDetail;
+        set
+        {
+            _errorMessageDetail = value;
+            if (value != null)
+                ErrorMessage = value.ToEnglish();
+        }
+    }
+
+    private JimMessage? _errorMessageDetail;
 
     /// <summary>
     /// Number of retry attempts if the export failed.
