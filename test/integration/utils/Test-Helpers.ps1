@@ -435,13 +435,13 @@ function Get-ActiveDirectoryLabVmName {
         server's address configured can still have that server stopped.
 
     .PARAMETER Instance
-        Primary, Source, Target, AdfsPrimary, ExchangePrimary or ExchangeSource.
+        Primary, Source, Target, Hybrid, AdfsPrimary, ExchangePrimary or ExchangeSource.
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet('Primary', 'Source', 'Target', 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource')]
+        [ValidateSet('Primary', 'Source', 'Target', 'Hybrid', 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource')]
         [string]$Instance
     )
 
@@ -449,6 +449,7 @@ function Get-ActiveDirectoryLabVmName {
         'Primary' { 'PRIMARY', 'dc-primary' }
         'Source' { 'SOURCE', 'dc-source' }
         'Target' { 'TARGET', 'dc-target' }
+        'Hybrid' { 'HYBRID', 'dc-hybrid' }
         'AdfsPrimary' { 'ADFS_PRIMARY', 'adfs-primary' }
         'ExchangePrimary' { 'EXCHANGE_PRIMARY', 'exchange-primary' }
         'ExchangeSource' { 'EXCHANGE_SOURCE', 'exchange-source' }
@@ -888,8 +889,59 @@ function Get-DirectoryConfig {
         "ActiveDirectory" {
             # Validate the instance first, so an unknown one is reported as that and not as a missing
             # variable, and read only the variables of the instance asked for.
-            if ($Instance -notin @('Primary', 'Source', 'Target')) {
-                throw "Unknown $DirectoryType instance: $Instance. Valid values: Primary, Source, Target"
+            if ($Instance -notin @('Primary', 'Source', 'Target', 'Hybrid')) {
+                throw "Unknown $DirectoryType instance: $Instance. Valid values: Primary, Source, Target, Hybrid"
+            }
+
+            # The hybrid forest (Scenario 038, #3029) has no Samba counterpart and is not one of the
+            # reverted three: Entra Cloud Sync's agent runs on its domain controller and synchronises
+            # OU=CloudSync to the hybrid test tenant, and a revert would roll back what Cloud Sync has
+            # already copied and the agent's own credentials with it. So it has no checkpoint; a run
+            # creates its objects in an organisational unit of its own and deletes that unit at the end.
+            # No Connected System binds to it, so its JIM identity is the administrator's.
+            if ($Instance -eq 'Hybrid') {
+                $domain = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_HYBRID_DOMAIN' -Default 'meridian.local'
+                $baseDn = (@($domain.Split('.') | ForEach-Object { "DC=$_" }) -join ',')
+                $adminPassword = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADMIN_PASSWORD'
+                $adminDn = "CN=Administrator,CN=Users,$baseDn"
+                $syncOuDn = "OU=CloudSync,$baseDn"
+                $instanceConfigs = @{
+                    Hybrid = @{
+                        ContainerName    = $null
+                        Host             = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_HYBRID_HOST' -Default "dc1.$domain"
+                        Address          = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_HYBRID_ADDRESS'
+                        VmName           = Get-ActiveDirectoryLabVmName -Instance Hybrid
+                        Port             = 636
+                        UseSSL           = $true
+                        BindDN           = $adminDn
+                        BindPassword     = $adminPassword
+                        JimBindDN        = $adminDn
+                        JimBindPassword  = $adminPassword
+                        MultiPartitionJimBindDN       = $adminDn
+                        MultiPartitionJimBindPassword = $adminPassword
+                        AuthType         = "Simple"
+                        BaseDN           = $baseDn
+                        SyncOuDn         = $syncOuDn
+                        UserContainer    = $syncOuDn
+                        GroupContainer   = $syncOuDn
+                        UserObjectClass  = "user"
+                        GroupObjectClass = "group"
+                        UserRdnAttr      = "CN"
+                        UserNameAttr     = "sAMAccountName"
+                        ExternalIdAttr   = "objectGUID"
+                        DepartmentAttr   = "department"
+                        DnTemplate       = "CN={displayName},$syncOuDn"
+                        Domain           = $domain
+                        ShortDomain      = $domain.Split('.')[0].ToUpperInvariant()
+                        LdapSearchPort   = 636
+                        LdapSearchScheme = "ldaps"
+                        ComposeProfiles  = @("ad-lab")
+                        PopulateScript   = $null
+                        ConnectedSystemName = $null
+                        CheckpointBaseline  = $null
+                    }
+                }
+                break
             }
 
             # The tree, attributes, delegation and Connected System names are the SambaAD instance's

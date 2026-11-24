@@ -1968,7 +1968,7 @@ Describe 'ConvertFrom-LabRebuildSetting' {
         { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*'$Key'*"
     }
 
-    It 'passes the DNS forwarder on when there is one, and leaves it out when there is none (the lab has no uplink)' {
+    It 'passes the DNS forwarder on when there is one, and leaves it out when there is none (most lab domain controllers have none)' {
         $with = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
         $with.Roles[0].BuildParameters.DnsForwarder | Should -Be '10.0.0.1'
 
@@ -3360,7 +3360,7 @@ Describe 'Invoke-LabRebuildPhase' {
 
 Describe 'Get-LabGuestPhaseArgument without a DNS forwarder' {
     BeforeAll {
-        # The lab network has no uplink, so there is nothing to forward to and the setting is optional.
+        # Most lab domain controllers resolve nothing outside their own forest, so the setting is optional.
         function Get-ForwarderTestSetting {
             return @{
                 ComputerName           = 'dc1'

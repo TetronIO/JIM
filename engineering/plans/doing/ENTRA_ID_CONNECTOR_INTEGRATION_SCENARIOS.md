@@ -120,6 +120,8 @@ The scenario, its registration with the runner, and the `ad-lab.yml` step, which
 
 ### Phase 4: Scenario 038 ([#3029](https://github.com/TetronIO/JIM/issues/3029))
 
+Written, not yet run: it waits for the hybrid forest and tenant. Checked against Microsoft's documentation (2026-11-24): Cloud Sync from Active Directory and the Source of Authority switch both need only Entra ID Free, and no custom domain is needed (an unverified UPN suffix becomes the tenant's `onmicrosoft.com`). The agent runs on a domain-joined Windows Server with Desktop Experience, a domain controller included, and needs outbound HTTPS to Microsoft, which the lab's `Lab` switch does not give; switching a user back needs the tenant's `blockCloudObjectTakeoverThroughHardMatchEnabled` turned off once. The forest, `dc-hybrid`, is never reverted, since a revert would undo what Cloud Sync has copied and the agent's credentials. The setup is in `test/integration/ad-lab/README.md`, The hybrid forest; the scenario reports as `jim-entra-hybrid`.
+
 ### Phase 5: scale ([#3053](https://github.com/TetronIO/JIM/issues/3053))
 
 Decided 2026-11-23: test up to the tenant's limit, in two parts.
