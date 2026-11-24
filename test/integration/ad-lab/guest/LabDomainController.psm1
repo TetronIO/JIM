@@ -1602,7 +1602,7 @@ function Get-LabGuestPhaseArgument {
         Configure = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
         Verify    = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
     }
-    # The DNS forwarder is optional: the lab network has no uplink, so there is normally nothing to forward to. It
+    # The DNS forwarder is optional: only dc-hybrid resolves names outside its forest, so normally there is none. It
     # is passed only when it has a value, so the guest never receives an empty argument.
     $optionalScalar = @{
         License   = @()
@@ -2223,7 +2223,7 @@ function ConvertFrom-LabRebuildSetting {
         }
         $shared[$key] = ([string]$value).Trim()
     }
-    # The forwarder is optional: the lab network has no uplink, and the build script accepts none. When there is
+    # The forwarder is optional: most lab domain controllers have none, and the build script accepts none. When there is
     # one it must be an address, and it is passed on.
     $shared['dnsForwarder'] = $null
     $forwarderValue = Get-LabSettingValue -Object $Settings -Name 'dnsForwarder'

@@ -148,7 +148,7 @@ Describe 'Get-LabSettingsExample' {
         $source.gateway | Should -Be $script:Settings.ntpServer
     }
 
-    It 'has no dnsForwarder: the Lab switch has no uplink, so there is nothing to forward to' {
+    It 'has no dnsForwarder: these domain controllers resolve nothing outside their own forest' {
         $script:Settings.PSObject.Properties.Name | Should -Not -Contain 'dnsForwarder'
     }
 
