@@ -1221,4 +1221,128 @@
   <data name="ExchangeRetryRecord" xml:space="preserve">
     <value>Retried; JIM will attempt it again shortly.</value>
   </data>
+  <data name="ServiceSettingUpdatedFromEnvironment" xml:space="preserve">
+    <value>Updated built-in Service Setting '{0}' from environment configuration</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SeedingApplying" xml:space="preserve">
+    <value>Applying built-in configuration</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="AuthCreatingInitialAdmin" xml:space="preserve">
+    <value>Creating initial administrator user on first sign-in</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="AuthAssigningAdminRole" xml:space="preserve">
+    <value>Assigning {0} role to initial administrator</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SearchUpdating" xml:space="preserve">
+    <value>Updating Predefined Search '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SearchAddingGroup" xml:space="preserve">
+    <value>Adding a criteria group to Predefined Search '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SearchUpdatingGroup" xml:space="preserve">
+    <value>Updating a criteria group on Predefined Search '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SearchDeletingGroup" xml:space="preserve">
+    <value>Deleting a criteria group from Predefined Search '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SearchAddingCriterion" xml:space="preserve">
+    <value>Adding a criterion to Predefined Search '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SearchUpdatingCriterion" xml:space="preserve">
+    <value>Updating a criterion on Predefined Search '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="SearchDeletingCriterion" xml:space="preserve">
+    <value>Deleting a criterion from Predefined Search '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="RoleCreating" xml:space="preserve">
+    <value>Creating Role '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="RoleAddingMember" xml:space="preserve">
+    <value>Adding '{0}' to Role '{1}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="RoleRemovingMember" xml:space="preserve">
+    <value>Removing '{0}' from Role '{1}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>Creating API key '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ApiKeyUpdating" xml:space="preserve">
+    <value>Updating API key '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ApiKeyDeleting" xml:space="preserve">
+    <value>Deleting API key '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="CertAddingUploaded" xml:space="preserve">
+    <value>Adding trusted certificate from uploaded data</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="CertAddingFromFile" xml:space="preserve">
+    <value>Adding trusted certificate from file path: {0}</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="CertUpdating" xml:space="preserve">
+    <value>Updating trusted certificate '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="CertDeleting" xml:space="preserve">
+    <value>Deleting trusted certificate '{0}'</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ExportPreparing" xml:space="preserve">
+    <value>Preparing exports</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ExportCompletedSummary" xml:space="preserve">
+    <value>Export completed: {0} succeeded, {1} failed, {2} deferred</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ExportExecuting" xml:space="preserve">
+    <value>Exporting</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ExportExecutingDeferred" xml:space="preserve">
+    <value>Exporting deferred</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="ExportToFile" xml:space="preserve">
+    <value>Exporting {0} changes to file</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="RetentionRunning" xml:space="preserve">
+    <value>Change history and activity retention cleanup</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="AutoSelectingContainers" xml:space="preserve">
+    <value>Auto-selecting {0} container(s) created during export</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="UpdateObjectType" xml:space="preserve">
+    <value>Update object type: {0}</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="UpdateAttribute" xml:space="preserve">
+    <value>Update attribute: {0}.{1}</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
+  <data name="BulkUpdateAttributes" xml:space="preserve">
+    <value>Bulk update of {0} attribute(s) on {1}</value>
+    <comment>What an Activity says when it starts.</comment>
+  </data>
 </root>

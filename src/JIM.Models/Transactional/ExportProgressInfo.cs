@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Transactional;
 
 /// <summary>
@@ -47,6 +49,23 @@ public class ExportProgressInfo
     /// Human-readable progress message.
     /// </summary>
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    /// <see cref="Message"/> as a message the portal shows in the reader's language (#3039), where it is JIM's own wording;
+    /// null for a Connector's. Setting it also sets <see cref="Message"/> to its British English.
+    /// </summary>
+    public JimMessage? MessageDetail
+    {
+        get => _messageDetail;
+        set
+        {
+            _messageDetail = value;
+            if (value != null)
+                Message = value.ToEnglish();
+        }
+    }
+
+    private JimMessage? _messageDetail;
 
     /// <summary>
     /// The Connector's own phase key (#454), set when this report came from the Connector entering

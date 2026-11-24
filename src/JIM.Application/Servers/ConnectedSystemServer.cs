@@ -4880,7 +4880,7 @@ public partial class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
             ParentActivityId = parentActivity?.Id,
-            Message = $"Auto-selecting {createdContainerExternalIds.Count} container(s) created during export"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AutoSelectingContainers), ActivityMessage.Plain(createdContainerExternalIds.Count))
         };
 
         if (initiatedByApiKey != null)
@@ -5003,7 +5003,7 @@ public partial class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
             ParentActivityId = parentActivity?.Id,
-            Message = $"Auto-selecting {createdContainerExternalIds.Count} container(s) created during export"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AutoSelectingContainers), ActivityMessage.Plain(createdContainerExternalIds.Count))
         };
 
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
@@ -6138,7 +6138,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = objectType.ConnectedSystemId,
-            Message = $"Update object type: {objectType.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateObjectType), objectType.Name)
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -6175,7 +6175,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
-            Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateAttribute), attribute.ConnectedSystemObjectType?.Name ?? string.Empty, attribute.Name)
         };
         var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
             ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
@@ -6209,7 +6209,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = objectType.ConnectedSystemId,
-            Message = $"Update object type: {objectType.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateObjectType), objectType.Name)
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -6237,7 +6237,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
-            Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateAttribute), attribute.ConnectedSystemObjectType?.Name ?? string.Empty, attribute.Name)
         };
         var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
             ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
@@ -6378,7 +6378,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
-            Message = $"Bulk update of {attributeUpdates.Count} attribute(s) on {objectType.Name}",
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.BulkUpdateAttributes), ActivityMessage.Plain(attributeUpdates.Count), objectType.Name),
             ObjectsToProcess = attributeUpdates.Count
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -6458,7 +6458,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
-            Message = $"Bulk update of {attributeUpdates.Count} attribute(s) on {objectType.Name}",
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.BulkUpdateAttributes), ActivityMessage.Plain(attributeUpdates.Count), objectType.Name),
             ObjectsToProcess = attributeUpdates.Count
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);

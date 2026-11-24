@@ -936,4 +936,97 @@
   <data name="ExchangeRetryRecord" xml:space="preserve">
     <value>Relancé ; JIM va le retenter sous peu.</value>
   </data>
+  <data name="ServiceSettingUpdatedFromEnvironment" xml:space="preserve">
+    <value>Paramètre de service intégré « {0} » mis à jour à partir de la configuration d’environnement</value>
+  </data>
+  <data name="SeedingApplying" xml:space="preserve">
+    <value>Application de la configuration intégrée</value>
+  </data>
+  <data name="AuthCreatingInitialAdmin" xml:space="preserve">
+    <value>Création de l’utilisateur administrateur initial à la première connexion</value>
+  </data>
+  <data name="AuthAssigningAdminRole" xml:space="preserve">
+    <value>Attribution du rôle {0} à l’administrateur initial</value>
+  </data>
+  <data name="SearchUpdating" xml:space="preserve">
+    <value>Mise à jour de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchAddingGroup" xml:space="preserve">
+    <value>Ajout d’un groupe de critères à la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchUpdatingGroup" xml:space="preserve">
+    <value>Mise à jour d’un groupe de critères de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchDeletingGroup" xml:space="preserve">
+    <value>Suppression d’un groupe de critères de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchAddingCriterion" xml:space="preserve">
+    <value>Ajout d’un critère à la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchUpdatingCriterion" xml:space="preserve">
+    <value>Mise à jour d’un critère de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchDeletingCriterion" xml:space="preserve">
+    <value>Suppression d’un critère de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="RoleCreating" xml:space="preserve">
+    <value>Création du rôle « {0} »</value>
+  </data>
+  <data name="RoleAddingMember" xml:space="preserve">
+    <value>Ajout de « {0} » au rôle « {1} »</value>
+  </data>
+  <data name="RoleRemovingMember" xml:space="preserve">
+    <value>Retrait de « {0} » du rôle « {1} »</value>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>Création de la clé d’API « {0} »</value>
+  </data>
+  <data name="ApiKeyUpdating" xml:space="preserve">
+    <value>Mise à jour de la clé d’API « {0} »</value>
+  </data>
+  <data name="ApiKeyDeleting" xml:space="preserve">
+    <value>Suppression de la clé d’API « {0} »</value>
+  </data>
+  <data name="CertAddingUploaded" xml:space="preserve">
+    <value>Ajout d’un certificat de confiance à partir de données téléversées</value>
+  </data>
+  <data name="CertAddingFromFile" xml:space="preserve">
+    <value>Ajout d’un certificat de confiance à partir du chemin de fichier : {0}</value>
+  </data>
+  <data name="CertUpdating" xml:space="preserve">
+    <value>Mise à jour du certificat de confiance « {0} »</value>
+  </data>
+  <data name="CertDeleting" xml:space="preserve">
+    <value>Suppression du certificat de confiance « {0} »</value>
+  </data>
+  <data name="ExportPreparing" xml:space="preserve">
+    <value>Préparation des exportations</value>
+  </data>
+  <data name="ExportCompletedSummary" xml:space="preserve">
+    <value>Exportation terminée : {0} réussie(s), {1} en échec, {2} différée(s)</value>
+  </data>
+  <data name="ExportExecuting" xml:space="preserve">
+    <value>Exportation en cours</value>
+  </data>
+  <data name="ExportExecutingDeferred" xml:space="preserve">
+    <value>Exportation différée en cours</value>
+  </data>
+  <data name="ExportToFile" xml:space="preserve">
+    <value>Exportation de {0} modifications vers un fichier</value>
+  </data>
+  <data name="RetentionRunning" xml:space="preserve">
+    <value>Nettoyage de la conservation de l’historique des modifications et des activités</value>
+  </data>
+  <data name="AutoSelectingContainers" xml:space="preserve">
+    <value>Sélection automatique de {0} conteneur(s) créé(s) pendant l’exportation</value>
+  </data>
+  <data name="UpdateObjectType" xml:space="preserve">
+    <value>Mise à jour du type d’objet : {0}</value>
+  </data>
+  <data name="UpdateAttribute" xml:space="preserve">
+    <value>Mise à jour de l’attribut : {0}.{1}</value>
+  </data>
+  <data name="BulkUpdateAttributes" xml:space="preserve">
+    <value>Mise à jour en bloc de {0} attribut(s) sur {1}</value>
+  </data>
 </root>

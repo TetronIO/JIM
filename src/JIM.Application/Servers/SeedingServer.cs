@@ -771,7 +771,7 @@ internal class SeedingServer
             TargetType = ActivityTargetType.SystemInitialisation,
             TargetOperationType = ActivityTargetOperationType.Create,
             TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetBuiltInConfiguration)),
-            Message = "Applying built-in configuration"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SeedingApplying))
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
         _seedingActivity = activity;

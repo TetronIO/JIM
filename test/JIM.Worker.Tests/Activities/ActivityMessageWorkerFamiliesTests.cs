@@ -308,4 +308,50 @@ public class ActivityMessageWorkerFamiliesTests
         AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.ExchangeRetriedOne), 3, ActivityMessage.Plain(3)), "3 queued Exchange changes will be attempted again.");
         AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryRecord)), "Retried; JIM will attempt it again shortly.");
     }
+
+    [TestCase(nameof(ActivityMessages.SeedingApplying), new string[0], "Applying built-in configuration")]
+    [TestCase(nameof(ActivityMessages.AuthCreatingInitialAdmin), new string[0], "Creating initial administrator user on first sign-in")]
+    [TestCase(nameof(ActivityMessages.AuthAssigningAdminRole), new[] { "Administrator" }, "Assigning Administrator role to initial administrator")]
+    [TestCase(nameof(ActivityMessages.SearchUpdating), new[] { "Users" }, "Updating Predefined Search 'Users'")]
+    [TestCase(nameof(ActivityMessages.SearchAddingGroup), new[] { "Users" }, "Adding a criteria group to Predefined Search 'Users'")]
+    [TestCase(nameof(ActivityMessages.SearchUpdatingGroup), new[] { "Users" }, "Updating a criteria group on Predefined Search 'Users'")]
+    [TestCase(nameof(ActivityMessages.SearchDeletingGroup), new[] { "Users" }, "Deleting a criteria group from Predefined Search 'Users'")]
+    [TestCase(nameof(ActivityMessages.SearchAddingCriterion), new[] { "Users" }, "Adding a criterion to Predefined Search 'Users'")]
+    [TestCase(nameof(ActivityMessages.SearchUpdatingCriterion), new[] { "Users" }, "Updating a criterion on Predefined Search 'Users'")]
+    [TestCase(nameof(ActivityMessages.SearchDeletingCriterion), new[] { "Users" }, "Deleting a criterion from Predefined Search 'Users'")]
+    [TestCase(nameof(ActivityMessages.RoleCreating), new[] { "Auditors" }, "Creating Role 'Auditors'")]
+    [TestCase(nameof(ActivityMessages.RoleAddingMember), new[] { "Ann", "Auditors" }, "Adding 'Ann' to Role 'Auditors'")]
+    [TestCase(nameof(ActivityMessages.RoleRemovingMember), new[] { "Ann", "Auditors" }, "Removing 'Ann' from Role 'Auditors'")]
+    [TestCase(nameof(ActivityMessages.ApiKeyCreating), new[] { "CI" }, "Creating API key 'CI'")]
+    [TestCase(nameof(ActivityMessages.ApiKeyUpdating), new[] { "CI" }, "Updating API key 'CI'")]
+    [TestCase(nameof(ActivityMessages.ApiKeyDeleting), new[] { "CI" }, "Deleting API key 'CI'")]
+    [TestCase(nameof(ActivityMessages.CertAddingUploaded), new string[0], "Adding trusted certificate from uploaded data")]
+    [TestCase(nameof(ActivityMessages.CertAddingFromFile), new[] { "/tmp/a.pem" }, "Adding trusted certificate from file path: /tmp/a.pem")]
+    [TestCase(nameof(ActivityMessages.CertUpdating), new[] { "Lab CA" }, "Updating trusted certificate 'Lab CA'")]
+    [TestCase(nameof(ActivityMessages.CertDeleting), new[] { "Lab CA" }, "Deleting trusted certificate 'Lab CA'")]
+    [TestCase(nameof(ActivityMessages.ExportPreparing), new string[0], "Preparing exports")]
+    [TestCase(nameof(ActivityMessages.ExportExecuting), new string[0], "Exporting")]
+    [TestCase(nameof(ActivityMessages.ExportExecutingDeferred), new string[0], "Exporting deferred")]
+    [TestCase(nameof(ActivityMessages.ExportToFile), new[] { "12" }, "Exporting 12 changes to file")]
+    [TestCase(nameof(ActivityMessages.ExportCompletedSummary), new[] { "5", "1", "2" }, "Export completed: 5 succeeded, 1 failed, 2 deferred")]
+    [TestCase(nameof(ActivityMessages.RetentionRunning), new string[0], "Change history and activity retention cleanup")]
+    [TestCase(nameof(ActivityMessages.AutoSelectingContainers), new[] { "3" }, "Auto-selecting 3 container(s) created during export")]
+    [TestCase(nameof(ActivityMessages.UpdateObjectType), new[] { "User" }, "Update object type: User")]
+    [TestCase(nameof(ActivityMessages.UpdateAttribute), new[] { "User", "mail" }, "Update attribute: User.mail")]
+    [TestCase(nameof(ActivityMessages.BulkUpdateAttributes), new[] { "4", "User" }, "Bulk update of 4 attribute(s) on User")]
+    [TestCase(nameof(ActivityMessages.ServiceSettingUpdatedFromEnvironment), new[] { "Sync page size" }, "Updated built-in Service Setting 'Sync page size' from environment configuration")]
+    public void ActivityStart_EveryMessage_SaysWhatItAlwaysSaid_AndTranslates(string key, string[] arguments, string english) =>
+        AssertTranslated(ActivityMessage.Create(key, arguments.Select(a => (MessageArgument)a).ToArray()), english);
+
+    [Test]
+    public void ExportProgressInfo_SettingTheMessage_SetsTheEnglishBesideIt()
+    {
+        var info = new ExportProgressInfo { MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportPreparing)) };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(info.Message, Is.EqualTo("Preparing exports"));
+            Assert.That(info.MessageDetail!.ToEnglish(), Is.EqualTo(info.Message));
+        }
+    }
 }

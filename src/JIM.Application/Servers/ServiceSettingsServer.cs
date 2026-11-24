@@ -552,7 +552,7 @@ namespace JIM.Application.Servers
                 TargetType = ActivityTargetType.ServiceSetting,
                 TargetOperationType = ActivityTargetOperationType.Update,
                 ParentActivityId = await getParentActivityAsync(),
-                Message = $"Updated built-in Service Setting '{displayName}' from environment configuration"
+                MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ServiceSettingUpdatedFromEnvironment), displayName)
             };
             await Application.Activities.CreateSystemActivityAsync(activity);
 

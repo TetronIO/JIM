@@ -94,7 +94,7 @@ public class SecurityServer
             TargetName = role.Name,
             TargetType = ActivityTargetType.Role,
             TargetOperationType = ActivityTargetOperationType.Create,
-            Message = $"Creating Role '{role.Name}'",
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleCreating), role.Name),
             ParentActivityId = parentActivityId
         };
         await createActivityAsync(activity);
@@ -147,7 +147,7 @@ public class SecurityServer
             TargetName = roleName,
             TargetType = ActivityTargetType.Role,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Adding '{memberName}' to Role '{roleName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleAddingMember), memberName, roleName)
         };
         await createActivityAsync(activity);
 
@@ -200,7 +200,7 @@ public class SecurityServer
             TargetName = roleName,
             TargetType = ActivityTargetType.Role,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Adding '{memberName}' to Role '{roleName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleAddingMember), memberName, roleName)
         };
         await createActivityAsync(activity);
 
@@ -248,7 +248,7 @@ public class SecurityServer
             TargetName = roleName,
             TargetType = ActivityTargetType.Role,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Removing '{memberName}' from Role '{roleName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RoleRemovingMember), memberName, roleName)
         };
         await createActivityAsync(activity);
 
@@ -619,7 +619,7 @@ public class SecurityServer
             TargetName = apiKey.Name,
             TargetType = ActivityTargetType.ApiKey,
             TargetOperationType = ActivityTargetOperationType.Create,
-            Message = $"Creating API key '{apiKey.Name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ApiKeyCreating), apiKey.Name)
         };
         await createActivityAsync(activity);
 
@@ -672,7 +672,7 @@ public class SecurityServer
             TargetName = apiKey.Name,
             TargetType = ActivityTargetType.ApiKey,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Updating API key '{apiKey.Name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ApiKeyUpdating), apiKey.Name)
         };
         await createActivityAsync(activity);
 
@@ -723,7 +723,7 @@ public class SecurityServer
             TargetName = apiKeyName,
             TargetType = ActivityTargetType.ApiKey,
             TargetOperationType = ActivityTargetOperationType.Delete,
-            Message = $"Deleting API key '{apiKeyName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ApiKeyDeleting), apiKeyName)
         };
         await createActivityAsync(activity);
 

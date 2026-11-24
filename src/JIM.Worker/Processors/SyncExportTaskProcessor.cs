@@ -290,7 +290,10 @@ public class SyncExportTaskProcessor
                             return;
                         }
 
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
+                        if (progressInfo.MessageDetail is { } narration)
+                            await _syncRepo.UpdateActivityMessageAsync(_activity, narration);
+                        else
+                            await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,

@@ -102,7 +102,7 @@ public class CertificateServer : ICertificateProvider
             TargetName = name,
             TargetType = ActivityTargetType.TrustedCertificate,
             TargetOperationType = ActivityTargetOperationType.Create,
-            Message = "Adding trusted certificate from uploaded data"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CertAddingUploaded))
         };
         await createActivityAsync(activity);
 
@@ -183,7 +183,7 @@ public class CertificateServer : ICertificateProvider
             TargetName = name,
             TargetType = ActivityTargetType.TrustedCertificate,
             TargetOperationType = ActivityTargetOperationType.Create,
-            Message = $"Adding trusted certificate from file path: {filePath}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CertAddingFromFile), filePath)
         };
         await createActivityAsync(activity);
 
@@ -272,7 +272,7 @@ public class CertificateServer : ICertificateProvider
             TargetName = certificate.Name,
             TargetType = ActivityTargetType.TrustedCertificate,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Updating trusted certificate '{certificate.Name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CertUpdating), certificate.Name)
         };
         await createActivityAsync(activity);
 
@@ -346,7 +346,7 @@ public class CertificateServer : ICertificateProvider
             TargetName = certificateName,
             TargetType = ActivityTargetType.TrustedCertificate,
             TargetOperationType = ActivityTargetOperationType.Delete,
-            Message = $"Deleting trusted certificate '{certificateName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CertDeleting), certificateName)
         };
         await createActivityAsync(activity);
 
