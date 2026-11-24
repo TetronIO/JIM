@@ -1252,7 +1252,7 @@ public class ExportExecutionServer
         var finishedUnwritten = 0;
 
         // Read by batches as they record their outcomes, added to as each chunk is resolved.
-        var unresolvedReferenceNotes = new ConcurrentDictionary<Guid, string>();
+        var unresolvedReferenceNotes = new ConcurrentDictionary<Guid, JimMessage>();
 
         // What the pass records for exports it does not write. Kept off the result until the batches are done: the
         // parallel workers add their own outcomes to it under a lock this pass does not hold.
@@ -1478,7 +1478,7 @@ public class ExportExecutionServer
                         PendingExportId = export.Id,
                         Deferred = true,
                         Succeeded = false,
-                        UnresolvedReferenceMessage = note
+                        UnresolvedReferenceMessageDetail = note
                     }.WithCauseFrom(export);
                     lock (preparationLock)
                         deferredItems.Add(deferredItem);
@@ -1765,13 +1765,13 @@ public class ExportExecutionServer
     /// <param name="names">The display names of the referenced Metaverse Objects with no anchor, as
     /// <see cref="WithdrawReferencesToDeletedObjectsAsync"/> read them.</param>
     /// <returns>Per Pending Export id, the message for its item; empty unless handling is Error.</returns>
-    private static (Dictionary<Guid, string> Notes, int UnresolvableCount) BuildUnresolvedReferenceNotes(
+    private static (Dictionary<Guid, JimMessage> Notes, int UnresolvableCount) BuildUnresolvedReferenceNotes(
         ConnectedSystem connectedSystem,
         List<PendingExport> stillUnresolvedExports,
         IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
         IReadOnlyDictionary<Guid, string?> names)
     {
-        var notes = new Dictionary<Guid, string>();
+        var notes = new Dictionary<Guid, JimMessage>();
         if (stillUnresolvedExports.Count == 0)
             return (notes, 0);
 
@@ -1815,19 +1815,13 @@ public class ExportExecutionServer
             }).ToList();
 
             const int shown = 3;
-            var summary = string.Join("; ", described.Take(shown));
-            if (described.Count > shown)
-                summary += $"; and {described.Count - shown} more";
-
-            var message = $"{described.Count} reference value(s) could not be written because the referenced Metaverse Object has no " +
-                          $"Connected System Object in this Connected System: {summary}. The referenced object is out of scope for every " +
-                          "Synchronisation Rule into this system, or has not been provisioned yet. Everything else on this export was written; " +
-                          "the reference is retried on the deferred cadence and written when the object appears.";
+            var messageDetail = ActivityMessage.UnresolvedReferences(described, shown);
+            var message = messageDetail.ToEnglish();
 
             switch (handling)
             {
                 case UnresolvedReferenceHandling.Error:
-                    notes[export.Id] = message;
+                    notes[export.Id] = messageDetail;
                     Log.Debug("BuildUnresolvedReferenceNotes: Export {ExportId} for CSO {CsoId}: {Message}",
                         export.Id, export.ConnectedSystemObjectId, message);
                     break;
@@ -1870,7 +1864,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         int passTotal,
         TimeSpan initialPasswordTimeToLive,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        IReadOnlyDictionary<Guid, JimMessage>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
         Func<int>? passProcessedOffset = null,
         Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null)
@@ -2061,7 +2055,7 @@ public class ExportExecutionServer
         int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null,
         int? passTotal = null,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        IReadOnlyDictionary<Guid, JimMessage>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
         Func<int>? passProcessedOffset = null)
     {
@@ -2993,7 +2987,7 @@ public class ExportExecutionServer
         string connectedSystemName,
         IReadOnlySet<int>? initialPasswordRuleIds,
         bool stageExchangeChanges,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
+        IReadOnlyDictionary<Guid, JimMessage>? unresolvedReferenceNotes = null)
     {
         var exportsToUpdate = new List<PendingExport>();
         var exchangeDeclarations = new List<(PendingExport Export, ConnectedSystemExportResult ExportResult, ExchangeDeclaredState Declared, ExchangeRecipientDecision? Decision)>();
@@ -3100,7 +3094,7 @@ public class ExportExecutionServer
                 AttributeChangeCount = writtenChanges.Count,
                 AttributeValueChanges = writtenChanges,
                 Succeeded = true,
-                UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null,
+                UnresolvedReferenceMessageDetail = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null,
                 ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
             }.WithCauseFrom(export));
 

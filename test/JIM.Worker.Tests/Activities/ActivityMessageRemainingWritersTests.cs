@@ -248,4 +248,58 @@ public class ActivityMessageRemainingWritersTests
         AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.RecallScopeHeldBack), cause, id),
             $"{undecidable.Message} Metaverse Object {id} was left as it was, with the values the Synchronisation Rule contributed.");
     }
+
+    [Test]
+    public void ImportObjectTypeErrors_SayWhatTheProcessorAlwaysWrote_AndTranslate()
+    {
+        AssertTranslated(ActivityMessage.ImportObjectTypeChangeWithdrawn("User", "Contact"),
+            "JIM holds this object as a 'User', and this Full Import allows Object Type changes, but it could not retire the 'User' object: " +
+            "it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronisation Rule still manages). " +
+            "The new 'Contact' object has not been created, and the 'User' object has been left as it is, so nothing is deprovisioned. " +
+            "Bring the 'User' object into the Full Import's scope, or disable the Synchronisation Rules bound to its Object Type, then run the Full Import again.");
+
+        const string tail = " If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: " +
+            "JIM will retire the 'User' object and import a new 'Contact' one. If it has not, review the Object Types selected on the Connected System.";
+        AssertTranslated(ActivityMessage.ImportObjectTypeChangeRefused("User", "Contact", "E1", heldIsObsolete: false),
+            "JIM holds this object as a 'User', but the Connector now returns it as a 'Contact' (External ID 'E1'). " +
+            "It has not been imported, and the existing 'User' object has been left as it is, so nothing is deprovisioned." + tail);
+        AssertTranslated(ActivityMessage.ImportObjectTypeChangeRefused("User", "Contact", "E1", heldIsObsolete: true),
+            "JIM holds this object as a 'User', but the Connector now returns it as a 'Contact' (External ID 'E1'). " +
+            "It has not been imported, and the existing 'User' object, which an earlier import marked obsolete, has been left as it is." + tail);
+
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExportedCreateNotConfirmed)),
+            "The Create export succeeded, but this import read every object and did not report this one back. The Create will be retried on the next export.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ImportDeletionWithoutObjectType)),
+            "The Connector reported a deletion without its Object Type, and its External ID does not tell JIM which object was deleted: " +
+            "this Connector's External IDs can name different objects in different Object Types. Nothing was deleted; run a Full Import, which detects deletions by absence.");
+
+        var notFound = ActivityMessage.ImportObjectTypeNotFound(7, "Widget");
+        Assert.That(notFound.ToEnglish(), Is.EqualTo("PerformImportAsync: Couldn't find valid Connected System (7) object type for imported object type: Widget"));
+        Assert.That(In(notFound, French), Is.Not.EqualTo(notFound.ToEnglish()));
+    }
+
+    [Test]
+    public void UnresolvedReferences_SaysWhatTheServerAlwaysWrote_WithAndWithoutMore_AndTranslates()
+    {
+        const string lead = " reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System: ";
+        const string tail = ". The referenced object is out of scope for every Synchronisation Rule into this system, or has not been provisioned yet. " +
+            "Everything else on this export was written; the reference is retried on the deferred cadence and written when the object appears.";
+
+        AssertTranslated(ActivityMessage.UnresolvedReferences(["Manager -> 'Ada' (1)", "Manager -> 'Bo' (2)"], 3), "2" + lead + "Manager -> 'Ada' (1); Manager -> 'Bo' (2)" + tail);
+        AssertTranslated(ActivityMessage.UnresolvedReferences(["a -> 1", "b -> 2", "c -> 3", "d -> 4", "e -> 5"], 3), "5" + lead + "a -> 1; b -> 2; c -> 3; and 2 more" + tail);
+    }
+
+    [Test]
+    public void ProvisioningMatchErrors_SayWhatTheServerAlwaysWrote_AndTranslate()
+    {
+        const string rest = ". A Metaverse Object can join only one Connected System Object in each Connected System: correct the data, or the Object Matching Rule, so that its values identify one.";
+
+        AssertTranslated(ActivityMessage.ProvisioningMatchFailed("Corporate AD", "the rule could not be worked out"), "Before provisioning to 'Corporate AD': the rule could not be worked out");
+        AssertTranslated(ActivityMessage.ProvisioningAmbiguity(2, "Corporate AD", null, [], 0, previewing: false),
+            "This Metaverse Object matches 2 Connected System Objects in 'Corporate AD', so it was neither joined to one nor provisioned" + rest);
+        AssertTranslated(ActivityMessage.ProvisioningAmbiguity(2, "Corporate AD", "Employee ID equals employeeNumber", ["\"E1\""], 0, previewing: true),
+            "This Metaverse Object matches 2 Connected System Objects in 'Corporate AD' on Employee ID equals employeeNumber (\"E1\"), so a synchronisation would neither join it to one nor provision it" + rest);
+        AssertTranslated(ActivityMessage.ProvisioningAmbiguity(2, "Corporate AD", "x equals y", ["\"E1\"", "\"E2\""], 3, previewing: false),
+            "This Metaverse Object matches 2 Connected System Objects in 'Corporate AD' on x equals y (\"E1\", \"E2\", and 3 more), so it was neither joined to one nor provisioned" + rest);
+    }
 }

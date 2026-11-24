@@ -1521,4 +1521,64 @@
     <value>{0} Metaverse Object {1} was left as it was, with the values the Synchronisation Rule contributed.</value>
     <comment>An error on an execution item of a Synchronisation Rule's deletion. {0}: why a surviving contributor's scope could not be decided (a message ending in a full stop), {1}: the Metaverse Object's id.</comment>
   </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM holds this object as a '{0}', and this Full Import allows Object Type changes, but it could not retire the '{0}' object: it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronisation Rule still manages). The new '{1}' object has not been created, and the '{0}' object has been left as it is, so nothing is deprovisioned. Bring the '{0}' object into the Full Import's scope, or disable the Synchronisation Rules bound to its Object Type, then run the Full Import again.</value>
+    <comment>An error on an item of a Full Import that allows Object Type changes, whose old object could not be retired. {0}: the Object Type JIM holds the object as, {1}: the Object Type it arrived as.</comment>
+  </data>
+  <data name="ExportedCreateNotConfirmed" xml:space="preserve">
+    <value>The Create export succeeded, but this import read every object and did not report this one back. The Create will be retried on the next export.</value>
+    <comment>An error on an import item whose earlier Create export was not seen coming back.</comment>
+  </data>
+  <data name="ImportDeletionWithoutObjectType" xml:space="preserve">
+    <value>The Connector reported a deletion without its Object Type, and its External ID does not tell JIM which object was deleted: this Connector's External IDs can name different objects in different Object Types. Nothing was deleted; run a Full Import, which detects deletions by absence.</value>
+    <comment>An error on an import item.</comment>
+  </data>
+  <data name="ImportObjectTypeNotFound" xml:space="preserve">
+    <value>PerformImportAsync: Couldn't find valid Connected System ({0}) object type for imported object type: {1}</value>
+    <comment>An error on an import item. The English begins with the name of the code that raised it, which the translations leave out. {0}: the Connected System's id, as plain digits, {1}: the Object Type name the Connector gave.</comment>
+  </data>
+  <data name="ImportObjectTypeChangeRefused" xml:space="preserve">
+    <value>JIM holds this object as a '{0}', but the Connector now returns it as a '{1}' (External ID '{2}'). It has not been imported, and {3}. If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM will retire the '{0}' object and import a new '{1}' one. If it has not, review the Object Types selected on the Connected System.</value>
+    <comment>An error on an import item whose Object Type changed. {0}: the Object Type JIM holds, {1}: the one it arrived as, {2}: the External ID, {3}: one of the two clauses ImportKeptHeldObsolete and ImportKeptHeldNothingDeprovisioned. 'Allow Object Type Changes' is the name of a Run Profile option.</comment>
+  </data>
+  <data name="ImportKeptHeldObsolete" xml:space="preserve">
+    <value>the existing '{0}' object, which an earlier import marked obsolete, has been left as it is</value>
+    <comment>A clause inside ImportObjectTypeChangeRefused. Lower case, no full stop.</comment>
+  </data>
+  <data name="ImportKeptHeldNothingDeprovisioned" xml:space="preserve">
+    <value>the existing '{0}' object has been left as it is, so nothing is deprovisioned</value>
+    <comment>A clause inside ImportObjectTypeChangeRefused. Lower case, no full stop.</comment>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System: {1}. The referenced object is out of scope for every Synchronisation Rule into this system, or has not been provisioned yet. Everything else on this export was written; the reference is retried on the deferred cadence and written when the object appears.</value>
+    <comment>Error or note on an export item that refers to an object the target does not hold. {0}: how many, as plain digits, {1}: the list of references (a message or text).</comment>
+  </data>
+  <data name="UnresolvedReferencesAndMore" xml:space="preserve">
+    <value>{0}; and {1} more</value>
+    <comment>The end of a list of unresolved references. {0}: the first few references, {1}: how many more, as plain digits.</comment>
+  </data>
+  <data name="ProvisioningMatchFailed" xml:space="preserve">
+    <value>Before provisioning to '{0}': {1}</value>
+    <comment>An error when export matching could not be worked out. {0}: the Connected System's name, {1}: why.</comment>
+  </data>
+  <data name="ProvisioningAmbiguity" xml:space="preserve">
+    <value>This Metaverse Object matches {0} Connected System Objects in '{1}', so {2}. A Metaverse Object can join only one Connected System Object in each Connected System: correct the data, or the Object Matching Rule, so that its values identify one.</value>
+    <comment>An error when export matching found several objects. {0}: how many, as plain digits, {1}: the Connected System's name, {2}: one of ProvisioningOutcomeWasNot and ProvisioningOutcomeWouldNot (starts lower case, no full stop).</comment>
+  </data>
+  <data name="ProvisioningAmbiguityOnRule" xml:space="preserve">
+    <value>This Metaverse Object matches {0} Connected System Objects in '{1}' on {2} ({3}), so {4}. A Metaverse Object can join only one Connected System Object in each Connected System: correct the data, or the Object Matching Rule, so that its values identify one.</value>
+    <comment>As ProvisioningAmbiguity, where the Object Matching Rule is known. {2}: a description of the rule's comparison, in English (for example 'Employee ID equals employeeNumber'), {3}: the matched values (quoted, comma separated), {4}: the outcome.</comment>
+  </data>
+  <data name="ProvisioningAmbiguityMoreValues" xml:space="preserve">
+    <value>and {0} more</value>
+    <comment>The last item of a list of matched values. {0}: how many more, as plain digits.</comment>
+  </data>
+  <data name="ProvisioningOutcomeWasNot" xml:space="preserve">
+    <value>it was neither joined to one nor provisioned</value>
+    <comment>The outcome inside ProvisioningAmbiguity. Lower case, no full stop. The German is a main clause with the verb first, because it follows 'daher gilt:'.</comment>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronisation would neither join it to one nor provision it</value>
+    <comment>The outcome inside ProvisioningAmbiguity, when a preview describes what a synchronisation would do. Lower case, no full stop.</comment>
+  </data>
 </root>

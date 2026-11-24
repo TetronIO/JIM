@@ -134,4 +134,13 @@
   <data name="RecallScopeHeldBack" xml:space="preserve">
     <value>{0} Metaverse Object {1} was left as it was, with the values the Synchronization Rule contributed.</value>
   </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM holds this object as a '{0}', and this Full Import allows Object Type changes, but it could not retire the '{0}' object: it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronization Rule still manages). The new '{1}' object has not been created, and the '{0}' object has been left as it is, so nothing is deprovisioned. Bring the '{0}' object into the Full Import's scope, or disable the Synchronization Rules bound to its Object Type, then run the Full Import again.</value>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System: {1}. The referenced object is out of scope for every Synchronization Rule into this system, or has not been provisioned yet. Everything else on this export was written; the reference is retried on the deferred cadence and written when the object appears.</value>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronization would neither join it to one nor provision it</value>
+  </data>
 </root>

@@ -480,6 +480,23 @@ public class ProcessedExportItem
     public string? UnresolvedReferenceMessage { get; set; }
 
     /// <summary>
+    /// <see cref="UnresolvedReferenceMessage"/> as a message the portal shows in the reader's language (#3084). Setting it
+    /// also sets <see cref="UnresolvedReferenceMessage"/> to its British English.
+    /// </summary>
+    public JimMessage? UnresolvedReferenceMessageDetail
+    {
+        get => _unresolvedReferenceMessageDetail;
+        set
+        {
+            _unresolvedReferenceMessageDetail = value;
+            if (value != null)
+                UnresolvedReferenceMessage = value.ToEnglish();
+        }
+    }
+
+    private JimMessage? _unresolvedReferenceMessageDetail;
+
+    /// <summary>
     /// True when this item's Connected System Object row has already been removed by the export server
     /// as part of processing this item: a successful Delete export of a Connected System Object whose
     /// provisioning was never confirmed by an import (Status stayed PendingProvisioning throughout).

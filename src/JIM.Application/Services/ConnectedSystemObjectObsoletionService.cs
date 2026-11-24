@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
+using JIM.Application.Localisation;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -189,7 +190,7 @@ public static class ConnectedSystemObjectObsoletionService
         {
             deletionExecutionItem.ObjectChangeType = ObjectChangeType.NotSet;
             deletionExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
-            deletionExecutionItem.ErrorMessage = undecidable.Message;
+            ActivityMessage.SetError(deletionExecutionItem, undecidable);
             result.UndecidableSurvivorScope = undecidable;
             result.ExecutionItems.Add(deletionExecutionItem);
             Log.Warning("ProcessObsoleteConnectedSystemObjectAsync: CSO {CsoId} held back, with Metaverse Object {MvoId}; a surviving contributor's scope could not be decided: {Message}",

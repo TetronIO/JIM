@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Sync;
 
@@ -34,6 +35,12 @@ public class ProvisioningMatchError
 
     /// <summary>What went wrong and how to resolve it, as the administrator reads it.</summary>
     public required string Message { get; init; }
+
+    /// <summary>
+    /// <see cref="Message"/> as a message the portal shows in the reader's language (#3084); its English is exactly
+    /// <see cref="Message"/>. Null for an error built without one.
+    /// </summary>
+    public JimMessage? MessageDetail { get; init; }
 
     /// <summary>The Connected System Objects an ambiguous match found, to list on the error; empty otherwise.</summary>
     public IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate> Candidates { get; init; } = [];

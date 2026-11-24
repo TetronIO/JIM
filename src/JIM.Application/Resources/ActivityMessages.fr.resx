@@ -1161,4 +1161,49 @@
   <data name="RecallScopeHeldBack" xml:space="preserve">
     <value>{0} L’objet Metaverse {1} a été laissé en l’état, avec les valeurs que la règle de synchronisation a apportées.</value>
   </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM conserve cet objet en tant que « {0} », et cette importation complète autorise les changements de type d’objet, mais elle n’a pas pu retirer l’objet « {0} » : il se trouve en dehors de ce que couvre la détection des suppressions de l’importation complète (une partition que ce profil d’exécution n’importe pas, ou un type d’objet désélectionné qu’une règle de synchronisation activée gère encore). Le nouvel objet « {1} » n’a pas été créé et l’objet « {0} » a été laissé en l’état ; aucun déprovisionnement n’a donc lieu. Placez l’objet « {0} » dans le périmètre de l’importation complète, ou désactivez les règles de synchronisation liées à son type d’objet, puis relancez l’importation complète.</value>
+  </data>
+  <data name="ExportedCreateNotConfirmed" xml:space="preserve">
+    <value>L’exportation de création a réussi, mais cette importation a lu tous les objets sans renvoyer celui-ci. La création sera retentée lors de la prochaine exportation.</value>
+  </data>
+  <data name="ImportDeletionWithoutObjectType" xml:space="preserve">
+    <value>Le connecteur a signalé une suppression sans son type d’objet, et son identifiant externe ne permet pas à JIM de savoir quel objet a été supprimé : les identifiants externes de ce connecteur peuvent désigner des objets différents dans des types d’objet différents. Rien n’a été supprimé ; lancez une importation complète, qui détecte les suppressions par absence.</value>
+  </data>
+  <data name="ImportObjectTypeNotFound" xml:space="preserve">
+    <value>Aucun type d’objet valide n’a été trouvé dans le système connecté ({0}) pour le type d’objet importé : {1}</value>
+  </data>
+  <data name="ImportObjectTypeChangeRefused" xml:space="preserve">
+    <value>JIM conserve cet objet en tant que « {0} », mais le connecteur le renvoie désormais en tant que « {1} » (identifiant externe « {2} »). Il n’a pas été importé, et {3}. Si le type de l’objet a réellement changé, lancez une importation complète avec l’option « Autoriser les changements de type d’objet » activée sur son profil d’exécution : JIM retirera l’objet « {0} » et importera un nouvel objet « {1} ». Sinon, vérifiez les types d’objet sélectionnés sur le système connecté.</value>
+  </data>
+  <data name="ImportKeptHeldObsolete" xml:space="preserve">
+    <value>l’objet « {0} » existant, qu’une importation précédente a marqué comme obsolète, a été laissé en l’état</value>
+  </data>
+  <data name="ImportKeptHeldNothingDeprovisioned" xml:space="preserve">
+    <value>l’objet « {0} » existant a été laissé en l’état ; aucun déprovisionnement n’a donc lieu</value>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} valeur(s) de référence n’ont pas pu être écrites, car l’objet Metaverse référencé n’a pas d’objet de système connecté dans ce système connecté : {1}. L’objet référencé est hors du périmètre de toutes les règles de synchronisation vers ce système, ou n’a pas encore été provisionné. Tout le reste de cette exportation a été écrit ; la référence est retentée selon la cadence différée et écrite dès que l’objet apparaît.</value>
+  </data>
+  <data name="UnresolvedReferencesAndMore" xml:space="preserve">
+    <value>{0} ; et {1} de plus</value>
+  </data>
+  <data name="ProvisioningMatchFailed" xml:space="preserve">
+    <value>Avant le provisionnement vers « {0} » : {1}</value>
+  </data>
+  <data name="ProvisioningAmbiguity" xml:space="preserve">
+    <value>Cet objet Metaverse correspond à {0} objets de système connecté dans « {1} » ; {2}. Un objet Metaverse ne peut être joint qu’à un seul objet de système connecté dans chaque système connecté : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ProvisioningAmbiguityOnRule" xml:space="preserve">
+    <value>Cet objet Metaverse correspond à {0} objets de système connecté dans « {1} » selon {2} ({3}) ; {4}. Un objet Metaverse ne peut être joint qu’à un seul objet de système connecté dans chaque système connecté : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ProvisioningAmbiguityMoreValues" xml:space="preserve">
+    <value>et {0} de plus</value>
+  </data>
+  <data name="ProvisioningOutcomeWasNot" xml:space="preserve">
+    <value>il n’a été ni joint à l’un d’eux ni provisionné</value>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>une synchronisation ne le joindrait ni à l’un d’eux ni ne le provisionnerait</value>
+  </data>
 </root>

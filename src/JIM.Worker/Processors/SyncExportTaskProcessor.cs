@@ -507,7 +507,10 @@ public class SyncExportTaskProcessor
                 // Activity with a warning. Only raised under Error handling; see
                 // ExportExecutionServer.BuildUnresolvedReferenceNotes.
                 executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
+                if (exportItem.UnresolvedReferenceMessageDetail is { } unresolvedDetail)
+                    executionItem.ErrorMessageDetail = unresolvedDetail;
+                else
+                    executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
             }
 
             // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.

@@ -1159,4 +1159,49 @@
   <data name="RecallScopeHeldBack" xml:space="preserve">
     <value>{0} Das Metaverse-Objekt {1} wurde unverändert gelassen, mit den Werten, die die Synchronisierungsregel beigetragen hat.</value>
   </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM führt dieses Objekt als „{0}“, und dieser vollständige Import erlaubt Objekttypänderungen, konnte das Objekt „{0}“ aber nicht stilllegen: Es liegt außerhalb dessen, was die Löscherkennung des vollständigen Imports abdeckt (eine Partition, die dieses Ausführungsprofil nicht importiert, oder ein abgewählter Objekttyp, den eine aktivierte Synchronisierungsregel noch verwaltet). Das neue Objekt „{1}“ wurde nicht erstellt, und das Objekt „{0}“ blieb unverändert, sodass nichts deprovisioniert wird. Nehmen Sie das Objekt „{0}“ in den Geltungsbereich des vollständigen Imports auf, oder deaktivieren Sie die an seinen Objekttyp gebundenen Synchronisierungsregeln, und führen Sie den vollständigen Import dann erneut aus.</value>
+  </data>
+  <data name="ExportedCreateNotConfirmed" xml:space="preserve">
+    <value>Der Create-Export war erfolgreich, aber dieser Import hat alle Objekte gelesen und dieses nicht zurückgemeldet. Das Erstellen wird beim nächsten Export erneut versucht.</value>
+  </data>
+  <data name="ImportDeletionWithoutObjectType" xml:space="preserve">
+    <value>Der Connector hat eine Löschung ohne Objekttyp gemeldet, und seine externe ID verrät JIM nicht, welches Objekt gelöscht wurde: Die externen IDs dieses Connectors können in verschiedenen Objekttypen verschiedene Objekte bezeichnen. Es wurde nichts gelöscht; führen Sie einen vollständigen Import aus, der Löschungen anhand fehlender Objekte erkennt.</value>
+  </data>
+  <data name="ImportObjectTypeNotFound" xml:space="preserve">
+    <value>Im verbundenen System ({0}) wurde kein gültiger Objekttyp für den importierten Objekttyp gefunden: {1}</value>
+  </data>
+  <data name="ImportObjectTypeChangeRefused" xml:space="preserve">
+    <value>JIM führt dieses Objekt als „{0}“, aber der Connector liefert es jetzt als „{1}“ (externe ID „{2}“). Es wurde nicht importiert, und {3}. Wenn sich der Typ des Objekts tatsächlich geändert hat, führen Sie einen vollständigen Import aus, bei dem in seinem Ausführungsprofil „Objekttypänderungen zulassen“ aktiviert ist: JIM legt das Objekt „{0}“ still und importiert ein neues Objekt „{1}“. Wenn nicht, prüfen Sie die im verbundenen System ausgewählten Objekttypen.</value>
+  </data>
+  <data name="ImportKeptHeldObsolete" xml:space="preserve">
+    <value>das vorhandene Objekt „{0}“, das ein früherer Import als veraltet markiert hat, blieb unverändert</value>
+  </data>
+  <data name="ImportKeptHeldNothingDeprovisioned" xml:space="preserve">
+    <value>das vorhandene Objekt „{0}“ blieb unverändert, sodass nichts deprovisioniert wird</value>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} Verweiswert(e) konnten nicht geschrieben werden, weil das referenzierte Metaverse-Objekt kein Objekt in diesem verbundenen System hat: {1}. Das referenzierte Objekt liegt außerhalb des Geltungsbereichs aller Synchronisierungsregeln für dieses System oder wurde noch nicht bereitgestellt. Alles Übrige dieses Exports wurde geschrieben; der Verweis wird im zurückgestellten Takt erneut versucht und geschrieben, sobald das Objekt erscheint.</value>
+  </data>
+  <data name="UnresolvedReferencesAndMore" xml:space="preserve">
+    <value>{0}; und {1} weitere</value>
+  </data>
+  <data name="ProvisioningMatchFailed" xml:space="preserve">
+    <value>Vor der Bereitstellung in „{0}“: {1}</value>
+  </data>
+  <data name="ProvisioningAmbiguity" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt entspricht {0} Objekten im verbundenen System „{1}“, daher gilt: {2}. Ein Metaverse-Objekt kann in jedem verbundenen System nur mit einem Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ProvisioningAmbiguityOnRule" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt entspricht {0} Objekten im verbundenen System „{1}“ bei {2} ({3}), daher gilt: {4}. Ein Metaverse-Objekt kann in jedem verbundenen System nur mit einem Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ProvisioningAmbiguityMoreValues" xml:space="preserve">
+    <value>und {0} weitere</value>
+  </data>
+  <data name="ProvisioningOutcomeWasNot" xml:space="preserve">
+    <value>wurde es weder mit einem von ihnen verknüpft noch bereitgestellt</value>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>würde eine Synchronisierung es weder mit einem von ihnen verknüpfen noch bereitstellen</value>
+  </data>
 </root>
