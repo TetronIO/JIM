@@ -1352,6 +1352,40 @@ public partial class SyncEngine
     internal static bool HasNoWinner(MetaverseAttribute attribute) => IsAccumulate(attribute) || IsMerge(attribute);
 
     /// <summary>
+    /// Whether flowing <paramref name="cso"/> through <paramref name="inboundRules"/> may withdraw a value its rule holds in
+    /// a Merge attribute (#3059): its Metaverse Object holds a text value tagged with the rule of a direct mapping into a
+    /// Merge attribute that the mapping's source no longer holds. A synchronisation page reads the joined objects of the
+    /// objects this predicts in one query, for the contributor re-election such a withdrawal starts.
+    /// </summary>
+    /// <remarks>
+    /// A prediction, not a decision: the flow itself decides what is withdrawn. Missing a withdrawal (an expression mapping,
+    /// a value changed by inbound value processing) only means that object's joined objects are read singly, as they were
+    /// before; predicting one that does not happen only adds the object to the page's read. Neither changes a result.
+    /// </remarks>
+    public static bool MayWithdrawMergeValues(ConnectedSystemObject cso, IEnumerable<SyncRule> inboundRules)
+    {
+        var mvo = cso.MetaverseObject;
+        if (mvo == null)
+            return false;
+
+        return inboundRules
+            .SelectMany(rule => rule.AttributeFlowRules
+                .Where(mapping => mapping.Enabled && mapping.TargetMetaverseAttribute is { Type: AttributeDataType.Text } target && IsMerge(target)
+                                  && mapping.Sources.Count == 1 && mapping.Sources[0].ConnectedSystemAttributeId.HasValue
+                                  && string.IsNullOrEmpty(mapping.Sources[0].Expression))
+                .Select(mapping => (RuleId: rule.Id, AttributeId: mapping.TargetMetaverseAttribute!.Id, SourceAttributeId: mapping.Sources[0].ConnectedSystemAttributeId!.Value)))
+            .Any(direct =>
+            {
+                var supplied = cso.AttributeValues
+                    .Where(av => av.AttributeId == direct.SourceAttributeId && av.StringValue != null)
+                    .Select(av => av.StringValue!)
+                    .ToHashSet(StringComparer.Ordinal);
+                return mvo.AttributeValues.Any(av => av.AttributeId == direct.AttributeId && av.ContributedBySyncRuleId == direct.RuleId
+                                                     && av.StringValue != null && !supplied.Contains(av.StringValue));
+            });
+    }
+
+    /// <summary>
     /// Re-tags, rather than removes and adds again, each value of a Merge attribute (#3059) that one contributor
     /// withdrew and another re-added in the same pass: the value never left the Metaverse Object, so the existing row
     /// takes the new contributor's provenance and no value change reaches change history or export. Run once every

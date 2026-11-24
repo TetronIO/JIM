@@ -64,6 +64,9 @@ public static class ContributorReElectionService
     /// change-tracked on the worker's context where configuration change previews run, so a survivor left bound to
     /// the copy lets the next save on that context discover the copy through it. The run passes false: binding the
     /// survivor to the page's one instance of the object is what it wants.</param>
+    /// <param name="readJoinedObjects">Reads the Connected System Objects joined to a Metaverse Object; the single
+    /// repository read when not given. A synchronisation run gives its page-batched <see cref="ReElectionSurvivorLookup"/>
+    /// (#3059).</param>
     /// <returns>
     /// One (outcome type, attribute name, value) tuple per <c>Generated</c> result
     /// <paramref name="resolvePendingGeneratedValues"/> returned (work package J), for the caller to record as
@@ -82,10 +85,12 @@ public static class ContributorReElectionService
         IReadOnlyList<ConnectedSystemObjectType>? objectTypes,
         IExpressionEvaluator expressionEvaluator,
         Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null,
-        bool leaveSurvivorsAsFound = false)
+        bool leaveSurvivorsAsFound = false,
+        Func<Guid, Task<List<ConnectedSystemObject>>>? readJoinedObjects = null)
     {
         var outcomes = await ReElectCoreAsync(mvo, recalledValues, scope, priorityContext, syncEngine, syncRepository,
-            isCsoInScopeForImportRule, objectTypes, expressionEvaluator, resolvePendingGeneratedValues, leaveSurvivorsAsFound);
+            isCsoInScopeForImportRule, objectTypes, expressionEvaluator, resolvePendingGeneratedValues, leaveSurvivorsAsFound,
+            readJoinedObjects ?? syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync);
 
         // A Merge value (#3059) withdrawn by the leaver and re-added by a survivor never left the object: re-tag it in place,
         // so no value change reaches change history or export.
@@ -104,7 +109,8 @@ public static class ContributorReElectionService
         IReadOnlyList<ConnectedSystemObjectType>? objectTypes,
         IExpressionEvaluator expressionEvaluator,
         Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues,
-        bool leaveSurvivorsAsFound)
+        bool leaveSurvivorsAsFound,
+        Func<Guid, Task<List<ConnectedSystemObject>>> readJoinedObjects)
     {
         if (mvo.Type == null)
             return [];
@@ -119,7 +125,7 @@ public static class ContributorReElectionService
         // system's own page), and survivors joined via other Connected Systems are invisible, silently disabling
         // re-election. The in-memory test database auto-fixes the navigation up and masks this; only a
         // real-database run can catch a regression here.
-        var joinedCsos = await syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
+        var joinedCsos = await readJoinedObjects(mvo.Id);
         var survivorsToReflow = SelectSurvivorsToReflow(mvo.Type.Id, reElectableAttributeIds, joinedCsos, scope, priorityContext);
 
         if (objectTypes == null)

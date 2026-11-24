@@ -157,6 +157,20 @@ As built, steps 2 and 3 took a simpler shape with the same effect, and no extrac
 - One collapse step, `SyncEngine.CollapseMergeRetags`, turns a withdrawn value that is re-added in the same pass into a re-tag of the existing row: no value change, no change record, no Pending Export. It runs at the end of every re-election and once in the per-object flow.
 - Re-election cannot reach the withdrawing object's own other rules (its scope excludes the leaver's Connected System). So when a Merge writer finds a supplied value already held by another contributor, it notes it on the transient `MetaverseObject.PendingMergeSupplies`. The collapse re-tags a withdrawn value to such a supplier, whichever order the rules flowed in.
 
+Performance (step 4), measured by `MergeContributionModeBenchmarkDatabaseTests` on real PostgreSQL: 5,000 people, three Connected Systems with overlapping values, median of five alternating runs after a warm-up.
+
+| Phase | Priority | Merge | Merge / Priority |
+|---|---|---|---|
+| Steady state (nothing changed) | 2,521 ms | 2,726 ms | 108% |
+| Churn (5% of one system drop a value another still supplies) | 1,017 ms | 1,093 ms | 108% |
+| Initial, per value written | 0.39 ms | 0.28 ms | 72% |
+
+- The initial synchronisation takes 20% longer in total because Merge stores every contributor's values (25,000 against Priority's 15,000), which is the mode doing its job. The budget is therefore judged per value written, as agreed on #3059.
+- Churn first measured 143%: every withdrawal re-elected, and each re-election read the object's joined objects with a query of its own, about 2.8 ms each and almost all fixed cost. A page now predicts the objects likely to withdraw a Merge value (`SyncEngine.MayWithdrawMergeValues`) and reads all their joined objects in one query (`ReElectionSurvivorLookup`, `GetConnectedSystemObjectsByMetaverseObjectIdsAsync`).
+  - The bulk read leaves out the system being synchronised and any object whose joined objects hold more than 2,000 values, so a page of large groups is never loaded whole.
+  - An object the prediction misses is read singly, as before, so the prediction affects cost only, never results.
+- Batching the whole page instead was measured and rejected: a 500-object read to serve about 25 re-elections made churn slower, not faster.
+
 ### Phase 3: manual removal and impact report
 
 1. Application method `MetaverseServer.RemoveAccumulatedValuesAsync`: refuses non-Accumulate attributes, and refuses values a live contributor supplies (naming it, using the Phase 2 evaluation). Records a `ValueContributorKind.Person` change record and an Activity.

@@ -349,6 +349,46 @@ public class SyncEngineMergeFlowTests
     }
 
     [Test]
+    public void MayWithdrawMergeValues_RuleNoLongerSuppliesAValueItHolds_IsTrue()
+    {
+        var emails = AuditLog();
+        var ad = Rule(syncRuleId: 1, priority: 1, emails);
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        Hold(mvo, emails, "a@corp.example", syncRuleId: 1, systemId: 5);
+        Hold(mvo, emails, "b@corp.example", syncRuleId: 1, systemId: 5);
+
+        Assert.That(Application.Servers.SyncEngine.MayWithdrawMergeValues(Cso(mvo, 5, "a@corp.example"), [ad]), Is.True);
+    }
+
+    [Test]
+    public void MayWithdrawMergeValues_RuleStillSuppliesEveryValueItHolds_IsFalse()
+    {
+        var emails = AuditLog();
+        var ad = Rule(syncRuleId: 1, priority: 1, emails);
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        Hold(mvo, emails, "a@corp.example", syncRuleId: 1, systemId: 5);
+        Hold(mvo, emails, "c@corp.example", syncRuleId: 2, systemId: 6);
+
+        Assert.That(Application.Servers.SyncEngine.MayWithdrawMergeValues(Cso(mvo, 5, "a@corp.example", "z@corp.example"), [ad]), Is.False,
+            "a value another rule holds, and a new value, withdraw nothing");
+    }
+
+    [Test]
+    public void MayWithdrawMergeValues_PriorityAttributeOrNoMetaverseObject_IsFalse()
+    {
+        var proxies = new MetaverseAttribute { Id = 102, Name = "Proxy Addresses", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued };
+        var rule = Rule(syncRuleId: 1, priority: 1, proxies);
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        Hold(mvo, proxies, "a@corp.example", syncRuleId: 1, systemId: 5);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Application.Servers.SyncEngine.MayWithdrawMergeValues(Cso(mvo, 5), [rule]), Is.False, "only Merge withdrawals are predicted");
+            Assert.That(Application.Servers.SyncEngine.MayWithdrawMergeValues(new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1 }, [rule]), Is.False);
+        }
+    }
+
+    [Test]
     public void FlowInboundAttributes_PriorityAttribute_StillReplacesTheSet()
     {
         var dept = new MetaverseAttribute { Id = 102, Name = "Proxy Addresses", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued };

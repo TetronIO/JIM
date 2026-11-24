@@ -2338,6 +2338,21 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// The Connected System Objects of every Connected System but <paramref name="excludeConnectedSystemId"/> joined to
+    /// each of <paramref name="metaverseObjectIds"/>, keyed by Metaverse Object id, with the same type and attribute values
+    /// as <see cref="GetConnectedSystemObjectsByMetaverseObjectIdAsync"/>. Contributor re-election reads a synchronisation
+    /// page's objects this way once it has several to re-elect (#3059); it never re-elects from the system being
+    /// synchronised, so that system's objects, already loaded and possibly with only some of their values, are left alone.
+    /// </summary>
+    /// <param name="metaverseObjectIds">The Metaverse Objects to read for.</param>
+    /// <param name="excludeConnectedSystemId">The Connected System whose objects are left out.</param>
+    /// <param name="maxValuesPerMetaverseObject">A Metaverse Object whose joined objects hold more values than this in
+    /// total is left out of the result, to be read singly, so a page of large groups cannot load every member value at
+    /// once. Every other requested id has an entry, empty when nothing else is joined to it.</param>
+    Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int excludeConnectedSystemId, int maxValuesPerMetaverseObject);
+
+    /// <summary>
     /// Gets all CSOs joined to any of the given MVOs across all Connected Systems, in one query,
     /// grouped by MVO ID. LEAN SHAPE: only the external ID and secondary external ID attribute
     /// values (with their Attribute) are loaded, because MVO deletion and reference recall need

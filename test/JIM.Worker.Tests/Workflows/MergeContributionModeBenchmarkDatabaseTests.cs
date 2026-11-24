@@ -36,7 +36,7 @@ public class MergeContributionModeBenchmarkDatabaseTests
     private const int People = 5_000;
     private const double ChurnFraction = 0.05;
     private const int SeedBatch = 1_000;
-    private const int Repetitions = 3;
+    private const int Repetitions = 5;
 
     private string _connectionString = null!;
 
@@ -92,7 +92,7 @@ public class MergeContributionModeBenchmarkDatabaseTests
             ActivityStopped = span =>
             {
                 if (_recording)
-                    _spans.Enqueue((span.Source.Name == "Npgsql" ? "(database command)" : span.DisplayName, span.Duration.TotalMilliseconds));
+                    _spans.Enqueue((span.Source.Name == "Npgsql" ? "(db) " + StatementShape(span) : span.DisplayName, span.Duration.TotalMilliseconds));
             }
         };
         ActivitySource.AddActivityListener(_listener);
@@ -142,8 +142,8 @@ public class MergeContributionModeBenchmarkDatabaseTests
             foreach (var (mode, measurement) in new[] { ("Priority", priority), ("Merge", merge) })
             {
                 TestContext.Out.WriteLine($"  {phase} run, {mode}: where the time went (span totals; spans nest, so they overlap)");
-                foreach (var (name, count, ms) in select(measurement).Take(14))
-                    TestContext.Out.WriteLine($"    {name,-60} {count,7:N0} x {ms,9:N0} ms");
+                foreach (var (name, count, ms) in select(measurement).Take(24))
+                    TestContext.Out.WriteLine($"    {name,-95} {count,7:N0} x {ms,9:N0} ms");
             }
         }
 
@@ -153,6 +153,14 @@ public class MergeContributionModeBenchmarkDatabaseTests
             Assert.That(merge.ValuesAfterChurn, Is.EqualTo(People * 5), "Merge holds every distinct value, b kept for the churned people");
             Assert.That(merge.RetaggedToB, Is.EqualTo((int)(People * ChurnFraction)), "each churned person's b is credited to B");
         }
+    }
+
+    /// <summary>A database command's statement, whitespace collapsed and cut short, so commands of one shape total together.</summary>
+    private static string StatementShape(System.Diagnostics.Activity span)
+    {
+        var statement = span.TagObjects.FirstOrDefault(tag => tag.Key is "db.statement" or "db.query.text").Value as string ?? span.DisplayName;
+        var collapsed = System.Text.RegularExpressions.Regex.Replace(statement, @"\s+", " ").Trim();
+        return collapsed.Length <= 90 ? collapsed : collapsed[..90];
     }
 
     private sealed record Measurement(long Initial, long Steady, long Churn, int ValuesAfterChurn, int RetaggedToB,
@@ -185,6 +193,11 @@ public class MergeContributionModeBenchmarkDatabaseTests
         _systems.Clear();
         var emailsAttributeId = await SeedConfigurationAsync(mode);
         await SeedObjectsAsync();
+
+        // Planner statistics for the freshly seeded tables, as a running deployment's would have: without them each run's
+        // plans depend on when autovacuum happens to reach the new rows, and the runs differ for that reason alone.
+        await using (var analyse = NewContext())
+            await analyse.Database.ExecuteSqlRawAsync("ANALYZE");
 
         var initial = await TimeAsync("A", "B", "C");
         var (steady, steadySpans) = await RecordAsync(() => TimeAsync("A", "B", "C"));
