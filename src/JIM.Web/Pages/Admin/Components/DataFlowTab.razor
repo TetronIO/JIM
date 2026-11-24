@@ -10,8 +10,7 @@
 @* The system-wide view of every attribute data flow in both directions (#1199). Pure discovery: nothing is edited *@
 @* here, rows link to the surface that owns the change. *@
 
-@* Every block on this tab sits 16px (mt-4) below the one above it, the gap the sibling tabs leave above their first *@
-@* row: the tab panels carry no padding of their own (TabPanelsClass="pa-0"). *@
+@* mt-4 as the sibling tabs' first rows have: the tab panels carry no padding of their own (TabPanelsClass="pa-0"). *@
 <MudText Typo="Typo.body1" Class="mud-text-secondary mt-4">
     @SchemaText.DataFlowIntro
 </MudText>
@@ -20,7 +19,7 @@
 @* Direction sits with the other filters and behaves like them (cleared means both), but it does more than filter: *@
 @* Inbound and Outbound carry different settings, so choosing one lets the table drop the columns that do not apply *@
 @* to it and name the one that does, instead of a catch-all header over two unrelated concepts. *@
-<MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.Center">
+<MudStack Row="true" Spacing="3" Class="mt-6 flex-wrap" AlignItems="AlignItems.Center">
     <MudItem Class="flex-grow-1">
         <MudSelect T="SyncRuleDirection?" Label="@SchemaText.DataFlowDirectionLabel" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_direction" ValueChanged="OnDirectionChangedAsync">
@@ -64,7 +63,7 @@
 
 @* Search scope lives here rather than as helper text under the toolbar box, which would overflow the toolbar's *@
 @* fixed height and sit on the header row beneath it. *@
-<MudText Typo="Typo.body2" Class="mud-text-secondary mt-4">
+<MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
     @SchemaText.SearchScopeText
 </MudText>
 
@@ -75,7 +74,6 @@
    single header row: the band that used to name each side spanned several columns, which a data grid's one heading
    per column cannot express, so the qualification moved into the headings themselves. *@
 <VirtualisedDataGrid @ref="_grid" T="DataFlowHeader"
-                     GridClass="mt-4"
                      ContainerId="data-flow-list"
                      UrlParameterPrefix="df-"
                      DefaultSortBy="system"
