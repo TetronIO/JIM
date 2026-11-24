@@ -134,9 +134,10 @@ Decided 2026-11-23: test up to the tenant's limit, in two parts.
   - Groups cannot be purged with an application permission, so runs keep groups to the template's few hundred.
 - **Running it:** on request only, from `entra-connector.yml`.
 
-**Part 2: Scenario 040, against a stand-in Microsoft Graph service, at every template up to Scale1m.** Planned. It measures JIM's side without Graph's rate limits.
+**Part 2: Scenario 040, against a stand-in Microsoft Graph service, at every template up to Scale1m.** Implemented. It measures JIM reading a large tenant.
+- **Reading, not writing (changed 2026-11-24):** the Connector writes no faster than Graph's 20 writes a second per application whatever answers it, so provisioning a million users would take days against any tenant. The stand-in is seeded in process with Scenario 039's population, and the scenario measures Full Import, Delta Import and their synchronisations, the shape a customer connecting an existing large tenant meets. Writing at scale stays Scenario 039's, against the real tenant.
 - **How JIM reaches it:** the integration network resolves `login.microsoftonline.com` and `graph.microsoft.com` to the stand-in, whose certificate JIM's certificate store trusts, so JIM runs unchanged.
-- **One implementation:** the stand-in and the unit tests' simulated tenant (`FakeGraphTenant`) become one implementation, re-indexed for a million objects, as the SCIM test provider shares `MockScimProvider` with the unit suite.
+- **One implementation:** the stand-in (`test/JIM.TestGraphService`) serves `MockGraphTenant`, the unit tests' simulated tenant, indexed for a million objects, as the SCIM test provider shares `MockScimProvider` with the unit suite.
 
 ## Success Criteria
 

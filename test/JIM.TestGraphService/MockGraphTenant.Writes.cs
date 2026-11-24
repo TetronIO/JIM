@@ -141,30 +141,36 @@ public partial class MockGraphTenant
             return Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{id}' does not exist or one of its queried reference-property objects are not present.");
 
         if (RecordsWrites)
-        {
-            // As Graph does: a deleted object leaves every group it was in or owned, and its reports lose their manager.
-            foreach (var (groupId, members) in Members)
-            {
-                if (members.Remove(id) | (Owners.GetValueOrDefault(groupId)?.Remove(id) ?? false))
-                    RecordChange("groups", groupId);
-            }
-
-            if (_reports.Remove(id, out var reports))
-            {
-                foreach (var report in reports)
-                {
-                    if (User(report) is { } reportUser && (string?)reportUser["managerId"] == id)
-                    {
-                        reportUser.Remove("managerId");
-                        RecordChange("users", report);
-                    }
-                }
-            }
-
-            _deltaEntries[collection].Add(new JsonObject { ["id"] = id, ["@removed"] = new JsonObject { ["reason"] = "deleted" } });
-        }
+            RemoveEverywhere(collection, id);
 
         return (204, null);
+    }
+
+    /// <summary>
+    /// What Graph does after deleting an object, recorded for the next delta round: the object leaves every group it
+    /// was in or owned, its reports lose their manager, and the round reports it removed.
+    /// </summary>
+    private void RemoveEverywhere(string collection, string id)
+    {
+        foreach (var (groupId, members) in Members)
+        {
+            if (members.Remove(id) | (Owners.GetValueOrDefault(groupId)?.Remove(id) ?? false))
+                RecordChange("groups", groupId);
+        }
+
+        if (_reports.Remove(id, out var reports))
+        {
+            foreach (var report in reports)
+            {
+                if (User(report) is { } reportUser && (string?)reportUser["managerId"] == id)
+                {
+                    reportUser.Remove("managerId");
+                    RecordChange("users", report);
+                }
+            }
+        }
+
+        _deltaEntries[collection].Add(new JsonObject { ["id"] = id, ["@removed"] = new JsonObject { ["reason"] = "deleted" } });
     }
 
     /// <summary>

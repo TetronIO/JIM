@@ -155,6 +155,46 @@ public class MockGraphTenantTests
     }
 
     [Test]
+    public void Seed_APopulation_HoldsEveryUserGroupAndMembership()
+    {
+        var seeded = _tenant.Seed(new GraphSeed("run1-", "contoso.com", Users: 1000, Groups: 10, AverageMemberships: 3));
+
+        var first = Send(HttpMethod.Get, "users/run1-u00000@contoso.com?$select=displayName,mailNickname,jobTitle,department", null);
+        var allStaff = Send(HttpMethod.Get, "groups?$filter=mailNickname eq 'run1-g000'&$select=displayName", null)["value"]!.AsArray().Single()!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(seeded, Is.EqualTo(new GraphSeedResult(Users: 1000, Groups: 10, Memberships: 3000)));
+            Assert.That(_tenant.Users, Has.Count.EqualTo(1000));
+            Assert.That(_tenant.Groups, Has.Count.EqualTo(10));
+            Assert.That((string?)first["displayName"], Is.EqualTo("run1-Scale User 00000"));
+            Assert.That((string?)first["mailNickname"], Is.EqualTo("run1-u00000"));
+            Assert.That((string?)allStaff["displayName"], Is.EqualTo("run1-All Staff"));
+            Assert.That(_tenant.Members[(string)allStaff["id"]!], Has.Count.EqualTo(1000), "All Staff holds everyone.");
+        }
+    }
+
+    [Test]
+    public void ApplyChanges_AfterSeeding_ChangesAndDeletesATenthAndAHundredthAndADeltaRoundReportsThem()
+    {
+        _tenant.Seed(new GraphSeed("run1-", "contoso.com", Users: 1000, Groups: 10, AverageMemberships: 3));
+        var usersBaseline = DeltaLink("users");
+        var groupsBaseline = DeltaLink("groups");
+
+        var changed = _tenant.ApplyChanges();
+
+        var retitled = Send(HttpMethod.Get, "users/run1-u00007@contoso.com?$select=jobTitle", null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changed, Is.EqualTo(new GraphChangeResult(Retitled: 100, Moved: 100, Deleted: 10)));
+            Assert.That((string?)retitled["jobTitle"], Is.EqualTo("Senior Analyst"));
+            Assert.That(_tenant.Users, Has.Count.EqualTo(990));
+            Assert.That(_tenant.Users.Any(u => (string?)u["mailNickname"] == "run1-u00005"), Is.False, "Every hundredth, from the sixth, is deleted.");
+            Assert.That(RoundIds(usersBaseline).Distinct().Count(), Is.EqualTo(119), "100 retitled, 10 deleted, and the deleted u00005's reports u00050 to u00059 losing their manager (u00057 is also retitled).");
+            Assert.That(RoundIds(groupsBaseline), Is.Not.Empty);
+        }
+    }
+
+    [Test]
     public void Respond_OutsideGraphVersionOne_AnswersNotFound()
     {
         using var response = _tenant.Respond(new HttpRequestMessage(HttpMethod.Get, "https://graph.microsoft.com/beta/users"));
