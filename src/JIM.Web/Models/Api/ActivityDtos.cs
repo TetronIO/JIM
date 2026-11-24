@@ -60,18 +60,17 @@ public class ActivityHeader
     public string? Message { get; set; }
 
     /// <summary>
-    /// The key of the progress message, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
-    /// when there is no message, or for one recorded before keys were stored.
+    /// The message's key, for showing it in another language.
     /// </summary>
     public string? MessageKey { get; set; }
 
     /// <summary>
-    /// The values placed into the progress message, in order. Null whenever the key is.
+    /// The message's values, in order.
     /// </summary>
     public List<MessageArgumentDto>? MessageArguments { get; set; }
 
     /// <summary>
-    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// Picks a counted message's singular or plural form.
     /// </summary>
     public long? MessageCount { get; set; }
 
@@ -436,18 +435,17 @@ public class ActivityDetailDto
     public string? Message { get; set; }
 
     /// <summary>
-    /// The key of the progress message, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
-    /// when there is no message, or for one recorded before keys were stored.
+    /// The message's key, for showing it in another language.
     /// </summary>
     public string? MessageKey { get; set; }
 
     /// <summary>
-    /// The values placed into the progress message, in order. Null whenever the key is.
+    /// The message's values, in order.
     /// </summary>
     public List<MessageArgumentDto>? MessageArguments { get; set; }
 
     /// <summary>
-    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// Picks a counted message's singular or plural form.
     /// </summary>
     public long? MessageCount { get; set; }
 
@@ -492,18 +490,17 @@ public class ActivityDetailDto
     public string? WarningMessage { get; set; }
 
     /// <summary>
-    /// The key of the warning, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
-    /// when there is no message, or for one recorded before keys were stored.
+    /// The message's key, for showing it in another language.
     /// </summary>
     public string? WarningMessageKey { get; set; }
 
     /// <summary>
-    /// The values placed into the warning, in order. Null whenever the key is.
+    /// The message's values, in order.
     /// </summary>
     public List<MessageArgumentDto>? WarningMessageArguments { get; set; }
 
     /// <summary>
-    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// Picks a counted message's singular or plural form.
     /// </summary>
     public long? WarningMessageCount { get; set; }
 
@@ -513,18 +510,17 @@ public class ActivityDetailDto
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// The key of the error message, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
-    /// when there is no message, or for one recorded before keys were stored.
+    /// The message's key, for showing it in another language.
     /// </summary>
     public string? ErrorMessageKey { get; set; }
 
     /// <summary>
-    /// The values placed into the error message, in order. Null whenever the key is.
+    /// The message's values, in order.
     /// </summary>
     public List<MessageArgumentDto>? ErrorMessageArguments { get; set; }
 
     /// <summary>
-    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// Picks a counted message's singular or plural form.
     /// </summary>
     public long? ErrorMessageCount { get; set; }
 

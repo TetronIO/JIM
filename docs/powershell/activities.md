@@ -102,9 +102,9 @@ A configuration change Activity's entry also has PredictionComparison once a syn
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
-| `MessageKey` | `string` | The key of the progress message, for rendering it in another language, such as `ActivityMessages.RoleMemberAdded`. Empty when there is no message, or for one recorded before keys were stored. |
-| `MessageArguments` | `object[]` | The values placed into the progress message, in order. Empty whenever the key is. Each has `Text`, `Number`, `Date` and `Message`. |
-| `MessageCount` | `long` | For a counted message, the count that chooses its singular or plural form; empty otherwise. |
+| `MessageKey` | `string` | The message's key, for showing it in another language. |
+| `MessageArguments` | `object[]` | The message's values, in order. Each has `Text`, `Number`, `Date` and `Message`. |
+| `MessageCount` | `long` | Picks a counted message's singular or plural form. |
 | `InitiatedByType` | `string` | The type of security principal that initiated this Activity. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedById` | `guid` | The unique identifier of the security principal that initiated this Activity. |
 | `InitiatedByName` | `string` | Name of the user or API key that initiated this Activity. |
@@ -158,9 +158,9 @@ A configuration change Activity's entry also has PredictionComparison once a syn
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
-| `MessageKey` | `string` | The key of the progress message, for rendering it in another language, such as `ActivityMessages.RoleMemberAdded`. Empty when there is no message, or for one recorded before keys were stored. |
-| `MessageArguments` | `object[]` | The values placed into the progress message, in order. Empty whenever the key is. Each has `Text`, `Number`, `Date` and `Message`. |
-| `MessageCount` | `long` | For a counted message, the count that chooses its singular or plural form; empty otherwise. |
+| `MessageKey` | `string` | The message's key, for showing it in another language. |
+| `MessageArguments` | `object[]` | The message's values, in order. Each has `Text`, `Number`, `Date` and `Message`. |
+| `MessageCount` | `long` | Picks a counted message's singular or plural form. |
 | `InitiatedByType` | `string` | The type of security principal that initiated this Activity. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedById` | `guid` | The unique identifier of the security principal that initiated this Activity. |
 | `InitiatedByName` | `string` | Name of the user or API key that initiated this Activity. |
@@ -169,13 +169,13 @@ A configuration change Activity's entry also has PredictionComparison once a syn
 | `ExecutionTime` | `string` | How long the Activity took to execute (once complete). |
 | `TotalActivityTime` | `string` | Total time from creation to completion. |
 | `WarningMessage` | `string` | A warning that did not stop the Activity, for example that a Delta Import fell back to a Full Import. |
-| `WarningMessageKey` | `string` | The key of the warning, for rendering it in another language, such as `ActivityMessages.RoleMemberAdded`. Empty when there is no message, or for one recorded before keys were stored. |
-| `WarningMessageArguments` | `object[]` | The values placed into the warning, in order. Empty whenever the key is. Each has `Text`, `Number`, `Date` and `Message`. |
-| `WarningMessageCount` | `long` | For a counted message, the count that chooses its singular or plural form; empty otherwise. |
+| `WarningMessageKey` | `string` | The message's key, for showing it in another language. |
+| `WarningMessageArguments` | `object[]` | The message's values, in order. Each has `Text`, `Number`, `Date` and `Message`. |
+| `WarningMessageCount` | `long` | Picks a counted message's singular or plural form. |
 | `ErrorMessage` | `string` | Error message if the Activity failed. |
-| `ErrorMessageKey` | `string` | The key of the error message, for rendering it in another language, such as `ActivityMessages.RoleMemberAdded`. Empty when there is no message, or for one recorded before keys were stored. |
-| `ErrorMessageArguments` | `object[]` | The values placed into the error message, in order. Empty whenever the key is. Each has `Text`, `Number`, `Date` and `Message`. |
-| `ErrorMessageCount` | `long` | For a counted message, the count that chooses its singular or plural form; empty otherwise. |
+| `ErrorMessageKey` | `string` | The message's key, for showing it in another language. |
+| `ErrorMessageArguments` | `object[]` | The message's values, in order. Each has `Text`, `Number`, `Date` and `Message`. |
+| `ErrorMessageCount` | `long` | Picks a counted message's singular or plural form. |
 | `ErrorStackTrace` | `string` | Error stack trace if the Activity failed. |
 | `ErrorDetail` | `string` | Structured detail about the failure, as JSON, where there is something specific worth acting on beyond the message. An LDAPS connection refused because of the directory server's certificate records that certificate here: its subject, issuer, the names it was issued for, its validity dates, its thumbprint, and which check it failed. Empty for failures with no structured detail. |
 | `ConnectedSystemRunType` | `string` | The run type, for a Run Profile execution. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
