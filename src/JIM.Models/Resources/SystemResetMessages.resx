@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="HeaderAdministratorsRemoved" xml:space="preserve">
+    <value>Factory reset completed (administrators removed).</value>
+    <comment>First line of the factory reset Activity's summary, when the reset removed the administrators too.</comment>
+  </data>
+  <data name="HeaderAdministratorsRetained" xml:space="preserve">
+    <value>Factory reset completed (administrators retained: {0}).</value>
+    <comment>First line of the factory reset Activity's summary. {0}: how many administrators were kept, as plain digits.</comment>
+  </data>
+  <data name="NothingRemoved" xml:space="preserve">
+    <value>{0}
+
+Nothing was removed; the system was already empty.</value>
+    <comment>The whole summary when the reset removed nothing. {0}: the first line (HeaderAdministratorsRemoved or HeaderAdministratorsRetained). Keep the two line breaks.</comment>
+  </data>
+  <data name="RemovedList" xml:space="preserve">
+    <value>{0}
+
+Removed:
+{1}</value>
+    <comment>The whole summary when the reset removed something. {0}: the first line, {1}: the list of what was removed, one line each (see Joined). Keep the line breaks.</comment>
+  </data>
+  <data name="Joined" xml:space="preserve">
+    <value>{0}
+{1}</value>
+    <comment>Two lines of the list of what a factory reset removed, one under the other. Keep the line break.</comment>
+  </data>
+  <data name="RemovedConnectedSystemsOne" xml:space="preserve">
+    <value>• {0} Connected System</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedConnectedSystemsOther" xml:space="preserve">
+    <value>• {0} Connected Systems</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedConnectedSystemObjectsOne" xml:space="preserve">
+    <value>• {0} Connected System Object</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedConnectedSystemObjectsOther" xml:space="preserve">
+    <value>• {0} Connected System Objects</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedMetaverseObjectsOne" xml:space="preserve">
+    <value>• {0} Metaverse Object</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedMetaverseObjectsOther" xml:space="preserve">
+    <value>• {0} Metaverse Objects</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedMetaverseObjectChangesOne" xml:space="preserve">
+    <value>• {0} Metaverse Object change record</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedMetaverseObjectChangesOther" xml:space="preserve">
+    <value>• {0} Metaverse Object change records</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedConnectedSystemObjectChangesOne" xml:space="preserve">
+    <value>• {0} Connected System Object change record</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedConnectedSystemObjectChangesOther" xml:space="preserve">
+    <value>• {0} Connected System Object change records</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedSynchronisationRulesOne" xml:space="preserve">
+    <value>• {0} Synchronisation Rule</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedSynchronisationRulesOther" xml:space="preserve">
+    <value>• {0} Synchronisation Rules</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedObjectMatchingRulesOne" xml:space="preserve">
+    <value>• {0} Object Matching Rule</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedObjectMatchingRulesOther" xml:space="preserve">
+    <value>• {0} Object Matching Rules</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedSchedulesOne" xml:space="preserve">
+    <value>• {0} schedule</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedSchedulesOther" xml:space="preserve">
+    <value>• {0} schedules</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedScheduleExecutionsOne" xml:space="preserve">
+    <value>• {0} schedule execution</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedScheduleExecutionsOther" xml:space="preserve">
+    <value>• {0} schedule executions</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedActivitiesOne" xml:space="preserve">
+    <value>• {0} activity</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedActivitiesOther" xml:space="preserve">
+    <value>• {0} activities</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedPendingExportsOne" xml:space="preserve">
+    <value>• {0} Pending Export</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedPendingExportsOther" xml:space="preserve">
+    <value>• {0} Pending Exports</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomMetaverseObjectTypesOne" xml:space="preserve">
+    <value>• {0} custom Metaverse Object Type</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomMetaverseObjectTypesOther" xml:space="preserve">
+    <value>• {0} custom Metaverse Object Types</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomMetaverseAttributesOne" xml:space="preserve">
+    <value>• {0} custom metaverse attribute</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomMetaverseAttributesOther" xml:space="preserve">
+    <value>• {0} custom metaverse attributes</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomRolesOne" xml:space="preserve">
+    <value>• {0} custom role</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomRolesOther" xml:space="preserve">
+    <value>• {0} custom roles</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomConnectorDefinitionsOne" xml:space="preserve">
+    <value>• {0} custom connector definition</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomConnectorDefinitionsOther" xml:space="preserve">
+    <value>• {0} custom connector definitions</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomPredefinedSearchesOne" xml:space="preserve">
+    <value>• {0} custom predefined search</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomPredefinedSearchesOther" xml:space="preserve">
+    <value>• {0} custom predefined searches</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomExampleDataSetsOne" xml:space="preserve">
+    <value>• {0} custom example data set</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomExampleDataSetsOther" xml:space="preserve">
+    <value>• {0} custom example data sets</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomExampleDataTemplatesOne" xml:space="preserve">
+    <value>• {0} custom example data template</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomExampleDataTemplatesOther" xml:space="preserve">
+    <value>• {0} custom example data templates</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomApiKeysOne" xml:space="preserve">
+    <value>• {0} custom API key</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedCustomApiKeysOther" xml:space="preserve">
+    <value>• {0} custom API keys</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedTrustedCertificatesOne" xml:space="preserve">
+    <value>• {0} trusted certificate</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+  <data name="RemovedTrustedCertificatesOther" xml:space="preserve">
+    <value>• {0} trusted certificates</value>
+    <comment>One line of the list of what a factory reset removed. {0}: how many, with the reader's digit grouping. Starts with a bullet; the noun is lower case where it is not a JIM term; no full stop.</comment>
+  </data>
+</root>

@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 
 namespace JIM.Models.Utility;
 
@@ -138,50 +140,60 @@ public class SystemResetResult
     /// Builds the human-readable summary recorded on the reset Activity: a header stating the
     /// administrator outcome, followed by a bulleted breakdown of every object type that had a
     /// non-zero removal count. Categories with a zero count are omitted; when nothing at all was
-    /// removed the breakdown is replaced with an "already empty" note.
+    /// removed the breakdown is replaced with an "already empty" note. This is its British English.
     /// </summary>
     /// <param name="includeAdministrators">Whether the reset removed administrator users (true) or preserved them (false).</param>
-    public string BuildResetMessage(bool includeAdministrators)
+    public string BuildResetMessage(bool includeAdministrators) =>
+        BuildResetMessageDetail(includeAdministrators).ToEnglish();
+
+    /// <summary>
+    /// <see cref="BuildResetMessage"/> as a message, so the portal shows it in the reader's language: each count
+    /// is pluralised by that language's own rule, and the list is lines of whole phrases rather than English
+    /// fragments joined by code (#3094).
+    /// </summary>
+    /// <param name="includeAdministrators">Whether the reset removed administrator users (true) or preserved them (false).</param>
+    public JimMessage BuildResetMessageDetail(bool includeAdministrators)
     {
         var header = includeAdministrators
-            ? "Factory reset completed (administrators removed)."
-            : $"Factory reset completed (administrators retained: {AdministratorsRetained}).";
+            ? JimMessage.Create(MessageCatalogues.SystemReset, nameof(SystemResetMessages.HeaderAdministratorsRemoved))
+            : JimMessage.Create(MessageCatalogues.SystemReset, nameof(SystemResetMessages.HeaderAdministratorsRetained),
+                AdministratorsRetained.ToString(CultureInfo.InvariantCulture));
 
-        // (count, singular, plural) in a sensible reading order. Administrators are conveyed by the
-        // header rather than a bullet: in the administrator-inclusive wipe they are already counted
-        // within MetaverseObjectsRemoved, so a separate bullet would double-count them.
-        var categories = new (int Count, string Singular, string Plural)[]
+        // Administrators are conveyed by the header rather than a line: in the administrator-inclusive wipe they are
+        // already counted within MetaverseObjectsRemoved, so a separate line would double-count them. Categories are in
+        // a sensible reading order.
+        var lines = new[]
         {
-            (ConnectedSystemsRemoved, "Connected System", "Connected Systems"),
-            (ConnectedSystemObjectsRemoved, "Connected System Object", "Connected System Objects"),
-            (MetaverseObjectsRemoved, "Metaverse Object", "Metaverse Objects"),
-            (MetaverseObjectChangesRemoved, "Metaverse Object change record", "Metaverse Object change records"),
-            (ConnectedSystemObjectChangesRemoved, "Connected System Object change record", "Connected System Object change records"),
-            (SyncRulesRemoved, "Synchronisation Rule", "Synchronisation Rules"),
-            (ObjectMatchingRulesRemoved, "Object Matching Rule", "Object Matching Rules"),
-            (SchedulesRemoved, "schedule", "schedules"),
-            (ScheduleExecutionsRemoved, "schedule execution", "schedule executions"),
-            (ActivitiesRemoved, "activity", "activities"),
-            (PendingExportsRemoved, "Pending Export", "Pending Exports"),
-            (CustomMetaverseObjectTypesRemoved, "custom Metaverse Object Type", "custom Metaverse Object Types"),
-            (CustomMetaverseAttributesRemoved, "custom metaverse attribute", "custom metaverse attributes"),
-            (CustomRolesRemoved, "custom role", "custom roles"),
-            (CustomConnectorDefinitionsRemoved, "custom connector definition", "custom connector definitions"),
-            (CustomPredefinedSearchesRemoved, "custom predefined search", "custom predefined searches"),
-            (CustomExampleDataSetsRemoved, "custom example data set", "custom example data sets"),
-            (CustomExampleDataTemplatesRemoved, "custom example data template", "custom example data templates"),
-            (CustomApiKeysRemoved, "custom API key", "custom API keys"),
-            (TrustedCertificatesRemoved, "trusted certificate", "trusted certificates")
-        };
+            Line(ConnectedSystemsRemoved, nameof(SystemResetMessages.RemovedConnectedSystemsOne)),
+            Line(ConnectedSystemObjectsRemoved, nameof(SystemResetMessages.RemovedConnectedSystemObjectsOne)),
+            Line(MetaverseObjectsRemoved, nameof(SystemResetMessages.RemovedMetaverseObjectsOne)),
+            Line(MetaverseObjectChangesRemoved, nameof(SystemResetMessages.RemovedMetaverseObjectChangesOne)),
+            Line(ConnectedSystemObjectChangesRemoved, nameof(SystemResetMessages.RemovedConnectedSystemObjectChangesOne)),
+            Line(SyncRulesRemoved, nameof(SystemResetMessages.RemovedSynchronisationRulesOne)),
+            Line(ObjectMatchingRulesRemoved, nameof(SystemResetMessages.RemovedObjectMatchingRulesOne)),
+            Line(SchedulesRemoved, nameof(SystemResetMessages.RemovedSchedulesOne)),
+            Line(ScheduleExecutionsRemoved, nameof(SystemResetMessages.RemovedScheduleExecutionsOne)),
+            Line(ActivitiesRemoved, nameof(SystemResetMessages.RemovedActivitiesOne)),
+            Line(PendingExportsRemoved, nameof(SystemResetMessages.RemovedPendingExportsOne)),
+            Line(CustomMetaverseObjectTypesRemoved, nameof(SystemResetMessages.RemovedCustomMetaverseObjectTypesOne)),
+            Line(CustomMetaverseAttributesRemoved, nameof(SystemResetMessages.RemovedCustomMetaverseAttributesOne)),
+            Line(CustomRolesRemoved, nameof(SystemResetMessages.RemovedCustomRolesOne)),
+            Line(CustomConnectorDefinitionsRemoved, nameof(SystemResetMessages.RemovedCustomConnectorDefinitionsOne)),
+            Line(CustomPredefinedSearchesRemoved, nameof(SystemResetMessages.RemovedCustomPredefinedSearchesOne)),
+            Line(CustomExampleDataSetsRemoved, nameof(SystemResetMessages.RemovedCustomExampleDataSetsOne)),
+            Line(CustomExampleDataTemplatesRemoved, nameof(SystemResetMessages.RemovedCustomExampleDataTemplatesOne)),
+            Line(CustomApiKeysRemoved, nameof(SystemResetMessages.RemovedCustomApiKeysOne)),
+            Line(TrustedCertificatesRemoved, nameof(SystemResetMessages.RemovedTrustedCertificatesOne))
+        }.OfType<JimMessage>().ToList();
 
-        var bullets = categories
-            .Where(c => c.Count > 0)
-            .Select(c => $"• {c.Count.ToString("N0", CultureInfo.InvariantCulture)} {(c.Count == 1 ? c.Singular : c.Plural)}")
-            .ToList();
+        if (lines.Count == 0)
+            return JimMessage.Create(MessageCatalogues.SystemReset, nameof(SystemResetMessages.NothingRemoved), header);
 
-        if (bullets.Count == 0)
-            return $"{header}{Environment.NewLine}{Environment.NewLine}Nothing was removed; the system was already empty.";
-
-        return $"{header}{Environment.NewLine}{Environment.NewLine}Removed:{Environment.NewLine}{string.Join(Environment.NewLine, bullets)}";
+        var list = lines.Aggregate((joined, next) =>
+            JimMessage.Create(MessageCatalogues.SystemReset, nameof(SystemResetMessages.Joined), joined, next));
+        return JimMessage.Create(MessageCatalogues.SystemReset, nameof(SystemResetMessages.RemovedList), header, list);
     }
+
+    private static JimMessage? Line(int count, string oneKey) =>
+        count > 0 ? JimMessage.Counted(MessageCatalogues.SystemReset, oneKey, count, count) : null;
 }

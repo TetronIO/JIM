@@ -25,4 +25,7 @@ public static class MessageCatalogues
 
     /// <summary>What export staging says about a declared Exchange recipient type (<c>ExchangeMessages.resx</c>).</summary>
     public const string Exchange = "JIM.Models:ExchangeMessages";
+
+    /// <summary>What a factory reset's Activity says it removed (<c>SystemResetMessages.resx</c>).</summary>
+    public const string SystemReset = "JIM.Models:SystemResetMessages";
 }
