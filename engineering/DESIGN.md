@@ -293,6 +293,26 @@ The portal uses a fixed sidebar (240px, MudBlazor's `DrawerVariant.Mini` default
 
 Cards and elevated surfaces use subtle background shifts between `background` and `surface` tokens. No drop shadows on cards or data tables; the design is deliberately flat. Grid-card hover lightens the border rather than adding a shadow.
 
+### Spacing
+
+Vertical gaps are chosen by **role**, never by size and never by matching a neighbouring page. Three roles cover the portal; each is a token on `:root` in `site.css`, drawn from the spacing scale above.
+
+| Role | Token | Size | Separates |
+|------|-------|------|-----------|
+| Section | `--jim-space-section` | 24px (`lg`) | Independent blocks: a tab bar and the first block below it, an introduction, a filter bar, a table, a panel, two panels side by side |
+| Field | `--jim-space-field` | 16px (`md`) | The fields of one form or group |
+| Caption | `--jim-space-caption` | 8px (`sm`) | A control or block and the helper text that describes it |
+
+**How they are applied: by components, not by margins.**
+
+- `<SectionStack>` lays out the blocks of a page, tab or panel one section gap apart. Its children's own vertical margins are neutralised, so a utility class left on a child, or a component's built-in margin, cannot change the gap.
+- `<SectionCaption>` placed straight after a block inside a `<SectionStack>` sits one caption gap below it, so it reads as part of that block.
+- A tab bar's panels take `TabPanelsClass="pt-6"` (the section gap) when their content is a `<SectionStack>`.
+
+**Enforced.** `VerticalSpacingConventionTests` (`test/JIM.Web.Tests/Spacing/`) counts the vertical margin utilities (`mt-`, `mb-`, `my-`, `ma-`, non-zero) placed by hand in every `.razor` file against a baseline that may only fall. A new file starts at zero. A genuine exception carries a `spacing: exempt - <why>` comment on its line or one of the two above.
+
+**Migration** ([#3095](https://github.com/TetronIO/JIM/issues/3095)). The portal predates these roles, so most pages still place margins by hand; each page moves to `<SectionStack>` as it is touched, and the baseline records the progress. The Schema page's three tabs are the worked example.
+
 ### Docs site
 
 The MkDocs Material docs site uses a standard two-column layout (nav plus content). Table and admonition body text is set at 0.72rem (up from Material's 0.64rem default). Default Material hover shadow on cards is removed for a flatter look consistent with the portal.
