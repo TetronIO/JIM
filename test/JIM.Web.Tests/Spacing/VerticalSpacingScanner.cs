@@ -23,18 +23,15 @@ internal static partial class VerticalSpacingScanner
         var code = RazorComment().Replace(razor, comment => new string('\n', comment.Value.Count(c => c == '\n')));
         var codeLines = code.Split('\n');
 
-        var findings = new List<Finding>();
-        for (var i = 0; i < codeLines.Length; i++)
-        {
-            var exempt = Enumerable.Range(Math.Max(0, i - 2), Math.Min(i, 2) + 1)
-                .Any(line => rawLines[line].Contains(ExemptionMarker, StringComparison.Ordinal));
-            if (exempt)
-                continue;
+        // A line is exempt when it, or one of the two above it, carries the marker.
+        bool IsExempt(int index) => Enumerable.Range(Math.Max(0, index - 2), Math.Min(index, 2) + 1)
+            .Any(line => rawLines[line].Contains(ExemptionMarker, StringComparison.Ordinal));
 
-            findings.AddRange(VerticalMargin().Matches(codeLines[i]).Select(match => new Finding(i + 1, match.Value)));
-        }
-
-        return findings;
+        return codeLines
+            .Select((line, index) => (Line: line, Index: index))
+            .Where(entry => !IsExempt(entry.Index))
+            .SelectMany(entry => VerticalMargin().Matches(entry.Line).Select(match => new Finding(entry.Index + 1, match.Value)))
+            .ToList();
     }
 
     [GeneratedRegex(@"@\*.*?\*@|<!--.*?-->", RegexOptions.Singleline)]
