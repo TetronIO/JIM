@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Globalization;
 using JIM.Models.Localisation;
 using JIM.Models.Resources;
 
@@ -157,7 +156,7 @@ public class SystemResetResult
         var header = includeAdministrators
             ? JimMessage.Create(MessageCatalogues.SystemReset, nameof(SystemResetMessages.HeaderAdministratorsRemoved))
             : JimMessage.Create(MessageCatalogues.SystemReset, nameof(SystemResetMessages.HeaderAdministratorsRetained),
-                AdministratorsRetained.ToString(CultureInfo.InvariantCulture));
+                (long)AdministratorsRetained);
 
         // Administrators are conveyed by the header rather than a line: in the administrator-inclusive wipe they are
         // already counted within MetaverseObjectsRemoved, so a separate line would double-count them. Categories are in

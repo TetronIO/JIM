@@ -56,6 +56,15 @@ public class ExchangeFilterMessageTests
         Assert.That(checkedShapes, Is.GreaterThan(500));
     }
 
+    /// <summary>The count of chosen changes travels as a number, so it is formatted for the reader.</summary>
+    [Test]
+    public void DescribeFilter_SeveralChanges_CountIsANumber()
+    {
+        var filter = new PendingExchangeChangeFilter { Ids = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList() };
+
+        Assert.That(ExchangeDeliveryServer.DescribeFilter(filter).Arguments[0].Number, Is.EqualTo(3));
+    }
+
     [Test]
     public void DescribeFilter_InFrench_ReadsAsWholeSentences()
     {

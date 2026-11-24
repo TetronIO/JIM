@@ -287,7 +287,7 @@ public class ExchangeDeliveryServer
         if (filter.TargetsSpecificChanges)
             return filter.Ids!.Count == 1
                 ? ExchangeMessage(nameof(ExchangeMessages.FilterOneChange))
-                : ExchangeMessage(nameof(ExchangeMessages.FilterChanges), ActivityMessage.Plain(filter.Ids!.Count));
+                : ExchangeMessage(nameof(ExchangeMessages.FilterChanges), (long)filter.Ids!.Count);
 
         var chosen = new List<JimMessage>();
         if (filter.State.HasValue)

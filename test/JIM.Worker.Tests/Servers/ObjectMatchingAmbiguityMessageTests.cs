@@ -136,6 +136,42 @@ public class ObjectMatchingAmbiguityMessageTests
         }
     }
 
+    /// <summary>
+    /// The match count travels as a number, not as text, so it is formatted for the reader (digit grouping in their
+    /// language); the English for the counts these messages see is unchanged.
+    /// </summary>
+    [Test]
+    public void DescribeAmbiguityMessage_MatchCount_IsANumberFormattedForTheReader()
+    {
+        foreach (var rule in new[] { null, Rule() })
+        {
+            var message = ObjectMatchingServer.DescribeAmbiguityMessage(Ambiguity(rule, valueCount: 1, total: 1234));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(message.Arguments[0].Number, Is.EqualTo(1234));
+                Assert.That(message.Arguments[0].Text, Is.Null);
+                Assert.That(MessageRenderer.Render(message, French, French), Does.Contain(1234.ToString("N0", French)));
+                Assert.That(ObjectMatchingServer.DescribeAmbiguityMessage(Ambiguity(rule, valueCount: 1, total: 3)).ToEnglish(),
+                    Does.StartWith("This object matches 3 Metaverse Objects"));
+            }
+        }
+    }
+
+    [Test]
+    public void DescribeImportRuleDisagreement_DifferentObjectsCount_IsANumber()
+    {
+        var matches = new List<ImportRuleMatch>
+        {
+            new(new SyncRule { Name = "HR" }, new ImportMatch(new MetaverseObject { Id = Guid.NewGuid() }, Rule(), null!, "E1")),
+            new(new SyncRule { Name = "Mail" }, new ImportMatch(new MetaverseObject { Id = Guid.NewGuid() }, Rule("Mail", "email"), null!, "a@b"))
+        };
+
+        var message = ObjectMatchingServer.DescribeImportRuleDisagreement(matches)!.MessageDetail!;
+
+        Assert.That(message.Arguments[0].Number, Is.EqualTo(2));
+    }
+
     [Test]
     public void DescribeImportRuleDisagreement_InFrench_ListsEachRuleWithItsComparison()
     {

@@ -71,6 +71,20 @@ public class SystemResetMessageTests
         Assert.That(checkedSummaries, Is.EqualTo(2 * 3 * 20 * 5));
     }
 
+    /// <summary>The administrators retained travel as a number, so the count is formatted for the reader.</summary>
+    [Test]
+    public void BuildResetMessageDetail_AdministratorsRetained_IsANumber()
+    {
+        var detail = new SystemResetResult { AdministratorsRetained = 3 }.BuildResetMessageDetail(includeAdministrators: false);
+        var header = detail.Arguments[0].Message!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.Arguments[0].Number, Is.EqualTo(3));
+            Assert.That(header.Arguments[0].Text, Is.Null);
+        }
+    }
+
     [Test]
     public void BuildResetMessageDetail_EveryCategoryAtOnce_RendersTheEnglishTheSummaryWroteBefore()
     {

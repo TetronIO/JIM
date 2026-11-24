@@ -72,9 +72,9 @@ public static partial class ActivityMessage
     {
         var outcome = ImportOutcome(previewing);
         if (comparison == null)
-            return Create(nameof(ActivityMessages.ImportAmbiguity), Plain(matches), outcome);
+            return Create(nameof(ActivityMessages.ImportAmbiguity), (long)matches, outcome);
 
-        return Create(nameof(ActivityMessages.ImportAmbiguityOnRule), Plain(matches), comparison, MatchedValues(values, moreValues), outcome);
+        return Create(nameof(ActivityMessages.ImportAmbiguityOnRule), (long)matches, comparison, MatchedValues(values, moreValues), outcome);
     }
 
     /// <summary>An object's import Synchronisation Rules found different Metaverse Objects, and JIM chooses none of them (#3094).</summary>
@@ -88,7 +88,7 @@ public static partial class ActivityMessage
             .Select(item => Create(nameof(ActivityMessages.ImportRuleDisagreementItem), item.SyncRuleName, item.MetaverseObjectName, item.Comparison, item.MatchedValue))
             .Aggregate((JimMessage?)null, (joined, next) => joined is null ? next : Create(nameof(ActivityMessages.JoinedBySemicolon), joined, next));
 
-        return Create(nameof(ActivityMessages.ImportRuleDisagreement), Plain(differentObjects),
+        return Create(nameof(ActivityMessages.ImportRuleDisagreement), (long)differentObjects,
             items ?? Create(nameof(ActivityMessages.Verbatim), string.Empty), ImportOutcome(previewing));
     }
 
