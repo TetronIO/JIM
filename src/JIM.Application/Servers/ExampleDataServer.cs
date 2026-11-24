@@ -5,6 +5,7 @@ using JIM.Application.Expressions;
 using JIM.Application.Localisation;
 using JIM.Application.Resources;
 using JIM.Application.Servers.Scoping;
+using JIM.Application.UniqueValues;
 using JIM.Application.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -25,6 +26,7 @@ using Activity = JIM.Models.Activities.Activity;
 using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.RegularExpressions;
 namespace JIM.Application.Servers;
 
@@ -432,6 +434,10 @@ public class ExampleDataServer
     /// <param name="initiatedById">The unique identifier of the principal that started the generation.</param>
     /// <param name="initiatedByName">The display name of the principal that started the generation.</param>
     /// <param name="activityId">The Activity the generation runs in, which each Created change record links to.</param>
+    /// <param name="uniqueValueReservations">
+    /// The process-wide reservation set unique values are claimed in, shared with synchronisation runs so the two can
+    /// never issue the same value at once. The worker passes its own; null uses a set private to this execution.
+    /// </param>
     /// <returns>The number of objects created.</returns>
     public async Task<int> ExecuteTemplateAsync(
         int templateId,
@@ -442,7 +448,41 @@ public class ExampleDataServer
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,
-        Guid? activityId = null)
+        Guid? activityId = null,
+        UniqueValueReservationSet? uniqueValueReservations = null)
+    {
+        // Unique values (#1789) are claimed through the Unique Value Generation service under one owner for the whole
+        // execution, and held until the objects carrying them are saved, after which the Metaverse gate finds them.
+        var uniqueValueOptions = new UniqueValueResolveOptions
+        {
+            Reservations = uniqueValueReservations ?? new UniqueValueReservationSet(),
+            // random-id: an in-memory reservation owner for this execution's claims; never a row's id
+            ReservationOwnerId = Guid.NewGuid()
+        };
+
+        try
+        {
+            return await GenerateAndPersistAsync(templateId, cancellationToken, progressCallback, progressUpdateInterval, batchSize,
+                initiatedByType, initiatedById, initiatedByName, activityId, uniqueValueOptions);
+        }
+        finally
+        {
+            uniqueValueOptions.Reservations.ReleaseAll(uniqueValueOptions.ReservationOwnerId);
+            await Application.UniqueValues.ReturnUnusedSequenceNumbersAsync(uniqueValueOptions);
+        }
+    }
+
+    private async Task<int> GenerateAndPersistAsync(
+        int templateId,
+        CancellationToken cancellationToken,
+        Func<int, int, string?, Task>? progressCallback,
+        TimeSpan? progressUpdateInterval,
+        int batchSize,
+        ActivityInitiatorType initiatedByType,
+        Guid? initiatedById,
+        string? initiatedByName,
+        Guid? activityId,
+        UniqueValueResolveOptions uniqueValueOptions)
     {
         // get the entire template
         // enumerate the object types
@@ -508,6 +548,11 @@ public class ExampleDataServer
         // second at ~0% CPU. The loop now only increments the atomic counter; this task samples it on an interval and
         // reports asynchronously, holding no lock. It is cancelled once generation completes (before any further
         // database work).
+        //
+        // Unique values (#1789) are checked against the database during generation, on the same database context the
+        // reporter writes the Activity through, and a context refuses two operations at once. The two take turns
+        // through this gate: a progress write waits for the check in hand, and the next check waits for the write.
+        using var databaseGate = new SemaphoreSlim(1, 1);
         using var progressReporterCts = new CancellationTokenSource();
         var progressReporterTask = progressCallback == null
             ? Task.CompletedTask
@@ -515,6 +560,7 @@ public class ExampleDataServer
                 generated => ReportOverallProgressAsync(generationPhase, generated, "Generating objects..."),
                 objectsGeneratedHolder,
                 reportInterval,
+                databaseGate,
                 progressReporterCts.Token);
 
         // object type dependency graph needs considering
@@ -528,7 +574,6 @@ public class ExampleDataServer
         // safe and contention-free here. Not security-sensitive (example data), so a PRNG is appropriate.
         var random = Random.Shared;
         var metaverseObjectsToCreate = new List<MetaverseObject>();
-        var trackerStore = new ExampleDataValueTrackerStore();
             
         // we've had issues with EF not returning values for example datasets when retrieving the template
         // so we're going to get all the example datasets referenced in a template separately and passing them in as needed.
@@ -577,7 +622,6 @@ public class ExampleDataServer
 
             var objectTypeStopWatch = Stopwatch.StartNew();
             Log.Verbose($"ExecuteTemplateAsync: Processing Metaverse Object Type: {objectType.MetaverseObjectType.Name}");
-            var trackers = trackerStore;
             var create = metaverseObjectsToCreate;
             // Order attributes so that any attribute an expression (or conditional dependency) references is generated
             // first. Computed once per object type (the dependency graph is static across generated objects), and any
@@ -594,9 +638,11 @@ public class ExampleDataServer
             // drawn from inside the parallel loop because a counter needs the eligible total up front, which is unknown
             // for a conditional attribute, and because it would hand the last true values to whichever threads finish
             // last rather than spreading them at random. Settling the quota before the next segment also means any
-            // attribute that depends on the Boolean sees its final value. A template with no distributed Boolean has
-            // one segment, so its generation is unchanged.
-            var segments = SplitAtDistributedBooleans(orderedTemplateAttributes, out var distributedBooleans);
+            // attribute that depends on the Boolean sees its final value. An attribute whose value must be unique
+            // (#1789) splits the attributes the same way, because the Unique Value Generation service checks values a
+            // page at a time, against the database: it is settled between segments too, so anything that reads it sees
+            // the value actually issued. A template with neither has one segment, so its generation is unchanged.
+            var segments = SplitAtSettledAttributes(orderedTemplateAttributes, out var settledAttributes);
             var objectsOfType = new MetaverseObject[objectType.ObjectsToCreate];
             for (var segmentIndex = 0; segmentIndex < segments.Count; segmentIndex++)
             {
@@ -638,19 +684,19 @@ public class ExampleDataServer
                                 switch (templateAttribute.MetaverseAttribute.Type)
                                 {
                                     case AttributeDataType.Text:
-                                        GenerateMetaverseStringValue(metaverseObject, templateAttribute, random, trackers);
+                                        GenerateMetaverseStringValue(metaverseObject, templateAttribute, random);
                                         break;
                                     case AttributeDataType.Guid:
                                         GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
                                         break;
                                     case AttributeDataType.Number:
-                                        GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random, trackers);
+                                        GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random);
                                         break;
                                     case AttributeDataType.LongNumber:
-                                        GenerateMetaverseLongNumberValue(metaverseObject, templateAttribute, random, trackers);
+                                        GenerateMetaverseLongNumberValue(metaverseObject, templateAttribute, random);
                                         break;
                                     case AttributeDataType.Decimal:
-                                        GenerateMetaverseDecimalValue(metaverseObject, templateAttribute, random, trackers);
+                                        GenerateMetaverseDecimalValue(metaverseObject, templateAttribute, random);
                                         break;
                                     case AttributeDataType.DateTime:
                                         GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
@@ -692,11 +738,20 @@ public class ExampleDataServer
                     return 0;
                 }
 
-                if (segmentIndex < distributedBooleans.Count)
+                if (segmentIndex < settledAttributes.Count)
                 {
-                    var distributedBoolean = distributedBooleans[segmentIndex];
-                    dependencies.TryGetValue(distributedBoolean, out var booleanDependency);
-                    AssignDistributedBooleanValues(objectsOfType, distributedBoolean, booleanDependency, random);
+                    var settledAttribute = settledAttributes[segmentIndex];
+                    dependencies.TryGetValue(settledAttribute, out var settledDependency);
+                    if (HasBooleanTrueDistribution(settledAttribute))
+                        AssignDistributedBooleanValues(objectsOfType, settledAttribute, settledDependency, random);
+                    else
+                        await AssignUniqueValuesAsync(objectsOfType, settledAttribute, settledDependency, random, uniqueValueOptions, databaseGate, cancellationToken);
+
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from unique value assignment prematurely.");
+                        return 0;
+                    }
                 }
             }
 
@@ -839,6 +894,7 @@ public class ExampleDataServer
         Func<int, Task> reportGenerated,
         int[] objectsGeneratedHolder,
         TimeSpan interval,
+        SemaphoreSlim databaseGate,
         CancellationToken cancellationToken)
     {
         try
@@ -847,7 +903,15 @@ public class ExampleDataServer
             {
                 await Task.Delay(interval, cancellationToken);
                 var generated = Volatile.Read(ref objectsGeneratedHolder[0]);
-                await reportGenerated(generated);
+                await databaseGate.WaitAsync(cancellationToken);
+                try
+                {
+                    await reportGenerated(generated);
+                }
+                finally
+                {
+                    databaseGate.Release();
+                }
             }
         }
         catch (OperationCanceledException)
@@ -942,8 +1006,7 @@ public class ExampleDataServer
     private void GenerateMetaverseStringValue(
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
-        Random random,
-        ExampleDataValueTrackerStore trackerStore)
+        Random random)
     {
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
@@ -995,14 +1058,10 @@ public class ExampleDataServer
             }
             else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
             {
-                // pattern generation:
-                // parse out the attribute variables {var} and system variables [var]
-                // use regex to do this. keep it simple for now, just replace what you find
-                // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
-                // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
+                // pattern generation: replace the attribute variables {First Name}. A pattern whose value must be unique
+                // ([UniqueInt], or Example Data Set variables {0}) never reaches here: it is settled between segments by
+                // AssignUniqueValuesAsync (#1789).
                 output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, trackerStore, output);
-                output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSetInstances, trackerStore, random, output);
             }
             else if (dataGenerationTemplateAttribute.WeightedStringValues is { Count: > 0 })
             {
@@ -1023,7 +1082,7 @@ public class ExampleDataServer
         }
         else if (dataGenerationTemplateAttribute.IsUsingNumbers())
         {
-            var numberValue = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
+            var numberValue = GenerateRandomNumberValue(dataGenerationTemplateAttribute, random);
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -1398,13 +1457,12 @@ public class ExampleDataServer
     private void GenerateMetaverseNumberValue(
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
-        Random random,
-        ExampleDataValueTrackerStore trackerStore)
+        Random random)
     {
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
+        var value = GenerateRandomNumberValue(dataGenerationTemplateAttribute, random);
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -1415,14 +1473,13 @@ public class ExampleDataServer
     private void GenerateMetaverseLongNumberValue(
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
-        Random random,
-        ExampleDataValueTrackerStore trackerStore)
+        Random random)
     {
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
         // Generate a long value - for now, use int generator and cast to long
-        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
+        var value = GenerateRandomNumberValue(dataGenerationTemplateAttribute, random);
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -1433,15 +1490,14 @@ public class ExampleDataServer
     private void GenerateMetaverseDecimalValue(
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
-        Random random,
-        ExampleDataValueTrackerStore trackerStore)
+        Random random)
     {
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
         // Generate a decimal value - for now, use the int generator (an int widens to decimal exactly),
         // mirroring the LongNumber approach above.
-        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
+        var value = GenerateRandomNumberValue(dataGenerationTemplateAttribute, random);
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -1499,20 +1555,23 @@ public class ExampleDataServer
         templateAttribute.MetaverseAttribute?.Type == AttributeDataType.Boolean && templateAttribute.BoolTrueDistribution.HasValue;
 
     /// <summary>
-    /// Splits the dependency-ordered attributes at each distributed Boolean (see <see cref="HasBooleanTrueDistribution"/>).
-    /// Returns one more segment than there are distributed Booleans: the Boolean at position n is settled after segment n.
+    /// Splits the dependency-ordered attributes into segments generated in parallel, at each attribute that has to be
+    /// settled across the whole object set before anything after it is generated: a Boolean with a
+    /// <see cref="ExampleDataTemplateAttribute.BoolTrueDistribution"/> (#877), or an attribute whose value must be unique
+    /// (#1789). The settled attributes are returned in order, one per segment boundary; segment <c>i</c> is followed by
+    /// settled attribute <c>i</c>. A template with neither has one segment.
     /// </summary>
-    private static List<List<ExampleDataTemplateAttribute>> SplitAtDistributedBooleans(
+    private static List<List<ExampleDataTemplateAttribute>> SplitAtSettledAttributes(
         IEnumerable<ExampleDataTemplateAttribute> orderedTemplateAttributes,
-        out List<ExampleDataTemplateAttribute> distributedBooleans)
+        out List<ExampleDataTemplateAttribute> settledAttributes)
     {
         var segments = new List<List<ExampleDataTemplateAttribute>> { new() };
-        distributedBooleans = [];
+        settledAttributes = [];
         foreach (var templateAttribute in orderedTemplateAttributes)
         {
-            if (HasBooleanTrueDistribution(templateAttribute))
+            if (HasBooleanTrueDistribution(templateAttribute) || NeedsUniqueValue(templateAttribute))
             {
-                distributedBooleans.Add(templateAttribute);
+                settledAttributes.Add(templateAttribute);
                 segments.Add([]);
             }
             else
@@ -1522,6 +1581,264 @@ public class ExampleDataServer
         }
 
         return segments;
+    }
+
+    private const string UniqueIntVariable = "[UniqueInt]";
+
+    private static readonly Regex ExampleDataSetVariableRegex = new(@"({\d.*?})", RegexOptions.Compiled);
+
+    /// <summary>
+    /// How many objects' unique values are checked with the Unique Value Generation service in one call. Its gates
+    /// query once per call, so a page keeps the built-in 10,000-user template to a few dozen round trips.
+    /// </summary>
+    private const int UniqueValuePageSize = 500;
+
+    /// <summary>
+    /// How many values are tried for one object before a unique pattern gives up and fails the template: the same
+    /// default limit a generated Synchronisation Rule mapping has. Only an Example Data Set pattern can reach it, when its
+    /// sets hold too few unused combinations.
+    /// </summary>
+    private const int MaximumUniqueValueAttempts = 1000;
+
+    /// <summary>
+    /// Whether an attribute's value must be unique, and so is issued through the Unique Value Generation service
+    /// (#1789): a text pattern with <c>[UniqueInt]</c> or with Example Data Set variables, or a sequential number. These
+    /// are the values example data has always kept unique; the service makes them unique against the Metaverse
+    /// Objects that already exist as well as against each other.
+    /// </summary>
+    private static bool NeedsUniqueValue(ExampleDataTemplateAttribute templateAttribute)
+    {
+        if (templateAttribute.MetaverseAttribute == null || HasBooleanTrueDistribution(templateAttribute))
+            return false;
+
+        return IsUniquePattern(templateAttribute) || IsSequentialNumber(templateAttribute);
+    }
+
+    /// <summary>
+    /// A text pattern that keeps its value unique: one carrying <c>[UniqueInt]</c>, or drawing from Example Data Sets
+    /// through <c>{0}</c>-style variables. Mirrors the string generation path's order: an expression wins over a pattern.
+    /// </summary>
+    private static bool IsUniquePattern(ExampleDataTemplateAttribute templateAttribute) =>
+        templateAttribute.MetaverseAttribute?.Type == AttributeDataType.Text
+        && !templateAttribute.IsUsingExpression()
+        && !string.IsNullOrEmpty(templateAttribute.Pattern)
+        && (templateAttribute.Pattern.Contains(UniqueIntVariable, StringComparison.Ordinal)
+            || (templateAttribute.ExampleDataSetInstances.Count > 0 && ExampleDataSetVariableRegex.IsMatch(templateAttribute.Pattern)));
+
+    /// <summary>
+    /// A number generated in sequence: any Number, Long Number or Decimal attribute not set to random numbers, and a text
+    /// attribute configured for numbers (not strings) the same way. Mirrors which attributes the number generator used
+    /// to count up for.
+    /// </summary>
+    private static bool IsSequentialNumber(ExampleDataTemplateAttribute templateAttribute) =>
+        templateAttribute.RandomNumbers != true && templateAttribute.MetaverseAttribute?.Type switch
+        {
+            AttributeDataType.Number or AttributeDataType.LongNumber or AttributeDataType.Decimal => true,
+            AttributeDataType.Text => !templateAttribute.IsUsingStrings() && templateAttribute.IsUsingNumbers(),
+            _ => false
+        };
+
+    /// <summary>
+    /// Settles a unique-valued attribute for every object whose dependency holds (#1789), a page at a time, through the
+    /// Unique Value Generation service: a sequential number from the attribute's counter, or a pattern value checked and
+    /// claimed against this run, the Metaverse, the retired values register and live generated value assignments.
+    /// </summary>
+    private async Task AssignUniqueValuesAsync(
+        MetaverseObject[] objectsOfType,
+        ExampleDataTemplateAttribute templateAttribute,
+        ExampleDataDependencyCheck? dependency,
+        Random random,
+        UniqueValueResolveOptions options,
+        SemaphoreSlim databaseGate,
+        CancellationToken cancellationToken)
+    {
+        var eligible = objectsOfType.Where(mvo => dependency == null || dependency.IsMet(mvo)).ToArray();
+        if (eligible.Length == 0)
+            return;
+
+        var stopwatch = Stopwatch.StartNew();
+        if (IsSequentialNumber(templateAttribute))
+            await AssignSequentialNumbersAsync(eligible, templateAttribute, options, databaseGate, cancellationToken);
+        else
+            await AssignUniquePatternValuesAsync(eligible, templateAttribute, random, options, databaseGate, cancellationToken);
+
+        Log.Information("ExecuteTemplateAsync: Issued unique values for {Count:N0} objects' {Attribute} in {Elapsed}",
+            eligible.Length, LogSanitiser.Sanitise(templateAttribute.MetaverseAttribute!.Name), stopwatch.Elapsed);
+    }
+
+    /// <summary>
+    /// Draws a sequential number for each object from the attribute's counter, the same forward-only counter a generated
+    /// Sequence mapping on the attribute draws from, so example data and live generation never issue the same number and a
+    /// second run carries on where the first stopped. The counter starts at the higher of the configured minimum (or 1)
+    /// and one past the attribute's highest existing number.
+    /// </summary>
+    private async Task AssignSequentialNumbersAsync(
+        MetaverseObject[] objects,
+        ExampleDataTemplateAttribute templateAttribute,
+        UniqueValueResolveOptions options,
+        SemaphoreSlim databaseGate,
+        CancellationToken cancellationToken)
+    {
+        var attribute = templateAttribute.MetaverseAttribute!;
+
+        // Transient settings, never saved: example data has no Synchronisation Rule mapping, so nothing is committed as
+        // an assignment; the numbers are held by the objects they are saved on. A Decimal attribute is drawn as a Long
+        // Number: its numbers come from the same counter, though the Metaverse gate does not read decimal values.
+        var settings = new SyncRuleMappingGeneration
+        {
+            TokenKind = GeneratedValueTokenKind.Sequence,
+            SequenceStart = templateAttribute.MinNumber ?? 1,
+            SequenceIncrement = 1
+        };
+        var targetType = attribute.Type switch
+        {
+            AttributeDataType.Number or AttributeDataType.LongNumber => attribute.Type,
+            AttributeDataType.Decimal => AttributeDataType.LongNumber,
+            _ => AttributeDataType.Text
+        };
+
+        foreach (var page in objects.Chunk(UniqueValuePageSize))
+        {
+            if (cancellationToken.IsCancellationRequested)
+                return;
+
+            var requests = page.Select(_ => new GenerationRequest
+            {
+                Mode = GeneratedValueMode.Import,
+                MetaverseAttributeId = attribute.Id,
+                Generation = settings,
+                TargetType = targetType,
+                AttributeName = attribute.Name
+            }).ToList();
+
+            var outcomes = await WithDatabaseGateAsync(databaseGate, () => Application.UniqueValues.ResolveAsync(requests, options));
+            for (var i = 0; i < page.Length; i++)
+            {
+                var outcome = outcomes[i];
+                if (outcome.Kind != GenerationOutcomeKind.Generated)
+                    throw new InvalidDataException($"Example data could not issue a sequential number for '{attribute.Name}': {outcome.FailureMessage}");
+
+                var number = long.Parse(outcome.Value!, NumberStyles.Integer, CultureInfo.InvariantCulture);
+                page[i].AttributeValues.Add(SequentialNumberValue(attribute, number));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs one Unique Value Generation call while holding <paramref name="databaseGate"/>, so it never overlaps the
+    /// progress reporter's Activity write on the shared database context.
+    /// </summary>
+    private static async Task<T> WithDatabaseGateAsync<T>(SemaphoreSlim databaseGate, Func<Task<T>> work)
+    {
+        await databaseGate.WaitAsync();
+        try
+        {
+            return await work();
+        }
+        finally
+        {
+            databaseGate.Release();
+        }
+    }
+
+    private static MetaverseObjectAttributeValue SequentialNumberValue(MetaverseAttribute attribute, long number) => attribute.Type switch
+    {
+        AttributeDataType.Number => new MetaverseObjectAttributeValue
+        {
+            Attribute = attribute,
+            IntValue = number <= int.MaxValue
+                ? (int)number
+                : throw new InvalidDataException($"The next sequential number for '{attribute.Name}' is {number:N0}, which is too large for a Number attribute.")
+        },
+        AttributeDataType.LongNumber => new MetaverseObjectAttributeValue { Attribute = attribute, LongValue = number },
+        AttributeDataType.Decimal => new MetaverseObjectAttributeValue { Attribute = attribute, DecimalValue = number },
+        _ => new MetaverseObjectAttributeValue { Attribute = attribute, StringValue = number.ToString(CultureInfo.InvariantCulture) }
+    };
+
+    /// <summary>
+    /// Issues a unique pattern value to each object. Example data builds each candidate exactly as it always has
+    /// (<see cref="BuildUniquePatternCandidate"/>), and the Unique Value Generation service only says whether it is taken
+    /// (<see cref="UniqueValueGenerationServer.ClaimValuesAsync"/>); a taken value is retried with the next attempt, which
+    /// numbers <c>[UniqueInt]</c> one higher and draws fresh Example Data Set values.
+    /// <para>
+    /// The attempt each object starts from is remembered per base value (the pattern with its attribute variables
+    /// replaced), so the fortieth "Ada Lovelace" starts at "ada.lovelace40" rather than walking up from the bare value,
+    /// and namesakes in one page try different attempts at once: usually one round trip per page, not one per name
+    /// already used.
+    /// </para>
+    /// </summary>
+    private async Task AssignUniquePatternValuesAsync(
+        MetaverseObject[] objects,
+        ExampleDataTemplateAttribute templateAttribute,
+        Random random,
+        UniqueValueResolveOptions options,
+        SemaphoreSlim databaseGate,
+        CancellationToken cancellationToken)
+    {
+        var attribute = templateAttribute.MetaverseAttribute!;
+        var pattern = templateAttribute.Pattern!;
+        var instances = templateAttribute.ExampleDataSetInstances;
+        var nextAttemptByBase = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var page in objects.Chunk(UniqueValuePageSize))
+        {
+            var baseTexts = page.Select(mvo => ReplaceAttributeVariables(mvo, pattern)).ToArray();
+            var attempts = new int[page.Length];
+            var tries = new int[page.Length];
+            var pending = Enumerable.Range(0, page.Length).ToList();
+
+            while (pending.Count > 0)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return;
+
+                // Objects sharing a base value each try a different attempt in the same round, from the lowest one not
+                // yet issued: a page of namesakes is settled in one round rather than one round each.
+                foreach (var namesakes in pending.GroupBy(i => baseTexts[i]))
+                {
+                    var next = nextAttemptByBase.GetValueOrDefault(namesakes.Key);
+                    foreach (var i in namesakes)
+                    {
+                        attempts[i] = Math.Max(attempts[i], next);
+                        next = attempts[i] + 1;
+                    }
+                }
+
+                var candidates = pending.Select(i => BuildUniquePatternCandidate(baseTexts[i], attempts[i], instances, random)).ToList();
+                var claims = candidates.Select(candidate => new UniqueValueClaim
+                {
+                    MetaverseAttributeId = attribute.Id,
+                    TargetType = AttributeDataType.Text,
+                    AttributeName = attribute.Name,
+                    Value = candidate
+                }).ToList();
+
+                var claimed = await WithDatabaseGateAsync(databaseGate, () => Application.UniqueValues.ClaimValuesAsync(claims, options));
+
+                var stillPending = new List<int>();
+                for (var k = 0; k < pending.Count; k++)
+                {
+                    var i = pending[k];
+                    if (claimed[k])
+                    {
+                        page[i].AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = attribute, StringValue = candidates[k] });
+                        nextAttemptByBase[baseTexts[i]] = Math.Max(nextAttemptByBase.GetValueOrDefault(baseTexts[i]), attempts[i] + 1);
+                        continue;
+                    }
+
+                    if (++tries[i] >= MaximumUniqueValueAttempts)
+                        throw new InvalidDataException($"Example data could not find an unused value for '{attribute.Name}' after {MaximumUniqueValueAttempts:N0} attempts. The Example Data Sets its pattern draws from have too few unused combinations left: add values to them, create fewer objects, or add [UniqueInt] to the pattern.");
+
+                    stillPending.Add(i);
+                }
+
+                // A taken value is never tried again by the same object.
+                foreach (var i in stillPending)
+                    attempts[i]++;
+
+                pending = stillPending;
+            }
+        }
     }
 
     /// <summary>
@@ -1764,12 +2081,18 @@ public class ExampleDataServer
     #endregion
 
     #region Attribute Value Generation
+    /// <summary>
+    /// Matches attribute variables such as <c>{First Name}</c> (not Example Data Set variables such as <c>{0}</c>). Built
+    /// once: compiling it on every call cost a few milliseconds an object, which unique patterns, settled on one thread
+    /// rather than across the parallel loop (#1789), paid 10,000 times over for the built-in template.
+    /// </summary>
+    private static readonly Regex AttributeVariableRegex = new(@"({.*?[^\d]})", RegexOptions.Compiled);
+
     internal static string ReplaceAttributeVariables(MetaverseObject metaverseObject, string textToProcess)
     {
         // match attribute variables (that do not contain numbers)
         // enumerate, find their value and replace
-        var regex = new Regex(@"({.*?[^\d]})", RegexOptions.Compiled);
-        foreach (var match in regex.Matches(textToProcess).Cast<Match>())
+        foreach (var match in AttributeVariableRegex.Matches(textToProcess).Cast<Match>())
         {
             // snip off the brackets: {} to get the attribute name, i.e FirstName
             var attributeName = match.Value[1..^1];
@@ -1783,149 +2106,54 @@ public class ExampleDataServer
         return textToProcess;
     }
 
-    private static string ReplaceSystemVariables(
-        MetaverseObject metaverseObject,
-        MetaverseAttribute metaverseAttribute,
-        ExampleDataValueTrackerStore trackerStore,
-        string textToProcess)
+    /// <summary>
+    /// Builds attempt <paramref name="attemptIndex"/> (zero-based) of a unique pattern's value from
+    /// <paramref name="baseText"/>, the pattern with its attribute variables already replaced: <c>[UniqueInt]</c> is
+    /// removed at attempt 0 and replaced with 2, 3, ... at attempts 1, 2, ..., in place; each Example Data Set variable
+    /// (<c>{0}</c>, <c>{1}</c>) is replaced with a fresh random value from its set at every attempt.
+    /// </summary>
+    private static string BuildUniquePatternCandidate(string baseText, int attemptIndex, List<ExampleDataSetInstance> exampleDataSetInstances, Random random)
     {
-        // match system variables
-        // enumerate, process
-        var regex = new Regex(@"(\[.*?\])", RegexOptions.Compiled);
-        var systemVars = regex.Matches(textToProcess);
-        foreach (var match in systemVars.Cast<Match>())
+        var text = baseText.Replace(UniqueIntVariable, attemptIndex == 0 ? string.Empty : (attemptIndex + 1).ToString(CultureInfo.InvariantCulture));
+        if (exampleDataSetInstances.Count == 0)
+            return text;
+
+        foreach (var variable in ExampleDataSetVariableRegex.Matches(text).Select(match => match.Value).Distinct().ToList())
         {
-            // snip off the brackets: {} to get the attribute name, i.e FirstName
-            var variableName = match.Value[1..^1];
+            // snip off the brackets: {} to get the variable, i.e. {0}, an index into the attribute's Example Data Sets
+            var exampleDataSetIndex = int.Parse(variable[1..^1], CultureInfo.InvariantCulture);
+            if (exampleDataSetIndex >= exampleDataSetInstances.Count)
+                throw new InvalidDataException("ExampleDataTemplateAttribute example data set index variable is too high. Smaller number needed. Must be within the bounds of the assigned ExampleDataSets");
 
-            // keeping these as strings for now. They will need evolving into part of the Functions feature at some point
-            if (variableName != "UniqueInt")
-                continue;
+            var exampleDataSet = exampleDataSetInstances[exampleDataSetIndex].ExampleDataSet;
+            var randomValue = exampleDataSet.Values[random.Next(0, exampleDataSet.Values.Count)].StringValue;
+            if (string.IsNullOrEmpty(randomValue))
+                throw new InvalidDataException("Did not get a string ExampleDataSetValue value from the randomly selected list of values.");
 
-            // is the string value unique amongst all MetaverseObjects of the same type?
-            // if so, replace the system variable with an empty string
-            // if not, add a uniqueness in in place of the system variable
-
-            // get the text value without any unique int added, i.e. "joe.bloggs@demo.tetron.io"
-            var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
-
-            // ask the tracker how many times this base value has been generated for this object type and attribute.
-            // 1 means it is unique so far, so we emit it without a unique int. 2, 3, ... means we have generated it
-            // before, so we append that integer to disambiguate. This is atomic, so concurrent generation of the same
-            // base value still yields distinct suffixes.
-            var occurrence = trackerStore.NextUniqueIntSuffix(metaverseObject.Type.Id, metaverseAttribute.Id, textWithoutSystemVar);
-            textToProcess = occurrence == 1
-                ? textWithoutSystemVar
-                : textToProcess.Replace(match.Value, occurrence.ToString());
+            text = text.Replace(variable, randomValue);
         }
 
-        return textToProcess;
+        return text;
     }
 
-    private static string ReplaceExampleDataSetVariables(
-        MetaverseObject metaverseObject,
-        MetaverseAttribute metaverseAttribute,
-        List<ExampleDataSetInstance> exampleDataSetInstances,
-        ExampleDataValueTrackerStore trackerStore,
-        Random random,
-        string textToProcess)
+    private static int GenerateRandomNumberValue(ExampleDataTemplateAttribute dataGenTemplateAttribute, Random random)
     {
-        // logic:
-        // - replace each example data set variable in the pattern with a random value from example data sets, populating a new value variable
-        // - check if the new value variable value is unique via the tracked values list
-        // - if not, re-run until it is unique
-
-        // match example data set variables i.e. {0}
-        // enumerate, process
-
-        if (exampleDataSetInstances == null || exampleDataSetInstances.Count == 0)
-            return textToProcess;
-
-        var regex = new Regex(@"({\d.*?})", RegexOptions.Compiled);
-        var exampleDataSetVariables = regex.Matches(textToProcess);
-
-        if (exampleDataSetVariables.Count == 0)
-            return textToProcess;
-
-        var isGeneratedValueUnique = false;
-        while (!isGeneratedValueUnique)
-        {
-            var completeGeneratedValue = textToProcess;
-            foreach (Match match in exampleDataSetVariables.Cast<Match>())
-            {
-                // snip off the brackets: {} to get the variable, then test if it's an ExampleDataSet index, i.e. {0}
-                var variable = match.Value[1..^1];
-                var exampleDataSetIndex = int.Parse(variable);
-
-                if (exampleDataSetIndex >= exampleDataSetInstances.Count)
-                    throw new InvalidDataException("ExampleDataTemplateAttribute example data set index variable is too high. Smaller number needed. Must be within the bounds of the assigned ExampleDataSets");
-
-                // get the example data set and then choose a random value from it before replacing the variable
-                var exampleDataSet = exampleDataSetInstances[exampleDataSetIndex].ExampleDataSet;
-                var randomValueIndex = random.Next(0, exampleDataSet.Values.Count);
-                var randomValue = exampleDataSet.Values[randomValueIndex].StringValue;
-
-                if (string.IsNullOrEmpty(randomValue))
-                    throw new InvalidDataException("Did not get a string ExampleDataSetValue value from the randomly selected list of values.");
-
-                // replace the example data set variable with the random value
-                completeGeneratedValue = completeGeneratedValue.Replace(match.Value, randomValue);
-            }
-
-            // atomically reserve the generated value for this object type and attribute. if it was already used,
-            // TryReserveValue returns false and we loop round to generate another candidate; otherwise it is now
-            // reserved and we keep it. The check-and-reserve is atomic, so two threads that independently generate the
-            // same value cannot both keep it.
-            if (trackerStore.TryReserveValue(metaverseObject.Type.Id, metaverseAttribute.Id, completeGeneratedValue))
-            {
-                // generated value is unique
-                isGeneratedValueUnique = true;
-                textToProcess = completeGeneratedValue;
-            }
-            // else: this is not a unique value, we've generated it before. go round again until it is unique.
-        }
-
-        return textToProcess;
-    }
-
-    private static int GenerateNumberValue(MetaverseObjectType metaverseObjectType, ExampleDataTemplateAttribute dataGenTemplateAttribute, Random random, ExampleDataValueTrackerStore trackerStore)
-    {
-        var value = 1;
-        int attributeId;
-        if (dataGenTemplateAttribute.MetaverseAttribute != null)
-            attributeId = dataGenTemplateAttribute.MetaverseAttribute.Id;
-        else
+        if (dataGenTemplateAttribute.MetaverseAttribute == null)
             throw new InvalidDataException("Only supporting MetaverseObjects for now");
 
-        if (dataGenTemplateAttribute.RandomNumbers.HasValue && dataGenTemplateAttribute.RandomNumbers.Value)
-        {
-            // random numbers
-            if (dataGenTemplateAttribute is { MinNumber: not null, MaxNumber: null })
-            {
-                // min value only
-                value = random.Next(dataGenTemplateAttribute.MinNumber.Value, int.MaxValue);
-            }
-            else if (!dataGenTemplateAttribute.MinNumber.HasValue && dataGenTemplateAttribute.MaxNumber.HasValue)
-            {
-                // max value only
-                value = random.Next(dataGenTemplateAttribute.MaxNumber.Value);
-            }
-            else if (dataGenTemplateAttribute is { MinNumber: not null, MaxNumber: not null })
-            {
-                // min and max values
-                value = random.Next(dataGenTemplateAttribute.MinNumber.Value, dataGenTemplateAttribute.MaxNumber.Value);
-            }
-        }
-        else
-        {
-            // sequential numbers: the first value generated for this object type and attribute is the configured
-            // minimum (or 1 if unset), and each subsequent value is one higher. The store assigns these atomically
-            // with an O(1) keyed lookup, so the parallel generation loop is not serialised on a single lock.
-            var seed = dataGenTemplateAttribute.MinNumber ?? 1;
-            value = trackerStore.NextSequential(metaverseObjectType.Id, attributeId, seed);
-        }
+        // Sequential numbers are issued by the Unique Value Generation service between segments (AssignUniqueValuesAsync,
+        // #1789); reaching here with one would issue a number that no counter knows about.
+        if (IsSequentialNumber(dataGenTemplateAttribute))
+            throw new InvalidOperationException($"Sequential numbers for '{dataGenTemplateAttribute.MetaverseAttribute.Name}' are assigned by the Unique Value Generation service, not generated inline.");
 
-        return value;
+        if (dataGenTemplateAttribute is { MinNumber: not null, MaxNumber: null })
+            return random.Next(dataGenTemplateAttribute.MinNumber.Value, int.MaxValue); // min value only
+        if (dataGenTemplateAttribute is { MinNumber: null, MaxNumber: not null })
+            return random.Next(dataGenTemplateAttribute.MaxNumber.Value); // max value only
+        if (dataGenTemplateAttribute is { MinNumber: not null, MaxNumber: not null })
+            return random.Next(dataGenTemplateAttribute.MinNumber.Value, dataGenTemplateAttribute.MaxNumber.Value); // min and max values
+
+        return 1;
     }
     #endregion
 
