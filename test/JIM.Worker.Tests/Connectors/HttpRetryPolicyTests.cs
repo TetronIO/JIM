@@ -76,17 +76,55 @@ public class HttpRetryPolicyTests
     }
 
     [Test]
+    public void EvaluateResponse_LastRetryNotYetMade_Retries()
+    {
+        using var response = CreateResponse(HttpStatusCode.TooManyRequests);
+
+        // Three attempts made: the initial call and two retries. The third retry is still owed.
+        var decision = CreatePolicy(maxRetries: 3).EvaluateResponse(response, attempt: 3, Now);
+
+        Assert.That(decision.ShouldRetry, Is.True);
+    }
+
+    [Test]
     public void EvaluateResponse_AttemptsExhausted_DoesNotRetry()
     {
         using var response = CreateResponse(HttpStatusCode.TooManyRequests);
 
-        var decision = CreatePolicy(maxRetries: 3).EvaluateResponse(response, attempt: 3, Now);
+        // Four attempts made: the initial call and all three retries.
+        var decision = CreatePolicy(maxRetries: 3).EvaluateResponse(response, attempt: 4, Now);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.False);
             Assert.That(decision.Reason, Does.Contain("attempt").IgnoreCase);
         }
+    }
+
+    [Test]
+    public void EvaluateResponse_NoRetriesConfigured_DoesNotRetryTheInitialCall()
+    {
+        using var response = CreateResponse(HttpStatusCode.TooManyRequests);
+
+        var decision = CreatePolicy(maxRetries: 0).EvaluateResponse(response, attempt: 1, Now);
+
+        Assert.That(decision.ShouldRetry, Is.False);
+    }
+
+    [Test]
+    public void EvaluateException_LastRetryNotYetMade_Retries()
+    {
+        var decision = CreatePolicy(maxRetries: 3).EvaluateException(new HttpRequestException("connection reset"), attempt: 3);
+
+        Assert.That(decision.ShouldRetry, Is.True);
+    }
+
+    [Test]
+    public void EvaluateException_AttemptsExhausted_DoesNotRetry()
+    {
+        var decision = CreatePolicy(maxRetries: 3).EvaluateException(new HttpRequestException("connection reset"), attempt: 4);
+
+        Assert.That(decision.ShouldRetry, Is.False);
     }
 
     #endregion
