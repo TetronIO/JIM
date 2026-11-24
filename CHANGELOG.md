@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The REST API and `Get-JIMConnectedSystem -Id` now return a Connected System's setting values, so a script can check a configuration before changing it; an encrypted setting reports only whether a value is held.
 - ✨ Export Synchronisation Rules can deprovision leavers with **Disable**: the account is disabled and kept for audit, and re-enabled if the person returns. Works with Active Directory, Samba AD, 389 Directory Server, OpenLDAP and Microsoft Entra ID. (#2085)
 
+- ✨ Activities and Run Profile Execution Items in the REST API and PowerShell module now return each message's key and values beside its English, so an integration can show it in another language; the portal's Operations queue now shows live progress in the reader's language too (#3039).
+
 - ✨ JIM can reach the internet through an outbound proxy, as the Microsoft Entra ID Connector may need: the installer asks for one, and the standard `HTTPS_PROXY` and `NO_PROXY` settings work on Docker and Podman alike. (#3051)
 
 ### Changed

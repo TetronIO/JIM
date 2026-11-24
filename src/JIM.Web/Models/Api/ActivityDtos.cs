@@ -60,6 +60,22 @@ public class ActivityHeader
     public string? Message { get; set; }
 
     /// <summary>
+    /// The key of the progress message, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
+    /// when there is no message, or for one recorded before keys were stored.
+    /// </summary>
+    public string? MessageKey { get; set; }
+
+    /// <summary>
+    /// The values placed into the progress message, in order. Null whenever the key is.
+    /// </summary>
+    public List<MessageArgumentDto>? MessageArguments { get; set; }
+
+    /// <summary>
+    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// </summary>
+    public long? MessageCount { get; set; }
+
+    /// <summary>
     /// The type of security principal that initiated this Activity.
     /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
@@ -284,6 +300,9 @@ public class ActivityHeader
             TargetName = activity.TargetName,
             TargetContext = activity.TargetContext,
             Message = activity.Message,
+            MessageKey = ApiMessage.KeyOf(activity.MessageDetail),
+            MessageArguments = ApiMessage.ArgumentsOf(activity.MessageDetail),
+            MessageCount = ApiMessage.CountOf(activity.MessageDetail),
             InitiatedByType = activity.InitiatedByType,
             InitiatedById = activity.InitiatedById,
             InitiatedByName = activity.InitiatedByName,
@@ -417,6 +436,22 @@ public class ActivityDetailDto
     public string? Message { get; set; }
 
     /// <summary>
+    /// The key of the progress message, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
+    /// when there is no message, or for one recorded before keys were stored.
+    /// </summary>
+    public string? MessageKey { get; set; }
+
+    /// <summary>
+    /// The values placed into the progress message, in order. Null whenever the key is.
+    /// </summary>
+    public List<MessageArgumentDto>? MessageArguments { get; set; }
+
+    /// <summary>
+    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// </summary>
+    public long? MessageCount { get; set; }
+
+    /// <summary>
     /// The type of security principal that initiated this Activity.
     /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
@@ -457,9 +492,41 @@ public class ActivityDetailDto
     public string? WarningMessage { get; set; }
 
     /// <summary>
+    /// The key of the warning, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
+    /// when there is no message, or for one recorded before keys were stored.
+    /// </summary>
+    public string? WarningMessageKey { get; set; }
+
+    /// <summary>
+    /// The values placed into the warning, in order. Null whenever the key is.
+    /// </summary>
+    public List<MessageArgumentDto>? WarningMessageArguments { get; set; }
+
+    /// <summary>
+    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// </summary>
+    public long? WarningMessageCount { get; set; }
+
+    /// <summary>
     /// Error message if the Activity failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// The key of the error message, for rendering it in another language, such as <c>ActivityMessages.RoleMemberAdded</c>. Null
+    /// when there is no message, or for one recorded before keys were stored.
+    /// </summary>
+    public string? ErrorMessageKey { get; set; }
+
+    /// <summary>
+    /// The values placed into the error message, in order. Null whenever the key is.
+    /// </summary>
+    public List<MessageArgumentDto>? ErrorMessageArguments { get; set; }
+
+    /// <summary>
+    /// For a counted message, the count that chooses its singular or plural form; null otherwise.
+    /// </summary>
+    public long? ErrorMessageCount { get; set; }
 
     /// <summary>
     /// Error stack trace if the Activity failed.
@@ -762,6 +829,9 @@ public class ActivityDetailDto
             TargetName = activity.TargetName,
             TargetContext = activity.TargetContext,
             Message = activity.Message,
+            MessageKey = ApiMessage.KeyOf(activity.MessageDetail),
+            MessageArguments = ApiMessage.ArgumentsOf(activity.MessageDetail),
+            MessageCount = ApiMessage.CountOf(activity.MessageDetail),
             InitiatedByType = activity.InitiatedByType,
             InitiatedById = activity.InitiatedById,
             InitiatedByName = activity.InitiatedByName,
@@ -770,7 +840,13 @@ public class ActivityDetailDto
             ExecutionTime = activity.ExecutionTime,
             TotalActivityTime = activity.TotalActivityTime,
             WarningMessage = activity.WarningMessage,
+            WarningMessageKey = ApiMessage.KeyOf(activity.WarningMessageDetail),
+            WarningMessageArguments = ApiMessage.ArgumentsOf(activity.WarningMessageDetail),
+            WarningMessageCount = ApiMessage.CountOf(activity.WarningMessageDetail),
             ErrorMessage = activity.ErrorMessage,
+            ErrorMessageKey = ApiMessage.KeyOf(activity.ErrorMessageDetail),
+            ErrorMessageArguments = ApiMessage.ArgumentsOf(activity.ErrorMessageDetail),
+            ErrorMessageCount = ApiMessage.CountOf(activity.ErrorMessageDetail),
             ErrorStackTrace = activity.ErrorStackTrace,
             ErrorDetail = activity.ErrorDetail,
             ConnectedSystemRunType = activity.ConnectedSystemRunType,

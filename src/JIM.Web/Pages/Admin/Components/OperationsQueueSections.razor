@@ -239,7 +239,7 @@
                                     <td><OneLineText Text="@RunProfileCell(task)" /></td>
                                     <td class="jim-queue-progress-cell">
                                         <WorkerTaskProgress Status="@task.Status" ObjectsToProcess="@task.ObjectsToProcess"
-                                                            ObjectsProcessed="@task.ObjectsProcessed" ProgressMessage="@task.ProgressMessage"
+                                                            ObjectsProcessed="@task.ObjectsProcessed" ProgressMessage="@MessageDisplay.Show(JIM.Models.Localisation.MessageJson.Deserialise(task.ProgressMessageDetailJson), task.ProgressMessage)"
                                                             Steps="@task.Steps" />
                                     </td>
                                     <td>@InitiatorCell(task)</td>

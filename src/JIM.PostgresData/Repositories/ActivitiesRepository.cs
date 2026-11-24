@@ -1884,6 +1884,7 @@ public partial class ActivityRepository : IActivityRepository
                 ActivityId = a.Id,
                 Status = a.Status,
                 Message = a.Message,
+                MessageDetailJson = a.MessageDetailJson,
                 ObjectsProcessed = a.ObjectsProcessed,
                 ObjectsToProcess = a.ObjectsToProcess,
                 Created = a.Created,

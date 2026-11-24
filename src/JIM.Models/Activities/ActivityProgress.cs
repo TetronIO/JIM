@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Activities;
@@ -22,6 +23,22 @@ public class ActivityProgress
     /// (for example "Importing objects from Connected System" or "Saving changes").
     /// </summary>
     public string? Message { get; set; }
+
+    /// <summary>
+    /// <see cref="Message"/> as a message, as JSON (#3039); null for narration recorded as text only.
+    /// </summary>
+    public string? MessageDetailJson { get; set; }
+
+    /// <summary>The narration as a message; setting it also sets <see cref="Message"/> to its British English.</summary>
+    public JimMessage? MessageDetail
+    {
+        get => MessageJson.Deserialise(MessageDetailJson);
+        set
+        {
+            MessageDetailJson = MessageJson.Serialise(value);
+            Message = value?.ToEnglish();
+        }
+    }
 
     /// <summary>
     /// Objects processed so far within the current counting window. Some run phases reset this
