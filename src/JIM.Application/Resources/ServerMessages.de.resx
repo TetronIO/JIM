@@ -345,4 +345,13 @@
   <data name="ProvSeveralValues" xml:space="preserve">
     <value>Der Ausdruck hat {0} Werte zurückgegeben, dieses Attribut ist aber einwertig, daher würde diese Quelle keinen Wert liefern, und die Synchronisierung meldet einen Fehler.</value>
   </data>
+  <data name="ContributionModeNeedsMultiValued" xml:space="preserve">
+    <value>Der Beitragsmodus {0} gilt nur für mehrwertige Attribute. Stellen Sie den Modus auf „Priorität“, bevor Sie das Attribut einwertig machen.</value>
+  </data>
+  <data name="ContributionModeNotForReference" xml:space="preserve">
+    <value>Der Beitragsmodus {0} ist für Referenzattribute nicht verfügbar, da eine Referenz entfernt wird, wenn das Metaverse-Objekt gelöscht wird, auf das sie verweist. Um einen Verlauf der Referenzen zu behalten, erfassen Sie die Kennung des referenzierten Objekts als Text in einem separaten mehrwertigen Textattribut.</value>
+  </data>
+  <data name="ContributionModeUnsupported" xml:space="preserve">
+    <value>Der Beitragsmodus {0} ist für ein Attribut vom Typ {1} nicht verfügbar.</value>
+  </data>
 </root>

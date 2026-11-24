@@ -9042,6 +9042,18 @@ public partial class ConnectedSystemServer
     /// is not a contributor).</exception>
     /// <returns>The resulting order, the mappings whose priority or "Null is a value" it changes, and every contributor's
     /// priority and "Null is a value" as stored, which is what the preflight describes the change against.</returns>
+    /// <summary>
+    /// Refuses an administrator's change to an Accumulate attribute's priority order (#3059): every contributor adds its
+    /// values, so no order is used, and a reorder that took effect silently would mislead. The order is kept as it is, so
+    /// it applies again if the attribute returns to Priority.
+    /// </summary>
+    private static void EnsurePriorityOrderApplies(IReadOnlyList<SyncRuleMapping> contributors)
+    {
+        var attribute = contributors[0].TargetMetaverseAttribute;
+        if (attribute?.ContributionMode == AttributeContributionMode.Accumulate)
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNotUsedUnderAccumulate), attribute.Name));
+    }
+
     private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed, IReadOnlyDictionary<int, (int Priority, bool NullIsValue)> Before)> BuildAttributePriorityFromFullOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
     {
         if (orderedContributors == null)
@@ -9050,6 +9062,7 @@ public partial class ConnectedSystemServer
         var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
         if (existing.Count == 0)
             throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
+        EnsurePriorityOrderApplies(existing);
 
         var requestedIds = orderedContributors.Select(c => c.MappingId).ToList();
         var requestedDistinct = new HashSet<int>(requestedIds);
@@ -9134,6 +9147,7 @@ public partial class ConnectedSystemServer
         var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
         if (existing.Count == 0)
             throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
+        EnsurePriorityOrderApplies(existing);
 
         var moving = existing.SingleOrDefault(m => m.Id == mappingId);
         if (moving == null)

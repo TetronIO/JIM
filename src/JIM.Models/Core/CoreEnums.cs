@@ -457,3 +457,24 @@ public enum AttributeRenderingHint
     /// </summary>
     List = 3
 }
+
+/// <summary>
+/// How a multi-valued Metaverse attribute combines the values of the import Synchronisation Rules that contribute to it
+/// (#3059). Stored on <see cref="MetaverseAttribute"/>; the same mode applies on every Metaverse Object Type that uses
+/// the attribute.
+/// </summary>
+public enum AttributeContributionMode
+{
+    /// <summary>
+    /// The highest-priority applicable contributor supplies the whole value set; the others are ignored. The only mode
+    /// for single-valued attributes, and the default.
+    /// </summary>
+    Priority = 0,
+
+    /// <summary>
+    /// Every value a contributor supplies is added and kept. Synchronisation never removes a value, whatever happens to
+    /// the contributor; only an administrator can. Not available for Reference attributes, because a reference cannot
+    /// outlive the Metaverse Object it points to.
+    /// </summary>
+    Accumulate = 1
+}

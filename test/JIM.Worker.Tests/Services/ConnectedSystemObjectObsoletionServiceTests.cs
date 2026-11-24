@@ -184,6 +184,36 @@ public class ConnectedSystemObjectObsoletionServiceTests
         }
     }
 
+    /// <summary>
+    /// PRD Scenario 2 (#3059): an account deleted at its source is obsoleted and its other values are recalled, but an
+    /// Accumulate attribute keeps every value that account contributed, still naming its contributor.
+    /// </summary>
+    [Test]
+    public async Task ProcessObsoleteCso_AccumulateValue_IsKeptWhileOtherValuesAreRecalledAsync()
+    {
+        var auditLog = new MetaverseAttribute
+        {
+            Id = 101, Name = "Account Audit Log", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued, ContributionMode = AttributeContributionMode.Accumulate
+        };
+        var accumulated = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), Attribute = auditLog, AttributeId = auditLog.Id, StringValue = "AD|5f1c|sAMAccountName=jsmith",
+            ContributedBySystemId = SystemId, ContributedBySyncRuleId = 7, MetaverseObject = _mvo
+        };
+        _mvo.AttributeValues.Add(accumulated);
+
+        var result = await ProcessAsync(_cso);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MvoAttributeChange!.Value.Removals, Is.EqualTo(new[] { _contributedValue }), "only the Priority value is recalled");
+            Assert.That(result.RecallClearedAttributeCount, Is.EqualTo(1));
+            Assert.That(_mvo.AttributeValues, Is.EqualTo(new[] { accumulated }), "the Accumulate value survives the obsoletion");
+            Assert.That(accumulated.ContributedBySystemId, Is.EqualTo(SystemId), "and still names its contributor");
+        }
+    }
+
     [Test]
     public async Task ProcessObsoleteCso_NoImportSourceRemains_PreservesValuesAndRecordsOutcomeAsync()
     {

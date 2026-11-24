@@ -257,6 +257,132 @@ public class MetaverseControllerAttributeTests
 
     #endregion
 
+    #region Contribution mode (#3059)
+
+    [Test]
+    public async Task CreateAttributeAsync_MultiValuedAccumulate_CreatesWithTheModeAndReturnsItAsync()
+    {
+        MetaverseAttribute? captured = null;
+        _mv.Setup(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Callback<MetaverseAttribute>(a => { a.Id = 5; captured = a; });
+        _mv.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(5, It.IsAny<bool>())).ReturnsAsync(() => captured);
+
+        var result = await _controller.CreateAttributeAsync(new CreateMetaverseAttributeRequest
+        {
+            Name = "accountAuditLog", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued,
+            ContributionMode = AttributeContributionMode.Accumulate
+        });
+
+        Assert.That(result, Is.InstanceOf<CreatedResult>());
+        var dto = (MetaverseAttributeDetailDto)((CreatedResult)result).Value!;
+        Assert.That(dto.ContributionMode, Is.EqualTo(AttributeContributionMode.Accumulate));
+    }
+
+    [Test]
+    public async Task CreateAttributeAsync_SingleValuedAccumulate_ReturnsBadRequestAsync()
+    {
+        var result = await _controller.CreateAttributeAsync(new CreateMetaverseAttributeRequest
+        {
+            Name = "costCentre", Type = AttributeDataType.Text, ContributionMode = AttributeContributionMode.Accumulate
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Does.Contain("multi-valued"));
+        _mv.Verify(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_ContributionModeOnly_UpdatesItAndReturnsOkAsync()
+    {
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { ContributionMode = AttributeContributionMode.Accumulate });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(((MetaverseAttributeDetailDto)((OkObjectResult)result).Value!).ContributionMode, Is.EqualTo(AttributeContributionMode.Accumulate));
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.Is<MetaverseAttribute>(a => a.ContributionMode == AttributeContributionMode.Accumulate)), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_AccumulateOnAReferenceAttribute_ReturnsBadRequestNamingTheAlternativeAsync()
+    {
+        var attribute = Attr(1, "managers");
+        attribute.Type = AttributeDataType.Reference;
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { ContributionMode = AttributeContributionMode.Accumulate });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Does.Contain("text attribute"));
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_LeavingAccumulateWithoutConfirmation_ReturnsBadRequestAndChangesNothingAsync()
+    {
+        // Leaving Accumulate lets the next synchronisation remove the values it kept, so it must be confirmed.
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { ContributionMode = AttributeContributionMode.Priority });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Does.Contain(nameof(UpdateMetaverseAttributeRequest.ConfirmLeavingAccumulate)));
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_LeavingAccumulateConfirmed_UpdatesItAsync()
+    {
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest
+        {
+            ContributionMode = AttributeContributionMode.Priority, ConfirmLeavingAccumulate = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.Is<MetaverseAttribute>(a => a.ContributionMode == AttributeContributionMode.Priority)), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_LeavingAccumulateWithoutConfirmation_RenamesNothingEitherAsync()
+    {
+        // The gate is checked before anything is written, so a rename sent in the same request does not half-apply.
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest
+        {
+            Name = "renamed", ContributionMode = AttributeContributionMode.Priority
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ChangeAttributeSchemaAsync_AccumulateToSingleValued_ReturnsBadRequestAsync()
+    {
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    #endregion
+
     #region Update / rename
 
     [Test]

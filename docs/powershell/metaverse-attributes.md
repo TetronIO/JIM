@@ -75,6 +75,7 @@ By default, one page of attributes, each in summary with the Object Types it is 
 | `Type` | `string` | The kind of value the attribute holds. One of `NotSet`, `Text`, `Number`, `DateTime`, `Binary`, `Reference`, `Guid`, `Boolean`, `LongNumber` or `Decimal`. |
 | `AttributePlurality` | `string` | Whether the attribute holds one value or many. One of `SingleValued` or `MultiValued`. |
 | `BuiltIn` | `bool` | Whether JIM provides the attribute. A built-in attribute cannot be changed or deleted. |
+| `ContributionMode` | `string` | How the values of several import Synchronisation Rules are combined: `Priority` (the highest-priority contributor supplies the values) or `Accumulate` (every contributor adds values, and synchronisation never removes one). One of `Priority` or `Accumulate`. |
 | `MetaverseObjectTypes` | `object[]` | The Object Types the attribute is bound to, each as a Key (the Object Type's ID) and a Value (its name). Each has `Key` and `Value`. |
 
 **With `-Id` or `-Name`**:
@@ -88,6 +89,7 @@ By default, one page of attributes, each in summary with the Object Types it is 
 | `AttributePlurality` | `string` | Whether the attribute holds one value or many. One of `SingleValued` or `MultiValued`. |
 | `BuiltIn` | `bool` | Whether JIM provides the attribute. A built-in attribute cannot be changed or deleted. |
 | `RenderingHint` | `string` | How the portal shows a multi-valued attribute's values. Ignored for a single-valued attribute. One of `Default`, `Table`, `ChipSet` or `List`. |
+| `ContributionMode` | `string` | How the values of several import Synchronisation Rules are combined: `Priority` (the highest-priority contributor supplies the values) or `Accumulate` (every contributor adds values, and synchronisation never removes one). One of `Priority` or `Accumulate`. |
 | `ObjectTypes` | `object[]` | The Object Types the attribute is bound to. Each has `Id` and `Name`. |
 | `StandardMappings` | `object[]` | The attribute's counterparts in other standards, such as SCIM 2.0 and LDAP. They are guidance only; synchronisation never uses them. Each has `Standard`, `CounterpartName` and `Notes`. |
 <!-- END GENERATED: Get-JIMMetaverseAttribute -->
@@ -116,7 +118,7 @@ Creates a custom Metaverse Attribute, optionally bound to Metaverse Object Types
 ### Syntax
 
 ```powershell
-New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <string>] [-ObjectTypeIds <int[]>] [-ChangeReason <string>] [-WhatIf] [-Confirm]
+New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <string>] [-ContributionMode <string>] [-ObjectTypeIds <int[]>] [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -126,6 +128,7 @@ New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <st
 | `Name` | `string` | Yes |  | The name of the new attribute. It must be unique, ignoring case. |
 | `Type` | `string` | Yes |  | The kind of value the attribute holds. Integer is the type JIM names Number. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid` or `Binary`. |
 | `AttributePlurality` | `string` | No | `'SingleValued'` | Whether the attribute holds one value or many. A Boolean holds one value, so JIM refuses MultiValued for a Boolean. One of `SingleValued` or `MultiValued`. |
+| `ContributionMode` | `string` | No |  | How the values of several import Synchronisation Rules are combined. Priority (JIM's default when this is not given) takes the values from the highest-priority contributor. Accumulate adds every value any contributor supplies and never removes one through synchronisation; JIM refuses it for a single-valued or a Reference attribute. One of `Priority` or `Accumulate`. |
 | `ObjectTypeIds` | `int[]` | No |  | The IDs of the Metaverse Object Types to bind the attribute to. It can also be bound later, with `Add-JIMMetaverseObjectTypeAttribute`. |
 | `ChangeReason` | `string` | No |  | An optional reason for the change, recorded in the attribute's Configuration Change History. |
 
@@ -163,10 +166,10 @@ Changes a custom Metaverse Attribute: its name, rendering hint, Standard Mapping
 
 ```powershell
 # ById (default)
-Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-RenderingHint <string>] [-Type <string>] [-AttributePlurality <string>] [-StandardMappings <Array>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-RenderingHint <string>] [-ContributionMode <string>] [-Type <string>] [-AttributePlurality <string>] [-StandardMappings <Array>] [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Set-JIMMetaverseAttribute -InputObject <PSCustomObject> [-Name <string>] [-RenderingHint <string>] [-Type <string>] [-AttributePlurality <string>] [-StandardMappings <Array>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMMetaverseAttribute -InputObject <PSCustomObject> [-Name <string>] [-RenderingHint <string>] [-ContributionMode <string>] [-Type <string>] [-AttributePlurality <string>] [-StandardMappings <Array>] [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -177,10 +180,12 @@ Set-JIMMetaverseAttribute -InputObject <PSCustomObject> [-Name <string>] [-Rende
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | An attribute from the pipeline, for example from `Get-JIMMetaverseAttribute`. Accepts pipeline input. |
 | `Name` | `string` | No |  | A new name for the attribute. It must be unique, ignoring case. |
 | `RenderingHint` | `string` | No |  | How the portal shows a multi-valued attribute's values. Ignored for a single-valued attribute. One of `Default`, `Table`, `ChipSet` or `List`. |
+| `ContributionMode` | `string` | No |  | How the values of several import Synchronisation Rules are combined. Priority takes the values from the highest-priority contributor. Accumulate adds every value any contributor supplies and never removes one through synchronisation; JIM refuses it for a single-valued or a Reference attribute. The change applies to each Metaverse Object at its next synchronisation. One of `Priority` or `Accumulate`. |
 | `Type` | `string` | No |  | A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses a type change while any Metaverse Object holds a value for the attribute. A Boolean holds one value, so Boolean without `-AttributePlurality` also makes the attribute single-valued. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid` or `Binary`. |
 | `AttributePlurality` | `string` | No |  | Whether the attribute holds one value or many. While any Metaverse Object holds a value for the attribute, JIM allows only a change from SingleValued to MultiValued, which keeps every value; it refuses MultiValued to SingleValued, and refuses MultiValued for a Boolean. Giving the plurality the attribute already has changes nothing, so stored values never block it. One of `SingleValued` or `MultiValued`. |
 | `StandardMappings` | `Array` | No |  | The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a Standard (Scim, Ldap or Jim), a CounterpartName (the attribute's name in that standard) and optional Notes. Standard Mappings are guidance only and never affect synchronisation. |
 | `ChangeReason` | `string` | No |  | An optional reason for the change, recorded in the attribute's Configuration Change History. |
+| `Force` | `switch` | No |  | Confirms changing an Accumulate attribute to another mode. At each Metaverse Object's next synchronisation, the values Accumulate kept that no contributor supplies any more are removed, and exports remove them from target systems, so JIM refuses the change without it. Has no other effect. |
 | `PassThru` | `switch` | No |  | Returns the updated attribute. |
 
 ### Output
@@ -463,6 +468,7 @@ The attribute's priority order on that Object Type: each contributing Attribute 
 | `MetaverseObjectTypeId` | `int` | The unique identifier of the Object Type the order applies to. |
 | `MetaverseAttributeId` | `int` | The unique identifier of the attribute. |
 | `MetaverseAttributeName` | `string` | The attribute's name; empty when nothing contributes to it. |
+| `ContributionMode` | `string` | How the attribute combines its contributors' values. Under `Priority` the order below decides which contributor supplies the values; under `Accumulate` every contributor adds its values, the order is not used, and a change to it is refused. One of `Priority` or `Accumulate`. |
 | `Contributors` | `object[]` | The Attribute Flows that contribute a value to the attribute, highest priority first; empty when none does. Each has `MappingId`, `Priority`, `NullIsValue`, `SyncRuleId`, `SyncRuleName`, `SyncRuleEnabled`, `ConnectedSystemId` and `ConnectedSystemName`. |
 | `AwaitingSynchronisation` | `object[]` | On the response to a change of the order: the Connected System Object Types the change recorded as awaiting synchronisation, one for each enabled Synchronisation Rule whose Attribute Flow it moved or whose "Null is a value" it changed, since the change alters which value wins for that rule's objects. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and when the change recorded nothing. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 <!-- END GENERATED: Get-JIMMetaverseAttributePriority -->

@@ -8208,7 +8208,7 @@ public abstract class SyncTaskProcessorBase
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && _attributePriorityContext != null && mvo.Type != null &&
                     await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
                         mvo,
-                        mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id).ToList(),
+                        mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id && ContributedValueRecall.IsRecallable(av)).ToList(),
                         ContributorRecallScope.ForObsoletingConnectedSystemObject(connectedSystemObject),
                         _attributePriorityContext,
                         _syncRepo,
@@ -8371,7 +8371,8 @@ public abstract class SyncTaskProcessorBase
         SyncRule? scopingSyncRule)
     {
         var mvo = connectedSystemObject.MetaverseObject!;
-        var contributed = mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id).ToList();
+        // An Accumulate attribute's values are not withdrawn (#3059).
+        var contributed = mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id && ContributedValueRecall.IsRecallable(av)).ToList();
         if (!connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion || contributed.Count == 0)
         {
             Log.Debug("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of every import rule's scope, but an export rule made its join and " +
@@ -8451,8 +8452,9 @@ public abstract class SyncTaskProcessorBase
         List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
         List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null;
 
+        // An Accumulate attribute's values stay when the object leaves scope (#3059).
         var contributedAttributes = mvo.AttributeValues
-            .Where(av => av.ContributedBySystemId == _connectedSystem.Id)
+            .Where(av => av.ContributedBySystemId == _connectedSystem.Id && ContributedValueRecall.IsRecallable(av))
             .ToList();
 
         foreach (var attributeValue in contributedAttributes)

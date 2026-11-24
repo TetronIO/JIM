@@ -251,6 +251,47 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// PRD requirement 13 (#3059): deleting a Synchronisation Rule that contributed to an Accumulate attribute leaves those
+    /// values in place, still naming the Connected System that contributed them, while the rule's other values are recalled.
+    /// </summary>
+    [Test]
+    public async Task ExecuteSyncRuleDeletionRecallAsync_AccumulateValues_AreKeptWhileOtherValuesAreRecalledAsync()
+    {
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        var mvType = await DbContext.MetaverseObjectTypes.FindAsync(ctx.HrImportRule.MetaverseObjectTypeId);
+        var auditLog = new MetaverseAttribute
+        {
+            Name = "Account Audit Log",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ContributionMode = AttributeContributionMode.Accumulate,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType! },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(auditLog);
+        await DbContext.SaveChangesAsync();
+        mvType!.Attributes.Add(auditLog);
+        var hrDisplayName = ctx.HrImportRule.ConnectedSystemObjectType.Attributes.Single(a => a.Name == "DisplayName");
+        ctx.HrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(ctx.HrImportRule, auditLog, hrDisplayName));
+        await DbContext.SaveChangesAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        Assert.That(GetAttributeValue(SyncRepo.MetaverseObjects.Values.Single(), auditLog.Id)?.StringValue, Is.EqualTo("John Smith"),
+            "precondition: the rule contributed to the Accumulate attribute");
+
+        var (task, _) = await DisableRuleAndBuildTaskAsync(ctx.HrImportRule);
+        await Jim.ConnectedSystems.ExecuteSyncRuleDeletionRecallAsync(task);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var kept = GetAttributeValue(mvo, auditLog.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(kept?.StringValue, Is.EqualTo("John Smith"), "the Accumulate value survives the rule's deletion");
+            Assert.That(kept?.ContributedBySystemId, Is.EqualTo(ctx.Hr.Id), "and still names its Connected System");
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId), Is.Null, "the rule's Priority values are still recalled");
+        }
+    }
+
     [Test]
     public async Task ExecuteSyncRuleDeletionRecallAsync_RecallTakesObjectOutOfExportScope_DeprovisionsTargetAsync()
     {

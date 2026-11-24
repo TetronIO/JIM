@@ -67,6 +67,14 @@ public class MetaverseAttribute : IAuditable
     /// </summary>
     public AttributeRenderingHint RenderingHint { get; set; } = AttributeRenderingHint.Default;
 
+    /// <summary>
+    /// How the values of this attribute are combined when more than one import Synchronisation Rule contributes to it.
+    /// Priority (the default) takes the whole value set from the highest-priority applicable contributor; Accumulate
+    /// adds every value any contributor has supplied and never removes one through synchronisation. Only Priority is
+    /// valid for single-valued attributes.
+    /// </summary>
+    public AttributeContributionMode ContributionMode { get; set; } = AttributeContributionMode.Priority;
+
     public List<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
 
     public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; } = null!;
