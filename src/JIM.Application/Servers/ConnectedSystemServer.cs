@@ -5724,6 +5724,7 @@ public partial class ConnectedSystemServer
         // Activity, which only has room for one message: a hierarchy that both failed to enumerate and failed to
         // count used to report whichever happened to run last.
         var warnings = new List<string>();
+        var noPartitionsWarning = false;
 
         // Counted against the same directory state that produced the hierarchy, and before the merge, because the
         // Connector answers in terms of its own partitions. Applied after the merge, when JIM's own Containers
@@ -5734,7 +5735,8 @@ public partial class ConnectedSystemServer
             // Zero partitions almost always means the connector could not enumerate them (connection,
             // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
             // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-            warnings.Add("The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.");
+            warnings.Add(ActivityMessage.Create(nameof(ActivityMessages.HierarchyNoPartitions)).ToEnglish());
+            noPartitionsWarning = true;
         }
 
         // A partition whose count was cut short has its figures discarded, so say so. Blank counts otherwise look
@@ -5747,7 +5749,12 @@ public partial class ConnectedSystemServer
             warnings.Add(incompleteCounts);
 
         if (warnings.Count > 0)
-            activity.WarningMessage = string.Join(" ", warnings);
+        {
+            // The sentence JIM words itself is stored as a message; what the Connector said of its own counts stays English.
+            activity.WarningMessageDetail = ActivityMessage.Spaced(warnings.Select(w => noPartitionsWarning && w == ActivityMessage.Create(nameof(ActivityMessages.HierarchyNoPartitions)).ToEnglish()
+                ? ActivityMessage.Create(nameof(ActivityMessages.HierarchyNoPartitions))
+                : ActivityMessage.Create(nameof(ActivityMessages.Verbatim), w)));
+        }
 
         // Merge discovered partitions with existing ones, preserving user selections
         var result = MergeHierarchy(connectedSystem, partitions);

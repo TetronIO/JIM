@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Exceptions;
 
 /// <summary>
@@ -24,12 +27,32 @@ namespace JIM.Models.Exceptions;
 /// had one. <see cref="Exception.InnerException"/> is always the first failure's cause.
 /// </para>
 /// </remarks>
-public class SynchronisationHistoryPersistenceException : SyncPersistenceException
+public class SynchronisationHistoryPersistenceException : SyncPersistenceException, IJimMessageCarrier
 {
     public SynchronisationHistoryPersistenceException(string message, Exception innerException, int page, int totalPages, string connectedSystemName)
         : base(message, innerException, page, totalPages, connectedSystemName)
     {
     }
+
+    /// <summary>The failure as a message the portal shows in the reader's language; its English is <see cref="Exception.Message"/>.</summary>
+    public SynchronisationHistoryPersistenceException(JimMessage detail, Exception innerException, int page, int totalPages, string connectedSystemName)
+        : base(detail.ToEnglish(), innerException, page, totalPages, connectedSystemName)
+    {
+        Detail = detail;
+    }
+
+    /// <summary>A failure found as the next page handed its history off, as a message.</summary>
+    public SynchronisationHistoryPersistenceException(JimMessage detail, Exception innerException, int page, int totalPages, string connectedSystemName,
+        int nextPage, SynchronisationHistoryNextPageOutcome nextPageOutcome, Exception? nextPageFailure)
+        : this(detail, innerException, page, totalPages, connectedSystemName)
+    {
+        NextPage = nextPage;
+        NextPageOutcome = nextPageOutcome;
+        NextPageFailure = nextPageFailure;
+    }
+
+    /// <summary>The failure as a message; null for one built from English only.</summary>
+    public JimMessage? Detail { get; }
 
     /// <summary>
     /// A failure found as the next page handed its history off, with what became of that page's history.
@@ -65,18 +88,18 @@ public class SynchronisationHistoryPersistenceException : SyncPersistenceExcepti
     /// loop.</param>
     /// <param name="totalPages">The pages the run expected.</param>
     /// <param name="connectedSystemName">The Connected System being synchronised.</param>
-    public static string BuildMessage(int page, int totalPages, string connectedSystemName)
+    public static string BuildMessage(int page, int totalPages, string connectedSystemName) =>
+        Describe(page, totalPages, connectedSystemName).ToEnglish();
+
+    /// <summary><see cref="BuildMessage"/> as a message.</summary>
+    public static JimMessage Describe(int page, int totalPages, string connectedSystemName)
     {
         // A page's history is written while the next page saves its changes (#2924), so a page's failure can be found
         // once the next page has saved them; the run never goes further than that. Whether there was a next page is not
         // read from totalPages: that is an estimate (#2934), and a closing sweep page can follow one it called the last.
         return page > 0
-            ? $"Failed to record the execution items and change history of page {page} of {totalPages} for Connected System " +
-              $"'{connectedSystemName}'. Those synchronisation changes were saved; their history was not, and the run stopped " +
-              "without saving the changes of any page after the next one, or of the steps after the pages."
-            : "Failed to record the execution items and change history of the steps after the pages for Connected System " +
-              $"'{connectedSystemName}'. Those synchronisation changes were saved; their history was not, and the run stopped " +
-              "before saving any further changes.";
+            ? JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.HistoryFailedPage), page, totalPages, connectedSystemName)
+            : JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.HistoryFailedAfterPages), connectedSystemName);
     }
 
     /// <summary>
@@ -89,16 +112,20 @@ public class SynchronisationHistoryPersistenceException : SyncPersistenceExcepti
     /// <param name="detail">Why the next page's write failed (<see cref="SynchronisationHistoryNextPageOutcome.WriteFailed"/>),
     /// or what it refers to of the failed history (<see cref="SynchronisationHistoryNextPageOutcome.NotWrittenDependsOnFailedPage"/>);
     /// unused when it was written.</param>
-    public static string BuildNextPageMessage(int nextPage, int totalPages, SynchronisationHistoryNextPageOutcome outcome, string? detail)
+    public static string BuildNextPageMessage(int nextPage, int totalPages, SynchronisationHistoryNextPageOutcome outcome, string? detail) =>
+        DescribeNextPage(nextPage, totalPages, outcome, detail).ToEnglish();
+
+    /// <summary><see cref="BuildNextPageMessage"/> as a message; <paramref name="detail"/> is a message where it has one.</summary>
+    public static JimMessage DescribeNextPage(int nextPage, int totalPages, SynchronisationHistoryNextPageOutcome outcome, MessageArgument? detail)
     {
-        var saved = $"Page {nextPage} of {totalPages} had saved its changes when the failure was found; ";
-        return outcome switch
+        var key = outcome switch
         {
-            SynchronisationHistoryNextPageOutcome.Written => saved + "its history was written.",
-            SynchronisationHistoryNextPageOutcome.WriteFailed => saved + $"its history could not be written either: {detail}",
-            SynchronisationHistoryNextPageOutcome.NotWrittenDependsOnFailedPage =>
-                saved + $"its history was not written, because it refers to the history that failed ({detail}).",
+            SynchronisationHistoryNextPageOutcome.Written => nameof(SyncMessages.HistoryNextWritten),
+            SynchronisationHistoryNextPageOutcome.WriteFailed => nameof(SyncMessages.HistoryNextWriteFailed),
+            SynchronisationHistoryNextPageOutcome.NotWrittenDependsOnFailedPage => nameof(SyncMessages.HistoryNextDepends),
             _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unknown outcome for the next page's history.")
         };
+
+        return JimMessage.Create(MessageCatalogues.Sync, key, nextPage, totalPages, detail ?? string.Empty);
     }
 }

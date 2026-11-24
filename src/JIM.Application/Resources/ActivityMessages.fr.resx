@@ -876,4 +876,64 @@
   <data name="ProgressProcessingModifiedCsos" xml:space="preserve">
     <value>Traitement des objets de système connecté modifiés</value>
   </data>
+  <data name="ProbeUndeterminedOne" xml:space="preserve">
+    <value>JIM n’a pas pu sonder {0} pour détecter les valeurs déjà utilisées. {1}. JIM a choisi {2} valeur en s’appuyant uniquement sur ses propres enregistrements.</value>
+  </data>
+  <data name="ProbeUndeterminedOther" xml:space="preserve">
+    <value>JIM n’a pas pu sonder {0} pour détecter les valeurs déjà utilisées. {1}. JIM a choisi {2} valeurs en s’appuyant uniquement sur ses propres enregistrements.</value>
+  </data>
+  <data name="ProbeIncomplete" xml:space="preserve">
+    <value>La vérification effectuée par JIM sur {0} pour détecter les valeurs déjà utilisées était incomplète. {1}.</value>
+  </data>
+  <data name="ScimLatestRejection" xml:space="preserve">
+    <value>Dernier rejet : {0}</value>
+  </data>
+  <data name="ScimRequestsFrom" xml:space="preserve">
+    <value>Requêtes SCIM de « {0} »</value>
+  </data>
+  <data name="HierarchyNoPartitions" xml:space="preserve">
+    <value>L’actualisation de la hiérarchie n’a récupéré aucune partition du système connecté ; la hiérarchie existante a donc été laissée inchangée. Cela indique généralement un problème de connexion, d’authentification ou de périmètre plutôt qu’un annuaire vide ; vérifiez les paramètres et la connectivité du système connecté, puis réessayez.</value>
+  </data>
+  <data name="QueueExplicitOne" xml:space="preserve">
+    <value>Définition du mot de passe demandée pour {0} compte : {1}.</value>
+  </data>
+  <data name="QueueExplicitOther" xml:space="preserve">
+    <value>Définition du mot de passe demandée pour {0} comptes : {1}.</value>
+  </data>
+  <data name="QueueNotQueued" xml:space="preserve">
+    <value>Non mis en file d’attente pour {0} : la synchronisation des mots de passe y est désactivée, et l’objet de système connecté que cette modification atteindrait attend encore son premier mot de passe, que JIM remet à la place.</value>
+  </data>
+  <data name="QueueNone" xml:space="preserve">
+    <value>Aucun système connecté n’est configuré pour la synchronisation des mots de passe ; ce mot de passe n’a donc été mis en file d’attente pour livraison nulle part.</value>
+  </data>
+  <data name="QueueQueuedOne" xml:space="preserve">
+    <value>Modification du mot de passe mise en file d’attente pour {0} système connecté : {1}.</value>
+  </data>
+  <data name="QueueQueuedOther" xml:space="preserve">
+    <value>Modification du mot de passe mise en file d’attente pour {0} systèmes connectés : {1}.</value>
+  </data>
+  <data name="QueueHeldOne" xml:space="preserve">
+    <value>En attente jusqu’à l’activation de la synchronisation des mots de passe sur {0} ; la modification sera livrée alors, ou expirera avant.</value>
+  </data>
+  <data name="QueueHeldOther" xml:space="preserve">
+    <value>En attente jusqu’à l’activation de la synchronisation des mots de passe sur {0} ; les modifications seront livrées alors, ou expireront avant.</value>
+  </data>
+  <data name="ExchangeRetryNothingSingle" xml:space="preserve">
+    <value>Rien n’a été relancé : la modification n’est plus en suspens ni en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeRetryNothingMany" xml:space="preserve">
+    <value>Rien n’a été relancé : aucune des modifications n’est plus en suspens ni en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeRetryNothingMatched" xml:space="preserve">
+    <value>Rien n’a été relancé : aucune modification Exchange en file d’attente correspondante n’était en suspens ou en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeRetriedOne" xml:space="preserve">
+    <value>1 modification Exchange en file d’attente sera retentée.</value>
+  </data>
+  <data name="ExchangeRetriedOther" xml:space="preserve">
+    <value>{0} modifications Exchange en file d’attente seront retentées.</value>
+  </data>
+  <data name="ExchangeRetryRecord" xml:space="preserve">
+    <value>Relancé ; JIM va le retenter sous peu.</value>
+  </data>
 </root>

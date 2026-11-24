@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -224,14 +226,13 @@ public class ExchangeDeliveryServer
             throw;
         }
 
-        action.Message = retried.Count switch
+        action.MessageDetail = retried.Count switch
         {
             0 when filter.TargetsSpecificChanges => filter.Ids!.Count == 1
-                ? "Nothing was retried: the change is no longer parked or retrying."
-                : "Nothing was retried: none of the changes is parked or retrying any more.",
-            0 => "Nothing was retried: no queued Exchange change matched that was parked or retrying.",
-            1 => "1 queued Exchange change will be attempted again.",
-            _ => $"{retried.Count} queued Exchange changes will be attempted again."
+                ? ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryNothingSingle))
+                : ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryNothingMany)),
+            0 => ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryNothingMatched)),
+            _ => ActivityMessage.Counted(nameof(ActivityMessages.ExchangeRetriedOne), retried.Count, ActivityMessage.Plain(retried.Count))
         };
         await _completeActivity(action);
 
@@ -264,7 +265,7 @@ public class ExchangeDeliveryServer
             InitiatedById = action.InitiatedById,
             InitiatedByName = action.InitiatedByName,
             Status = ActivityStatus.Complete,
-            Message = "Retried; JIM will attempt it again shortly.",
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryRecord)),
             Created = now,
             Executed = now,
             ExecutionTime = TimeSpan.Zero,

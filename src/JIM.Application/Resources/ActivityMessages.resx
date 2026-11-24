@@ -1152,4 +1152,73 @@
     <value>Processing modified Connected System Objects</value>
     <comment>Live progress narration.</comment>
   </data>
+  <data name="ProbeUndeterminedOne" xml:space="preserve">
+    <value>JIM couldn't probe {0} for values already in use. {1}. JIM chose {2} value using its own records only.</value>
+    <comment>{0} is the Connected System, {1} why it could not be probed, {2} how many values.</comment>
+  </data>
+  <data name="ProbeUndeterminedOther" xml:space="preserve">
+    <value>JIM couldn't probe {0} for values already in use. {1}. JIM chose {2} values using its own records only.</value>
+    <comment>{0} is the Connected System, {1} why it could not be probed, {2} how many values.</comment>
+  </data>
+  <data name="ProbeIncomplete" xml:space="preserve">
+    <value>JIM's probe of {0} for values already in use was incomplete. {1}.</value>
+    <comment>{0} is the Connected System, {1} what the probe answered with.</comment>
+  </data>
+  <data name="ScimLatestRejection" xml:space="preserve">
+    <value>Latest rejection: {0}</value>
+    <comment>{0} is the reason a SCIM request was refused.</comment>
+  </data>
+  <data name="ScimRequestsFrom" xml:space="preserve">
+    <value>SCIM requests from '{0}'</value>
+    <comment>{0} is the API Key's name.</comment>
+  </data>
+  <data name="HierarchyNoPartitions" xml:space="preserve">
+    <value>The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.</value>
+  </data>
+  <data name="QueueExplicitOne" xml:space="preserve">
+    <value>Password set requested for {0} account: {1}.</value>
+    <comment>{0} is how many accounts, {1} the Connected Systems.</comment>
+  </data>
+  <data name="QueueExplicitOther" xml:space="preserve">
+    <value>Password set requested for {0} accounts: {1}.</value>
+  </data>
+  <data name="QueueNotQueued" xml:space="preserve">
+    <value>Not queued for {0}: Password Synchronisation is switched off there, and the Connected System Object this change would reach is still owed its first password, which JIM delivers instead.</value>
+    <comment>{0} lists the Connected Systems.</comment>
+  </data>
+  <data name="QueueNone" xml:space="preserve">
+    <value>No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere.</value>
+  </data>
+  <data name="QueueQueuedOne" xml:space="preserve">
+    <value>Password change queued for {0} Connected System: {1}.</value>
+  </data>
+  <data name="QueueQueuedOther" xml:space="preserve">
+    <value>Password change queued for {0} Connected Systems: {1}.</value>
+  </data>
+  <data name="QueueHeldOne" xml:space="preserve">
+    <value>Held until Password Synchronisation is enabled on {0}; the change will be delivered then, or expire first.</value>
+    <comment>{0} lists the Connected Systems.</comment>
+  </data>
+  <data name="QueueHeldOther" xml:space="preserve">
+    <value>Held until Password Synchronisation is enabled on {0}; the changes will be delivered then, or expire first.</value>
+  </data>
+  <data name="ExchangeRetryNothingSingle" xml:space="preserve">
+    <value>Nothing was retried: the change is no longer parked or retrying.</value>
+  </data>
+  <data name="ExchangeRetryNothingMany" xml:space="preserve">
+    <value>Nothing was retried: none of the changes is parked or retrying any more.</value>
+  </data>
+  <data name="ExchangeRetryNothingMatched" xml:space="preserve">
+    <value>Nothing was retried: no queued Exchange change matched that was parked or retrying.</value>
+  </data>
+  <data name="ExchangeRetriedOne" xml:space="preserve">
+    <value>1 queued Exchange change will be attempted again.</value>
+    <comment>The singular has no placeholder.</comment>
+  </data>
+  <data name="ExchangeRetriedOther" xml:space="preserve">
+    <value>{0} queued Exchange changes will be attempted again.</value>
+  </data>
+  <data name="ExchangeRetryRecord" xml:space="preserve">
+    <value>Retried; JIM will attempt it again shortly.</value>
+  </data>
 </root>

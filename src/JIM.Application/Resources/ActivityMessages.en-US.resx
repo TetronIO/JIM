@@ -107,4 +107,16 @@
   <data name="GeneratedValueLostRace" xml:space="preserve">
     <value>{0}'s generated value "{1}" was issued to another object at the same moment as this one; it will be regenerated the next time this object synchronizes.</value>
   </data>
+  <data name="QueueNotQueued" xml:space="preserve">
+    <value>Not queued for {0}: Password Synchronization is switched off there, and the Connected System Object this change would reach is still owed its first password, which JIM delivers instead.</value>
+  </data>
+  <data name="QueueNone" xml:space="preserve">
+    <value>No Connected System is configured for Password Synchronization, so this password was not queued for delivery anywhere.</value>
+  </data>
+  <data name="QueueHeldOne" xml:space="preserve">
+    <value>Held until Password Synchronization is enabled on {0}; the change will be delivered then, or expire first.</value>
+  </data>
+  <data name="QueueHeldOther" xml:space="preserve">
+    <value>Held until Password Synchronization is enabled on {0}; the changes will be delivered then, or expire first.</value>
+  </data>
 </root>

@@ -201,8 +201,10 @@ public partial class ActivityRepository : IActivityRepository
     /// One atomic UPDATE, so concurrent flushes from several web instances add rather than overwrite; the in-memory
     /// test provider does not support <c>ExecuteUpdateAsync</c>, so it falls back to a tracked load and save.
     /// </remarks>
-    public async Task<bool> AddToScimRequestSummaryAsync(JIM.Models.Scim.ScimRequestTally tally, string? warningMessage)
+    public async Task<bool> AddToScimRequestSummaryAsync(JIM.Models.Scim.ScimRequestTally tally, JIM.Models.Localisation.JimMessage? warning)
     {
+        var warningMessage = warning == null ? null : JIM.Models.Localisation.MessageRenderer.ToEnglish(warning);
+        var warningDetailJson = JIM.Models.Localisation.MessageJson.Serialise(warning);
         var query = Repository.Database.Activities
             .Where(a => a.TargetType == ActivityTargetType.ScimRequests
                 && a.ConnectedSystemId == tally.ConnectedSystemId
@@ -223,6 +225,7 @@ public partial class ActivityRepository : IActivityRepository
                 if (warningMessage != null)
                     setters
                         .SetProperty(a => a.WarningMessage, warningMessage)
+                        .SetProperty(a => a.WarningMessageDetailJson, warningDetailJson)
                         .SetProperty(a => a.Status, ActivityStatus.CompleteWithWarning);
             });
             return rowsAffected > 0;
@@ -242,6 +245,7 @@ public partial class ActivityRepository : IActivityRepository
         if (warningMessage != null)
         {
             existing.WarningMessage = warningMessage;
+            existing.WarningMessageDetailJson = warningDetailJson;
             existing.Status = ActivityStatus.CompleteWithWarning;
         }
         await Repository.Database.SaveChangesAsync();

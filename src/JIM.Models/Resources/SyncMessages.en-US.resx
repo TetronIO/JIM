@@ -32,4 +32,10 @@
   <data name="ExportObjectTypeConflict" xml:space="preserve">
     <value>Metaverse Object {0}: Synchronization Rule '{1}' targets Connected System Object Type '{2}' in '{3}', but this Metaverse Object is already represented there by a '{4}' object. A Metaverse Object can have only one Connected System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no Metaverse Object satisfies two outbound Synchronization Rules targeting this Connected System, or give the exported Object Types their own Connected System over the same target.</value>
   </data>
+  <data name="HistoryFailedPage" xml:space="preserve">
+    <value>Failed to record the execution items and change history of page {0} of {1} for Connected System '{2}'. Those synchronization changes were saved; their history was not, and the run stopped without saving the changes of any page after the next one, or of the steps after the pages.</value>
+  </data>
+  <data name="HistoryFailedAfterPages" xml:space="preserve">
+    <value>Failed to record the execution items and change history of the steps after the pages for Connected System '{0}'. Those synchronization changes were saved; their history was not, and the run stopped before saving any further changes.</value>
+  </data>
 </root>

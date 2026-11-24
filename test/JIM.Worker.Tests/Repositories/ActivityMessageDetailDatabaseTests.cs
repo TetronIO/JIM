@@ -4,6 +4,7 @@
 using JIM.Application.Localisation;
 using JIM.Application.Resources;
 using JIM.Models.Activities;
+using JIM.Models.Staging;
 using JIM.Models.Localisation;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
@@ -237,6 +238,48 @@ public class ActivityMessageDetailDatabaseTests
         {
             Assert.That(stored.Message, Is.EqualTo("From a Connector"));
             Assert.That(stored.MessageDetailJson, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task AddToScimRequestSummaryAsync_RawUpdate_WritesTheWarningAndItsMessageTogetherAsync()
+    {
+        // Arrange: a summary Activity for a window, as the first tally of the window creates it
+        await using var seed = NewContext();
+        var system = new ConnectedSystem { Name = $"Scim-{Guid.NewGuid():N}", ConnectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true } };
+        seed.ConnectedSystems.Add(system);
+        await seed.SaveChangesAsync();
+        var keyId = Guid.NewGuid();
+        var window = new DateTime(2026, 11, 24, 10, 0, 0, DateTimeKind.Utc);
+        var activityId = await SeedActivityAsync(seed, a =>
+        {
+            a.ConnectedSystemId = system.Id;
+            a.InitiatedById = keyId;
+            a.AggregationWindowStart = window;
+            a.Status = ActivityStatus.Complete;
+        });
+        await seed.Database.ExecuteSqlRawAsync("UPDATE \"Activities\" SET \"TargetType\" = {0} WHERE \"Id\" = {1}", (int)ActivityTargetType.ScimRequests, activityId);
+        var tally = new JIM.Models.Scim.ScimRequestTally
+        {
+            ConnectedSystemId = system.Id, ApiKeyId = keyId, ApiKeyName = "Key", WindowStart = window, FirstSeen = window, LastSeen = window, Rejected = 1, LatestRejection = "Unknown schema"
+        };
+
+        // Act
+        bool updated;
+        await using (var context = NewContext())
+            updated = await new PostgresDataRepository(context).Activity.AddToScimRequestSummaryAsync(
+                tally, ActivityMessage.Create(nameof(ActivityMessages.ScimLatestRejection), "Unknown schema"));
+
+        // Assert
+        await using var read = NewContext();
+        var stored = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated, Is.True);
+            Assert.That(stored.WarningMessage, Is.EqualTo("Latest rejection: Unknown schema"));
+            Assert.That(stored.WarningMessageDetail?.ToEnglish(), Is.EqualTo(stored.WarningMessage));
+            Assert.That(stored.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(stored.TotalErrors, Is.EqualTo(1));
         }
     }
 

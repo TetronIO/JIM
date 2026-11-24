@@ -11,6 +11,7 @@ using JIM.Models.Operations;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 
 namespace JIM.Worker.Tests.Activities;
 
@@ -248,5 +249,63 @@ public class ActivityMessageWorkerFamiliesTests
         AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ProgressReadingPage), 1234), "Reading page 1,234");
         AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystemPage), ActivityMessage.Plain(3)),
             "Importing objects from Connected System (page 3)");
+    }
+
+    [Test]
+    public void WarningFamilies_ProbeScimAndHierarchy_SayWhatTheyAlwaysSaid_AndTranslate()
+    {
+        AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.ProbeUndeterminedOne), 1, "Directory", "It timed out", ActivityMessage.Plain(1)),
+            "JIM couldn't probe Directory for values already in use. It timed out. JIM chose 1 value using its own records only.");
+        AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.ProbeUndeterminedOne), 4, "Directory", "It timed out", ActivityMessage.Plain(4)),
+            "JIM couldn't probe Directory for values already in use. It timed out. JIM chose 4 values using its own records only.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ProbeIncomplete), "Directory", "Only 100 were checked"),
+            "JIM's probe of Directory for values already in use was incomplete. Only 100 were checked.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ScimLatestRejection), "Unknown schema"), "Latest rejection: Unknown schema");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ScimRequestsFrom), "Key A"), "SCIM requests from 'Key A'");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.HierarchyNoPartitions)),
+            "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.");
+    }
+
+    [Test]
+    public void SynchronisationHistoryFailure_CarriesAMessage_ThatSaysExactlyItsText()
+    {
+        var inner = new InvalidOperationException("db");
+        var first = new SynchronisationHistoryPersistenceException(
+            SynchronisationHistoryPersistenceException.Describe(2, 5, "Directory"), inner, 2, 5, "Directory");
+        var next = SynchronisationHistoryPersistenceException.DescribeNextPage(3, 5, SynchronisationHistoryNextPageOutcome.WriteFailed, "disk full");
+        var joined = ActivityMessage.Spaced(first.Detail!, next);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.Message, Is.EqualTo(SynchronisationHistoryPersistenceException.BuildMessage(2, 5, "Directory")));
+            Assert.That(first.Detail!.ToEnglish(), Is.EqualTo(first.Message));
+            Assert.That(joined.ToEnglish(), Is.EqualTo(first.Message + " " + SynchronisationHistoryPersistenceException.BuildNextPageMessage(3, 5, SynchronisationHistoryNextPageOutcome.WriteFailed, "disk full")));
+            Assert.That(In(joined, French), Does.Contain("Échec de l’enregistrement"));
+            Assert.That(In(joined, German), Does.Contain("konnten nicht aufgezeichnet werden"));
+        }
+    }
+
+    [Test]
+    public void PasswordQueueOutcome_EveryShape_SaysWhatItAlwaysSaid_AndTranslates()
+    {
+        var enabled = new PasswordQueueTargetOutcome { ConnectedSystemId = 1, ConnectedSystemName = "A", Enabled = true };
+        var paused = new PasswordQueueTargetOutcome { ConnectedSystemId = 2, ConnectedSystemName = "B", Enabled = false };
+
+        AssertTranslated(JIM.Application.Servers.PasswordSynchronisationServer.DescribeQueueOutcomeMessage([enabled, paused], PendingPasswordChangeOrigin.Propagated),
+            "Password change queued for 2 Connected Systems: A, B. Held until Password Synchronisation is enabled on B; the changes will be delivered then, or expire first.");
+        AssertTranslated(JIM.Application.Servers.PasswordSynchronisationServer.DescribeQueueOutcomeMessage([enabled], PendingPasswordChangeOrigin.Explicit),
+            "Password set requested for 1 account: A.");
+        AssertTranslated(JIM.Application.Servers.PasswordSynchronisationServer.DescribeQueueOutcomeMessage([], PendingPasswordChangeOrigin.Propagated),
+            "No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere.");
+    }
+
+    [Test]
+    public void ExchangeRetryMessages_SayWhatTheyAlwaysSaid_AndTranslate()
+    {
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryNothingSingle)), "Nothing was retried: the change is no longer parked or retrying.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryNothingMany)), "Nothing was retried: none of the changes is parked or retrying any more.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryNothingMatched)), "Nothing was retried: no queued Exchange change matched that was parked or retrying.");
+        AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.ExchangeRetriedOne), 3, ActivityMessage.Plain(3)), "3 queued Exchange changes will be attempted again.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryRecord)), "Retried; JIM will attempt it again shortly.");
     }
 }

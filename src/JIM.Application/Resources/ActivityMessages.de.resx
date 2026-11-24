@@ -874,4 +874,64 @@
   <data name="ProgressProcessingModifiedCsos" xml:space="preserve">
     <value>Geänderte Objekte im verbundenen System werden verarbeitet</value>
   </data>
+  <data name="ProbeUndeterminedOne" xml:space="preserve">
+    <value>JIM konnte {0} nicht auf bereits verwendete Werte prüfen. {1}. JIM hat {2} Wert allein anhand seiner eigenen Datensätze gewählt.</value>
+  </data>
+  <data name="ProbeUndeterminedOther" xml:space="preserve">
+    <value>JIM konnte {0} nicht auf bereits verwendete Werte prüfen. {1}. JIM hat {2} Werte allein anhand seiner eigenen Datensätze gewählt.</value>
+  </data>
+  <data name="ProbeIncomplete" xml:space="preserve">
+    <value>Die Prüfung von {0} durch JIM auf bereits verwendete Werte war unvollständig. {1}.</value>
+  </data>
+  <data name="ScimLatestRejection" xml:space="preserve">
+    <value>Letzte Ablehnung: {0}</value>
+  </data>
+  <data name="ScimRequestsFrom" xml:space="preserve">
+    <value>SCIM-Anfragen von „{0}“</value>
+  </data>
+  <data name="HierarchyNoPartitions" xml:space="preserve">
+    <value>Die Aktualisierung der Hierarchie hat keine Partitionen aus dem verbundenen System abgerufen, daher blieb die bestehende Hierarchie unverändert. Das deutet meist auf ein Verbindungs-, Authentifizierungs- oder Geltungsbereichsproblem hin und nicht auf ein leeres Verzeichnis; prüfen Sie die Einstellungen und die Konnektivität des verbundenen Systems und versuchen Sie es dann erneut.</value>
+  </data>
+  <data name="QueueExplicitOne" xml:space="preserve">
+    <value>Kennwort-Festlegung für {0} Konto angefordert: {1}.</value>
+  </data>
+  <data name="QueueExplicitOther" xml:space="preserve">
+    <value>Kennwort-Festlegung für {0} Konten angefordert: {1}.</value>
+  </data>
+  <data name="QueueNotQueued" xml:space="preserve">
+    <value>Nicht in die Warteschlange gestellt für {0}: Die Kennwortsynchronisierung ist dort ausgeschaltet, und das Objekt im verbundenen System, das diese Änderung erreichen würde, wartet noch auf sein erstes Kennwort, das JIM stattdessen übermittelt.</value>
+  </data>
+  <data name="QueueNone" xml:space="preserve">
+    <value>Kein verbundenes System ist für die Kennwortsynchronisierung konfiguriert, daher wurde dieses Kennwort nirgends zur Zustellung eingereiht.</value>
+  </data>
+  <data name="QueueQueuedOne" xml:space="preserve">
+    <value>Kennwortänderung für {0} verbundenes System eingereiht: {1}.</value>
+  </data>
+  <data name="QueueQueuedOther" xml:space="preserve">
+    <value>Kennwortänderung für {0} verbundene Systeme eingereiht: {1}.</value>
+  </data>
+  <data name="QueueHeldOne" xml:space="preserve">
+    <value>Zurückgehalten, bis die Kennwortsynchronisierung auf {0} aktiviert ist; die Änderung wird dann zugestellt oder läuft vorher ab.</value>
+  </data>
+  <data name="QueueHeldOther" xml:space="preserve">
+    <value>Zurückgehalten, bis die Kennwortsynchronisierung auf {0} aktiviert ist; die Änderungen werden dann zugestellt oder laufen vorher ab.</value>
+  </data>
+  <data name="ExchangeRetryNothingSingle" xml:space="preserve">
+    <value>Es wurde nichts wiederholt: Die Änderung ist nicht mehr angehalten oder in Wiederholung.</value>
+  </data>
+  <data name="ExchangeRetryNothingMany" xml:space="preserve">
+    <value>Es wurde nichts wiederholt: Keine der Änderungen ist noch angehalten oder in Wiederholung.</value>
+  </data>
+  <data name="ExchangeRetryNothingMatched" xml:space="preserve">
+    <value>Es wurde nichts wiederholt: Es passte keine Exchange-Änderung in der Warteschlange, die angehalten oder in Wiederholung war.</value>
+  </data>
+  <data name="ExchangeRetriedOne" xml:space="preserve">
+    <value>1 Exchange-Änderung in der Warteschlange wird erneut versucht.</value>
+  </data>
+  <data name="ExchangeRetriedOther" xml:space="preserve">
+    <value>{0} Exchange-Änderungen in der Warteschlange werden erneut versucht.</value>
+  </data>
+  <data name="ExchangeRetryRecord" xml:space="preserve">
+    <value>Wiederholt; JIM versucht es in Kürze erneut.</value>
+  </data>
 </root>

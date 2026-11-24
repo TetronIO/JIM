@@ -725,12 +725,8 @@ public abstract class SyncTaskProcessorBase
             return;
         }
 
-        foreach (var warning in session.GetRunWarnings())
-        {
-            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-                ? warning
-                : $"{_activity.WarningMessage}\n{warning}";
-        }
+        foreach (var warning in session.GetRunWarningMessages())
+            ActivityMessage.AddWarning(_activity, warning);
 
         // Disposes the host as well: the session owns it once created.
         await session.DisposeAsync();

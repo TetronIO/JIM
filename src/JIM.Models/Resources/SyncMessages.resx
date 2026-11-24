@@ -54,4 +54,25 @@
     <value>Metaverse Object {0}: Synchronisation Rule '{1}' targets Connected System Object Type '{2}' in '{3}', but this Metaverse Object is already represented there by a '{4}' object. A Metaverse Object can have only one Connected System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported Object Types their own Connected System over the same target.</value>
     <comment>{0} is the Metaverse Object's id, {1} the rule, {2} the Object Type it targets, {3} the Connected System, {4} the Object Type already there.</comment>
   </data>
+  <data name="HistoryFailedPage" xml:space="preserve">
+    <value>Failed to record the execution items and change history of page {0} of {1} for Connected System '{2}'. Those synchronisation changes were saved; their history was not, and the run stopped without saving the changes of any page after the next one, or of the steps after the pages.</value>
+  </data>
+  <data name="HistoryFailedAfterPages" xml:space="preserve">
+    <value>Failed to record the execution items and change history of the steps after the pages for Connected System '{0}'. Those synchronisation changes were saved; their history was not, and the run stopped before saving any further changes.</value>
+  </data>
+  <data name="HistoryNextWritten" xml:space="preserve">
+    <value>Page {0} of {1} had saved its changes when the failure was found; its history was written.</value>
+  </data>
+  <data name="HistoryNextWriteFailed" xml:space="preserve">
+    <value>Page {0} of {1} had saved its changes when the failure was found; its history could not be written either: {2}</value>
+    <comment>{2} is why.</comment>
+  </data>
+  <data name="HistoryNextDepends" xml:space="preserve">
+    <value>Page {0} of {1} had saved its changes when the failure was found; its history was not written, because it refers to the history that failed ({2}).</value>
+    <comment>{2} is what it refers to.</comment>
+  </data>
+  <data name="HistoryDependencyOfPage" xml:space="preserve">
+    <value>{0} of page {1}</value>
+    <comment>What a later page's history refers to; {0} names it.</comment>
+  </data>
 </root>
