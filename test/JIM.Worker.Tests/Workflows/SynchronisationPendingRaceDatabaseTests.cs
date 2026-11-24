@@ -641,4 +641,76 @@ public class SynchronisationPendingRaceDatabaseTests
             Assert.That(stillMarked, Is.Zero, "every processed object's mark was cleared");
         }
     }
+
+    #region A run interrupted inside its page flush (#2848)
+
+    /// <summary>Stands in for a Worker that stops at an exact point in a page flush.</summary>
+    private sealed class SimulatedWorkerStopException() : Exception("Simulated Worker stop inside the page flush.");
+
+    /// <summary>
+    /// Wraps the run's repository so the page flush stops just before the join-state write: the page's projected
+    /// Metaverse Objects are already committed, by a transaction of their own, and their joins are not.
+    /// </summary>
+    private static ISyncRepository StopBeforeJoinStateWrite(ISyncRepository repository) =>
+        InterceptingSyncRepositoryProxy.Create(repository, nameof(ISyncRepository.UpdateConnectedSystemObjectJoinStatesAsync),
+            () => throw new SimulatedWorkerStopException());
+
+    private async Task<(int MetaverseObjects, int Joined)> CountMetaverseObjectsAndJoinsAsync()
+    {
+        await using var ctx = NewContext();
+        return (await ctx.MetaverseObjects.AsNoTracking().CountAsync(),
+            await ctx.ConnectedSystemObjects.AsNoTracking().CountAsync(c => c.MetaverseObjectId != null));
+    }
+
+    /// <summary>
+    /// The page flush commits its Metaverse Object creates and its join-state write separately, so a Worker that stops
+    /// between them leaves projected Metaverse Objects with nothing joined to them. Their Connected System Objects keep
+    /// their synchronisation-pending mark, so the next run processes them again; with a projection-only Synchronisation
+    /// Rule nothing can match them to the Metaverse Objects already there, and they must not be projected a second time.
+    /// </summary>
+    [Test]
+    [Explicit("Reproduces #2848 and fails until the page flush writes its state in one transaction; remove with the fix.")]
+    public async Task FullSync_InterruptedBetweenProjectionAndJoinWrite_NextRunDoesNotProjectAgainAsync()
+    {
+        await CreateObjectsAsync(1, 2);
+
+        Assert.That(async () => await RunAsync(ConnectedSystemRunType.FullSynchronisation, wrapRepository: StopBeforeJoinStateWrite),
+            Throws.Exception, "precondition: the run stopped inside its page flush");
+        var interrupted = await CountMetaverseObjectsAndJoinsAsync();
+        Assert.That(interrupted, Is.EqualTo((2, 0)), "precondition: the projections committed and the joins did not");
+
+        await RunAsync(ConnectedSystemRunType.FullSynchronisation);
+
+        var recovered = await CountMetaverseObjectsAndJoinsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recovered.Joined, Is.EqualTo(2), "the next run joined every object");
+            Assert.That(recovered.MetaverseObjects, Is.EqualTo(2), "one Metaverse Object per object, none left with nothing joined");
+        }
+    }
+
+    /// <summary>The Delta Synchronisation counterpart of the test above, for objects created since the last run.</summary>
+    [Test]
+    [Explicit("Reproduces #2848 and fails until the page flush writes its state in one transaction; remove with the fix.")]
+    public async Task DeltaSync_InterruptedBetweenProjectionAndJoinWrite_NextRunDoesNotProjectAgainAsync()
+    {
+        await ArrangeSynchronisedObjectsAsync(2);
+        await CreateObjectsAsync(3, 4);
+
+        Assert.That(async () => await RunAsync(ConnectedSystemRunType.DeltaSynchronisation, wrapRepository: StopBeforeJoinStateWrite),
+            Throws.Exception, "precondition: the run stopped inside its page flush");
+        var interrupted = await CountMetaverseObjectsAndJoinsAsync();
+        Assert.That(interrupted, Is.EqualTo((4, 2)), "precondition: the projections committed and the joins did not");
+
+        await RunAsync(ConnectedSystemRunType.DeltaSynchronisation);
+
+        var recovered = await CountMetaverseObjectsAndJoinsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recovered.Joined, Is.EqualTo(4), "the next run joined every object");
+            Assert.That(recovered.MetaverseObjects, Is.EqualTo(4), "one Metaverse Object per object, none left with nothing joined");
+        }
+    }
+
+    #endregion
 }
