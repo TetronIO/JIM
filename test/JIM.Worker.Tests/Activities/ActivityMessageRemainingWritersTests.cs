@@ -330,4 +330,14 @@ public class ActivityMessageRemainingWritersTests
         AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterWholeQueue)), "The Password Synchronisation queue");
         AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterOneChange)), "One password change");
     }
+
+    [Test]
+    public void ImportConfirmationAndExchangeRetry_SayWhatTheyAlwaysSaid_AndTranslate()
+    {
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExportNotConfirmedByImport), ActivityMessage.Plain(3), "mail (x2), cn"),
+            "We exported a change, but did not get confirmation of it when a confirming import was performed. Details: 3 attribute(s): mail (x2), cn. " +
+            "Will attempt to reassert the change on the next export run.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryFailed), ActivityMessage.CauseOf(new InvalidOperationException("db down"))),
+            "The retry did not complete: db down");
+    }
 }

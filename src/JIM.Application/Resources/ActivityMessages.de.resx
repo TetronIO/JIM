@@ -1181,7 +1181,7 @@
     <value>das vorhandene Objekt „{0}“ blieb unverändert, sodass nichts deprovisioniert wird</value>
   </data>
   <data name="UnresolvedReferencesNote" xml:space="preserve">
-    <value>{0} Verweiswert(e) konnten nicht geschrieben werden, weil das referenzierte Metaverse-Objekt kein Objekt in diesem verbundenen System hat: {1}. Das referenzierte Objekt liegt außerhalb des Geltungsbereichs aller Synchronisierungsregeln für dieses System oder wurde noch nicht bereitgestellt. Alles Übrige dieses Exports wurde geschrieben; der Verweis wird im zurückgestellten Takt erneut versucht und geschrieben, sobald das Objekt erscheint.</value>
+    <value>{0} Verweiswert(e) konnten nicht geschrieben werden, weil das referenzierte Metaverse-Objekt kein Objekt im verbundenen System hat: {1}. Das referenzierte Objekt liegt außerhalb des Geltungsbereichs aller Synchronisierungsregeln für dieses System oder wurde noch nicht bereitgestellt. Alles Übrige dieses Exports wurde geschrieben; der Verweis wird im zurückgestellten Takt erneut versucht und geschrieben, sobald das Objekt erscheint.</value>
   </data>
   <data name="UnresolvedReferencesAndMore" xml:space="preserve">
     <value>{0}; und {1} weitere</value>
@@ -1320,5 +1320,11 @@
   </data>
   <data name="PasswordFilterWholeQueue" xml:space="preserve">
     <value>Die Warteschlange der Kennwortsynchronisierung</value>
+  </data>
+  <data name="ExchangeRetryFailed" xml:space="preserve">
+    <value>Die Wiederholung wurde nicht abgeschlossen: {0}</value>
+  </data>
+  <data name="ExportNotConfirmedByImport" xml:space="preserve">
+    <value>Wir haben eine Änderung exportiert, aber bei einem bestätigenden Import keine Bestätigung dafür erhalten. Details: {0} Attribut(e): {1}. Die Änderung wird beim nächsten Exportlauf erneut durchgesetzt.</value>
   </data>
 </root>

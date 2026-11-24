@@ -1323,4 +1323,10 @@
   <data name="PasswordFilterWholeQueue" xml:space="preserve">
     <value>La file d’attente de synchronisation des mots de passe</value>
   </data>
+  <data name="ExchangeRetryFailed" xml:space="preserve">
+    <value>La nouvelle tentative n’a pas abouti : {0}</value>
+  </data>
+  <data name="ExportNotConfirmedByImport" xml:space="preserve">
+    <value>Nous avons exporté une modification, mais nous n’en avons pas reçu la confirmation lors d’une importation de confirmation. Détails : {0} attribut(s) : {1}. Une nouvelle tentative d’application de la modification aura lieu lors de la prochaine exécution d’exportation.</value>
+  </data>
 </root>

@@ -1737,4 +1737,12 @@
     <value>The Password Synchronisation queue</value>
     <comment>The target of an administrator's action over the whole password queue.</comment>
   </data>
+  <data name="ExchangeRetryFailed" xml:space="preserve">
+    <value>The retry did not complete: {0}</value>
+    <comment>The error on the Activity of an administrator's retry over the Exchange queue. {0}: the cause, which another system may word.</comment>
+  </data>
+  <data name="ExportNotConfirmedByImport" xml:space="preserve">
+    <value>We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {0} attribute(s): {1}. Will attempt to reassert the change on the next export run.</value>
+    <comment>An error on an item of a confirming import. {0}: how many attributes, as plain digits, {1}: their names, comma separated, with '(x2)' after a name that changed twice.</comment>
+  </data>
 </root>

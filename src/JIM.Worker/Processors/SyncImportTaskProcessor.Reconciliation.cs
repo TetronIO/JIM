@@ -5,6 +5,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using JIM.Application.Diagnostics;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Models.Activities;
@@ -768,7 +770,7 @@ public partial class SyncImportTaskProcessor
         var retryAttrNames = string.Join(", ", result.RetryChanges
             .GroupBy(c => c.Attribute?.Name ?? "unknown")
             .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
-        var errorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.";
+        var errorMessage = ActivityMessage.Create(nameof(ActivityMessages.ExportNotConfirmedByImport), ActivityMessage.Plain(result.RetryChanges.Count), retryAttrNames);
 
         if (existingRpei != null)
         {
@@ -782,7 +784,7 @@ public partial class SyncImportTaskProcessor
             if (existingRpei.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
             {
                 existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed;
-                existingRpei.ErrorMessage = errorMessage;
+                existingRpei.ErrorMessageDetail = errorMessage;
             }
             modifiedImportItems.TryAdd(existingRpei.Id, existingRpei);
         }
@@ -795,7 +797,7 @@ public partial class SyncImportTaskProcessor
                 ConnectedSystemObjectId = cso.Id,
                 ObjectChangeType = ObjectChangeType.Updated,
                 ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                ErrorMessage = errorMessage
+                ErrorMessageDetail = errorMessage
             };
             executionItem.SnapshotCsoDisplayFields(cso);
 

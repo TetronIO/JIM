@@ -162,6 +162,9 @@
     <value>Every account given this Synchronization Rule's Static Initial Password therefore keeps that one shared password, which never expires.</value>
   </data>
   <data name="PasswordPutBackEnforced" xml:space="preserve">
-    <value>"Password never expires" was changed on this account, but the Synchronization Rule {0} writes its userAccountControl with Enforce State on, so the next synchronisation puts the Attribute Flow's value back, and with it whether the password never expires; while that value keeps "Password never expires" set, Active Directory does not ask for a change at the next sign-in.</value>
+    <value>"Password never expires" was changed on this account, but the Synchronization Rule {0} writes its userAccountControl with Enforce State on, so the next synchronization puts the Attribute Flow's value back, and with it whether the password never expires; while that value keeps "Password never expires" set, Active Directory does not ask for a change at the next sign-in.</value>
+  </data>
+  <data name="PasswordFilterWholeQueue" xml:space="preserve">
+    <value>The Password Synchronization queue</value>
   </data>
 </root>

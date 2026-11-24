@@ -9,6 +9,7 @@ using JIM.Models.Core;
 using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
 using JIM.Models.Security;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -222,7 +223,9 @@ public class ExchangeDeliveryServer
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log.Error(ex, "RetryAsync: Could not retry the queued Exchange changes '{Target}'", action.TargetName);
-            await _completeActivityWithError(action, $"The retry did not complete: {ex.Message}");
+            var failed = ActivityMessage.Create(nameof(ActivityMessages.ExchangeRetryFailed), ActivityMessage.CauseOf(ex));
+            action.ErrorMessageDetail = failed;
+            await _completeActivityWithError(action, failed.ToEnglish());
             throw;
         }
 
