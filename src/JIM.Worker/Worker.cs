@@ -339,7 +339,8 @@ public class Worker : BackgroundService
                                                 dataGenTemplateServiceTask.InitiatedByType,
                                                 dataGenTemplateServiceTask.InitiatedById,
                                                 dataGenTemplateServiceTask.InitiatedByName,
-                                                newWorkerTask.Activity.Id);
+                                                newWorkerTask.Activity.Id,
+                                                _uniqueValueReservations);
                                             newWorkerTask.Activity.TotalCreated = objectsCreated;
                                             // Clear the transient progress message ("Persisting to database... batch X/Y")
                                             // so the completed Activity does not retain a stale in-progress status line.

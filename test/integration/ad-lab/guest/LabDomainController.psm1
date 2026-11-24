@@ -5050,6 +5050,67 @@ function Get-LabDomainPasswordPolicyChange {
     return $change
 }
 
+function Get-LabHybridUpdatePolicyChange {
+    <#
+    .SYNOPSIS
+        The Windows Update policy values (under HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU) that the
+        hybrid forest's domain controller, dc-hybrid, needs and does not have: only those that differ, so an empty
+        hashtable means the policy is right.
+
+    .DESCRIPTION
+        Every other lab machine is patched by the monthly rebuild and never in place, so its build switches automatic
+        updates off (NoAutoUpdate=1). dc-hybrid is never rebuilt or reverted (JIM#3029): it holds what Microsoft Entra
+        Cloud Sync has synchronised, and the agent's registration. It has to patch itself instead, so it installs
+        updates on a schedule (AUOptions=4): Sundays (ScheduledInstallDay=1) at 10:00 in the guest's time zone, which
+        the build sets to UTC (ScheduledInstallTime=10). That is clear of the nightly, which starts at 01:23 UTC and
+        is cut off after six hours, so a reboot to finish an update cannot land in the middle of Scenario 038.
+
+    .PARAMETER Current
+        The key's current values, as Get-ItemProperty returns them, or $null when the key does not exist.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [AllowNull()]
+        [object]$Current
+    )
+
+    $wanted = [ordered]@{
+        NoAutoUpdate         = 0
+        AUOptions            = 4
+        ScheduledInstallDay  = 1
+        ScheduledInstallTime = 10
+    }
+    $change = [ordered]@{}
+    foreach ($name in $wanted.Keys) {
+        $value = if (($null -ne $Current) -and $Current.PSObject.Properties[$name]) { $Current.$name } else { $null }
+        if ($value -ne $wanted[$name]) {
+            $change[$name] = $wanted[$name]
+        }
+    }
+    return [hashtable]$change
+}
+
+function Get-LabHybridSyncOuDn {
+    <#
+    .SYNOPSIS
+        The organisational unit Microsoft Entra Cloud Sync is scoped to in the hybrid forest: OU=CloudSync, directly
+        under the domain. Scenario 038 creates each run's objects in an organisational unit of their own inside it.
+
+    .PARAMETER DomainDn
+        The domain's distinguished name, for example DC=meridian,DC=local.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidatePattern('^DC=')]
+        [string]$DomainDn
+    )
+
+    return "OU=CloudSync,$DomainDn"
+}
+
 function Get-LabPasswordTemplateChange {
     <#
     .SYNOPSIS
@@ -5173,7 +5234,7 @@ Export-ModuleMember -Function @(
     'Get-LabGroupSid', 'Get-LabDelegatedContainerDn', 'Sync-LabDelegation', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
-    'Get-LabDomainPasswordPolicyChange', 'Get-LabPasswordTemplateChange',
+    'Get-LabDomainPasswordPolicyChange', 'Get-LabPasswordTemplateChange', 'Get-LabHybridUpdatePolicyChange', 'Get-LabHybridSyncOuDn',
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
     'Get-LabRebuildBuildAction', 'Get-LabRebuildBuildChain', 'Get-LabRebuildExclusiveRole', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
