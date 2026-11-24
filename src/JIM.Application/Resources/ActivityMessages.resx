@@ -1821,4 +1821,20 @@
     <value>Delivering</value>
     <comment>A password change's queue status: JIM is delivering it now. English is the status's name. Lower case: it follows a colon.</comment>
   </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>The Connector reported this change as not attempted, although the export run was not cancelled.</value>
+    <comment>An export item's error when a Connector left a change unattempted without the run being cancelled. JIM's own wording.</comment>
+  </data>
+  <data name="ExportNoResult" xml:space="preserve">
+    <value>The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again.</value>
+    <comment>An export item's error when a Connector returned fewer results than it was handed changes. JIM's own wording.</comment>
+  </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>This object was to be disabled, but the {0} that '{1}' uses cannot disable an account, so nothing was sent. Change the export Synchronisation Rule's Deprovisioning Action to Delete or Disconnect.</value>
+    <comment>An export item's error when a Disable was refused because the Connector cannot disable an account. {0}: the Connector's name (for example JIM LDAP Connector), {1}: the Connected System's name. Delete and Disconnect are the Deprovisioning Actions as the portal labels them.</comment>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>This object was to be disabled, but the Connector that '{0}' uses cannot disable an account, so nothing was sent. Change the export Synchronisation Rule's Deprovisioning Action to Delete or Disconnect.</value>
+    <comment>As ExportDisableUnsupported, where the Connected System's Connector Definition is not loaded. {0}: the Connected System's name.</comment>
+  </data>
 </root>

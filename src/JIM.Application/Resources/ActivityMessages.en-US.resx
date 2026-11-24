@@ -176,4 +176,10 @@
   <data name="PasswordStatusCancelled" xml:space="preserve">
     <value>Canceled</value>
   </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>This object was to be disabled, but the {0} that '{1}' uses cannot disable an account, so nothing was sent. Change the export Synchronization Rule's Deprovisioning Action to Delete or Disconnect.</value>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>This object was to be disabled, but the Connector that '{0}' uses cannot disable an account, so nothing was sent. Change the export Synchronization Rule's Deprovisioning Action to Delete or Disconnect.</value>
+  </data>
 </root>

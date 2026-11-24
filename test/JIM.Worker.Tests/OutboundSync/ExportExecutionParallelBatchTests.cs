@@ -1,11 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -1707,6 +1709,16 @@ public class ExportExecutionParallelBatchTests
             Assert.That(result.FailedCount, Is.EqualTo(2));
             Assert.That(result.ProcessedExportItems.Where(item => !item.Succeeded).Select(item => item.PendingExportId),
                 Is.EquivalentTo(exports.Skip(1).Select(pe => (Guid?)pe.Id)));
+
+            // JIM's own wording travels as a message, so the portal reads it in the viewer's language (#3094).
+            var failed = result.ProcessedExportItems.Where(item => !item.Succeeded).ToList();
+            Assert.That(failed.Select(item => item.ErrorMessageDetail?.ToEnglish()), Has.All.EqualTo(
+                "The Connector reported this change as not attempted, although the export run was not cancelled."));
+            Assert.That(failed.Select(item => item.ErrorMessage), Has.All.EqualTo(failed[0].ErrorMessageDetail!.ToEnglish()));
+            Assert.That(MessageRenderer.Render(failed[0].ErrorMessageDetail!, CultureInfo.GetCultureInfo("fr"), CultureInfo.GetCultureInfo("fr")), Is.EqualTo(
+                "Le connecteur a signalé cette modification comme non tentée, alors que l’exécution d’exportation n’a pas été annulée."));
+            Assert.That(MessageRenderer.Render(failed[0].ErrorMessageDetail!, CultureInfo.GetCultureInfo("de"), CultureInfo.GetCultureInfo("de")), Is.EqualTo(
+                "Der Connector hat diese Änderung als nicht versucht gemeldet, obwohl die Exportausführung nicht abgebrochen wurde."));
         }
     }
 
@@ -1763,6 +1775,12 @@ public class ExportExecutionParallelBatchTests
                 pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 1 && pe.LastErrorMessage!.Contains("no result")));
             Assert.That(result.SuccessCount, Is.EqualTo(1));
             Assert.That(result.FailedCount, Is.EqualTo(2));
+
+            var failed = result.ProcessedExportItems.Where(item => !item.Succeeded).ToList();
+            Assert.That(failed.Select(item => item.ErrorMessageDetail?.ToEnglish()), Has.All.EqualTo(
+                "The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again."));
+            Assert.That(MessageRenderer.Render(failed[0].ErrorMessageDetail!, CultureInfo.GetCultureInfo("fr"), CultureInfo.GetCultureInfo("fr")), Is.EqualTo(
+                "Le connecteur n’a renvoyé aucun résultat pour cette modification ; JIM ne peut donc pas savoir si elle a été écrite et elle sera renvoyée."));
         }
     }
 

@@ -1384,4 +1384,16 @@
   <data name="PasswordStatusDelivering" xml:space="preserve">
     <value>wird zugestellt</value>
   </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>Der Connector hat diese Änderung als nicht versucht gemeldet, obwohl die Exportausführung nicht abgebrochen wurde.</value>
+  </data>
+  <data name="ExportNoResult" xml:space="preserve">
+    <value>Der Connector hat für diese Änderung kein Ergebnis zurückgegeben, daher kann JIM nicht feststellen, ob sie geschrieben wurde; sie wird erneut gesendet.</value>
+  </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>Dieses Objekt sollte deaktiviert werden, aber der von „{1}“ verwendete {0} kann kein Konto deaktivieren, daher wurde nichts gesendet. Ändern Sie die Deprovisionierungsaktion der Exportsynchronisierungsregel in „Löschen“ oder „Trennen“.</value>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>Dieses Objekt sollte deaktiviert werden, aber der von „{0}“ verwendete Connector kann kein Konto deaktivieren, daher wurde nichts gesendet. Ändern Sie die Deprovisionierungsaktion der Exportsynchronisierungsregel in „Löschen“ oder „Trennen“.</value>
+  </data>
 </root>

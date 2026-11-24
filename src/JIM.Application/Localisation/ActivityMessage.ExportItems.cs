@@ -23,6 +23,19 @@ public static partial class ActivityMessage
     /// <summary>What an export item says when the Connector refused it without a reason.</summary>
     public static JimMessage ExportFailedNoReason() => Create(nameof(ActivityMessages.ExportFailedNoReason));
 
+    /// <summary>The Connector left a change unattempted although the export run was not cancelled.</summary>
+    public static JimMessage ExportNotAttempted() => Create(nameof(ActivityMessages.ExportNotAttempted));
+
+    /// <summary>The Connector returned fewer results than it was handed changes.</summary>
+    public static JimMessage ExportNoResult() => Create(nameof(ActivityMessages.ExportNoResult));
+
+    /// <summary>A Disable was refused because the Connected System's Connector cannot disable an account.</summary>
+    /// <param name="connectorName">The Connector's name, or null where the Connected System's Connector Definition is not loaded.</param>
+    public static JimMessage ExportDisableUnsupported(string? connectorName, string connectedSystemName) =>
+        connectorName == null
+            ? Create(nameof(ActivityMessages.ExportDisableUnsupportedUnnamed), connectedSystemName)
+            : Create(nameof(ActivityMessages.ExportDisableUnsupported), connectorName, connectedSystemName);
+
     /// <summary>An export run failed; <paramref name="cause"/> is another system's words or JIM's own message.</summary>
     public static JimMessage ExportRunFailed(MessageArgument cause) => Create(nameof(ActivityMessages.ExportFailed), cause);
 

@@ -1386,4 +1386,16 @@
   <data name="PasswordStatusDelivering" xml:space="preserve">
     <value>en cours de remise</value>
   </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>Le connecteur a signalé cette modification comme non tentée, alors que l’exécution d’exportation n’a pas été annulée.</value>
+  </data>
+  <data name="ExportNoResult" xml:space="preserve">
+    <value>Le connecteur n’a renvoyé aucun résultat pour cette modification ; JIM ne peut donc pas savoir si elle a été écrite et elle sera renvoyée.</value>
+  </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>Cet objet devait être désactivé, mais le {0} qu’utilise « {1} » ne peut pas désactiver un compte ; rien n’a donc été envoyé. Remplacez l’action de déprovisionnement de la règle de synchronisation d’exportation par Supprimer ou Déconnecter.</value>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>Cet objet devait être désactivé, mais le connecteur qu’utilise « {0} » ne peut pas désactiver un compte ; rien n’a donc été envoyé. Remplacez l’action de déprovisionnement de la règle de synchronisation d’exportation par Supprimer ou Déconnecter.</value>
+  </data>
 </root>

@@ -2689,8 +2689,7 @@ public class ExportExecutionServer
             return null;
 
         return ConnectedSystemExportResult.Failed(
-            $"This object was to be disabled, but the {connectedSystem.ConnectorDefinition?.Name ?? "Connector"} that '{connectedSystem.Name}' uses " +
-            "cannot disable an account, so nothing was sent. Change the export Synchronisation Rule's Deprovisioning Action to Delete or Disconnect.",
+            ActivityMessage.ExportDisableUnsupported(connectedSystem.ConnectorDefinition?.Name, connectedSystem.Name),
             ConnectedSystemExportErrorType.RejectedByConnectedSystem);
     }
 
@@ -2805,7 +2804,7 @@ public class ExportExecutionServer
     private static ConnectedSystemExportResult NoResultFromTheConnector(CancellationToken cancellationToken) =>
         cancellationToken.IsCancellationRequested
             ? ConnectedSystemExportResult.NotAttempted()
-            : ConnectedSystemExportResult.Failed("The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again.");
+            : ConnectedSystemExportResult.Failed(ActivityMessage.ExportNoResult());
 
     /// <summary>
     /// Finishes Disable Pending Exports the Connector carried out (#2085): each is removed and its Connected System Object
@@ -3059,8 +3058,7 @@ public class ExportExecutionServer
             // back silently would repeat that every run unseen: it is a failed attempt like any other.
             if (exportResult.IsNotAttempted)
             {
-                exportResult = ConnectedSystemExportResult.Failed(
-                    "The Connector reported this change as not attempted, although the export run was not cancelled.");
+                exportResult = ConnectedSystemExportResult.Failed(ActivityMessage.ExportNotAttempted());
                 notAttemptedWithoutCancellation++;
             }
 
@@ -3373,7 +3371,7 @@ public class ExportExecutionServer
             AttributeValueChanges = writtenChanges,
             Succeeded = false,
             ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
-            ErrorMessageDetail = exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null,
+            ErrorMessageDetail = exportResult.ErrorMessageDetail ?? (exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null),
             ErrorCount = export.ErrorCount,
             ErrorType = exportResult.ErrorType,
             RejectedAttributeName = exportResult.RejectedAttributeName
@@ -4963,7 +4961,7 @@ public class ExportExecutionServer
                         AttributeValueChanges = export.AttributeValueChanges.ToList(),
                         Succeeded = false,
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
-                        ErrorMessageDetail = exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null,
+                        ErrorMessageDetail = exportResult.ErrorMessageDetail ?? (exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null),
                         ErrorCount = export.ErrorCount,
                         ErrorType = exportResult.ErrorType,
                         RejectedAttributeName = exportResult.RejectedAttributeName
