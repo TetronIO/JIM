@@ -383,7 +383,7 @@ internal sealed class CollisionRemediationRun
         // until the decision releases it.
         export.Status = PendingExportStatus.Parked;
         export.LastAttemptedAt = DateTime.UtcNow;
-        export.LastErrorMessage = message;
+        export.LastErrorMessageDetail = messageDetail;
 
         Log.Warning("CollisionRemediation: {ConnectedSystem} rejected the {Attribute} \"{RejectedValue}\" on Pending Export {ExportId} as already in use; " +
             "the value needs a decision ({Why}), so the export is parked.",

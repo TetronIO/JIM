@@ -594,6 +594,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("DetailMessage")
                         .HasColumnType("text");
 
+                    b.Property<string>("DetailMessageDetailJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("MatchedValue")
                         .HasColumnType("text");
 
@@ -5202,6 +5205,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("LastErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastErrorMessageDetailJson")
                         .HasColumnType("text");
 
                     b.Property<string>("LastErrorStackTrace")

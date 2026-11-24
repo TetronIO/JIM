@@ -61,7 +61,8 @@ internal static class RpeiBulkColumns
     ];
 
     /// <summary>
-    /// Insert columns for the ActivityRunProfileExecutionItemSyncOutcomes table.
+    /// Insert columns for the ActivityRunProfileExecutionItemSyncOutcomes table. Outcomes are only ever inserted, never
+    /// updated in place, so there is no update list. DetailMessageDetailJson is DetailMessage as a stored message (#3094).
     /// </summary>
     internal static readonly string[] ActivityRunProfileExecutionItemSyncOutcomes =
     [
@@ -69,6 +70,6 @@ internal static class RpeiBulkColumns
         "OutcomeType", "TargetEntityId", "TargetEntityDescription",
         "DetailCount", "DetailMessage", "Ordinal", "ConnectedSystemObjectChangeId",
         "SyncRuleId", "SyncRuleName", "StagedChangeType",
-        "ObjectMatchingRuleId", "ObjectMatchingRuleDescriptionSnapshot", "MatchedValue"
+        "ObjectMatchingRuleId", "ObjectMatchingRuleDescriptionSnapshot", "MatchedValue", "DetailMessageDetailJson"
     ];
 }

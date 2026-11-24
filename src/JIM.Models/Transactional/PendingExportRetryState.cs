@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Transactional;
 
 /// <summary>
@@ -15,6 +17,8 @@ namespace JIM.Models.Transactional;
 /// <param name="LastAttemptedAt">When the export was last attempted, or null when it never has been.</param>
 /// <param name="LastErrorMessage">Why the last attempt failed, or null.</param>
 /// <param name="LastErrorStackTrace">The last failure's stack trace, or null.</param>
+/// <param name="LastErrorMessageDetailJson">The last failure as a stored message where JIM worded it (#3094), or null where
+/// the error is another system's own text or there is none.</param>
 public sealed record PendingExportRetryState(
     Guid PendingExportId,
     PendingExportStatus Status,
@@ -22,7 +26,8 @@ public sealed record PendingExportRetryState(
     DateTime? FailingSince,
     DateTime? LastAttemptedAt,
     string? LastErrorMessage,
-    string? LastErrorStackTrace)
+    string? LastErrorStackTrace,
+    string? LastErrorMessageDetailJson = null)
 {
     /// <summary>
     /// The retry state <paramref name="pendingExport"/> holds now.
@@ -34,13 +39,16 @@ public sealed record PendingExportRetryState(
         pendingExport.FailingSince,
         pendingExport.LastAttemptedAt,
         pendingExport.LastErrorMessage,
-        pendingExport.LastErrorStackTrace);
+        pendingExport.LastErrorStackTrace,
+        pendingExport.LastErrorMessageDetailJson);
 
     /// <summary>
     /// The state after one more failed attempt (#2119): counted, with the error kept and the start of the run of
     /// failures kept from the first of them. Always <see cref="PendingExportStatus.Pending"/>: JIM never gives up on a
     /// Pending Export, so the next export run attempts it again, however many attempts have failed before.
     /// </summary>
+    /// <remarks>The error is plain text here (another system's words, or an exception's), so any message the previous
+    /// failure stored is cleared rather than left to outlive its English.</remarks>
     public PendingExportRetryState AfterFailedAttempt(string errorMessage, string? stackTrace, DateTime attemptedAt) => this with
     {
         Status = PendingExportStatus.Pending,
@@ -48,8 +56,16 @@ public sealed record PendingExportRetryState(
         FailingSince = FailingSince ?? attemptedAt,
         LastAttemptedAt = attemptedAt,
         LastErrorMessage = errorMessage,
-        LastErrorStackTrace = stackTrace
+        LastErrorStackTrace = stackTrace,
+        LastErrorMessageDetailJson = null
     };
+
+    /// <summary>
+    /// As <see cref="AfterFailedAttempt(string, string?, DateTime)"/>, for a failure JIM worded itself (#3094): the error is
+    /// kept as the message, with its British English as <see cref="LastErrorMessage"/>.
+    /// </summary>
+    public PendingExportRetryState AfterFailedAttempt(JimMessage error, string? stackTrace, DateTime attemptedAt) =>
+        AfterFailedAttempt(error.ToEnglish(), stackTrace, attemptedAt) with { LastErrorMessageDetailJson = MessageJson.Serialise(error) };
 
     /// <summary>
     /// Writes this state onto <paramref name="pendingExport"/>, so its in-memory copy agrees with what was persisted.
@@ -62,5 +78,6 @@ public sealed record PendingExportRetryState(
         pendingExport.LastAttemptedAt = LastAttemptedAt;
         pendingExport.LastErrorMessage = LastErrorMessage;
         pendingExport.LastErrorStackTrace = LastErrorStackTrace;
+        pendingExport.LastErrorMessageDetailJson = LastErrorMessageDetailJson;
     }
 }

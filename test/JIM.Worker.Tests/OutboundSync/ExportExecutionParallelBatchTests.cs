@@ -1719,6 +1719,54 @@ public class ExportExecutionParallelBatchTests
                 "Le connecteur a signalé cette modification comme non tentée, alors que l’exécution d’exportation n’a pas été annulée."));
             Assert.That(MessageRenderer.Render(failed[0].ErrorMessageDetail!, CultureInfo.GetCultureInfo("de"), CultureInfo.GetCultureInfo("de")), Is.EqualTo(
                 "Der Connector hat diese Änderung als nicht versucht gemeldet, obwohl die Exportausführung nicht abgebrochen wurde."));
+
+            // The Pending Export keeps the same message as its last error, beside the English.
+            Assert.That(exports.Skip(1).Select(pe => pe.LastErrorMessageDetail?.ToEnglish()), Has.All.EqualTo(
+                "The Connector reported this change as not attempted, although the export run was not cancelled."));
+            Assert.That(exports.Skip(1).Select(pe => pe.LastErrorMessage), Has.All.EqualTo(
+                "The Connector reported this change as not attempted, although the export run was not cancelled."));
+        }
+    }
+
+    /// <summary>
+    /// #3094: an error the Connector worded stays its own text, with no message, and a message an earlier failure stored
+    /// is cleared rather than left to outlive its English.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorWordedFailureAfterAJimWordedOne_StoresTheTextAndClearsTheMessageAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 1);
+        exports[0].LastErrorMessageDetail = JIM.Application.Localisation.ActivityMessage.ExportFailedNoReason();
+        var connector = CreateScriptedConnector((_, _) => [ConnectedSystemExportResult.Failed("The directory went away.")]);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports[0].LastErrorMessage, Is.EqualTo("The directory went away."));
+            Assert.That(exports[0].LastErrorMessageDetailJson, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// #3094: a Connector that refuses a change and gives no reason leaves JIM to word the error, which is kept as a message.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorRefusesWithoutAReason_StoresJimsWordingAsAMessageAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 1);
+        var connector = CreateScriptedConnector((_, _) => [new ConnectedSystemExportResult { Success = false }]);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports[0].LastErrorMessage, Is.EqualTo("Export failed"));
+            Assert.That(exports[0].LastErrorMessageDetail?.Key, Is.EqualTo("ExportFailedNoReason"));
         }
     }
 
@@ -1781,6 +1829,8 @@ public class ExportExecutionParallelBatchTests
                 "The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again."));
             Assert.That(MessageRenderer.Render(failed[0].ErrorMessageDetail!, CultureInfo.GetCultureInfo("fr"), CultureInfo.GetCultureInfo("fr")), Is.EqualTo(
                 "Le connecteur n’a renvoyé aucun résultat pour cette modification ; JIM ne peut donc pas savoir si elle a été écrite et elle sera renvoyée."));
+            Assert.That(exports.Skip(1).Select(pe => pe.LastErrorMessageDetail?.ToEnglish()), Has.All.EqualTo(
+                "The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again."));
         }
     }
 

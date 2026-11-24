@@ -2613,7 +2613,7 @@ public class ExportExecutionServer
             var attemptedAt = DateTime.UtcNow;
             var failedAttempts = batch
                 .Where(pe => before.ContainsKey(pe.Id))
-                .ToDictionary(pe => pe.Id, pe => before[pe.Id].AfterFailedAttempt(exception.Message, stackTrace: null, attemptedAt));
+                .ToDictionary(pe => pe.Id, pe => AfterFailedAttempt(before[pe.Id], exception, stackTrace: null, attemptedAt));
             try
             {
                 failed = await repository.ReleaseExecutingPendingExportsAsync(failedAttempts.Values.ToList(), mark.MarkedAt);
@@ -3358,7 +3358,7 @@ public class ExportExecutionServer
     private static void RecordFailedAttempt(PendingExport export, ConnectedSystemExportResult exportResult,
         List<PendingExportAttributeValueChange> writtenChanges, ExportExecutionResult result)
     {
-        MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+        MarkExportFailed(export, exportResult);
         result.FailedCount++;
 
         // Capture export data for activity tracking (before any state changes)
@@ -4770,12 +4770,30 @@ public class ExportExecutionServer
     /// Records a failed attempt on an export (#2119): it stays Pending and is attempted again at the next export run.
     /// This is a synchronous version for batch processing - does not save to database.
     /// </summary>
-    private static void MarkExportFailed(PendingExport export, string errorMessage, string? stackTrace = null)
+    /// <remarks>
+    /// The error is kept as a message where JIM worded it (#3094): the export result's own message, or JIM's "Export
+    /// failed" where the Connector gave no reason. A Connector's own words stay its text, with no message.
+    /// </remarks>
+    private static void MarkExportFailed(PendingExport export, ConnectedSystemExportResult exportResult)
     {
-        var failed = PendingExportRetryState.Of(export).AfterFailedAttempt(errorMessage, stackTrace, DateTime.UtcNow);
+        var state = PendingExportRetryState.Of(export);
+        var attemptedAt = DateTime.UtcNow;
+        var detail = exportResult.ErrorMessageDetail ?? (exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null);
+        var failed = detail != null && (exportResult.ErrorMessage == null || detail.ToEnglish() == exportResult.ErrorMessage)
+            ? state.AfterFailedAttempt(detail, stackTrace: null, attemptedAt)
+            : state.AfterFailedAttempt(exportResult.ErrorMessage ?? "Export failed", stackTrace: null, attemptedAt);
         failed.ApplyTo(export);
         LogFailedAttempt(failed);
     }
+
+    /// <summary>
+    /// One more failed attempt for an exception: kept as the message the exception carries where JIM worded it (#3094),
+    /// else as the exception's own text.
+    /// </summary>
+    private static PendingExportRetryState AfterFailedAttempt(PendingExportRetryState state, Exception exception, string? stackTrace, DateTime attemptedAt) =>
+        exception.DetailOf() is { } detail && detail.ToEnglish() == exception.Message
+            ? state.AfterFailedAttempt(detail, stackTrace, attemptedAt)
+            : state.AfterFailedAttempt(exception.Message, stackTrace, attemptedAt);
 
     /// <summary>
     /// Logs a failed attempt once it has been applied.
@@ -4948,7 +4966,7 @@ public class ExportExecutionServer
 
                 if (!exportResult.Success)
                 {
-                    MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+                    MarkExportFailed(export, exportResult);
                     exportsToUpdate.Add(export);
                     result.FailedCount++;
 
@@ -5104,7 +5122,7 @@ public class ExportExecutionServer
             var now = DateTime.UtcNow;
             foreach (var export in pendingExports)
             {
-                PendingExportRetryState.Of(export).AfterFailedAttempt(ex.Message, ex.StackTrace, now).ApplyTo(export);
+                AfterFailedAttempt(PendingExportRetryState.Of(export), ex, ex.StackTrace, now).ApplyTo(export);
                 export.Status = PendingExportStatus.ExportNotConfirmed;
 
                 // Create ProcessedExportItem so the RPEI pipeline can record the failure.
@@ -5185,6 +5203,7 @@ public class ExportExecutionServer
         FailingSince = pendingExport.FailingSince,
         LastAttemptedAt = pendingExport.LastAttemptedAt,
         LastErrorMessage = pendingExport.LastErrorMessage,
+        LastErrorMessageDetailJson = pendingExport.LastErrorMessageDetailJson,
         LastErrorStackTrace = pendingExport.LastErrorStackTrace,
         SourceMetaverseObject = pendingExport.SourceMetaverseObject,
         SourceMetaverseObjectId = pendingExport.SourceMetaverseObjectId,

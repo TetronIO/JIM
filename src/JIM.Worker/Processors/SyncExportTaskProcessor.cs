@@ -522,6 +522,12 @@ public class SyncExportTaskProcessor
                 exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated,
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null,
                     detailMessage: exportItem.GeneratedValueCollision!.Message);
+
+                // The sentence is JIM's own, so it is stored as the message it was written from as well, for the portal
+                // to show in the viewer's language (#3094); the English above stays what the REST API returns.
+                if (exportItem.GeneratedValueCollision.MessageDetail is { } remediatedDetail
+                    && remediatedDetail.ToEnglish() == exportOutcome.DetailMessage)
+                    exportOutcome.DetailMessageDetail = remediatedDetail;
             }
             else if (!stillQueued && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
