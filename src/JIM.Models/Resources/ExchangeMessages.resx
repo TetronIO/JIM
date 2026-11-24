@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FitUnmanagedDeclared" xml:space="preserve">
+    <value>'{0}' cannot be declared: it is what JIM reads for a recipient it does not manage. Use one of {1}.</value>
+    <comment>Refusal on an export. {0}: the reserved recipient type value, as declared. {1}: the recipient type values a rule may declare, comma-separated, as written.</comment>
+  </data>
+  <data name="FitUserOnlyMailbox" xml:space="preserve">
+    <value>Only a user can have a mailbox; this object is a {0}.</value>
+    <comment>Refusal on an export. {0}: the Connected System Object Type's name, as the directory names it (group, contact).</comment>
+  </data>
+  <data name="FitUserOnlySharedMailbox" xml:space="preserve">
+    <value>Only a user can have a shared mailbox; this object is a {0}.</value>
+    <comment>Refusal on an export. {0}: the Connected System Object Type's name, as the directory names it (group, contact).</comment>
+  </data>
+  <data name="FitUserOnlyRoomMailbox" xml:space="preserve">
+    <value>Only a user can have a room mailbox; this object is a {0}.</value>
+    <comment>Refusal on an export. {0}: the Connected System Object Type's name, as the directory names it (group, contact).</comment>
+  </data>
+  <data name="FitUserOnlyEquipmentMailbox" xml:space="preserve">
+    <value>Only a user can have an equipment mailbox; this object is a {0}.</value>
+    <comment>Refusal on an export. {0}: the Connected System Object Type's name, as the directory names it (group, contact).</comment>
+  </data>
+  <data name="FitUserOnlyMailUser" xml:space="preserve">
+    <value>Only a user can be a mail user; this object is a {0}.</value>
+    <comment>Refusal on an export. {0}: the Connected System Object Type's name.</comment>
+  </data>
+  <data name="FitContactOnly" xml:space="preserve">
+    <value>Only a contact can be a mail contact; this object is a {0}.</value>
+    <comment>Refusal on an export. {0}: the Connected System Object Type's name.</comment>
+  </data>
+  <data name="FitGroupOnly" xml:space="preserve">
+    <value>Only a group can be mail-enabled; this object is a {0}.</value>
+    <comment>Refusal on an export. {0}: the Connected System Object Type's name.</comment>
+  </data>
+  <data name="FitGroupNotUniversal" xml:space="preserve">
+    <value>Only universal groups can be mail-enabled; this group is not universal.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="FitUnrecognised" xml:space="preserve">
+    <value>'{0}' is not an Exchange recipient type; use one of {1}.</value>
+    <comment>Refusal on an export. {0}: the value declared, as written. {1}: the recipient type values a rule may declare, comma-separated, as written.</comment>
+  </data>
+  <data name="UnmanagedCannotBecomeMailbox" xml:space="preserve">
+    <value>This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made a mailbox. Nothing was changed in Exchange.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="UnmanagedCannotBecomeSharedMailbox" xml:space="preserve">
+    <value>This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made a shared mailbox. Nothing was changed in Exchange.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="UnmanagedCannotBecomeRoomMailbox" xml:space="preserve">
+    <value>This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made a room mailbox. Nothing was changed in Exchange.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="UnmanagedCannotBecomeEquipmentMailbox" xml:space="preserve">
+    <value>This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made an equipment mailbox. Nothing was changed in Exchange.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="UnmanagedCannotBecomeMailUser" xml:space="preserve">
+    <value>This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made a mail user. Nothing was changed in Exchange.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="UnmanagedCannotBecomeMailContact" xml:space="preserve">
+    <value>This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made a mail contact. Nothing was changed in Exchange.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="UnmanagedCannotBecomeMailEnabledGroup" xml:space="preserve">
+    <value>This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made a mail-enabled group. Nothing was changed in Exchange.</value>
+    <comment>Refusal on an export.</comment>
+  </data>
+  <data name="TypeChangeNotSupported" xml:space="preserve">
+    <value>Changing a recipient's type is not supported in this release: this object is {0} in Exchange, and is now declared {1}. Nothing was changed in Exchange.</value>
+    <comment>Warning on an export. {0} and {1}: recipient types (TypeName messages). In English they carry their article; French and German put them after de type / vom Typ, so they take none.</comment>
+  </data>
+  <data name="TypeChangeToNoneNotSupported" xml:space="preserve">
+    <value>Changing a recipient's type is not supported in this release: this object is {0} in Exchange, and is now declared not to be a recipient. Nothing was changed in Exchange.</value>
+    <comment>Warning on an export. {0}: a recipient type (a TypeName message).</comment>
+  </data>
+  <data name="TypeNameMailbox" xml:space="preserve">
+    <value>a mailbox</value>
+    <comment>A recipient type inside TypeChangeNotSupported. English carries the article; French and German give the bare name, which follows de type / vom Typ.</comment>
+  </data>
+  <data name="TypeNameSharedMailbox" xml:space="preserve">
+    <value>a shared mailbox</value>
+    <comment>A recipient type inside TypeChangeNotSupported. English carries the article; French and German give the bare name, which follows de type / vom Typ.</comment>
+  </data>
+  <data name="TypeNameRoomMailbox" xml:space="preserve">
+    <value>a room mailbox</value>
+    <comment>A recipient type inside TypeChangeNotSupported. English carries the article; French and German give the bare name, which follows de type / vom Typ.</comment>
+  </data>
+  <data name="TypeNameEquipmentMailbox" xml:space="preserve">
+    <value>an equipment mailbox</value>
+    <comment>A recipient type inside TypeChangeNotSupported. English carries the article; French and German give the bare name, which follows de type / vom Typ.</comment>
+  </data>
+  <data name="TypeNameMailUser" xml:space="preserve">
+    <value>a mail user</value>
+    <comment>A recipient type inside TypeChangeNotSupported. English carries the article; French and German give the bare name, which follows de type / vom Typ.</comment>
+  </data>
+  <data name="TypeNameMailContact" xml:space="preserve">
+    <value>a mail contact</value>
+    <comment>A recipient type inside TypeChangeNotSupported. English carries the article; French and German give the bare name, which follows de type / vom Typ.</comment>
+  </data>
+  <data name="TypeNameMailEnabledGroup" xml:space="preserve">
+    <value>a mail-enabled group</value>
+    <comment>A recipient type inside TypeChangeNotSupported. English carries the article; French and German give the bare name, which follows de type / vom Typ.</comment>
+  </data>
+  <data name="TypeNameNone" xml:space="preserve">
+    <value>not a recipient</value>
+    <comment>A recipient type inside TypeChangeNotSupported.</comment>
+  </data>
+  <data name="TypeNameUnmanaged" xml:space="preserve">
+    <value>a recipient JIM does not manage</value>
+    <comment>A recipient type inside TypeChangeNotSupported.</comment>
+  </data>
+  <data name="TypeNameOther" xml:space="preserve">
+    <value>'{0}'</value>
+    <comment>A recipient type JIM does not recognise, inside TypeChangeNotSupported. {0}: the value as written.</comment>
+  </data>
+  <data name="QueuedMailbox" xml:space="preserve">
+    <value>Mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedUpdateMailbox" xml:space="preserve">
+    <value>Update to the mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedSharedMailbox" xml:space="preserve">
+    <value>Shared mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedUpdateSharedMailbox" xml:space="preserve">
+    <value>Update to the shared mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedRoomMailbox" xml:space="preserve">
+    <value>Room mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedUpdateRoomMailbox" xml:space="preserve">
+    <value>Update to the room mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedEquipmentMailbox" xml:space="preserve">
+    <value>Equipment mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedUpdateEquipmentMailbox" xml:space="preserve">
+    <value>Update to the equipment mailbox queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedMailUser" xml:space="preserve">
+    <value>Mail user queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedUpdateMailUser" xml:space="preserve">
+    <value>Update to the mail user queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedMailContact" xml:space="preserve">
+    <value>Mail contact queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedUpdateMailContact" xml:space="preserve">
+    <value>Update to the mail contact queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedMailEnabledGroup" xml:space="preserve">
+    <value>Mail-enabled group queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="QueuedUpdateMailEnabledGroup" xml:space="preserve">
+    <value>Update to the mail-enabled group queued for Exchange on {0}.</value>
+    <comment>An export's follow-up Activity. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="Replaced" xml:space="preserve">
+    <value>Not delivered to Exchange: replaced by a newer declared state for this object, queued by a later export to {0}.</value>
+    <comment>On the Activity of an Exchange change a newer one replaced. {0}: the Connected System's name.</comment>
+  </data>
+</root>

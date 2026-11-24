@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FitUnmanagedDeclared" xml:space="preserve">
+    <value>„{0}“ kann nicht deklariert werden: Diesen Wert liest JIM für einen Empfänger, den es nicht verwaltet. Verwenden Sie einen der folgenden Typen: {1}.</value>
+  </data>
+  <data name="FitUserOnlyMailbox" xml:space="preserve">
+    <value>Nur ein Benutzer kann ein Postfach haben; dieses Objekt ist vom Typ {0}.</value>
+  </data>
+  <data name="FitUserOnlySharedMailbox" xml:space="preserve">
+    <value>Nur ein Benutzer kann ein freigegebenes Postfach haben; dieses Objekt ist vom Typ {0}.</value>
+  </data>
+  <data name="FitUserOnlyRoomMailbox" xml:space="preserve">
+    <value>Nur ein Benutzer kann ein Raumpostfach haben; dieses Objekt ist vom Typ {0}.</value>
+  </data>
+  <data name="FitUserOnlyEquipmentMailbox" xml:space="preserve">
+    <value>Nur ein Benutzer kann ein Gerätepostfach haben; dieses Objekt ist vom Typ {0}.</value>
+  </data>
+  <data name="FitUserOnlyMailUser" xml:space="preserve">
+    <value>Nur ein Benutzer kann ein E-Mail-Benutzer sein; dieses Objekt ist vom Typ {0}.</value>
+  </data>
+  <data name="FitContactOnly" xml:space="preserve">
+    <value>Nur ein Kontakt kann ein E-Mail-Kontakt sein; dieses Objekt ist vom Typ {0}.</value>
+  </data>
+  <data name="FitGroupOnly" xml:space="preserve">
+    <value>Nur eine Gruppe kann E-Mail-aktiviert werden; dieses Objekt ist vom Typ {0}.</value>
+  </data>
+  <data name="FitGroupNotUniversal" xml:space="preserve">
+    <value>Nur universelle Gruppen können E-Mail-aktiviert werden; diese Gruppe ist nicht universell.</value>
+  </data>
+  <data name="FitUnrecognised" xml:space="preserve">
+    <value>„{0}“ ist kein Exchange-Empfängertyp; verwenden Sie einen der folgenden Typen: {1}.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailbox" xml:space="preserve">
+    <value>Dieses Objekt ist ein Empfängertyp, den JIM nicht verwaltet (zum Beispiel ein verknüpftes oder Remotepostfach), daher kann es nicht zu einem Postfach gemacht werden. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeSharedMailbox" xml:space="preserve">
+    <value>Dieses Objekt ist ein Empfängertyp, den JIM nicht verwaltet (zum Beispiel ein verknüpftes oder Remotepostfach), daher kann es nicht zu einem freigegebenen Postfach gemacht werden. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeRoomMailbox" xml:space="preserve">
+    <value>Dieses Objekt ist ein Empfängertyp, den JIM nicht verwaltet (zum Beispiel ein verknüpftes oder Remotepostfach), daher kann es nicht zu einem Raumpostfach gemacht werden. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeEquipmentMailbox" xml:space="preserve">
+    <value>Dieses Objekt ist ein Empfängertyp, den JIM nicht verwaltet (zum Beispiel ein verknüpftes oder Remotepostfach), daher kann es nicht zu einem Gerätepostfach gemacht werden. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailUser" xml:space="preserve">
+    <value>Dieses Objekt ist ein Empfängertyp, den JIM nicht verwaltet (zum Beispiel ein verknüpftes oder Remotepostfach), daher kann es nicht zu einem E-Mail-Benutzer gemacht werden. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailContact" xml:space="preserve">
+    <value>Dieses Objekt ist ein Empfängertyp, den JIM nicht verwaltet (zum Beispiel ein verknüpftes oder Remotepostfach), daher kann es nicht zu einem E-Mail-Kontakt gemacht werden. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailEnabledGroup" xml:space="preserve">
+    <value>Dieses Objekt ist ein Empfängertyp, den JIM nicht verwaltet (zum Beispiel ein verknüpftes oder Remotepostfach), daher kann es nicht zu einer E-Mail-aktivierten Gruppe gemacht werden. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="TypeChangeNotSupported" xml:space="preserve">
+    <value>Das Ändern des Typs eines Empfängers wird in dieser Version nicht unterstützt: Dieses Objekt ist in Exchange vom Typ {0} und ist jetzt als Typ {1} deklariert. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="TypeChangeToNoneNotSupported" xml:space="preserve">
+    <value>Das Ändern des Typs eines Empfängers wird in dieser Version nicht unterstützt: Dieses Objekt ist in Exchange vom Typ {0} und ist jetzt so deklariert, dass es kein Empfänger ist. In Exchange wurde nichts geändert.</value>
+  </data>
+  <data name="TypeNameMailbox" xml:space="preserve">
+    <value>Postfach</value>
+  </data>
+  <data name="TypeNameSharedMailbox" xml:space="preserve">
+    <value>freigegebenes Postfach</value>
+  </data>
+  <data name="TypeNameRoomMailbox" xml:space="preserve">
+    <value>Raumpostfach</value>
+  </data>
+  <data name="TypeNameEquipmentMailbox" xml:space="preserve">
+    <value>Gerätepostfach</value>
+  </data>
+  <data name="TypeNameMailUser" xml:space="preserve">
+    <value>E-Mail-Benutzer</value>
+  </data>
+  <data name="TypeNameMailContact" xml:space="preserve">
+    <value>E-Mail-Kontakt</value>
+  </data>
+  <data name="TypeNameMailEnabledGroup" xml:space="preserve">
+    <value>E-Mail-aktivierte Gruppe</value>
+  </data>
+  <data name="TypeNameNone" xml:space="preserve">
+    <value>„kein Empfänger“</value>
+  </data>
+  <data name="TypeNameUnmanaged" xml:space="preserve">
+    <value>„von JIM nicht verwalteter Empfänger“</value>
+  </data>
+  <data name="TypeNameOther" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="QueuedMailbox" xml:space="preserve">
+    <value>Postfach für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedUpdateMailbox" xml:space="preserve">
+    <value>Aktualisierung des Postfachs für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedSharedMailbox" xml:space="preserve">
+    <value>Freigegebenes Postfach für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedUpdateSharedMailbox" xml:space="preserve">
+    <value>Aktualisierung des freigegebenen Postfachs für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedRoomMailbox" xml:space="preserve">
+    <value>Raumpostfach für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedUpdateRoomMailbox" xml:space="preserve">
+    <value>Aktualisierung des Raumpostfachs für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedEquipmentMailbox" xml:space="preserve">
+    <value>Gerätepostfach für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedUpdateEquipmentMailbox" xml:space="preserve">
+    <value>Aktualisierung des Gerätepostfachs für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedMailUser" xml:space="preserve">
+    <value>E-Mail-Benutzer für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedUpdateMailUser" xml:space="preserve">
+    <value>Aktualisierung des E-Mail-Benutzers für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedMailContact" xml:space="preserve">
+    <value>E-Mail-Kontakt für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedUpdateMailContact" xml:space="preserve">
+    <value>Aktualisierung des E-Mail-Kontakts für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedMailEnabledGroup" xml:space="preserve">
+    <value>E-Mail-aktivierte Gruppe für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="QueuedUpdateMailEnabledGroup" xml:space="preserve">
+    <value>Aktualisierung der E-Mail-aktivierten Gruppe für Exchange auf {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="Replaced" xml:space="preserve">
+    <value>Nicht an Exchange übermittelt: ersetzt durch einen neueren deklarierten Zustand dieses Objekts, den ein späterer Export nach {0} in die Warteschlange gestellt hat.</value>
+  </data>
+</root>
