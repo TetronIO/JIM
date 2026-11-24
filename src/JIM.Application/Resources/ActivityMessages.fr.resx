@@ -1206,4 +1206,121 @@
   <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
     <value>une synchronisation ne le joindrait ni à l’un d’eux ni ne le provisionnerait</value>
   </data>
+  <data name="PasswordSetInitial" xml:space="preserve">
+    <value>Mot de passe initial défini sur {0}</value>
+  </data>
+  <data name="PasswordSetStandInApplies" xml:space="preserve">
+    <value>Mot de passe défini sur {0} en tant que premier mot de passe de cet objet de système connecté, à la place de son mot de passe initial</value>
+  </data>
+  <data name="PasswordSetStandInNoLongerSet" xml:space="preserve">
+    <value>Mot de passe défini sur {0} en tant que premier mot de passe de cet objet de système connecté. La règle de synchronisation qui l’a provisionné ne définit plus de mot de passe initial, ou a été supprimée ; ses paramètres d’activation de l’objet de système connecté et d’expiration du mot de passe n’ont donc pas été appliqués</value>
+  </data>
+  <data name="PasswordSetStandInOtherAccount" xml:space="preserve">
+    <value>Mot de passe défini sur {0}. Il devait aussi être le premier mot de passe d’un objet de système connecté qui s’y trouve et n’appartient plus à cette personne ; les paramètres de ce mot de passe initial pour l’activation de l’objet de système connecté et pour l’expiration du mot de passe n’ont donc pas été appliqués à celui-ci</value>
+  </data>
+  <data name="PasswordSetPlain" xml:space="preserve">
+    <value>Mot de passe défini sur {0}</value>
+  </data>
+  <data name="PasswordSetSentence" xml:space="preserve">
+    <value>Mot de passe défini sur {0}.</value>
+  </data>
+  <data name="PasswordDeliveryEnableLeftToFlow" xml:space="preserve">
+    <value>{0}. L’état activé du compte a été laissé à son flux d’attributs, qui le définit ; le paramètre « Activer l’objet de système connecté une fois le mot de passe défini » du mot de passe initial ne s’est donc pas appliqué.</value>
+  </data>
+  <data name="PasswordDeliveryEnableCompletesWithheld" xml:space="preserve">
+    <value>{0}, et le compte a été activé comme le demande son flux d’attributs : JIM a retenu l’activation jusqu’à ce que le compte ait un mot de passe.</value>
+  </data>
+  <data name="PasswordDeliveryEnabledAsAsked" xml:space="preserve">
+    <value>{0}, et l’objet de système connecté a été activé comme le demande le mot de passe initial de la règle de synchronisation.</value>
+  </data>
+  <data name="PasswordDeliveryEnableAsksOnly" xml:space="preserve">
+    <value>{0}. Le mot de passe initial de la règle de synchronisation demande que l’objet de système connecté soit activé.</value>
+  </data>
+  <data name="PasswordDeliveryEnableNotAsked" xml:space="preserve">
+    <value>{0}. Le mot de passe initial de la règle de synchronisation ne l’active pas ; il a donc été laissé tel qu’il a été créé.</value>
+  </data>
+  <data name="PasswordDeliveryPlain" xml:space="preserve">
+    <value>{0}.</value>
+  </data>
+  <data name="PasswordNotSet" xml:space="preserve">
+    <value>Mot de passe non défini sur {0} : {1}. {2}.</value>
+  </data>
+  <data name="PasswordRetryParked" xml:space="preserve">
+    <value>JIM a cessé d’essayer ; relancez l’opération une fois la cause corrigée</value>
+  </data>
+  <data name="PasswordRetryAgain" xml:space="preserve">
+    <value>JIM réessaiera</value>
+  </data>
+  <data name="PasswordReasonUnknown" xml:space="preserve">
+    <value>une raison inconnue</value>
+  </data>
+  <data name="PasswordWithdrawnAccountGone" xml:space="preserve">
+    <value>Mot de passe initial devenu inutile : le compte auquel il était destiné n’existe plus dans {0} ou n’est plus joint à cette personne.</value>
+  </data>
+  <data name="PasswordWithdrawnRuleOff" xml:space="preserve">
+    <value>Mot de passe initial devenu inutile : la règle de synchronisation qui a provisionné ce compte n’en définit plus, ou a été supprimée.</value>
+  </data>
+  <data name="PasswordCaveatBase" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué.</value>
+  </data>
+  <data name="PasswordCaveatRequireChange" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué : une modification est requise à la prochaine connexion.</value>
+  </data>
+  <data name="PasswordCaveatExpiresByPolicy" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué : le mot de passe expire selon la propre stratégie de mots de passe de {0}.</value>
+  </data>
+  <data name="PasswordCaveatNeverExpires" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué : le mot de passe n’expire jamais.</value>
+  </data>
+  <data name="PasswordCaveatWarningWithheld" xml:space="preserve">
+    <value>[l’avertissement du système connecté est masqué, car il contenait le mot de passe]</value>
+  </data>
+  <data name="PasswordCaveatOwnerLeftToExport" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé à l’exportation qui écrit userAccountControl, laquelle le maintient activé ; ne l’activez dans ce flux d’attributs que lorsque les mots de passe ne doivent jamais expirer, ou choisissez une autre expiration pour le mot de passe initial.</value>
+  </data>
+  <data name="PasswordCaveatOwnerAsAccountHas" xml:space="preserve">
+    <value>Un mot de passe défini sur chaque système connecté laisse « Le mot de passe n’expire jamais » tel que chaque compte l’a.</value>
+  </data>
+  <data name="PasswordCaveatSharedStatic" xml:space="preserve">
+    <value>Chaque compte auquel a été attribué le mot de passe initial statique de cette règle de synchronisation conserve donc ce mot de passe unique et partagé, qui n’expire jamais.</value>
+  </data>
+  <data name="PasswordPutBackWithheldEnable" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été modifié sur ce compte, mais l’exportation que JIM a retenue jusqu’à ce que le compte ait un mot de passe porte encore le userAccountControl du flux d’attributs et le réécrira, avec « Le mot de passe n’expire jamais », une fois libérée.</value>
+  </data>
+  <data name="PasswordPutBackEnforced" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été modifié sur ce compte, mais la règle de synchronisation {0} écrit son userAccountControl avec l’option Appliquer l’état activée ; la prochaine synchronisation rétablira donc la valeur du flux d’attributs, et avec elle le fait que le mot de passe n’expire jamais ; tant que cette valeur maintient « Le mot de passe n’expire jamais », Active Directory ne demande pas de modification à la prochaine connexion.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportSet" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé à l’exportation qui écrit userAccountControl, laquelle l’active ; le mot de passe n’expire donc jamais.</value>
+  </data>
+  <data name="PasswordNoteLeftSet" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé tel que le compte l’a, c’est-à-dire activé ; le mot de passe n’expire donc jamais.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportOff" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé à l’exportation qui écrit userAccountControl, laquelle le laisse désactivé ; le mot de passe expire donc selon la propre stratégie de mots de passe de {0}. Pour que ces mots de passe n’expirent jamais, activez « Le mot de passe n’expire jamais » (65536) dans le flux d’attributs qui écrit userAccountControl.</value>
+  </data>
+  <data name="PasswordNoteEverySystemOff" xml:space="preserve">
+    <value>Un mot de passe défini sur chaque système connecté laisse « Le mot de passe n’expire jamais » tel que chaque compte l’a ; l’option « N’expire jamais » demandée n’a donc pas été appliquée ; le mot de passe expire selon la propre stratégie de mots de passe de {0}.</value>
+  </data>
+  <data name="PasswordQueueRetryOne" xml:space="preserve">
+    <value>{0} modification de mot de passe en file d’attente sera retentée.</value>
+  </data>
+  <data name="PasswordQueueRetryOther" xml:space="preserve">
+    <value>{0} modifications de mot de passe en file d’attente seront retentées.</value>
+  </data>
+  <data name="PasswordQueueCancelOne" xml:space="preserve">
+    <value>{0} modification de mot de passe en file d’attente ne sera pas remise.</value>
+  </data>
+  <data name="PasswordQueueCancelOther" xml:space="preserve">
+    <value>{0} modifications de mot de passe en file d’attente ne seront pas remises.</value>
+  </data>
+  <data name="PasswordFilterOneChange" xml:space="preserve">
+    <value>Une modification de mot de passe</value>
+  </data>
+  <data name="PasswordFilterChanges" xml:space="preserve">
+    <value>{0} modifications de mot de passe</value>
+  </data>
+  <data name="PasswordFilterWholeQueue" xml:space="preserve">
+    <value>La file d’attente de synchronisation des mots de passe</value>
+  </data>
 </root>

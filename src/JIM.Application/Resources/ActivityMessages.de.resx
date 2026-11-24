@@ -1204,4 +1204,121 @@
   <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
     <value>würde eine Synchronisierung es weder mit einem von ihnen verknüpfen noch bereitstellen</value>
   </data>
+  <data name="PasswordSetInitial" xml:space="preserve">
+    <value>Initialkennwort auf {0} gesetzt</value>
+  </data>
+  <data name="PasswordSetStandInApplies" xml:space="preserve">
+    <value>Kennwort auf {0} als erstes Kennwort dieses Objekts im verbundenen System gesetzt, anstelle seines Initialkennworts</value>
+  </data>
+  <data name="PasswordSetStandInNoLongerSet" xml:space="preserve">
+    <value>Kennwort auf {0} als erstes Kennwort dieses Objekts im verbundenen System gesetzt. Die Synchronisierungsregel, die es bereitgestellt hat, setzt kein Initialkennwort mehr oder wurde gelöscht, daher wurden ihre Einstellungen zum Aktivieren des Objekts im verbundenen System und dazu, ob sein Kennwort nie abläuft, nicht angewendet</value>
+  </data>
+  <data name="PasswordSetStandInOtherAccount" xml:space="preserve">
+    <value>Kennwort auf {0} gesetzt. Es sollte auch das erste Kennwort eines Objekts im verbundenen System dort sein, das nicht mehr dieser Person gehört, daher wurden die Einstellungen dieses Initialkennworts zum Aktivieren des Objekts im verbundenen System und dazu, ob sein Kennwort nie abläuft, bei diesem nicht angewendet</value>
+  </data>
+  <data name="PasswordSetPlain" xml:space="preserve">
+    <value>Kennwort auf {0} gesetzt</value>
+  </data>
+  <data name="PasswordSetSentence" xml:space="preserve">
+    <value>Kennwort auf {0} gesetzt.</value>
+  </data>
+  <data name="PasswordDeliveryEnableLeftToFlow" xml:space="preserve">
+    <value>{0}. Der Aktivierungsstatus des Kontos wurde seinem Attributfluss überlassen, der ihn festlegt, daher galt die Einstellung „Objekt im verbundenen System aktivieren, sobald das Kennwort gesetzt ist“ des Initialkennworts nicht.</value>
+  </data>
+  <data name="PasswordDeliveryEnableCompletesWithheld" xml:space="preserve">
+    <value>{0}, und das Konto wurde aktiviert, wie sein Attributfluss es verlangt: JIM hat die Aktivierung zurückgehalten, bis das Konto ein Kennwort hatte.</value>
+  </data>
+  <data name="PasswordDeliveryEnabledAsAsked" xml:space="preserve">
+    <value>{0}, und das Objekt im verbundenen System wurde aktiviert, wie es das Initialkennwort der Synchronisierungsregel verlangt.</value>
+  </data>
+  <data name="PasswordDeliveryEnableAsksOnly" xml:space="preserve">
+    <value>{0}. Das Initialkennwort der Synchronisierungsregel verlangt, dass das Objekt im verbundenen System aktiviert wird.</value>
+  </data>
+  <data name="PasswordDeliveryEnableNotAsked" xml:space="preserve">
+    <value>{0}. Das Initialkennwort der Synchronisierungsregel aktiviert es nicht, daher blieb es so, wie es erstellt wurde.</value>
+  </data>
+  <data name="PasswordDeliveryPlain" xml:space="preserve">
+    <value>{0}.</value>
+  </data>
+  <data name="PasswordNotSet" xml:space="preserve">
+    <value>Kennwort auf {0} nicht gesetzt: {1}. {2}.</value>
+  </data>
+  <data name="PasswordRetryParked" xml:space="preserve">
+    <value>JIM versucht es nicht mehr; wiederholen Sie den Vorgang, sobald die Ursache behoben ist</value>
+  </data>
+  <data name="PasswordRetryAgain" xml:space="preserve">
+    <value>JIM versucht es erneut</value>
+  </data>
+  <data name="PasswordReasonUnknown" xml:space="preserve">
+    <value>ein unbekannter Grund</value>
+  </data>
+  <data name="PasswordWithdrawnAccountGone" xml:space="preserve">
+    <value>Initialkennwort nicht mehr erforderlich: Das Konto, für das es bestimmt war, existiert in {0} nicht mehr oder ist nicht mehr mit dieser Person verknüpft.</value>
+  </data>
+  <data name="PasswordWithdrawnRuleOff" xml:space="preserve">
+    <value>Initialkennwort nicht mehr erforderlich: Die Synchronisierungsregel, die dieses Konto bereitgestellt hat, setzt keines mehr oder wurde gelöscht.</value>
+  </data>
+  <data name="PasswordCaveatBase" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden.</value>
+  </data>
+  <data name="PasswordCaveatRequireChange" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden: Beim nächsten Anmelden ist eine Änderung erforderlich.</value>
+  </data>
+  <data name="PasswordCaveatExpiresByPolicy" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden: Das Kennwort läuft gemäß der eigenen Kennwortrichtlinie von {0} ab.</value>
+  </data>
+  <data name="PasswordCaveatNeverExpires" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden: Das Kennwort läuft nie ab.</value>
+  </data>
+  <data name="PasswordCaveatWarningWithheld" xml:space="preserve">
+    <value>[Die Warnung des verbundenen Systems wird zurückgehalten, weil sie das Kennwort enthielt]</value>
+  </data>
+  <data name="PasswordCaveatOwnerLeftToExport" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde dem Export überlassen, der userAccountControl schreibt und die Einstellung gesetzt lässt; setzen Sie sie in diesem Attributfluss nur, wenn Kennwörter nie ablaufen sollen, oder wählen Sie für das Initialkennwort ein anderes Ablaufverhalten.</value>
+  </data>
+  <data name="PasswordCaveatOwnerAsAccountHas" xml:space="preserve">
+    <value>Ein auf jedem verbundenen System gesetztes Kennwort belässt „Kennwort läuft nie ab“ so, wie jedes Konto es hat.</value>
+  </data>
+  <data name="PasswordCaveatSharedStatic" xml:space="preserve">
+    <value>Jedes Konto, dem das statische Initialkennwort dieser Synchronisierungsregel zugewiesen wurde, behält daher dieses eine gemeinsame Kennwort, das nie abläuft.</value>
+  </data>
+  <data name="PasswordPutBackWithheldEnable" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde für dieses Konto geändert, aber der Export, den JIM zurückgehalten hat, bis das Konto ein Kennwort hatte, enthält noch das userAccountControl des Attributflusses und schreibt es, samt „Kennwort läuft nie ab“, zurück, sobald er freigegeben wird.</value>
+  </data>
+  <data name="PasswordPutBackEnforced" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde für dieses Konto geändert, aber die Synchronisierungsregel {0} schreibt ihr userAccountControl mit aktiviertem „Enforce State“, daher stellt die nächste Synchronisierung den Wert des Attributflusses wieder her und damit auch, ob das Kennwort nie abläuft; solange dieser Wert „Kennwort läuft nie ab“ gesetzt lässt, verlangt Active Directory beim nächsten Anmelden keine Änderung.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportSet" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde dem Export überlassen, der userAccountControl schreibt und die Einstellung setzt, daher läuft das Kennwort nie ab.</value>
+  </data>
+  <data name="PasswordNoteLeftSet" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ blieb so, wie das Konto es hat, nämlich gesetzt, daher läuft das Kennwort nie ab.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportOff" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde dem Export überlassen, der userAccountControl schreibt und die Einstellung ausgeschaltet lässt, daher läuft das Kennwort gemäß der eigenen Kennwortrichtlinie von {0} ab. Damit diese Kennwörter nie ablaufen, setzen Sie „Kennwort läuft nie ab“ (65536) im Attributfluss, der userAccountControl schreibt.</value>
+  </data>
+  <data name="PasswordNoteEverySystemOff" xml:space="preserve">
+    <value>Ein auf jedem verbundenen System gesetztes Kennwort belässt „Kennwort läuft nie ab“ so, wie jedes Konto es hat, daher wurde das angeforderte „Läuft nie ab“ nicht angewendet; das Kennwort läuft gemäß der eigenen Kennwortrichtlinie von {0} ab.</value>
+  </data>
+  <data name="PasswordQueueRetryOne" xml:space="preserve">
+    <value>{0} Kennwortänderung in der Warteschlange wird erneut versucht.</value>
+  </data>
+  <data name="PasswordQueueRetryOther" xml:space="preserve">
+    <value>{0} Kennwortänderungen in der Warteschlange werden erneut versucht.</value>
+  </data>
+  <data name="PasswordQueueCancelOne" xml:space="preserve">
+    <value>{0} Kennwortänderung in der Warteschlange wird nicht zugestellt.</value>
+  </data>
+  <data name="PasswordQueueCancelOther" xml:space="preserve">
+    <value>{0} Kennwortänderungen in der Warteschlange werden nicht zugestellt.</value>
+  </data>
+  <data name="PasswordFilterOneChange" xml:space="preserve">
+    <value>Eine Kennwortänderung</value>
+  </data>
+  <data name="PasswordFilterChanges" xml:space="preserve">
+    <value>{0} Kennwortänderungen</value>
+  </data>
+  <data name="PasswordFilterWholeQueue" xml:space="preserve">
+    <value>Die Warteschlange der Kennwortsynchronisierung</value>
+  </data>
 </root>

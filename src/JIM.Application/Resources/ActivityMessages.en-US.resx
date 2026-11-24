@@ -143,4 +143,25 @@
   <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
     <value>a synchronization would neither join it to one nor provision it</value>
   </data>
+  <data name="PasswordSetStandInNoLongerSet" xml:space="preserve">
+    <value>Password set on {0} as this Connected System Object's first password. The Synchronization Rule that provisioned it no longer sets an Initial Password, or has been deleted, so its settings for enabling the Connected System Object and for whether its password never expires were not applied</value>
+  </data>
+  <data name="PasswordDeliveryEnabledAsAsked" xml:space="preserve">
+    <value>{0}, and the Connected System Object enabled as the Synchronization Rule's Initial Password asks.</value>
+  </data>
+  <data name="PasswordDeliveryEnableAsksOnly" xml:space="preserve">
+    <value>{0}. The Synchronization Rule's Initial Password asks for the Connected System Object to be enabled.</value>
+  </data>
+  <data name="PasswordDeliveryEnableNotAsked" xml:space="preserve">
+    <value>{0}. The Synchronization Rule's Initial Password does not enable it, so it was left as it was created.</value>
+  </data>
+  <data name="PasswordWithdrawnRuleOff" xml:space="preserve">
+    <value>Initial password no longer needed: the Synchronization Rule that provisioned this account no longer sets one, or has been deleted.</value>
+  </data>
+  <data name="PasswordCaveatSharedStatic" xml:space="preserve">
+    <value>Every account given this Synchronization Rule's Static Initial Password therefore keeps that one shared password, which never expires.</value>
+  </data>
+  <data name="PasswordPutBackEnforced" xml:space="preserve">
+    <value>"Password never expires" was changed on this account, but the Synchronization Rule {0} writes its userAccountControl with Enforce State on, so the next synchronisation puts the Attribute Flow's value back, and with it whether the password never expires; while that value keeps "Password never expires" set, Active Directory does not ask for a change at the next sign-in.</value>
+  </data>
 </root>

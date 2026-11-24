@@ -302,4 +302,32 @@ public class ActivityMessageRemainingWritersTests
         AssertTranslated(ActivityMessage.ProvisioningAmbiguity(2, "Corporate AD", "x equals y", ["\"E1\"", "\"E2\""], 3, previewing: false),
             "This Metaverse Object matches 2 Connected System Objects in 'Corporate AD' on x equals y (\"E1\", \"E2\", and 3 more), so it was neither joined to one nor provisioned" + rest);
     }
+
+    [Test]
+    public void PasswordDelivery_Texts_SayWhatTheServerAlwaysWrote_AndTranslate()
+    {
+        var set = ActivityMessage.Create(nameof(ActivityMessages.PasswordSetInitial), "Corporate AD");
+        var reason = ActivityMessage.Create(nameof(ActivityMessages.PasswordReasonUnknown));
+
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordDeliveryEnableCompletesWithheld), set),
+            "Initial password set on Corporate AD, and the account enabled as its Attribute Flow asks: JIM held the enable back until the account had a password.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordNotSet), "Corporate AD", reason,
+                ActivityMessage.Create(nameof(ActivityMessages.PasswordRetryParked))),
+            "Password not set on Corporate AD: an unknown reason. JIM has stopped trying; retry it once the cause is fixed.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordNotSet), "Corporate AD", "Policy rejected",
+                ActivityMessage.Create(nameof(ActivityMessages.PasswordRetryAgain))),
+            "Password not set on Corporate AD: Policy rejected. JIM will try again.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordWithdrawnAccountGone), "Corporate AD"),
+            "Initial password no longer needed: the account it was for no longer exists in Corporate AD, or is no longer joined to this person.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatExpiresByPolicy), "Corporate AD"),
+            "Not everything asked for could be applied: the password expires according to Corporate AD's own password policy.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordNoteLeftToExportSet)),
+            "\"Password never expires\" was left to the export that writes userAccountControl, which sets it, so the password never expires.");
+        AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.PasswordQueueRetryOne), 1, ActivityMessage.Plain(1)), "1 queued password change will be attempted again.");
+        AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.PasswordQueueRetryOne), 4, ActivityMessage.Plain(4)), "4 queued password changes will be attempted again.");
+        AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.PasswordQueueCancelOne), 1, ActivityMessage.Plain(1)), "1 queued password change will not be delivered.");
+        AssertTranslated(ActivityMessage.Counted(nameof(ActivityMessages.PasswordQueueCancelOne), 0, ActivityMessage.Plain(0)), "0 queued password changes will not be delivered.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterWholeQueue)), "The Password Synchronisation queue");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterOneChange)), "One password change");
+    }
 }
