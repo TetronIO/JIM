@@ -1410,6 +1410,34 @@
     <value>Exchange recipient</value>
     <comment>Title for a change to no recipient type, or to one JIM does not recognise.</comment>
   </data>
+  <data name="EchTitleMailbox" xml:space="preserve">
+    <value>Mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleSharedMailbox" xml:space="preserve">
+    <value>Shared mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleRoomMailbox" xml:space="preserve">
+    <value>Room mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleEquipmentMailbox" xml:space="preserve">
+    <value>Equipment mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleMailUser" xml:space="preserve">
+    <value>Mail user</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleMailContact" xml:space="preserve">
+    <value>Mail contact</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleMailEnabledGroup" xml:space="preserve">
+    <value>Mail-enabled group</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
   <data name="EchPillQueued" xml:space="preserve">
     <value>Queued</value>
     <comment>Status pill.</comment>

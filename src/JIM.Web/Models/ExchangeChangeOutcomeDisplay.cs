@@ -25,12 +25,17 @@ public static class ExchangeChangeOutcomeDisplay
     /// </summary>
     public static string Title(string? recipientType)
     {
-        if (string.IsNullOrEmpty(recipientType) || !ExchangeRecipientTypes.All.Contains(recipientType)
-            || recipientType == ExchangeRecipientTypes.None)
-            return MetaverseText.EchRecipientFallback;
-
-        var noun = ExchangeRecipientRules.Noun(recipientType);
-        return char.ToUpperInvariant(noun[0]) + noun[1..];
+        return recipientType switch
+        {
+            ExchangeRecipientTypes.Mailbox => MetaverseText.EchTitleMailbox,
+            ExchangeRecipientTypes.SharedMailbox => MetaverseText.EchTitleSharedMailbox,
+            ExchangeRecipientTypes.RoomMailbox => MetaverseText.EchTitleRoomMailbox,
+            ExchangeRecipientTypes.EquipmentMailbox => MetaverseText.EchTitleEquipmentMailbox,
+            ExchangeRecipientTypes.MailUser => MetaverseText.EchTitleMailUser,
+            ExchangeRecipientTypes.MailContact => MetaverseText.EchTitleMailContact,
+            ExchangeRecipientTypes.MailEnabledGroup => MetaverseText.EchTitleMailEnabledGroup,
+            _ => MetaverseText.EchRecipientFallback
+        };
     }
 
     /// <summary>

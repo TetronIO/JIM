@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Exchange;
 
 /// <summary>
@@ -15,7 +17,10 @@ public sealed record ExchangeRecipientDecision
     /// The sentence an administrator reads on the follow-up Activity: why the type was refused, or which type change was
     /// not made. Null when the decision is to stage, or there is nothing to do.
     /// </summary>
-    public string? Reason { get; init; }
+    public string? Reason => ReasonDetail?.ToEnglish();
+
+    /// <summary><see cref="Reason"/> as a message, which the portal shows in the reader's language (#3084).</summary>
+    public JimMessage? ReasonDetail { get; init; }
 
     /// <summary>Whether a staged change enables the recipient or updates it. Null unless the decision is to stage.</summary>
     public ExchangeRecipientChangeKind? Change { get; init; }

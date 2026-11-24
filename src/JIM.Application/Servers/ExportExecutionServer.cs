@@ -4112,13 +4112,13 @@ public class ExportExecutionServer
                         case ExchangeRecipientDecisionKind.Refused:
                             refused++;
                             activities.Add(ExchangeFollowUp(change.ActivityId, cso, declared, connectedSystemName, executionItemId, now,
-                                ActivityStatus.CompleteWithError, decision.Reason!, errorMessage: decision.Reason));
+                                ActivityStatus.CompleteWithError, decision.ReasonDetail!, errorMessage: decision.ReasonDetail));
                             break;
 
                         case ExchangeRecipientDecisionKind.TypeChangeNotSupported:
                             typeChanges++;
                             activities.Add(ExchangeFollowUp(change.ActivityId, cso, declared, connectedSystemName, executionItemId, now,
-                                ActivityStatus.CompleteWithWarning, decision.Reason!));
+                                ActivityStatus.CompleteWithWarning, decision.ReasonDetail!));
                             break;
 
                         default:
@@ -4187,7 +4187,7 @@ public class ExportExecutionServer
     /// screen for it, because delivery happens on a later, unrelated pass.
     /// </summary>
     private static Activity ExchangeFollowUp(Guid id, ConnectedSystemObject cso, ExchangeDeclaredState declared, string connectedSystemName,
-        Guid? executionItemId, DateTime now, ActivityStatus status, string message, string? errorMessage = null) => new()
+        Guid? executionItemId, DateTime now, ActivityStatus status, JimMessage message, JimMessage? errorMessage = null) => new()
     {
         Id = id,
         TargetType = ActivityTargetType.ExchangeRecipient,
@@ -4201,8 +4201,8 @@ public class ExportExecutionServer
         InitiatedByType = ActivityInitiatorType.System,
         InitiatedByName = "System",
         Status = status,
-        Message = message,
-        ErrorMessage = errorMessage,
+        MessageDetail = message,
+        ErrorMessageDetail = errorMessage,
         Created = now,
         Executed = now,
         ExecutionTime = TimeSpan.Zero,

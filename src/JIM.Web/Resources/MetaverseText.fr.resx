@@ -1061,6 +1061,27 @@
   <data name="EchRecipientFallback" xml:space="preserve">
     <value>Destinataire Exchange</value>
   </data>
+  <data name="EchTitleMailbox" xml:space="preserve">
+    <value>Boîte aux lettres</value>
+  </data>
+  <data name="EchTitleSharedMailbox" xml:space="preserve">
+    <value>Boîte aux lettres partagée</value>
+  </data>
+  <data name="EchTitleRoomMailbox" xml:space="preserve">
+    <value>Boîte aux lettres de salle</value>
+  </data>
+  <data name="EchTitleEquipmentMailbox" xml:space="preserve">
+    <value>Boîte aux lettres d’équipement</value>
+  </data>
+  <data name="EchTitleMailUser" xml:space="preserve">
+    <value>Utilisateur de messagerie</value>
+  </data>
+  <data name="EchTitleMailContact" xml:space="preserve">
+    <value>Contact de messagerie</value>
+  </data>
+  <data name="EchTitleMailEnabledGroup" xml:space="preserve">
+    <value>Groupe à extension messagerie</value>
+  </data>
   <data name="EchPillQueued" xml:space="preserve">
     <value>En file d’attente</value>
   </data>

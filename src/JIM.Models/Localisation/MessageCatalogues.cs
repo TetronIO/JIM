@@ -22,4 +22,7 @@ public static class MessageCatalogues
 
     /// <summary>How a Metaverse Attribute's references read in an Activity and a confirmation dialog (<c>MetaverseReferenceMessages.resx</c>).</summary>
     public const string MetaverseReferences = "JIM.Models:MetaverseReferenceMessages";
+
+    /// <summary>What export staging says about a declared Exchange recipient type (<c>ExchangeMessages.resx</c>).</summary>
+    public const string Exchange = "JIM.Models:ExchangeMessages";
 }
