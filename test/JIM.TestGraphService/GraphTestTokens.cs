@@ -5,13 +5,13 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 
-namespace JIM.Worker.Tests.Connectors;
+namespace JIM.TestGraphService;
 
 /// <summary>
 /// Access tokens and token endpoint responses shaped like Microsoft Entra ID's, for tests of what the Microsoft Graph
 /// Connector reads from them. The tokens are unsigned: JIM reads its own token's claims and never validates them.
 /// </summary>
-internal static class GraphTestTokens
+public static class GraphTestTokens
 {
     public static readonly string[] AllPermissions =
     [

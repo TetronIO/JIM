@@ -983,6 +983,9 @@
           "JIM.Utilities": "[1.0.0, )"
         }
       },
+      "jim.testgraphservice": {
+        "type": "Project"
+      },
       "jim.testscimserviceprovider": {
         "type": "Project",
         "dependencies": {

@@ -4,14 +4,14 @@
 using System.Net;
 using System.Text.Json.Nodes;
 
-namespace JIM.Worker.Tests.Connectors;
+namespace JIM.TestGraphService;
 
 /// <summary>
 /// The fake tenant's writes: creating, changing and deleting users and groups, membership and ownership through
 /// <c>@odata.bind</c> and <c>$ref</c>, and a user's manager. It answers as Graph does, including the ambiguous 400s a
 /// Connector has to tell apart: a member already present, and a member that does not exist.
 /// </summary>
-internal sealed partial class FakeGraphTenant
+public partial class MockGraphTenant
 {
     /// <summary>When set, consulted before every write; a non-null answer is returned instead of performing it.</summary>
     public Func<HttpMethod, string, JsonNode?, (HttpStatusCode Status, string Code, string Message)?>? WriteInterceptor { get; set; }
@@ -22,9 +22,15 @@ internal sealed partial class FakeGraphTenant
     /// <summary>The id the tenant assigns to the next object created; generated when not set.</summary>
     public Queue<string> NextIds { get; } = new();
 
-    public JsonObject? User(string id) => Users.FirstOrDefault(u => (string)u["id"]! == id);
+    /// <summary>User ids by user principal name, so a create can refuse a name already taken without scanning.</summary>
+    private readonly Dictionary<string, string> _userPrincipalNames = new(StringComparer.OrdinalIgnoreCase);
 
-    public JsonObject? Group(string id) => Groups.FirstOrDefault(g => (string)g["id"]! == id);
+    /// <summary>Each manager's reports by id, so deleting a manager clears their reports' manager without scanning.</summary>
+    private readonly Dictionary<string, HashSet<string>> _reports = [];
+
+    public JsonObject? User(string id) => Users.TryGet(id, out var user) ? user : null;
+
+    public JsonObject? Group(string id) => Groups.TryGet(id, out var group) ? group : null;
 
     private (int Status, JsonNode? Body) Write(HttpMethod method, string path, JsonNode? body)
     {
@@ -42,6 +48,8 @@ internal sealed partial class FakeGraphTenant
             ("DELETE", ["groups", var id, "members" or "owners", var memberId, "$ref"]) => RemoveReference(id, parts[2], memberId),
             ("PUT", ["users", var id, "manager", "$ref"]) => SetManager(id, Referenced(body!["@odata.id"]!.GetValue<string>())),
             ("DELETE", ["users", var id, "manager", "$ref"]) => RemoveManager(id),
+            // The tenant holds no directory extensions.
+            ("POST", ["directoryObjects", "getAvailableExtensionProperties"]) => (200, new JsonObject { ["value"] = new JsonArray() }),
             _ => Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"No route for {method} {path}.")
         };
     }
@@ -51,14 +59,15 @@ internal sealed partial class FakeGraphTenant
         if (body["passwordProfile"]?["password"] is null)
             return Error(HttpStatusCode.BadRequest, "Request_BadRequest", "Invalid value specified for property 'passwordProfile' of resource 'User'.");
 
-        var upn = (string?)body["userPrincipalName"];
-        if (Users.Any(u => string.Equals((string?)u["userPrincipalName"], upn, StringComparison.OrdinalIgnoreCase)))
+        if (UserPrincipalNameTaken((string?)body["userPrincipalName"]))
             return Error(HttpStatusCode.BadRequest, "Request_BadRequest", "Another object with the same value for property userPrincipalName already exists.");
 
         var user = new JsonObject { ["id"] = NextId(), ["onPremisesSyncEnabled"] = null };
         foreach (var (name, value) in body.Where(p => p.Key != "passwordProfile"))
             user[name] = value?.DeepClone();
         Users.Add(user);
+        IndexUserPrincipalName(user);
+        Recorded("users", (string)user["id"]!);
         return (201, user.DeepClone());
     }
 
@@ -77,6 +86,7 @@ internal sealed partial class FakeGraphTenant
 
         Members[id] = [];
         Owners[id] = [];
+        Recorded("groups", id);
         foreach (var (relationship, urls) in binds)
         {
             foreach (var reference in urls.Select(Referenced))
@@ -119,15 +129,48 @@ internal sealed partial class FakeGraphTenant
             }
         }
 
+        if (collection == "users")
+            IndexUserPrincipalName(target);
+        Recorded(collection, id);
         return (204, null);
     }
 
     private (int, JsonNode?) Delete(string collection, string id)
     {
-        var removed = (collection == "users" ? Users : Groups).RemoveAll(o => (string)o["id"]! == id);
-        return removed == 0
-            ? Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{id}' does not exist or one of its queried reference-property objects are not present.")
-            : (204, null);
+        if (!Collection(collection).Remove(id))
+            return Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{id}' does not exist or one of its queried reference-property objects are not present.");
+
+        if (RecordsWrites)
+            RemoveEverywhere(collection, id);
+
+        return (204, null);
+    }
+
+    /// <summary>
+    /// What Graph does after deleting an object, recorded for the next delta round: the object leaves every group it
+    /// was in or owned, its reports lose their manager, and the round reports it removed.
+    /// </summary>
+    private void RemoveEverywhere(string collection, string id)
+    {
+        foreach (var (groupId, members) in Members)
+        {
+            if (members.Remove(id) | (Owners.GetValueOrDefault(groupId)?.Remove(id) ?? false))
+                RecordChange("groups", groupId);
+        }
+
+        if (_reports.Remove(id, out var reports))
+        {
+            foreach (var report in reports)
+            {
+                if (User(report) is { } reportUser && (string?)reportUser["managerId"] == id)
+                {
+                    reportUser.Remove("managerId");
+                    RecordChange("users", report);
+                }
+            }
+        }
+
+        _deltaEntries[collection].Add(new JsonObject { ["id"] = id, ["@removed"] = new JsonObject { ["reason"] = "deleted" } });
     }
 
     /// <summary>
@@ -152,16 +195,20 @@ internal sealed partial class FakeGraphTenant
 
         foreach (var reference in references)
             AddReference(groupId, relationship, reference);
+        Recorded("groups", groupId);
         return (204, null);
     }
 
     private (int, JsonNode?) RemoveReference(string groupId, string relationship, string reference)
     {
         var removed = relationship == "members"
-            ? (Members.GetValueOrDefault(groupId)?.RemoveAll(m => m.Id == reference) ?? 0)
-            : (Owners.GetValueOrDefault(groupId)?.RemoveAll(o => o == reference) ?? 0);
-        if (removed > 0)
+            ? Members.GetValueOrDefault(groupId)?.Remove(reference) ?? false
+            : Owners.GetValueOrDefault(groupId)?.Remove(reference) ?? false;
+        if (removed)
+        {
+            Recorded("groups", groupId);
             return (204, null);
+        }
 
         // As Graph answers it: a member deleted from the tenant (which also leaves its groups) is refused as a removed
         // reference that does not exist; one that exists but is not a member, as not found.
@@ -176,7 +223,11 @@ internal sealed partial class FakeGraphTenant
         if (user == null || User(managerId) == null || !CanReference(managerId))
             return Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", $"Resource '{(user == null ? userId : managerId)}' does not exist or one of its queried reference-property objects are not present.");
 
+        if ((string?)user["managerId"] is { } previous)
+            _reports.GetValueOrDefault(previous)?.Remove(userId);
         user["managerId"] = managerId;
+        (_reports.TryGetValue(managerId, out var reports) ? reports : _reports[managerId] = []).Add(userId);
+        Recorded("users", userId);
         return (204, null);
     }
 
@@ -186,7 +237,9 @@ internal sealed partial class FakeGraphTenant
         if (user?["managerId"] is null)
             return Error(HttpStatusCode.NotFound, "Request_ResourceNotFound", "Resource 'manager' does not exist or one of its queried reference-property objects are not present.");
 
+        _reports.GetValueOrDefault((string)user["managerId"]!)?.Remove(userId);
         user.Remove("managerId");
+        Recorded("users", userId);
         return (204, null);
     }
 
@@ -200,8 +253,25 @@ internal sealed partial class FakeGraphTenant
 
     private bool Holds(string groupId, string relationship, string reference) =>
         relationship == "members"
-            ? Members.GetValueOrDefault(groupId)?.Any(m => m.Id == reference) == true
+            ? Members.GetValueOrDefault(groupId)?.Contains(reference) == true
             : Owners.GetValueOrDefault(groupId)?.Contains(reference) == true;
+
+    private bool UserPrincipalNameTaken(string? userPrincipalName) =>
+        userPrincipalName != null && _userPrincipalNames.TryGetValue(userPrincipalName, out var holder)
+        && User(holder) is { } user && string.Equals((string?)user["userPrincipalName"], userPrincipalName, StringComparison.OrdinalIgnoreCase);
+
+    private void IndexUserPrincipalName(JsonObject user)
+    {
+        if ((string?)user["userPrincipalName"] is { } userPrincipalName)
+            _userPrincipalNames[userPrincipalName] = (string)user["id"]!;
+    }
+
+    /// <summary>Records a write for the next delta round, when the tenant records its own writes.</summary>
+    private void Recorded(string collection, string id)
+    {
+        if (RecordsWrites)
+            RecordChange(collection, id);
+    }
 
     private bool Exists(string id) => User(id) != null || Group(id) != null;
 
