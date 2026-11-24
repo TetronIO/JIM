@@ -652,6 +652,100 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     /// above; the sibling <see cref="TwoContributorScopedContext"/> fixtures use an ordinary mapping for
     /// Training instead.
     /// </summary>
+    /// <summary>
+    /// PRD Scenarios 1 and 2 (#3059) through the real synchronisation processor: two Connected Systems each add their
+    /// value to one Accumulate attribute, and when HR's object leaves scope the attribute keeps both, while HR's
+    /// Priority values (Description, with no surviving contributor) are still recalled.
+    /// </summary>
+    [Test]
+    public async Task ScopeExit_AccumulateAttribute_KeepsEveryContributorsValuesAsync()
+    {
+        var ctx = await SetUpTwoContributorsToDescriptionWithScopingAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, trainingContributesDescription: false);
+        var auditLogId = await AddAccountAuditLogFedByBothSystemsAsync(ctx);
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(AuditLogValues(mvo, auditLogId), Is.EquivalentTo(new[] { "John Smith", SharedEmployeeId }),
+            "precondition: both systems added their value");
+
+        await PushHrOutOfScopeAsync(ctx);
+        var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        mvo = SyncRepo.MetaverseObjects[mvo.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Any(r => r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.False);
+            Assert.That(AuditLogValues(mvo, auditLogId), Is.EquivalentTo(new[] { "John Smith", SharedEmployeeId }),
+                "the Accumulate attribute keeps HR's value after HR's object leaves scope");
+            Assert.That(mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue), Is.False,
+                "HR's Priority value with no surviving contributor is still recalled");
+        }
+    }
+
+    /// <summary>
+    /// PRD Scenario 2 (#3059) through the real synchronisation processor: HR's account is deleted at source and its
+    /// object obsoleted; the Accumulate attribute keeps the value it contributed.
+    /// </summary>
+    [Test]
+    public async Task Recall_ObsoletedContributor_AccumulateAttributeKeepsItsValuesAsync()
+    {
+        var ctx = await SetUpTwoContributorsToDescriptionWithScopingAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, trainingContributesDescription: false);
+        var auditLogId = await AddAccountAuditLogFedByBothSystemsAsync(ctx);
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+
+        await MarkCsoObsoleteAsync(ctx.HrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        mvo = SyncRepo.MetaverseObjects[mvo.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AuditLogValues(mvo, auditLogId), Is.EquivalentTo(new[] { "John Smith", SharedEmployeeId }),
+                "the Accumulate attribute keeps the deleted account's value");
+            Assert.That(mvo.AttributeValues.Single(av => av.AttributeId == auditLogId && av.StringValue == "John Smith").ContributedBySystemId,
+                Is.EqualTo(ctx.Hr.Id), "and still names the Connected System that contributed it");
+            Assert.That(mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue), Is.False,
+                "HR's Priority value is still recalled");
+        }
+    }
+
+    private static List<string?> AuditLogValues(MetaverseObject mvo, int auditLogId) =>
+        mvo.AttributeValues.Where(av => av.AttributeId == auditLogId && !av.NullValue).Select(av => av.StringValue).ToList();
+
+    /// <summary>
+    /// Adds an Accumulate "Account Audit Log" attribute to the scoped two-contributor topology, fed by HR's DisplayName
+    /// and Training's EmployeeId. Call before the first synchronisation.
+    /// </summary>
+    private async Task<int> AddAccountAuditLogFedByBothSystemsAsync(TwoContributorScopedContext ctx)
+    {
+        var auditLog = new MetaverseAttribute
+        {
+            Name = "Account Audit Log",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ContributionMode = AttributeContributionMode.Accumulate,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { ctx.MvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(auditLog);
+        await DbContext.SaveChangesAsync();
+        ctx.MvType.Attributes.Add(auditLog);
+
+        var hrRule = DbContext.SyncRules.Single(r => r.Name == "HR Import");
+        var trainingRule = DbContext.SyncRules.Single(r => r.Id == ctx.TrainingImportRuleId);
+        hrRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrRule, auditLog,
+            hrRule.ConnectedSystemObjectType.Attributes.Single(a => a.Name == "DisplayName")));
+        trainingRule.AttributeFlowRules.Add(BuildDirectImportMapping(trainingRule, auditLog,
+            trainingRule.ConnectedSystemObjectType.Attributes.Single(a => a.Name == "EmployeeId")));
+        await DbContext.SaveChangesAsync();
+        return auditLog.Id;
+    }
+
     private async Task<TwoContributorScopedContext> SetUpScopedHrWithGeneratedTrainingSurvivorAsync()
     {
         // --- HR source: primary, recall enabled, scoped via ScopeFlag ---

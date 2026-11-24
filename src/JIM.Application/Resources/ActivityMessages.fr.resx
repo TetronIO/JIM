@@ -1029,4 +1029,7 @@
   <data name="BulkUpdateAttributes" xml:space="preserve">
     <value>Mise à jour en bloc de {0} attribut(s) sur {1}</value>
   </data>
+  <data name="WithdrawnReferencesToDeletedObjectsWarning" xml:space="preserve">
+    <value>{0} valeur(s) de référence en file d’attente ont été retirées, car l’objet Metaverse auquel elles faisaient référence a été supprimé ; elles n’auraient jamais pu être écrites. Une exportation en attente qui n’avait plus rien à envoyer a été terminée.</value>
+  </data>
 </root>

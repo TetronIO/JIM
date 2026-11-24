@@ -68,7 +68,7 @@ public class DeferredExportProgressTests
         DisplayNameAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
     }
 
-    private PendingExport SeedExport(bool hasUnresolvedReferences)
+    private PendingExport SeedExport(bool hasUnresolvedReferences, bool referencedObjectDeleted = false)
     {
         var cso = new ConnectedSystemObject
         {
@@ -102,13 +102,25 @@ public class DeferredExportProgressTests
             Attribute = DisplayNameAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
             StringValue = "Someone",
-            UnresolvedReferenceValue = hasUnresolvedReferences ? Guid.NewGuid().ToString() : null,
+            UnresolvedReferenceValue = hasUnresolvedReferences ? ReferencedMetaverseObjectId(referencedObjectDeleted).ToString() : null,
             Status = PendingExportAttributeChangeStatus.Pending
         });
 
         PendingExportsData.Add(export);
         SyncRepo.SeedPendingExport(export);
         return export;
+    }
+
+    /// <summary>
+    /// A Metaverse Object the reference names: one that exists and has no object in the target, so the reference waits;
+    /// or, when <paramref name="deleted"/>, one that no longer exists, so the reference is withdrawn (#3078).
+    /// </summary>
+    private Guid ReferencedMetaverseObjectId(bool deleted)
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        if (!deleted)
+            SyncRepo.SeedMetaverseObject(mvo);
+        return mvo.Id;
     }
 
     private static Mock<IConnector> ExportingConnector()
@@ -154,6 +166,32 @@ public class DeferredExportProgressTests
             "Every report from the second pass should count against the one export it actually covers.");
         Assert.That(deferredPassReports.Select(r => r.CountingWindow.Processed).Max(), Is.EqualTo(1),
             "Confirming an export still cannot be written finishes with it, so the pass should end complete rather than short.");
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredPassWithdrawsAReferenceToADeletedObject_EndsCompleteAsync()
+    {
+        // The deferred export's only change names a deleted Metaverse Object, so the pass withdraws it and finishes with
+        // the export without writing anything (#3078). The pass must still report that it got through its one export.
+        SeedExport(hasUnresolvedReferences: false);
+        SeedExport(hasUnresolvedReferences: true, referencedObjectDeleted: true);
+        var reports = new List<ExportProgressInfo>();
+
+        await Jim.ExportExecution.ExecuteExportsAsync(
+            TargetSystem,
+            ExportingConnector().Object,
+            SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 100, MaxParallelism = 1 },
+            CancellationToken.None,
+            progressInfo =>
+            {
+                reports.Add(progressInfo);
+                return Task.CompletedTask;
+            });
+
+        var deferredPassReports = reports.Where(r => r.PassTotal.HasValue).ToList();
+        Assert.That(deferredPassReports.Select(r => r.CountingWindow.Processed).DefaultIfEmpty().Max(), Is.EqualTo(1),
+            "An export the pass finished with by withdrawing its reference counts as done.");
     }
 
     [Test]

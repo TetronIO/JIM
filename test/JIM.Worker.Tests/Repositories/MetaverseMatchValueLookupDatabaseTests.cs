@@ -353,9 +353,27 @@ public class MetaverseMatchValueLookupDatabaseTests
             var values = Enumerable.Range(0, 5000)
                 .Select(n => (object)(n % 2 == 0 ? $"e{1000000 + n * 37 + 1}" : $"NOBODY{n}"))
                 .ToList();
+
+            // The planned shape first, without running it, so the plan is in the output even if the run below times out:
+            // the sequential-scan plan this test exists to catch is slow enough under ANALYZE to do that (#3067).
+            await using (var plannedOnly = new NpgsqlCommand(
+                $"{TransactionJit.DisableSql};\nEXPLAIN " + MetaverseRepository.BuildMatchValueBatchLookupSql(AttributeDataType.Text, caseSensitive),
+                connection))
+            {
+                MetaverseRepository.AddMatchValueLookupParameters(plannedOnly, seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, values, take: 11);
+                var planned = new List<string>();
+                await using var reader = await plannedOnly.ExecuteReaderAsync();
+                Assert.That(await TransactionJit.SkipDisableResultAsync(reader), Is.True);
+                while (await reader.ReadAsync())
+                    planned.Add(reader.GetString(0));
+                TestContext.Out.WriteLine($"{(caseSensitive ? "Respecting" : "Ignoring")} case, planned:\n{string.Join("\n", planned)}");
+            }
+
             await using var explain = new NpgsqlCommand(
                 $"{TransactionJit.DisableSql};\nEXPLAIN (ANALYZE, BUFFERS) " + MetaverseRepository.BuildMatchValueBatchLookupSql(AttributeDataType.Text, caseSensitive),
                 connection);
+            // Runs the lookup for real over 5,000 values; a slow CI runner must not fail it on Npgsql's default 30 seconds (#3067).
+            explain.CommandTimeout = 300;
             MetaverseRepository.AddMatchValueLookupParameters(explain, seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, values, take: 11);
 
             // Sent as the repository sends it, JIT off first.

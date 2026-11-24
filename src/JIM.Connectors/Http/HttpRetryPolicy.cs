@@ -56,7 +56,7 @@ public class HttpRetryPolicy
     /// Evaluates a response that the caller has judged unsuccessful.
     /// </summary>
     /// <param name="response">The provider's response.</param>
-    /// <param name="attempt">The 1-based number of attempts already made.</param>
+    /// <param name="attempt">The 1-based number of attempts already made, the initial call included.</param>
     /// <param name="utcNow">Current time, used to resolve an HTTP-date <c>Retry-After</c>.</param>
     public HttpRetryDecision EvaluateResponse(HttpResponseMessage response, int attempt, DateTimeOffset utcNow)
     {
@@ -68,7 +68,7 @@ public class HttpRetryPolicy
         if (!IsTransientStatusCode(response.StatusCode))
             return HttpRetryDecision.DoNotRetry($"HTTP {(int)response.StatusCode} is not a transient failure.");
 
-        if (attempt >= _maxRetries)
+        if (attempt > _maxRetries)
             return HttpRetryDecision.DoNotRetry($"All {_maxRetries} retry attempts have been used.");
 
         var retryAfter = ReadRetryAfter(response, utcNow);
@@ -92,7 +92,7 @@ public class HttpRetryPolicy
     /// Evaluates an exception raised while sending the request.
     /// </summary>
     /// <param name="exception">The exception thrown by the HTTP stack.</param>
-    /// <param name="attempt">The 1-based number of attempts already made.</param>
+    /// <param name="attempt">The 1-based number of attempts already made, the initial call included.</param>
     public HttpRetryDecision EvaluateException(Exception exception, int attempt)
     {
         ArgumentNullException.ThrowIfNull(exception);
@@ -100,7 +100,7 @@ public class HttpRetryPolicy
         if (!IsTransientException(exception))
             return HttpRetryDecision.DoNotRetry($"{exception.GetType().Name} is not a transient failure.");
 
-        if (attempt >= _maxRetries)
+        if (attempt > _maxRetries)
             return HttpRetryDecision.DoNotRetry($"All {_maxRetries} retry attempts have been used.");
 
         return HttpRetryDecision.RetryAfter(CalculateBackoff(attempt), $"{exception.GetType().Name} is transient; backing off.");

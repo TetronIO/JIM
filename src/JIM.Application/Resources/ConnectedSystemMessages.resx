@@ -423,4 +423,8 @@
     <value>the object's scope is decided at the next synchronisation</value>
     <comment>Ends a sentence.</comment>
   </data>
+  <data name="PriorityNotUsedUnderAccumulate" xml:space="preserve">
+    <value>The Metaverse attribute '{0}' uses the Accumulate contribution mode, so every contributor adds its values and the priority order is not used. Set the attribute's contribution mode to Priority to order its contributors.</value>
+    <comment>{0} is the attribute's name.</comment>
+  </data>
 </root>

@@ -80,11 +80,12 @@ The causes are judged against the Container Scope as it stands now, not as it st
 
 The same setting governs the export side. When JIM writes a reference attribute (a manager, a group's members) it needs the referenced object's own identifier in the target Connected System, which it can only have once that object exists there. A Pending Export whose references cannot all be resolved yet is not held back whole: everything that can be written is written now (a Create inserts the row without the reference columns; a group gains the members that can be resolved), and the Pending Export stays pending, carrying only the reference values still owed, until they resolve. It is retried on the deferred cadence and finished when the referenced objects can be addressed.
 
-JIM tells two situations apart at export time:
+JIM tells three situations apart at export time:
 
 | Situation | What it means | What happens |
 |-----------|---------------|--------------|
 | **Awaiting anchor** | The referenced object has a Connected System Object in this Connected System, but its own export has not been executed or confirmed yet, so it has no anchor to point at. | Ordinary ordering. Nothing is reported; the reference is written on a later run. |
 | **Not in this Connected System** | The referenced object has no Connected System Object in this Connected System at all: it is out of scope for every Synchronisation Rule into the system, or has not been provisioned. | The reference cannot be written as things stand, and is reported per the mode above: **Error** marks the referring object's Run Profile execution item with an Unresolved Reference error naming the attribute and the referenced object, and the Activity completes with a warning; **Warn** completes the Activity with a warning carrying a summary count; **Ignore** logs only. |
+| **Deleted** | The referenced Metaverse Object has been deleted since the reference was queued: a group member who left before the addition was exported, for example. | The reference can never be written, so it is withdrawn from the Pending Export, whatever the mode, and the Activity completes with a warning counting the withdrawn references. A Pending Export left with nothing to send is finished with. |
 
 An export that wrote in part is counted as succeeded on the Activity ("43 succeeded (4 written in part, awaiting references)"), because something was written; the Pending Export detail page lists each reference still owed with its reason, and the same detail is available from `Get-JIMPendingExport -Id` and the REST API as `unresolvedReferences`. A partial write that the target refuses (a reference column declared `NOT NULL`, say) fails that object with an ordinary export error, and is retried like any other failure.

@@ -347,4 +347,13 @@
   <data name="ProvSeveralValues" xml:space="preserve">
     <value>L’expression a renvoyé {0} valeurs, mais cet attribut est monovalué ; cette source ne fournirait donc aucune valeur et la synchronisation signale une erreur.</value>
   </data>
+  <data name="ContributionModeNeedsMultiValued" xml:space="preserve">
+    <value>Le mode de contribution {0} ne s’applique qu’aux attributs multivalués. Choisissez le mode Priorité avant de rendre l’attribut monovalué.</value>
+  </data>
+  <data name="ContributionModeNotForReference" xml:space="preserve">
+    <value>Le mode de contribution {0} n’est pas disponible pour les attributs de référence, car une référence est supprimée lorsque l’objet Metaverse vers lequel elle pointe est supprimé. Pour conserver un historique des références, enregistrez l’identifiant de l’objet référencé sous forme de texte dans un attribut texte multivalué distinct.</value>
+  </data>
+  <data name="ContributionModeUnsupported" xml:space="preserve">
+    <value>Le mode de contribution {0} n’est pas disponible pour un attribut {1}.</value>
+  </data>
 </root>

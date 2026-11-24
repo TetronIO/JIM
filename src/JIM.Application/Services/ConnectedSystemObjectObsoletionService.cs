@@ -180,7 +180,7 @@ public static class ConnectedSystemObjectObsoletionService
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && priorityContext != null && mvo.Type != null &&
             await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
                 mvo,
-                mvo.AttributeValues.Where(av => av.ContributedBySystemId == connectedSystemId).ToList(),
+                mvo.AttributeValues.Where(av => av.ContributedBySystemId == connectedSystemId && ContributedValueRecall.IsRecallable(av)).ToList(),
                 recallScope,
                 priorityContext,
                 syncRepository,
@@ -260,9 +260,10 @@ public static class ConnectedSystemObjectObsoletionService
         var generatedValueOutcomes = new List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>();
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
         {
-            // Find all MVO attribute values contributed by this Connected System and mark them for removal
+            // Find all MVO attribute values contributed by this Connected System and mark them for removal. An
+            // Accumulate attribute's values stay (#3059).
             var contributedAttributes = mvo.AttributeValues
-                .Where(av => av.ContributedBySystemId == connectedSystemId)
+                .Where(av => av.ContributedBySystemId == connectedSystemId && ContributedValueRecall.IsRecallable(av))
                 .ToList();
 
             foreach (var attributeValue in contributedAttributes)

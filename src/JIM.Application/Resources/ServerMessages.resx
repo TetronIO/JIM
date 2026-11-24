@@ -385,4 +385,16 @@
   <data name="ProvSeveralValues" xml:space="preserve">
     <value>The Expression returned {0} values, but this attribute is single-valued, so this source would supply no value and synchronisation reports an error.</value>
   </data>
+  <data name="ContributionModeNeedsMultiValued" xml:space="preserve">
+    <value>The {0} contribution mode applies only to multi-valued attributes. Set the mode to Priority before making the attribute single-valued.</value>
+    <comment>{0} is the contribution mode, Accumulate.</comment>
+  </data>
+  <data name="ContributionModeNotForReference" xml:space="preserve">
+    <value>The {0} contribution mode is not available for Reference attributes, because a reference is removed when the Metaverse Object it points to is deleted. To keep a history of references, record the referenced object's identifier as text in a separate multi-valued text attribute.</value>
+    <comment>{0} is the contribution mode, Accumulate.</comment>
+  </data>
+  <data name="ContributionModeUnsupported" xml:space="preserve">
+    <value>The {0} contribution mode is not available for a {1} attribute.</value>
+    <comment>{0} is the contribution mode; {1} is a data type.</comment>
+  </data>
 </root>

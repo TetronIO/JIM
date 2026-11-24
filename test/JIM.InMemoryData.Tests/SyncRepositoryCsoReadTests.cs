@@ -745,4 +745,69 @@ public class SyncRepositoryCsoReadTests
     }
 
     #endregion
+
+    #region Reference resolution on load
+
+    [Test]
+    public async Task GetConnectedSystemObjectsAsync_ValueNamesAJoinedObject_ResolvesItsMetaverseObjectTypeAndCreatedAsync()
+    {
+        var created = DateTime.UtcNow.AddDays(-1);
+        var metaverseObjectId = Guid.NewGuid();
+        var member = CreateCso(created: created, metaverseObjectId: metaverseObjectId);
+        var group = CreateCso();
+        group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = AttrId, ReferenceValueId = member.Id });
+        _repo.SeedConnectedSystemObject(member);
+        _repo.SeedConnectedSystemObject(group);
+
+        var page = await _repo.GetConnectedSystemObjectsAsync(CsId, 1, 10);
+
+        var value = page.Results.Single(c => c.Id == group.Id).AttributeValues.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(value.ResolvedReferenceMetaverseObjectId, Is.EqualTo(metaverseObjectId));
+            Assert.That(value.ResolvedReferenceTypeId, Is.EqualTo(ObjectTypeId));
+            Assert.That(value.ResolvedReferenceCreated, Is.EqualTo(created));
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsModifiedSinceAsync_ReferencedObjectJoinsBetweenLoads_EachLoadResolvesItAsItStandsAsync()
+    {
+        var member = CreateCso();
+        var group = CreateCso(lastUpdated: DateTime.UtcNow);
+        group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = AttrId, ReferenceValueId = member.Id });
+        _repo.SeedConnectedSystemObject(member);
+        _repo.SeedConnectedSystemObject(group);
+        var since = DateTime.UtcNow.AddHours(-1);
+
+        var before = (await _repo.GetConnectedSystemObjectsModifiedSinceAsync(CsId, since, 1, 10))
+            .Results.Single(c => c.Id == group.Id).AttributeValues.Single().ResolvedReferenceMetaverseObjectId;
+        var metaverseObjectId = Guid.NewGuid();
+        member.MetaverseObjectId = metaverseObjectId;
+        var after = (await _repo.GetConnectedSystemObjectsModifiedSinceAsync(CsId, since, 1, 10))
+            .Results.Single(c => c.Id == group.Id).AttributeValues.Single().ResolvedReferenceMetaverseObjectId;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(before, Is.Null, "an unjoined member resolves to no Metaverse Object");
+            Assert.That(after, Is.EqualTo(metaverseObjectId), "a later load sees the member joined");
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsForReferenceResolutionAsync_ValueNamesAJoinedObject_ResolvesItsMetaverseObjectAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var member = CreateCso(metaverseObjectId: metaverseObjectId);
+        var group = CreateCso();
+        group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = AttrId, ReferenceValueId = member.Id });
+        _repo.SeedConnectedSystemObject(member);
+        _repo.SeedConnectedSystemObject(group);
+
+        var loaded = await _repo.GetConnectedSystemObjectsForReferenceResolutionAsync([group.Id]);
+
+        Assert.That(loaded.Single().AttributeValues.Single().ResolvedReferenceMetaverseObjectId, Is.EqualTo(metaverseObjectId));
+    }
+
+    #endregion
 }

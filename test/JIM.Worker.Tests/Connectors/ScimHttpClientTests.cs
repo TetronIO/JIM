@@ -216,7 +216,7 @@ public class ScimHttpClientTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
-            Assert.That(handler.CallCount, Is.EqualTo(2), "the initial attempt plus one retry, per maxRetries.");
+            Assert.That(handler.CallCount, Is.EqualTo(3), "the initial attempt plus two retries, per maxRetries.");
         }
     }
 

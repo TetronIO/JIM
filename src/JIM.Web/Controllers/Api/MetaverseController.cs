@@ -597,6 +597,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             Name = request.Name,
             Type = request.Type,
             AttributePlurality = request.AttributePlurality,
+            ContributionMode = request.ContributionMode,
             Created = DateTime.UtcNow,
             MetaverseObjectTypes = new List<MetaverseObjectType>()
         };
@@ -624,6 +625,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
                 await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
         }
         catch (UnsupportedAttributePluralityException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (UnsupportedContributionModeException ex)
         {
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
@@ -684,8 +689,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     {
         _logger.LogInformation("Updating metaverse attribute: {Id}", id);
 
-        if (string.IsNullOrWhiteSpace(request.Name) && !request.RenderingHint.HasValue && request.StandardMappings == null)
-            return BadRequest(ApiErrorResponse.BadRequest("Supply a new Name, RenderingHint and/or StandardMappings to update."));
+        if (string.IsNullOrWhiteSpace(request.Name) && !request.RenderingHint.HasValue && !request.ContributionMode.HasValue && request.StandardMappings == null)
+            return BadRequest(ApiErrorResponse.BadRequest("Supply a new Name, RenderingHint, ContributionMode and/or StandardMappings to update."));
 
         var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
         if (attribute == null)
@@ -693,6 +698,18 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         if (attribute.BuiltIn)
             return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be modified."));
+
+        // Leaving Accumulate lets the next synchronisation remove values it kept (#3059), so it must be confirmed. Checked
+        // before anything is written, so a rename in the same request does not half-apply.
+        if (request.ContributionMode is { } requestedMode &&
+            AttributeContributionModeRules.CanRemoveValues(attribute.ContributionMode, requestedMode) &&
+            !request.ConfirmLeavingAccumulate)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Changing '{attribute.Name}' from Accumulate to {requestedMode} removes, at each Metaverse Object's next synchronisation, " +
+                $"the values that no contributor supplies any more, and exports remove them from target systems. " +
+                $"Set {nameof(UpdateMetaverseAttributeRequest.ConfirmLeavingAccumulate)} to true to make this change."));
+        }
 
         var apiKey = await GetCurrentApiKeyAsync();
         var user = apiKey == null ? await GetCurrentUserAsync() : null;
@@ -717,17 +734,27 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             }
         }
 
-        // Rendering hint via the generic audited update path.
-        if (request.RenderingHint.HasValue)
+        // Rendering hint and contribution mode via the generic audited update path, as one change.
+        if (request.RenderingHint.HasValue || request.ContributionMode.HasValue)
         {
             var tracked = await _application.Metaverse.GetMetaverseAttributeAsync(id, withChangeTracking: true);
             if (tracked != null)
             {
-                tracked.RenderingHint = request.RenderingHint.Value;
-                if (apiKey != null)
-                    await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, apiKey, request.ChangeReason);
-                else
-                    await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, user, request.ChangeReason);
+                if (request.RenderingHint.HasValue)
+                    tracked.RenderingHint = request.RenderingHint.Value;
+                if (request.ContributionMode.HasValue)
+                    tracked.ContributionMode = request.ContributionMode.Value;
+                try
+                {
+                    if (apiKey != null)
+                        await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, apiKey, request.ChangeReason);
+                    else
+                        await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, user, request.ChangeReason);
+                }
+                catch (UnsupportedContributionModeException ex)
+                {
+                    return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+                }
             }
         }
 
@@ -803,6 +830,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
                 : await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, await GetCurrentUserAsync(), request.ChangeReason);
         }
         catch (UnsupportedAttributePluralityException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (UnsupportedContributionModeException ex)
         {
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
@@ -1168,7 +1199,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {metaverseAttributeId} not found."));
 
         var mappings = await _application.ConnectedSystems.GetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId);
-        return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, mappings));
+        var dto = AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, mappings);
+
+        // The attribute itself, so the mode is reported even when nothing contributes to it.
+        dto.ContributionMode = attribute.ContributionMode;
+        return Ok(dto);
     }
 
     /// <summary>

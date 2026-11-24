@@ -497,7 +497,7 @@ public class SyncExportTaskProcessor
                 // no Connected System Object in this system. Reported as the import side reports its own
                 // unresolved references: an Unresolved Reference error on the object, which completes the
                 // Activity with a warning. Only raised under Error handling; see
-                // ExportExecutionServer.BuildUnresolvedReferenceNotesAsync.
+                // ExportExecutionServer.BuildUnresolvedReferenceNotes.
                 executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
                 executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
             }
@@ -622,6 +622,13 @@ public class SyncExportTaskProcessor
         if (_connectedSystem.UnresolvedReferenceHandling == UnresolvedReferenceHandling.Warn && result.UnresolvableReferenceCount > 0)
         {
             AppendActivityWarning(ActivityMessage.Create(nameof(ActivityMessages.UnresolvableReferencesWarning), ActivityMessage.Plain(result.UnresolvableReferenceCount)));
+        }
+
+        // Issue #3078: queued references to a deleted Metaverse Object were withdrawn, whatever the handling, since they are
+        // queued work this run removed rather than references left waiting.
+        if (result.WithdrawnReferenceCount > 0)
+        {
+            AppendActivityWarning(ActivityMessage.Create(nameof(ActivityMessages.WithdrawnReferencesToDeletedObjectsWarning), ActivityMessage.Plain(result.WithdrawnReferenceCount)));
         }
 
         // Run Profile Safeguards (#1618): populated (zero when nothing was withheld) on every Export

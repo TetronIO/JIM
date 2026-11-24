@@ -68,6 +68,13 @@ public class ExportExecutionResult
     public int UnresolvableReferenceCount { get; set; }
 
     /// <summary>
+    /// Number of queued reference values withdrawn because the Metaverse Object they referred to has been deleted, so
+    /// they could never be written. A Pending Export left with nothing to export is finished with.
+    /// </summary>
+    /// <remarks>Issue #3078: Metaverse Object deletion does not reach Pending Export changes naming the object.</remarks>
+    public int WithdrawnReferenceCount { get; set; }
+
+    /// <summary>
     /// IDs of the Pending Exports that were processed.
     /// Use these IDs to fetch the actual PendingExport records for detailed information.
     /// Note: These records may be deleted after successful export, use ProcessedExportItems instead.

@@ -1345,4 +1345,8 @@
     <value>Bulk update of {0} attribute(s) on {1}</value>
     <comment>What an Activity says when it starts.</comment>
   </data>
+  <data name="WithdrawnReferencesToDeletedObjectsWarning" xml:space="preserve">
+    <value>{0} queued reference value(s) were withdrawn because the Metaverse Object they referred to has been deleted, so they could never be written. A Pending Export left with nothing to send was finished with.</value>
+    <comment>A Warning on an export. {0}: a count.</comment>
+  </data>
 </root>

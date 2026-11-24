@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ Activities and Run Profile Execution Items in the REST API and PowerShell module now return each message's key and values beside its English, so an integration can show it in another language; the portal's Operations queue now shows live progress in the reader's language too (#3039).
 
+- ✨ A multi-valued Metaverse attribute can **Accumulate** values from every Connected System and keep them after the accounts that supplied them are deleted, for audit records such as every account a person has held. (#3059)
 - ✨ JIM can reach the internet through an outbound proxy, as the Microsoft Entra ID Connector may need: the installer asks for one, and the standard `HTTPS_PROXY` and `NO_PROXY` settings work on Docker and Podman alike. (#3051)
 
 ### Changed
@@ -26,7 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A Delta Import that finds an object deleted now confirms JIM's exported Delete of it and its exported removals of references to it, such as a leaver's group memberships, rather than leaving them waiting for a Full Import or, for the Delete, for ever.
+- 🐛 A queued group membership change or other reference to a Metaverse Object deleted before it was exported is now withdrawn at the next export, rather than holding its Pending Export open and being reported as awaiting provisioning on every run. (#3078)
 - 🐛 Behind an outbound proxy, the SCIM Connector now reads a service provider's certificate through the proxy, so **Fetch certificate** and a failed connection test show the certificate a TLS-inspecting proxy presents, ready to trust.
+- 🐛 The SCIM 2.0 Client Connector's **Maximum Retries** now retries as many times as it says: set to 3, a throttled or briefly unavailable request was retried only twice. (#3023)
 
 ## [1.0.0] - 2026-11-20
 
