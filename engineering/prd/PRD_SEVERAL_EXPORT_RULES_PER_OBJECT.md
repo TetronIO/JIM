@@ -29,7 +29,7 @@ The decisions below were made in the design review of 2026-11-24, one topic at a
 - An export rule has an Out-of-Scope Action like an import rule's, deciding whether the values it wrote are recalled or left in place when it stops covering an account that stays.
 - Only the managing rule (or another rule that provisions) decides whether an account exists; an add-on rule never keeps an account alive and its Deprovisioning Action never overrides the managing rule's.
 - Each rule's Enforce State applies to the attributes it writes, and only those.
-- No upgrade changes what an existing configuration does.
+- Every behaviour change an upgrade brings to an existing configuration is stated in the changelog: the #2822 narrowing (E) and Recall on a hand-over between two provisioning rules (Scenario 8).
 - The new setting and choices ship in the portal, the REST API and PowerShell together, with documentation.
 
 ## Non-Goals
@@ -176,7 +176,7 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 
 **Given** two provisioning rules, Contractor and Staff, and Sam's account managed by Contractor
 **When** Sam becomes Staff
-**Then** Staff takes the account over, as #2822 shipped. Attributes only the Contractor rule wrote follow Contractor's Out-of-Scope Action (for rules that existed before the upgrade, Leave them in place; see Constraints).
+**Then** Staff takes the account over, as #2822 shipped. Attributes only the Contractor rule wrote follow Contractor's Out-of-Scope Action: with the default, Recall its values, they are cleared. Today they are left in place, so this is a behaviour change on upgrade (see Constraints).
 
 ### Scenario 9: hand edit under Enforce State
 
@@ -192,7 +192,8 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 
 ## Constraints
 
-- **Upgrading in place must not change behaviour** (semantic versioning from v1.0.0). Existing export rules receive **Leave them in place** in the migration, so no account loses a value after an upgrade; rules created after the upgrade default to **Recall its values**. The record of which rules cover each account starts empty and fills as objects are evaluated; an account without a record is treated as never covered, so nothing is recalled from it.
+- **Upgrade default: Recall its values, for existing and new export rules alike** (decided 2026-11-24). The one existing configuration this changes is a hand-over between two provisioning rules (Scenario 8): attributes only the departing rule wrote are now recalled where today they are left. The changelog records it as a behaviour change, beside the #2822 narrowing, and says how to keep today's behaviour (set the rule to **Leave them in place**). Upgrading in place otherwise keeps working unchanged.
+- **The coverage record starts empty.** It fills as objects are evaluated after the upgrade; an account without a record is treated as never covered, so nothing is recalled from it until a rule has been recorded covering it.
 - Released migrations are append-only; the new setting and the coverage record arrive in a new migration.
 - No new third-party dependencies.
 - British English, Title Case product nouns, no em dashes, in every surface and document.
@@ -202,7 +203,7 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 
 | Area | Impact |
 |------|--------|
-| Database | Export rule Out-of-Scope Action column (or reuse of the existing one for export rules); a new table recording which export rules cover each Connected System Object; migration with the upgrade defaults above |
+| Database | Export rule Out-of-Scope Action column (or reuse of the existing one for export rules); a new table recording which export rules cover each Connected System Object; migration setting every export rule to Recall its values |
 | Application | Export evaluation and staging (`ExportEvaluationServer`, `SyncEngine.ExportStaging`): grouping, ordering, clash detection per attribute, full staging on coverage start, recall on coverage end; deprovisioning decisions under E; Drift Detection per-attribute ownership; synchronisation and configuration change previews; save warnings; rule and mapping deletion recall |
 | Worker | Coverage record writes in the page flush; recall task for rule deletion; execution item reporting for clashes and recalls; Enforce State |
 | Models | Export rule setting; coverage record entity; narrowed overlap DTO naming attributes |
@@ -230,10 +231,10 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 - Blocks #2827 (export attribute precedence).
 - Reuses the inbound recall-on-delete machinery from #1537.
 
-## Open Questions
+## Decisions Recorded After Review
 
-1. **Upgrade default.** This PRD gives existing export rules **Leave them in place** so nothing changes on upgrade, and new rules **Recall its values**. Confirm, or choose Recall for existing rules as well (behaviour then changes for accounts that hand over between two provisioning rules, Scenario 8).
-2. **Import-joined accounts** (requirement 29). An account joined by an import rule has no managing export rule, so E leaves it as today. Confirm that is acceptable for Phase 1.
+1. **Upgrade default** (2026-11-24): Recall its values for existing rules as well as new ones; see Constraints.
+2. **Import-joined accounts** (2026-11-24): an account joined by an import rule has no managing export rule, and stays as today under E (requirement 29).
 
 ## Acceptance Criteria
 
@@ -247,7 +248,7 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 - [ ] An add-on rule never keeps an account alive, and its Deprovisioning Action never applies to an account another rule manages; Contractor to Staff hand-over is unchanged.
 - [ ] Enforce State corrects only the attributes of rules that have it on.
 - [ ] Previews show combined exports, clashes, recalls and deprovisioning as the run would.
-- [ ] Existing configurations behave identically after upgrade.
+- [ ] After upgrade, existing configurations behave as before except for the two changes the changelog records (the #2822 narrowing, and Recall on a hand-over between two provisioning rules).
 - [ ] Unit tests (red first), `RequiresPostgres` tests for every new raw SQL write, an integration scenario for base plus add-on rules, Scenarios 008 and 032, and every scenario reading `ExportRuleOverlap` or relying on hand-over, all pass.
 - [ ] Documentation and changelog updated in the same pull requests.
 
