@@ -616,6 +616,59 @@ The host-side variables the runner reads are `JIM_AD_LAB_CONTROL_HOST`, `JIM_AD_
 `JIM_AD_LAB_CONTROL_KEY`, `JIM_AD_LAB_CONTROL_PORT` (default `22`) and `JIM_AD_LAB_SCRIPT_ROOT` (default `C:\jim-ad-lab`),
 alongside the per-instance addresses, host names, VM names and the two passwords listed in the PRD's harness section.
 
+## The hybrid forest
+
+Scenario 038 (#3029) tests JIM's Microsoft Entra ID Connector against objects that Entra Cloud Sync synchronises from
+Active Directory, and against Source of Authority switches. `onPremisesSyncEnabled` is set only by a synchronisation
+client, so those objects cannot be made through Graph; they need a real forest and a real Cloud Sync agent. That is a
+fourth forest, `dc-hybrid` (`MERIDIAN.LOCAL`, `dc1.meridian.local`), synchronised to a second, dedicated test tenant. It
+differs from the other three in three ways:
+
+- **It is never reverted.** A revert would roll back what Cloud Sync has already copied, and the agent's own
+  credentials with it. It has no checkpoint the runner uses, is not stopped by the power plan, and is left out of the
+  monthly rebuild (it is not in `settings.json`'s `domainControllers`); it is patched in place. Each run creates its objects in an organisational unit of its own under
+  `OU=CloudSync` and deletes that unit at the end, and a run first deletes any unit a failed run left.
+- **It must reach Microsoft.** The Cloud Sync agent makes outbound HTTPS connections only (no inbound port), to the
+  endpoints in Microsoft's [Cloud Sync prerequisites](https://learn.microsoft.com/entra/identity/hybrid/cloud-sync/how-to-prerequisites#firewall-and-proxy-requirements).
+  The `Lab` switch has no uplink by design, so this needs a deliberate exception, and the preferred one keeps the switch
+  as it is: a forward proxy on the host's `Lab` adapter that allows only those endpoints, which the agent is configured
+  to use. The alternative, a second adapter on a switch with an uplink, gives the machine a route out for everything.
+- **Its agent is tier 0 for the hybrid tenant.** Whoever controls `dc-hybrid` controls what Cloud Sync writes there. The
+  tenant holds nothing but test objects, and is never the JIM test tenant (`tetronjim`), which Scenarios 035 to 037 use:
+  turning on directory synchronisation is hard to undo.
+
+Licensing: synchronising Active Directory to Entra ID with Cloud Sync, and switching an object's Source of Authority,
+both need only Microsoft Entra ID Free. A custom domain is not needed: a user whose UPN suffix (`meridian.local`) is
+not a verified domain is given the tenant's `onmicrosoft.com` suffix, which the scenario does not depend on.
+
+**One-time setup**, by an administrator, in this order:
+
+1. **The forest.** Build it as any domain controller (see Building a domain controller), with `-Name dc-hybrid -Domain
+   MERIDIAN.LOCAL` and its own address, at least 4 GB of memory, and `-SkipBaselineCheckpoint`. Create
+   `OU=CloudSync,DC=meridian,DC=local`.
+2. **Its route to Microsoft**, as above.
+3. **The tenant.** Create a new Microsoft Entra tenant, and in it a cloud-only account with the Hybrid Identity
+   Administrator role, which the agent's installation signs in with.
+4. **The agent.** On `dc-hybrid`, install the Microsoft Entra provisioning agent (version 1.1.1370.0 or later, which
+   honours a Source of Authority switch) and register it with the tenant. In the Entra admin center, create a Cloud Sync
+   configuration for `meridian.local`, scoped to `OU=CloudSync`, and enable it.
+5. **Switching users back.** Entra ID refuses to switch a user's Source of Authority back to Active Directory while
+   the tenant's `blockCloudObjectTakeoverThroughHardMatchEnabled` is on, which it is by default. Turn it off once, with
+   `PATCH https://graph.microsoft.com/beta/directory/onPremisesSynchronization/{id}` and
+   `{"features":{"blockCloudObjectTakeoverThroughHardMatchEnabled":false}}`.
+6. **The CI app**, as for the JIM test tenant (Scenario 036 in `engineering/INTEGRATION_TESTING.md`): an app
+   registration with a federated credential for this repository's `jim-ad-lab` environment, holding
+   `Application.ReadWrite.OwnedBy`.
+7. **The Connector app.** As a Global Administrator, run `Register-JIMEntraIdConnector -TenantId <tenant>
+   -Name 'JIM Entra ID Connector (CI)' -TrackSourceOfAuthority` against any JIM, then make the CI app an owner of the
+   app registration and its service principal. The scenario replaces its certificate on every run.
+8. **The `jim-ad-lab` environment.** Set the variables `JIM_AD_LAB_HYBRID_ADDRESS`, `JIM_ENTRA_HYBRID_TENANT_ID` and
+   `JIM_ENTRA_HYBRID_CI_CLIENT_ID`. Until all three are set, the nightly leaves Scenario 038 out.
+   `JIM_AD_LAB_HYBRID_HOST`, `JIM_AD_LAB_HYBRID_VM` and `JIM_AD_LAB_HYBRID_DOMAIN` are optional.
+
+The scenario writes to the forest as its Administrator, over LDAPS through the LDAP toolbox, with the password the other
+forests share. It reports as the commit status `jim-entra-hybrid`.
+
 ## Monthly rebuild
 
 The lab is patched by rebuild and never in place: the domain controllers do not run Windows Update, and once a month

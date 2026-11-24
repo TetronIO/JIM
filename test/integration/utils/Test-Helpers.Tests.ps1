@@ -28,6 +28,7 @@ BeforeAll {
         'JIM_AD_LAB_PRIMARY_ADDRESS', 'JIM_AD_LAB_SOURCE_ADDRESS', 'JIM_AD_LAB_TARGET_ADDRESS',
         'JIM_AD_LAB_PRIMARY_HOST', 'JIM_AD_LAB_SOURCE_HOST', 'JIM_AD_LAB_TARGET_HOST',
         'JIM_AD_LAB_PRIMARY_VM', 'JIM_AD_LAB_SOURCE_VM', 'JIM_AD_LAB_TARGET_VM',
+        'JIM_AD_LAB_HYBRID_ADDRESS', 'JIM_AD_LAB_HYBRID_HOST', 'JIM_AD_LAB_HYBRID_VM', 'JIM_AD_LAB_HYBRID_DOMAIN',
         'JIM_AD_LAB_ADMIN_PASSWORD', 'JIM_AD_LAB_JIM_PASSWORD'
     )
     function Clear-AdLabEnvironment {
@@ -536,6 +537,54 @@ Describe 'Get-DirectoryConfig -DirectoryType ActiveDirectory' {
         $first.Host = 'mutated'
 
         (Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Primary).Host | Should -Be 'dc1.panoply.local'
+    }
+
+    Context 'the hybrid forest, which Entra Cloud Sync synchronises (Scenario 038)' {
+        BeforeEach { $env:JIM_AD_LAB_HYBRID_ADDRESS = '192.0.2.14' }
+
+        It 'describes dc-hybrid as dc1.meridian.local over LDAPS, with no container' {
+            $config = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Hybrid
+
+            $config.DirectoryType | Should -Be 'ActiveDirectory'
+            $config.Host | Should -Be 'dc1.meridian.local'
+            $config.Address | Should -Be '192.0.2.14'
+            $config.VmName | Should -Be 'dc-hybrid'
+            $config.ContainerName | Should -BeNullOrEmpty
+            $config.Port | Should -Be 636
+            $config.LdapSearchScheme | Should -Be 'ldaps'
+            $config.BaseDN | Should -Be 'DC=meridian,DC=local'
+            $config.Domain | Should -Be 'meridian.local'
+            $config.BindDN | Should -Be 'CN=Administrator,CN=Users,DC=meridian,DC=local'
+            $config.BindPassword | Should -Be 'admin-pw-for-test'
+        }
+
+        It 'names the unit Cloud Sync synchronises' {
+            (Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Hybrid).SyncOuDn | Should -Be 'OU=CloudSync,DC=meridian,DC=local'
+        }
+
+        It 'has no checkpoint to revert to: Cloud Sync''s agent and its place in the directory must survive every run' {
+            (Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Hybrid).CheckpointBaseline | Should -BeNullOrEmpty
+        }
+
+        It 'takes the forest''s domain, host and VM name from the environment' {
+            $env:JIM_AD_LAB_HYBRID_DOMAIN = 'hybrid.example'
+            $env:JIM_AD_LAB_HYBRID_HOST = 'dcx.hybrid.example'
+            $env:JIM_AD_LAB_HYBRID_VM = 'lab-dc-4'
+
+            $config = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Hybrid
+
+            $config.BaseDN | Should -Be 'DC=hybrid,DC=example'
+            $config.Domain | Should -Be 'hybrid.example'
+            $config.Host | Should -Be 'dcx.hybrid.example'
+            $config.VmName | Should -Be 'lab-dc-4'
+            $config.SyncOuDn | Should -Be 'OU=CloudSync,DC=hybrid,DC=example'
+        }
+
+        It 'throws naming the variable when its address is unset' {
+            [System.Environment]::SetEnvironmentVariable('JIM_AD_LAB_HYBRID_ADDRESS', $null)
+
+            { Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Hybrid } | Should -Throw '*JIM_AD_LAB_HYBRID_ADDRESS*'
+        }
     }
 }
 

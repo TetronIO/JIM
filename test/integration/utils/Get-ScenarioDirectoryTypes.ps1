@@ -39,7 +39,8 @@ function Get-ScenarioSupportedDirectoryTypes {
     .DESCRIPTION
         The Active Directory lab runs whatever Samba AD runs, except the scenarios only a real domain
         controller or its AD FS or Exchange servers can hold (003, 024, 025, 030, 031 and 034), which run on the lab only, and Scenario 035, whose Entra ID sign-in checks run
-        only from the lab's runner, which holds the test tenant's credentials.
+        only from the lab's runner, which holds the test tenant's credentials, and Scenario 038, which needs the lab's
+        hybrid forest and the hybrid test tenant Entra Cloud Sync copies it to.
         $null (the "All" scenario) has no restriction.
     #>
     [CmdletBinding()]
@@ -92,7 +93,9 @@ function Get-ScenarioSupportedDirectoryTypes {
         # books in step through both, exchange-primary and exchange-source: only the Active Directory lab has them.
         # Scenario 035 (Entra ID sign-in, #2367) needs no directory, but signs in through the JIM test tenant with
         # credentials only the lab's runner holds (the jim-ad-lab environment), so it runs there and nowhere else.
-        { $_ -in 3, 24, 25, 30, 31, 34, 35 } { return @('ActiveDirectory') }
+        # Scenario 038 (hybrid and Source of Authority, #3029) creates its objects in the lab's hybrid forest, which
+        # Entra Cloud Sync synchronises to the hybrid test tenant; only the lab has either.
+        { $_ -in 3, 24, 25, 30, 31, 34, 35, 38 } { return @('ActiveDirectory') }
 
         # Every other scenario, including the directory-agnostic ones (see
         # Test-ScenarioIsDirectoryAgnostic below), is architecturally able to run against any of the
@@ -177,7 +180,8 @@ function Test-ScenarioRunsOnItsOwn {
     .DESCRIPTION
         Scenario 031 (AD FS sign-in, #2441) is reported as jim-ad-lab-adfs, Scenario 035 (Entra ID sign-in, #2367)
         as jim-sso-entra, and Scenarios 036 and 037 (the Entra ID Connector with Entra ID as a target and as a source,
-        #361) together as jim-entra-connector, apart from the LDAP scenarios' jim-ad-lab, so that a sign-in or tenant
+        #361) together as jim-entra-connector, and Scenario 038 (hybrid and Source of Authority, #3029) as
+        jim-entra-hybrid, apart from the LDAP scenarios' jim-ad-lab, so that a sign-in or tenant
         failure never turns the LDAP result red or the reverse: ad-lab.yml runs each after the sweep (-Scenario 31,
         -Scenario 35, -Scenario 36, -Scenario 37), and the sweep does not run them too. Each still runs by itself on
         request. Scenarios 036 and 037 also need the test tenant's credentials, which only the lab's runner holds, so
@@ -194,5 +198,5 @@ function Test-ScenarioRunsOnItsOwn {
         [Nullable[int]]$ScenarioNumber
     )
 
-    return $ScenarioNumber -in 31, 35, 36, 37, 39, 40
+    return $ScenarioNumber -in 31, 35, 36, 37, 38, 39, 40
 }
