@@ -9059,6 +9059,8 @@ public partial class ConnectedSystemServer
         var attribute = contributors[0].TargetMetaverseAttribute;
         if (attribute?.ContributionMode == AttributeContributionMode.Accumulate)
             throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNotUsedUnderAccumulate), attribute.Name));
+        if (attribute?.ContributionMode == AttributeContributionMode.Merge)
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNotUsedUnderMerge), attribute.Name));
     }
 
     private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed, IReadOnlyDictionary<int, (int Priority, bool NullIsValue)> Before)> BuildAttributePriorityFromFullOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)

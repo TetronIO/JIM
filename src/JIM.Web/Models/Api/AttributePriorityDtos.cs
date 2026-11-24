@@ -31,8 +31,8 @@ public class AttributePriorityOrderDto
 
     /// <summary>
     /// How the attribute combines its contributors' values. Under <c>Priority</c> the order below decides which
-    /// contributor supplies the values; under <c>Accumulate</c> every contributor adds its values, the order is not used,
-    /// and a change to it is refused.
+    /// contributor supplies the values; under <c>Accumulate</c> and <c>Merge</c> every contributor adds its values, the
+    /// order is not used, and a change to it is refused.
     /// </summary>
     public AttributeContributionMode ContributionMode { get; set; }
 

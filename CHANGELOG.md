@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Activities and Run Profile Execution Items in the REST API and PowerShell module now return each message's key and values beside its English, so an integration can show it in another language; the portal's Operations queue now shows live progress in the reader's language too (#3039).
 
 - ✨ A multi-valued Metaverse attribute can **Accumulate** values from every Connected System and keep them after the accounts that supplied them are deleted, for audit records such as every account a person has held. (#3059)
+- ✨ A multi-valued Metaverse attribute can **Merge** values from every Connected System: it holds every value any system supplies and drops one only once no system supplies it, so a set such as a person's email addresses stays in step with every source. The Data Flow view names each attribute's contribution mode. (#3059)
 - ✨ JIM can reach the internet through an outbound proxy, as the Microsoft Entra ID Connector may need: the installer asks for one, and the standard `HTTPS_PROXY` and `NO_PROXY` settings work on Docker and Podman alike. (#3051)
 
 ### Changed

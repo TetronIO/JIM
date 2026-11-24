@@ -47,8 +47,9 @@ public class MetaverseAttributeDetailDto
 
     /// <summary>
     /// How the values of several import Synchronisation Rules are combined: <c>Priority</c> (the highest-priority
-    /// contributor supplies the values) or <c>Accumulate</c> (every contributor adds values, and synchronisation never
-    /// removes one).
+    /// contributor supplies the values), <c>Accumulate</c> (every contributor adds values, and synchronisation never
+    /// removes one) or <c>Merge</c> (every contributor adds values, and a value is removed once no contributor supplies
+    /// it).
     /// </summary>
     public AttributeContributionMode ContributionMode { get; set; }
 

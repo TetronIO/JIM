@@ -1983,6 +1983,7 @@ public abstract class SyncTaskProcessorBase
 
         mvo.PendingAttributeValueAdditions.Clear();
         mvo.PendingAttributeValueRemovals.Clear();
+        mvo.PendingMergeSupplies.Clear();
     }
 
     /// <summary>
@@ -2710,6 +2711,11 @@ public abstract class SyncTaskProcessorBase
             if (_attributePriorityContext != null)
                 _syncEngine.RecallOrphanedContributions(connectedSystemObject, _attributePriorityContext);
 
+            // A Merge value (#3059) one of this object's rules withdrew while another of its rules supplies it passes to
+            // that rule now, whichever order they flowed in; the withdrawal re-election below cannot, since it looks only
+            // beyond this object's Connected System.
+            SyncEngine.CollapseMergeRetags(connectedSystemObject.MetaverseObject);
+
             // Withdrawal re-election (#91): an authoritative source withdrawing a value in place hands the
             // attribute to the next contributor in the same run, rather than leaving it blank until the survivor's
             // system next synchronises. Explicit "Null is a value" assertions write a marker into the additions, so
@@ -2723,8 +2729,11 @@ public abstract class SyncTaskProcessorBase
                     connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions,
                     connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals);
 
+                // A Merge attribute (#3059) is re-elected on any withdrawal, not only a clear: a value this object stopped
+                // supplying stays, credited to its survivor, while another Connected System still supplies it.
                 var withdrawnValues = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals
-                    .Where(av => clearedAttributeIds.Contains(av.AttributeId))
+                    .Where(av => clearedAttributeIds.Contains(av.AttributeId) ||
+                                 av.Attribute?.ContributionMode == AttributeContributionMode.Merge)
                     .ToList();
 
                 if (withdrawnValues.Count > 0)

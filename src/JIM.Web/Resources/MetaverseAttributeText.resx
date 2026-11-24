@@ -27,11 +27,11 @@
     <comment>A contribution mode: every contributor adds values, and none is removed. An imperative verb, as a mode name.</comment>
   </data>
   <data name="ContributionModeHelper" xml:space="preserve">
-    <value>How the values of several Synchronisation Rules are combined. Priority takes them from the highest-priority contributor; Accumulate adds every value and never removes one through synchronisation.</value>
+    <value>How the values of several Synchronisation Rules are combined. Priority takes them from the highest-priority contributor; Accumulate adds every value and never removes one through synchronisation; Merge adds every value and removes one once no contributor supplies it.</value>
     <comment>Helper text under the Contribution Mode field. Priority and Accumulate are the mode names (ContributionModePriority, ContributionModeAccumulate).</comment>
   </data>
   <data name="ContributionModeReferenceHelper" xml:space="preserve">
-    <value>Accumulate is not available for a Reference attribute, because a reference is removed with the Metaverse Object it points to. To keep a history of references, record them as text in a separate attribute.</value>
+    <value>Accumulate and Merge are not available for a Reference attribute, because a reference is removed with the Metaverse Object it points to. To keep a history of references, record them as text in a separate attribute.</value>
     <comment>Helper text under the Contribution Mode field when the attribute is a Reference attribute.</comment>
   </data>
   <data name="AccumulateNotice" xml:space="preserve">
@@ -47,7 +47,7 @@
     <comment>Title of the confirmation dialog. {0} is the attribute's name.</comment>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Changing '{0}' to Priority removes, at each Metaverse Object's next synchronisation, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
+    <value>Changing '{0}' to {1} removes, at each Metaverse Object's next synchronisation, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
     <comment>Body of the confirmation dialog. {0} is the attribute's name; Priority is the mode name.</comment>
   </data>
   <data name="LeaveAccumulateConfirm" xml:space="preserve">
@@ -77,5 +77,17 @@
   <data name="ExportAccumulateAdvisory" xml:space="preserve">
     <value>This Metaverse attribute accumulates values, so this Attribute Flow exports every value it has kept, including those from accounts that have since been deleted.</value>
     <comment>Advisory in the Attribute Flow editor when an outbound flow's source attribute uses the Accumulate mode.</comment>
+  </data>
+  <data name="ContributionModeMerge" xml:space="preserve">
+    <value>Merge</value>
+  </data>
+  <data name="MergeNotice" xml:space="preserve">
+    <value>From each Metaverse Object's next synchronisation, every contributor adds its values to this attribute, and a value is removed only once no contributor supplies it.</value>
+  </data>
+  <data name="PriorityListMergeNotice" xml:space="preserve">
+    <value>This attribute uses the Merge contribution mode: every Synchronisation Rule below adds its values and none is preferred, so there is no order to set, and "Null is a value" has no effect.</value>
+  </data>
+  <data name="NullIsValueMergeTooltip" xml:space="preserve">
+    <value>"Null is a value" has no effect on a Merge attribute: every contributor adds its values, so there is no winner for a missing value to override.</value>
   </data>
 </root>

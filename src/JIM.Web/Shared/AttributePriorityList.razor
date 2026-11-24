@@ -25,10 +25,12 @@ else if (_contributors.Count == 0 && string.IsNullOrEmpty(PendingContributorSyst
         @SyncRuleText.PriorityNoContributors
     </MudAlert>
 }
-else if (_accumulate)
+else if (_noWinnerMode != null)
 {
-    @* An Accumulate attribute (#3059): every contributor adds its values, so there is no order and no winner. *@
-    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">@MetaverseAttributeText.PriorityListAccumulateNotice</MudAlert>
+    @* An Accumulate or Merge attribute (#3059): every contributor adds its values, so there is no order and no winner. *@
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">@(_noWinnerMode == AttributeContributionMode.Merge
+        ? MetaverseAttributeText.PriorityListMergeNotice
+        : MetaverseAttributeText.PriorityListAccumulateNotice)</MudAlert>
     <div class="d-flex align-center px-2 py-1 mud-text-secondary" style="font-weight: 500;">
         <div style="flex: 1 1 0;">@MetaverseAttributeText.ColumnConnectedSystem</div>
         <div style="flex: 1 1 0;">@MetaverseAttributeText.ColumnSynchronisationRule</div>
@@ -232,8 +234,9 @@ else
 
     private MudDropContainer<AttributePriorityContributorDto>? _dropContainer;
 
-    // An Accumulate attribute (#3059) has no order to manage; read from the contributors' target attribute.
-    private bool _accumulate;
+    // An Accumulate or Merge attribute (#3059) has no order to manage; read from the contributors' target attribute. Null
+    // for a Priority attribute.
+    private AttributeContributionMode? _noWinnerMode;
     private List<AttributePriorityContributorDto> _contributors = new();
 
     // Snapshot of the loaded order (mapping id + null-is-value), so dirty state and Reset compare against persisted truth.
@@ -267,7 +270,8 @@ else
         using var jim = JimFactory.Create();
         var mappings = await jim.ConnectedSystems.GetAttributePriorityOrderAsync(MetaverseObjectTypeId, MetaverseAttributeId);
         _contributors = mappings.Select(AttributePriorityContributorDto.FromEntity).ToList();
-        _accumulate = mappings.FirstOrDefault()?.TargetMetaverseAttribute?.ContributionMode == AttributeContributionMode.Accumulate;
+        var mode = mappings.FirstOrDefault()?.TargetMetaverseAttribute?.ContributionMode;
+        _noWinnerMode = mode is AttributeContributionMode.Accumulate or AttributeContributionMode.Merge ? mode : null;
         _original = _contributors.Select(c => (c.MappingId, c.NullIsValue)).ToList();
         _dirty = false;
         _loading = false;

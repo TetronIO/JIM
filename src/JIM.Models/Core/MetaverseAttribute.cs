@@ -70,8 +70,9 @@ public class MetaverseAttribute : IAuditable
     /// <summary>
     /// How the values of this attribute are combined when more than one import Synchronisation Rule contributes to it.
     /// Priority (the default) takes the whole value set from the highest-priority applicable contributor; Accumulate
-    /// adds every value any contributor has supplied and never removes one through synchronisation. Only Priority is
-    /// valid for single-valued attributes.
+    /// adds every value any contributor has supplied and never removes one through synchronisation; Merge adds every
+    /// contributor's values and removes a value once no contributor supplies it. Only Priority is valid for
+    /// single-valued and Reference attributes.
     /// </summary>
     public AttributeContributionMode ContributionMode { get; set; } = AttributeContributionMode.Priority;
 

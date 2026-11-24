@@ -67,6 +67,8 @@
                         <MudSelectItem Value="AttributeContributionMode.Priority">@MetaverseAttributeText.ContributionModePriority</MudSelectItem>
                         <MudSelectItem Value="AttributeContributionMode.Accumulate"
                                        Disabled="@(!AttributeContributionModeRules.IsPermitted(AttributeContributionMode.Accumulate, _type, _plurality))">@MetaverseAttributeText.ContributionModeAccumulate</MudSelectItem>
+                        <MudSelectItem Value="AttributeContributionMode.Merge"
+                                       Disabled="@(!AttributeContributionModeRules.IsPermitted(AttributeContributionMode.Merge, _type, _plurality))">@MetaverseAttributeText.ContributionModeMerge</MudSelectItem>
                     </MudSelect>
                     @if (!ReadOnly && _contributionMode != _originalContributionMode)
                     {
@@ -77,6 +79,10 @@
                         else if (_contributionMode == AttributeContributionMode.Accumulate)
                         {
                             <MudAlert Severity="Severity.Info">@MetaverseAttributeText.AccumulateNotice</MudAlert>
+                        }
+                        else if (_contributionMode == AttributeContributionMode.Merge)
+                        {
+                            <MudAlert Severity="Severity.Info">@MetaverseAttributeText.MergeNotice</MudAlert>
                         }
                     }
                 }
@@ -681,12 +687,19 @@
     /// Asks the administrator to confirm, by typing the attribute's name, a change that lets the next synchronisation
     /// remove the values Accumulate kept.
     /// </summary>
+    private static string ContributionModeName(AttributeContributionMode mode) => mode switch
+    {
+        AttributeContributionMode.Accumulate => MetaverseAttributeText.ContributionModeAccumulate,
+        AttributeContributionMode.Merge => MetaverseAttributeText.ContributionModeMerge,
+        _ => MetaverseAttributeText.ContributionModePriority
+    };
+
     private async Task<bool> ConfirmLeavingAccumulateAsync()
     {
         var name = _originalName;
         var parameters = new DialogParameters<ConsequenceConfirmationDialog>
         {
-            { x => x.IrreversibleWarning, string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateWarning, name) },
+            { x => x.IrreversibleWarning, string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateWarning, name, ContributionModeName(_contributionMode)) },
             { x => x.ConfirmationPhrase, name },
             { x => x.ConfirmButtonText, MetaverseAttributeText.LeaveAccumulateConfirm },
             { x => x.ConfirmButtonColour, Color.Error }

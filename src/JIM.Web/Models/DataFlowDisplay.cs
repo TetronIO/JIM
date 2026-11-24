@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Web.Resources;
@@ -41,6 +42,10 @@ public static class DataFlowDisplay
         if (flow.Direction != SyncRuleDirection.Import || !flow.Priority.HasValue)
             return null;
 
+        // Under Accumulate and Merge (#3059) every contributor adds its values, so no position applies: name the mode.
+        if (NoWinnerModeName(flow) is { } modeName)
+            return modeName;
+
         var priority = flow.Priority.Value;
         if (priority == int.MaxValue)
             return SchemaText.DataFlowPriorityUnranked;
@@ -68,8 +73,20 @@ public static class DataFlowDisplay
     {
         ArgumentNullException.ThrowIfNull(flow);
 
-        return flow.Direction == SyncRuleDirection.Import && flow.HasMultipleContributors && flow.Priority == 1;
+        return flow.Direction == SyncRuleDirection.Import && flow.HasMultipleContributors && flow.Priority == 1 &&
+               NoWinnerModeName(flow) == null;
     }
+
+    /// <summary>
+    /// The name of the target attribute's contribution mode when it has no priority winner (#3059): Accumulate or
+    /// Merge. Null for a Priority attribute.
+    /// </summary>
+    private static string? NoWinnerModeName(DataFlowHeader flow) => flow.TargetMetaverseAttributeContributionMode switch
+    {
+        AttributeContributionMode.Accumulate => MetaverseAttributeText.ContributionModeAccumulate,
+        AttributeContributionMode.Merge => MetaverseAttributeText.ContributionModeMerge,
+        _ => null
+    };
 
     /// <summary>
     /// The direction in the vocabulary the rest of the portal uses for Synchronisation Rules.
@@ -179,6 +196,9 @@ public static class DataFlowDisplay
 
         if (flow.Direction != SyncRuleDirection.Import)
             return SchemaText.DataFlowPriorityTooltipOutbound;
+
+        if (NoWinnerModeName(flow) is { } modeName)
+            return string.Format(CultureInfo.CurrentCulture, SchemaText.DataFlowPriorityTooltipNoOrder, modeName);
 
         var unranked = flow.Priority == int.MaxValue;
         var contributors = flow.ContributorCount ?? 0;

@@ -200,6 +200,15 @@ public class MetaverseObject
     public bool HasPendingProvenanceChanges { get; set; }
 
     /// <summary>
+    /// Values a contributor supplies to a Merge attribute (#3059) that another contributor already holds, recorded by
+    /// inbound Attribute Flow this pass and never persisted. Should the holder withdraw the value in the same pass, it
+    /// passes to one of these suppliers rather than leaving the object, whichever order the contributors flowed in.
+    /// Consumed by the sync engine's collapse of Merge re-tags, and cleared with the other pending changes.
+    /// </summary>
+    [NotMapped]
+    public List<MetaverseObjectAttributeValue> PendingMergeSupplies { get; set; } = new();
+
+    /// <summary>
     /// Navigation link to any joined Connected System Objects.
     /// </summary>
     public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = new ();

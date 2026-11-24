@@ -24,10 +24,10 @@
     <value>Akkumulieren</value>
   </data>
   <data name="ContributionModeHelper" xml:space="preserve">
-    <value>Wie die Werte mehrerer Synchronisierungsregeln kombiniert werden. „Priorität“ übernimmt sie vom Beitragenden mit der höchsten Priorität; „Akkumulieren“ fügt jeden Wert hinzu und entfernt durch die Synchronisierung nie einen.</value>
+    <value>Wie die Werte mehrerer Synchronisierungsregeln kombiniert werden. „Priorität“ übernimmt sie vom Beitragenden mit der höchsten Priorität; „Akkumulieren“ fügt jeden Wert hinzu und entfernt durch die Synchronisierung nie einen; „Zusammenführen“ fügt jeden Wert hinzu und entfernt einen, sobald kein Beitragender ihn mehr liefert.</value>
   </data>
   <data name="ContributionModeReferenceHelper" xml:space="preserve">
-    <value>„Akkumulieren“ ist für ein Referenzattribut nicht verfügbar, da eine Referenz mit dem Metaverse-Objekt entfernt wird, auf das sie verweist. Um einen Verlauf der Referenzen zu behalten, erfassen Sie sie als Text in einem separaten Attribut.</value>
+    <value>„Akkumulieren“ und „Zusammenführen“ sind für ein Referenzattribut nicht verfügbar, da eine Referenz mit dem Metaverse-Objekt entfernt wird, auf das sie verweist. Um einen Verlauf der Referenzen zu behalten, erfassen Sie sie als Text in einem separaten Attribut.</value>
   </data>
   <data name="AccumulateNotice" xml:space="preserve">
     <value>Ab der nächsten Synchronisierung jedes Metaverse-Objekts fügt jeder Beitragende diesem Attribut seine Werte hinzu, und die Synchronisierung entfernt nie einen, auch nicht, nachdem das Konto, das ihn geliefert hat, gelöscht wurde.</value>
@@ -39,7 +39,7 @@
     <value>Akkumulieren von Werten in „{0}“ beenden?</value>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Wenn Sie „{0}“ auf „Priorität“ umstellen, werden bei der nächsten Synchronisierung jedes Metaverse-Objekts die Werte entfernt, die kein Beitragender mehr liefert, und Exporte entfernen sie anschließend aus den Zielsystemen. Sie können nicht wiederhergestellt werden.</value>
+    <value>Wenn Sie „{0}“ auf „{1}“ umstellen, werden bei der nächsten Synchronisierung jedes Metaverse-Objekts die Werte entfernt, die kein Beitragender mehr liefert, und Exporte entfernen sie anschließend aus den Zielsystemen. Sie können nicht wiederhergestellt werden.</value>
   </data>
   <data name="LeaveAccumulateConfirm" xml:space="preserve">
     <value>Akkumulieren beenden</value>
@@ -61,5 +61,17 @@
   </data>
   <data name="ExportAccumulateAdvisory" xml:space="preserve">
     <value>Dieses Metaverse-Attribut akkumuliert Werte, daher exportiert dieser Attributfluss jeden behaltenen Wert, auch die von inzwischen gelöschten Konten.</value>
+  </data>
+  <data name="ContributionModeMerge" xml:space="preserve">
+    <value>Zusammenführen</value>
+  </data>
+  <data name="MergeNotice" xml:space="preserve">
+    <value>Ab der nächsten Synchronisierung jedes Metaverse-Objekts fügt jeder Beitragende diesem Attribut seine Werte hinzu, und ein Wert wird erst entfernt, wenn kein Beitragender ihn mehr liefert.</value>
+  </data>
+  <data name="PriorityListMergeNotice" xml:space="preserve">
+    <value>Dieses Attribut verwendet den Beitragsmodus „Zusammenführen“: Jede der folgenden Synchronisierungsregeln fügt ihre Werte hinzu und keine wird bevorzugt. Daher gibt es keine Reihenfolge festzulegen, und „Null ist ein Wert“ hat keine Wirkung.</value>
+  </data>
+  <data name="NullIsValueMergeTooltip" xml:space="preserve">
+    <value>„Null ist ein Wert“ hat bei einem Attribut im Modus „Zusammenführen“ keine Wirkung: Jeder Beitragende fügt seine Werte hinzu, daher gibt es keinen Gewinner, den ein fehlender Wert überschreiben könnte.</value>
   </data>
 </root>

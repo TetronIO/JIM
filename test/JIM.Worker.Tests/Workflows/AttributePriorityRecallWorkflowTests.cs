@@ -714,6 +714,213 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// PRD Scenario 4 (#3059) through the real synchronisation processor: "Email Addresses" in Merge mode, fed by Active
+    /// Directory (a, b) and the mail system (b, c). Active Directory dropping b leaves it in place, now credited to the
+    /// mail system that still supplies it; Active Directory then dropping a removes a.
+    /// </summary>
+    [Test]
+    public async Task Merge_ContributorDropsValues_KeepsThoseAnotherStillSuppliesAsync()
+    {
+        var ctx = await SetUpMergeEmailAddressesAsync();
+        await RunFullSyncAsync(ctx.Ad);
+        await RunFullSyncAsync(ctx.Mail);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(EmailValues(mvo, ctx.EmailAddressesId), Is.EquivalentTo(new[] { "a", "b", "c" }), "precondition");
+
+        SetEmails(ctx.AdCso, ctx.AdEmails, "a");
+        var first = await RunFullSyncReturningActivityAsync(ctx.Ad);
+        mvo = SyncRepo.MetaverseObjects[mvo.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.RunProfileExecutionItems.Any(r => r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.False);
+            Assert.That(EmailValues(mvo, ctx.EmailAddressesId), Is.EquivalentTo(new[] { "a", "b", "c" }),
+                "b stays: the mail system still supplies it");
+            Assert.That(EmailRow(mvo, ctx.EmailAddressesId, "b").ContributedBySystemId, Is.EqualTo(ctx.Mail.Id),
+                "b is now credited to the mail system");
+        }
+
+        SetEmails(ctx.AdCso, ctx.AdEmails);
+        await RunFullSyncAsync(ctx.Ad);
+        mvo = SyncRepo.MetaverseObjects[mvo.Id];
+        Assert.That(EmailValues(mvo, ctx.EmailAddressesId), Is.EquivalentTo(new[] { "b", "c" }), "a goes: nobody supplies it");
+    }
+
+    /// <summary>
+    /// PRD Scenario 5 (#3059): the mail system's object is deleted with recall on obsoletion. c goes; b stays because
+    /// Active Directory still supplies it, and is credited back to Active Directory where the mail system held it.
+    /// </summary>
+    [Test]
+    public async Task Merge_ContributorLeaves_KeepsValuesAnotherStillSuppliesAsync()
+    {
+        var ctx = await SetUpMergeEmailAddressesAsync();
+        await RunFullSyncAsync(ctx.Ad);
+        await RunFullSyncAsync(ctx.Mail);
+
+        // Hand b to the mail system, then have Active Directory supply it again, so the leaver holds a value a survivor supplies.
+        SetEmails(ctx.AdCso, ctx.AdEmails, "a");
+        await RunFullSyncAsync(ctx.Ad);
+        SetEmails(ctx.AdCso, ctx.AdEmails, "a", "b");
+        await RunFullSyncAsync(ctx.Ad);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(EmailRow(mvo, ctx.EmailAddressesId, "b").ContributedBySystemId, Is.EqualTo(ctx.Mail.Id), "precondition");
+
+        await MarkCsoObsoleteAsync(ctx.MailCso);
+        var activity = await RunFullSyncReturningActivityAsync(ctx.Mail);
+
+        mvo = SyncRepo.MetaverseObjects[mvo.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Any(r => r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.False);
+            Assert.That(EmailValues(mvo, ctx.EmailAddressesId), Is.EquivalentTo(new[] { "a", "b" }));
+            Assert.That(EmailRow(mvo, ctx.EmailAddressesId, "b").ContributedBySystemId, Is.EqualTo(ctx.Ad.Id),
+                "b is credited back to Active Directory");
+        }
+    }
+
+    /// <summary>
+    /// Two Synchronisation Rules on one Connected System both supply b to a Merge attribute (#3059). Whichever rule holds
+    /// it, that rule's source dropping b leaves it in place for the other: the order the rules flow in must not matter.
+    /// </summary>
+    [Test]
+    public async Task Merge_TwoRulesOnOneSystemSupplyAValue_EitherDroppingItKeepsItAsync()
+    {
+        var ctx = await SetUpMergeEmailAddressesAsync(mailAliasesRule: true);
+        await RunFullSyncAsync(ctx.Ad);
+        SetEmails(ctx.MailCso, ctx.MailEmails, "b");
+        SetEmails(ctx.MailCso, ctx.MailAliases!, "b");
+        await RunFullSyncAsync(ctx.Mail);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        SetEmails(ctx.AdCso, ctx.AdEmails, "a");
+        await RunFullSyncAsync(ctx.Ad);
+        Assert.That(EmailRow(SyncRepo.MetaverseObjects[mvo.Id], ctx.EmailAddressesId, "b").ContributedBySystemId, Is.EqualTo(ctx.Mail.Id), "precondition");
+
+        SetEmails(ctx.MailCso, ctx.MailEmails);
+        await RunFullSyncAsync(ctx.Mail);
+        Assert.That(EmailValues(SyncRepo.MetaverseObjects[mvo.Id], ctx.EmailAddressesId), Is.EquivalentTo(new[] { "a", "b" }),
+            "the aliases rule still supplies b");
+
+        SetEmails(ctx.MailCso, ctx.MailEmails, "b");
+        await RunFullSyncAsync(ctx.Mail);
+        SetEmails(ctx.MailCso, ctx.MailAliases!);
+        await RunFullSyncAsync(ctx.Mail);
+        Assert.That(EmailValues(SyncRepo.MetaverseObjects[mvo.Id], ctx.EmailAddressesId), Is.EquivalentTo(new[] { "a", "b" }),
+            "the emails rule still supplies b");
+    }
+
+    private static List<string?> EmailValues(MetaverseObject mvo, int attributeId) =>
+        mvo.AttributeValues.Where(av => av.AttributeId == attributeId && !av.NullValue).Select(av => av.StringValue).ToList();
+
+    private static MetaverseObjectAttributeValue EmailRow(MetaverseObject mvo, int attributeId, string value) =>
+        mvo.AttributeValues.Single(av => av.AttributeId == attributeId && av.StringValue == value);
+
+    private static void SetEmails(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, params string[] values)
+    {
+        cso.AttributeValues.RemoveAll(av => av.AttributeId == attribute.Id);
+        foreach (var value in values)
+        {
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), AttributeId = attribute.Id, Attribute = attribute, StringValue = value, ConnectedSystemObject = cso
+            });
+        }
+        cso.LastUpdated = DateTime.UtcNow;
+    }
+
+    private sealed record MergeEmailContext(
+        ConnectedSystem Ad,
+        ConnectedSystem Mail,
+        ConnectedSystemObject AdCso,
+        ConnectedSystemObject MailCso,
+        ConnectedSystemObjectTypeAttribute AdEmails,
+        ConnectedSystemObjectTypeAttribute MailEmails,
+        ConnectedSystemObjectTypeAttribute? MailAliases,
+        int EmailAddressesId);
+
+    /// <summary>
+    /// Active Directory (projects; supplies a, b) and a mail system (joins on EmployeeId; supplies b, c) feeding a Merge
+    /// "Email Addresses" attribute, both with recall on obsoletion. With <paramref name="mailAliasesRule"/>, a second
+    /// mail system rule feeds the attribute from an Aliases attribute, which starts empty.
+    /// </summary>
+    private async Task<MergeEmailContext> SetUpMergeEmailAddressesAsync(bool mailAliasesRule = false)
+    {
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvDisplayName = mvType.Attributes.First(a => a.Name == "DisplayName");
+        var mvEmployeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
+        var emailAddresses = new MetaverseAttribute
+        {
+            Name = "Email Addresses",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ContributionMode = AttributeContributionMode.Merge,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(emailAddresses);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(emailAddresses);
+
+        ConnectedSystemObjectTypeAttribute MultiValuedText(string name) =>
+            new() { Name = name, Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued, Selected = true };
+
+        var ad = await CreateConnectedSystemAsync("Active Directory");
+        var adDisplayName = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var adEmployeeId = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var adEmails = MultiValuedText("Emails");
+        var adType = await CreateCsoTypeAsync(ad.Id, "User", new List<ConnectedSystemObjectTypeAttribute>
+        {
+            new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true }, adDisplayName, adEmployeeId, adEmails
+        });
+        adType.RemoveContributedAttributesOnObsoletion = true;
+        var adRule = await CreateImportSyncRuleAsync(ad.Id, adType, mvType, "AD Import");
+        adRule.AttributeFlowRules.Add(BuildDirectImportMapping(adRule, mvDisplayName, adDisplayName));
+        adRule.AttributeFlowRules.Add(BuildDirectImportMapping(adRule, mvEmployeeId, adEmployeeId));
+        adRule.AttributeFlowRules.Add(BuildDirectImportMapping(adRule, emailAddresses, adEmails, priority: 1));
+        await DbContext.SaveChangesAsync();
+
+        var mail = await CreateConnectedSystemAsync("Mail");
+        mail.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var mailEmployeeId = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var mailEmails = MultiValuedText("Emails");
+        var mailAliases = mailAliasesRule ? MultiValuedText("Aliases") : null;
+        var mailAttributes = new List<ConnectedSystemObjectTypeAttribute>
+        {
+            new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true }, mailEmployeeId, mailEmails
+        };
+        if (mailAliases != null)
+            mailAttributes.Add(mailAliases);
+        var mailType = await CreateCsoTypeAsync(mail.Id, "Mailbox", mailAttributes);
+        mailType.RemoveContributedAttributesOnObsoletion = true;
+        var mailRule = await CreateImportSyncRuleAsync(mail.Id, mailType, mvType, "Mail Import", enableProjection: false);
+        mailRule.AttributeFlowRules.Add(BuildDirectImportMapping(mailRule, emailAddresses, mailEmails, priority: 2));
+        mailRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = mailRule,
+            SyncRuleId = mailRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeId,
+            TargetMetaverseAttributeId = mvEmployeeId.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new() { Order = 0, ConnectedSystemAttribute = mailEmployeeId, ConnectedSystemAttributeId = mailEmployeeId.Id }
+            }
+        });
+        if (mailAliases != null)
+        {
+            var aliasesRule = await CreateImportSyncRuleAsync(mail.Id, mailType, mvType, "Mail Aliases Import", enableProjection: false);
+            aliasesRule.AttributeFlowRules.Add(BuildDirectImportMapping(aliasesRule, emailAddresses, mailAliases, priority: 3));
+        }
+        await DbContext.SaveChangesAsync();
+
+        var adCso = await CreateCsoAsync(ad.Id, adType, "John Smith", SharedEmployeeId);
+        SetEmails(adCso, adEmails, "a", "b");
+        var mailCso = await CreateCsoAsync(mail.Id, mailType, "unused", SharedEmployeeId);
+        SetEmails(mailCso, mailEmails, "b", "c");
+
+        return new MergeEmailContext(ad, mail, adCso, mailCso, adEmails, mailEmails, mailAliases, emailAddresses.Id);
+    }
+
     private static List<string?> AuditLogValues(MetaverseObject mvo, int auditLogId) =>
         mvo.AttributeValues.Where(av => av.AttributeId == auditLogId && !av.NullValue).Select(av => av.StringValue).ToList();
 

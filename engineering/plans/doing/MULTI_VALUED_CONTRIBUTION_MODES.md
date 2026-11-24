@@ -1,6 +1,6 @@
 # Contribution Modes for Multi-Valued Metaverse Attributes: Implementation Plan
 
-- **Status:** Doing (Phase 1 underway)
+- **Status:** Doing (Phase 1 complete; Phase 2 underway)
 - **Issue:** [#3059](https://github.com/TetronIO/JIM/issues/3059)
 - **PRD:** [`PRD_MULTI_VALUED_CONTRIBUTION_MODES.md`](../../prd/doing/PRD_MULTI_VALUED_CONTRIBUTION_MODES.md)
 - **Related Issues:** #91 (attribute priority), #3064 (per-Attribute Flow recall), #1570 (grace-period freeze), #2472 (value contributor kinds), #614 (internal Metaverse Object management)
@@ -127,7 +127,7 @@ Configuration change history: the mode is a field on `MetaverseAttribute`, which
 
 ## Implementation Phases
 
-### Phase 1: mode configuration and Accumulate
+### Phase 1: mode configuration and Accumulate ✅
 
 1. Red tests (TDD), `JIM.Worker.Tests`:
    - Writer: Accumulate adds and never removes; the first contributor keeps the tag; two rules in the same pass add a value once; "Null is a value" is ignored; the gate is bypassed.
@@ -149,6 +149,13 @@ Configuration change history: the mode is a field on `MetaverseAttribute`, which
 4. Performance: Scale run comparing a Merge attribute fed by three systems with the same run in Priority mode, steady state and a 5% churn run, against the PRD's 10% budget. Record the numbers in the PR.
 5. Scenarios 008 and 032 if anything in export staging was touched (`src/JIM.Application/CLAUDE.md` section 6). The design intends no change there.
 6. Surfaces: Merge enabled in the mode selector, API and PowerShell; docs; changelog.
+
+As built, steps 2 and 3 took a simpler shape with the same effect, and no extraction from `ContributorReElectionService`:
+
+- The Merge writer withdraws only the rows tagged with its own rule that it no longer supplies, and adds what is not held.
+- Any Merge withdrawal triggers the existing withdrawal re-election, so a survivor on another Connected System re-adds the value.
+- One collapse step, `SyncEngine.CollapseMergeRetags`, turns a withdrawn value that is re-added in the same pass into a re-tag of the existing row: no value change, no change record, no Pending Export. It runs at the end of every re-election and once in the per-object flow.
+- Re-election cannot reach the withdrawing object's own other rules (its scope excludes the leaver's Connected System). So when a Merge writer finds a supplied value already held by another contributor, it notes it on the transient `MetaverseObject.PendingMergeSupplies`. The collapse re-tags a withdrawn value to such a supplier, whichever order the rules flowed in.
 
 ### Phase 3: manual removal and impact report
 

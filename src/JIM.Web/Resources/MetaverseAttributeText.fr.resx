@@ -24,10 +24,10 @@
     <value>Accumuler</value>
   </data>
   <data name="ContributionModeHelper" xml:space="preserve">
-    <value>Façon dont les valeurs de plusieurs règles de synchronisation sont combinées. « Priorité » les prend au contributeur de plus haute priorité ; « Accumuler » ajoute chaque valeur et la synchronisation n’en retire jamais aucune.</value>
+    <value>Façon dont les valeurs de plusieurs règles de synchronisation sont combinées. « Priorité » les prend au contributeur de plus haute priorité ; « Accumuler » ajoute chaque valeur et la synchronisation n’en retire jamais aucune ; « Fusionner » ajoute chaque valeur et en retire une dès qu’aucun contributeur ne la fournit plus.</value>
   </data>
   <data name="ContributionModeReferenceHelper" xml:space="preserve">
-    <value>« Accumuler » n’est pas disponible pour un attribut de référence, car une référence est supprimée avec l’objet Metaverse vers lequel elle pointe. Pour conserver un historique des références, enregistrez-les sous forme de texte dans un attribut distinct.</value>
+    <value>« Accumuler » et « Fusionner » ne sont pas disponibles pour un attribut de référence, car une référence est supprimée avec l’objet Metaverse vers lequel elle pointe. Pour conserver un historique des références, enregistrez-les sous forme de texte dans un attribut distinct.</value>
   </data>
   <data name="AccumulateNotice" xml:space="preserve">
     <value>À partir de la prochaine synchronisation de chaque objet Metaverse, chaque contributeur ajoute ses valeurs à cet attribut, et la synchronisation n’en retire jamais aucune, même après la suppression du compte qui l’a fournie.</value>
@@ -39,7 +39,7 @@
     <value>Arrêter d’accumuler les valeurs de « {0} » ?</value>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Passer « {0} » en « Priorité » retire, lors de la prochaine synchronisation de chaque objet Metaverse, les valeurs qu’aucun contributeur ne fournit plus, puis les exportations les retirent des systèmes cibles. Elles ne peuvent pas être récupérées.</value>
+    <value>Passer « {0} » en « {1} » retire, lors de la prochaine synchronisation de chaque objet Metaverse, les valeurs qu’aucun contributeur ne fournit plus, puis les exportations les retirent des systèmes cibles. Elles ne peuvent pas être récupérées.</value>
   </data>
   <data name="LeaveAccumulateConfirm" xml:space="preserve">
     <value>Arrêter d’accumuler</value>
@@ -61,5 +61,17 @@
   </data>
   <data name="ExportAccumulateAdvisory" xml:space="preserve">
     <value>Cet attribut Metaverse accumule des valeurs : ce flux d’attributs exporte donc chaque valeur conservée, y compris celles de comptes supprimés depuis.</value>
+  </data>
+  <data name="ContributionModeMerge" xml:space="preserve">
+    <value>Fusionner</value>
+  </data>
+  <data name="MergeNotice" xml:space="preserve">
+    <value>À partir de la prochaine synchronisation de chaque objet Metaverse, chaque contributeur ajoute ses valeurs à cet attribut, et une valeur n’est retirée que lorsqu’aucun contributeur ne la fournit plus.</value>
+  </data>
+  <data name="PriorityListMergeNotice" xml:space="preserve">
+    <value>Cet attribut utilise le mode de contribution « Fusionner » : chaque règle de synchronisation ci-dessous ajoute ses valeurs et aucune n’est privilégiée. Il n’y a donc pas d’ordre à définir, et « Null est une valeur » est sans effet.</value>
+  </data>
+  <data name="NullIsValueMergeTooltip" xml:space="preserve">
+    <value>« Null est une valeur » est sans effet sur un attribut en mode « Fusionner » : chaque contributeur ajoute ses valeurs, il n’y a donc pas de gagnant qu’une valeur absente pourrait remplacer.</value>
   </data>
 </root>

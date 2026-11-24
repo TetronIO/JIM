@@ -84,6 +84,28 @@ public static class ContributorReElectionService
         Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null,
         bool leaveSurvivorsAsFound = false)
     {
+        var outcomes = await ReElectCoreAsync(mvo, recalledValues, scope, priorityContext, syncEngine, syncRepository,
+            isCsoInScopeForImportRule, objectTypes, expressionEvaluator, resolvePendingGeneratedValues, leaveSurvivorsAsFound);
+
+        // A Merge value (#3059) withdrawn by the leaver and re-added by a survivor never left the object: re-tag it in place,
+        // so no value change reaches change history or export.
+        SyncEngine.CollapseMergeRetags(mvo);
+        return outcomes;
+    }
+
+    private static async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ReElectCoreAsync(
+        MetaverseObject mvo,
+        List<MetaverseObjectAttributeValue> recalledValues,
+        ContributorRecallScope scope,
+        AttributePriorityContext priorityContext,
+        ISyncEngine syncEngine,
+        ISyncRepository syncRepository,
+        Func<ConnectedSystemObject, SyncRule, bool> isCsoInScopeForImportRule,
+        IReadOnlyList<ConnectedSystemObjectType>? objectTypes,
+        IExpressionEvaluator expressionEvaluator,
+        Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues,
+        bool leaveSurvivorsAsFound)
+    {
         if (mvo.Type == null)
             return [];
 

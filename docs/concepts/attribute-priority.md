@@ -33,7 +33,7 @@ answers:
 
 This is an **inbound** concern. It governs how values flow from Connected Systems into the Metaverse; it does not change how the Metaverse is exported back out.
 
-Picking one winner is the **Priority** contribution mode, which every attribute uses unless you choose otherwise. A multi-valued attribute can instead **accumulate** values from every contributor; see [Accumulating values from every contributor](#accumulating-values-from-every-contributor).
+Picking one winner is the **Priority** contribution mode, which every attribute uses unless you choose otherwise. A multi-valued attribute can instead take values from every contributor: **Accumulate** keeps every value it has ever been given (see [Accumulating values from every contributor](#accumulating-values-from-every-contributor)), and **Merge** holds the values its contributors supply now (see [Merging values from every contributor](#merging-values-from-every-contributor)).
 
 ## :material-sort-numeric-ascending: How resolution works
 
@@ -61,6 +61,17 @@ A multi-valued attribute set to the **Accumulate** contribution mode takes value
 Accumulate needs a multi-valued attribute of any data type except Reference. A reference is removed with the Metaverse Object it points to, so it cannot be kept; to keep a history of references, record each one as text in a separate attribute instead (for example `"manager=" + cs["manager"]`).
 
 A change of mode takes effect at each Metaverse Object's next synchronisation. Changing an Accumulate attribute back to Priority lets that synchronisation remove every value that no contributor supplies any more, and exports then remove them from target systems, so every surface asks you to confirm it: the portal by typing the attribute's name, the REST API with `confirmLeavingAccumulate`, and PowerShell with `-Force`.
+
+## :material-set-merge: Merging values from every contributor
+
+A multi-valued attribute set to the **Merge** contribution mode holds every value any contributor supplies, and drops a value once no contributor supplies it any more. Use it where several systems each own part of a set, such as a person's email addresses held across a directory and a mail system: the attribute holds them all, and stays in step as each system changes its own.
+
+- **Every contributor adds**<br /> Each Synchronisation Rule that maps to the attribute adds the values it supplies that the attribute does not already hold. As with Accumulate, no contributor wins, so the priority order is not used and cannot be changed, and "Null is a value" has no effect.
+- **A contributor withdraws only its own values**<br /> When a Connected System stops supplying a value, because its source changed it or the contributing object left scope or was deleted and its values recalled (see [When the winning source disconnects or withdraws](#when-the-winning-source-disconnects-or-withdraws)), JIM removes that value unless another contributor still supplies it.
+- **A value another contributor supplies stays where it is**<br /> If the directory and the mail system both supply `b@corp.example` and the directory drops it, the value is kept and credited to the mail system. The Metaverse Object's value does not change, so nothing is exported and no value change is recorded; the value's provenance names the new contributor.
+- **Each value is held once**<br /> Values are compared exactly, as under Accumulate; use the Attribute Flow's case normalisation to treat `Jo@corp.example` and `jo@corp.example` as one.
+
+Merge needs a multi-valued attribute of any data type except Reference. Changing an Accumulate attribute to Merge removes, at each Metaverse Object's next synchronisation, the values no contributor supplies any more, so it asks for the same confirmation as changing it to Priority. Changing between Priority and Merge, or from Merge to Accumulate, removes nothing at the time of the change.
 
 ## :material-account-lock-outline: Giving one system authority over a subset of objects
 
@@ -179,7 +190,7 @@ Both surfaces above start from something you already suspect: an Object Type, or
 
 The same configuration is available for automation:
 
-- Choose the contribution mode with the attribute: `New-JIMMetaverseAttribute -ContributionMode Accumulate` or `Set-JIMMetaverseAttribute -ContributionMode`, or `contributionMode` on the attribute endpoints. The priority order reports the attribute's mode, and a change to an Accumulate attribute's order is refused.
+- Choose the contribution mode with the attribute: `New-JIMMetaverseAttribute -ContributionMode Accumulate` (or `Merge`) or `Set-JIMMetaverseAttribute -ContributionMode`, or `contributionMode` on the attribute endpoints. The priority order reports the attribute's mode, and a change to the order of an Accumulate or Merge attribute is refused.
 - Read the ordered contributor list for an attribute.
 - Replace the whole order, or move a single contributor to a position (JIM renumbers the others for you, so the list is never left in an inconsistent state).
 - A replacement order must list every contributor, with one exception: a Synchronisation Rule whose deletion is still recalling its values may be left out, and stays at the bottom. If an order is refused, the error names the contributors it is missing and any listed mapping that is not a contributor.

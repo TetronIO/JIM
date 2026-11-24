@@ -8616,6 +8616,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 MetaverseObjectTypeName = m.SyncRule.MetaverseObjectType.Name,
                 TargetMetaverseAttributeId = m.TargetMetaverseAttributeId,
                 TargetMetaverseAttributeName = m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : null,
+                TargetMetaverseAttributeContributionMode = m.SyncRule.Direction == SyncRuleDirection.Import && m.TargetMetaverseAttribute != null
+                    ? m.TargetMetaverseAttribute.ContributionMode
+                    : null,
                 TargetConnectedSystemAttributeId = m.TargetConnectedSystemAttributeId,
                 TargetConnectedSystemAttributeName = m.TargetConnectedSystemAttribute != null ? m.TargetConnectedSystemAttribute.Name : null,
                 Sources = m.Sources.OrderBy(s => s.Order).Select(s => new DataFlowSource

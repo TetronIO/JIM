@@ -15,7 +15,7 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="ContributionModeHelper" xml:space="preserve">
-    <value>How the values of several Synchronization Rules are combined. Priority takes them from the highest-priority contributor; Accumulate adds every value and never removes one through synchronization.</value>
+    <value>How the values of several Synchronization Rules are combined. Priority takes them from the highest-priority contributor; Accumulate adds every value and never removes one through synchronization; Merge adds every value and removes one once no contributor supplies it.</value>
   </data>
   <data name="AccumulateNotice" xml:space="preserve">
     <value>From each Metaverse Object's next synchronization, every contributor adds its values to this attribute, and synchronization never removes one, even after the account that supplied it is deleted.</value>
@@ -24,12 +24,18 @@
     <value>At each Metaverse Object's next synchronization, the values this attribute kept that no contributor supplies any more are removed, and exports remove them from target systems.</value>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Changing '{0}' to Priority removes, at each Metaverse Object's next synchronization, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
+    <value>Changing '{0}' to {1} removes, at each Metaverse Object's next synchronization, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
   </data>
   <data name="PriorityListAccumulateNotice" xml:space="preserve">
     <value>This attribute uses the Accumulate contribution mode: every Synchronization Rule below adds its values and none is preferred, so there is no order to set, and "Null is a value" has no effect.</value>
   </data>
   <data name="ColumnSynchronisationRule" xml:space="preserve">
     <value>Synchronization Rule</value>
+  </data>
+  <data name="MergeNotice" xml:space="preserve">
+    <value>From each Metaverse Object's next synchronization, every contributor adds its values to this attribute, and a value is removed only once no contributor supplies it.</value>
+  </data>
+  <data name="PriorityListMergeNotice" xml:space="preserve">
+    <value>This attribute uses the Merge contribution mode: every Synchronization Rule below adds its values and none is preferred, so there is no order to set, and "Null is a value" has no effect.</value>
   </data>
 </root>

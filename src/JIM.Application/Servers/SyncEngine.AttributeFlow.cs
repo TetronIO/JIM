@@ -79,10 +79,10 @@ public partial class SyncEngine
         // loses priority resolution to the rule currently owning the value (the incumbent) must never reach the
         // Metaverse Object. Single-contributor attributes, and runs without a priority context, use the unchanged
         // write path: the gate adds one cached lookup and never engages for the common single-contributor case.
-        // An Accumulate attribute (#3059) has no winner: every contributor adds its values, so the gate, and the
-        // discarding of other rules' pending additions that follows a win, do not apply.
+        // An Accumulate or Merge attribute (#3059) has no winner: every contributor adds its values, so the gate, and
+        // the discarding of other rules' pending additions that follows a win, do not apply.
         if (priorityContext != null &&
-            !IsAccumulate(syncRuleMapping.TargetMetaverseAttribute) &&
+            !HasNoWinner(syncRuleMapping.TargetMetaverseAttribute) &&
             priorityContext.GetContributorCount(mvoObjectTypeId, syncRuleMapping.TargetMetaverseAttribute.Id) > 1)
         {
             var incumbentSyncRuleId = FindEffectiveIncumbentSyncRuleId(mvo, syncRuleMapping.TargetMetaverseAttribute.Id);
@@ -562,10 +562,17 @@ public partial class SyncEngine
         int mvoObjectTypeId,
         AttributePriorityContext? priorityContext)
     {
-        // A contributor with no value removes nothing from an Accumulate attribute (#3059), and "Null is a value" has
-        // no effect on one: there is no winner for a null to assert over.
+        // A contributor with no value removes nothing from an Accumulate attribute (#3059), and withdraws only its own
+        // values from a Merge attribute. "Null is a value" has no effect on either: there is no winner for a null to
+        // assert over.
         if (IsAccumulate(syncRuleMapping.TargetMetaverseAttribute!))
             return;
+
+        if (IsMerge(syncRuleMapping.TargetMetaverseAttribute!))
+        {
+            WithdrawOwnMergeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!, contributingSyncRuleId, _ => true);
+            return;
+        }
 
         var attributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
         var existingValues = GetEffectiveAttributeValues(mvo, attributeId).ToList();
@@ -831,12 +838,12 @@ public partial class SyncEngine
         int? contributingSystemId,
         int? contributingSyncRuleId)
     {
-        if (IsAccumulate(targetAttribute))
+        if (HasNoWinner(targetAttribute))
         {
-            AccumulateValues(mvo, targetAttribute.Id, values, ExpressionResultValues.Key,
+            ContributeValues(mvo, targetAttribute, values, ExpressionResultValues.Key,
                 (MetaverseObjectAttributeValue row, out object key) => { key = TypedValueKey(row, targetAttribute.Type)!; return key != null; },
                 value => CreateExpressionValue(mvo, targetAttribute, value, contributingSystemId, contributingSyncRuleId),
-                EqualityComparer<object>.Default);
+                EqualityComparer<object>.Default, contributingSyncRuleId);
             return;
         }
 
@@ -1214,9 +1221,9 @@ public partial class SyncEngine
     {
         var targetAttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
 
-        if (IsAccumulate(syncRuleMapping.TargetMetaverseAttribute))
+        if (HasNoWinner(syncRuleMapping.TargetMetaverseAttribute))
         {
-            AccumulateValues(mvo, targetAttributeId, effectiveValues, value => value,
+            ContributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute, effectiveValues, value => value,
                 (MetaverseObjectAttributeValue row, out string key) => { key = row.StringValue!; return row.StringValue != null; },
                 value => new MetaverseObjectAttributeValue
                 {
@@ -1228,7 +1235,7 @@ public partial class SyncEngine
                     ContributedBySyncRuleId = contributingSyncRuleId,
                     ContributedByKind = ValueContributorKind.SynchronisationRule
                 },
-                StringComparer.Ordinal);
+                StringComparer.Ordinal, contributingSyncRuleId);
             return;
         }
 
@@ -1334,39 +1341,187 @@ public partial class SyncEngine
     internal static bool IsAccumulate(MetaverseAttribute attribute) =>
         attribute.ContributionMode == AttributeContributionMode.Accumulate;
 
+    /// <summary>Whether an attribute merges its values (#3059): every contributor adds, and withdraws only its own.</summary>
+    internal static bool IsMerge(MetaverseAttribute attribute) =>
+        attribute.ContributionMode == AttributeContributionMode.Merge;
+
     /// <summary>
-    /// Adds to an Accumulate attribute (#3059) each supplied value it does not already hold, stamped with this
-    /// contributor. Nothing is removed and no existing row's provenance changes, so a value first supplied by another
-    /// contributor keeps that contributor. Values this run has already staged count as held, so two rules on one
-    /// Connected System supplying the same value in the same pass add it once.
+    /// Whether an attribute's values come from every contributor rather than a priority winner (#3059): Accumulate or
+    /// Merge. Such an attribute bypasses the priority gate and never takes provenance over.
+    /// </summary>
+    internal static bool HasNoWinner(MetaverseAttribute attribute) => IsAccumulate(attribute) || IsMerge(attribute);
+
+    /// <summary>
+    /// Re-tags, rather than removes and adds again, each value of a Merge attribute (#3059) that one contributor
+    /// withdrew and another re-added in the same pass: the value never left the Metaverse Object, so the existing row
+    /// takes the new contributor's provenance and no value change reaches change history or export. Run once every
+    /// contributor that will flow in the pass has flowed, before the pending changes are applied.
+    /// </summary>
+    public static void CollapseMergeRetags(MetaverseObject mvo)
+    {
+        try
+        {
+            CollapseMergeRetagsCore(mvo);
+        }
+        finally
+        {
+            mvo.PendingMergeSupplies.Clear();
+        }
+    }
+
+    private static void CollapseMergeRetagsCore(MetaverseObject mvo)
+    {
+        if (mvo.PendingAttributeValueRemovals.Count == 0 ||
+            (mvo.PendingAttributeValueAdditions.Count == 0 && mvo.PendingMergeSupplies.Count == 0))
+            return;
+
+        // Pair each pending addition to a Merge attribute with a pending removal of the same value on the same attribute,
+        // then each value another contributor noted it supplies (PendingMergeSupplies) with any removal still unpaired.
+        var removalsByKey = new Dictionary<(int AttributeId, object Key), Queue<MetaverseObjectAttributeValue>>();
+        foreach (var removal in mvo.PendingAttributeValueRemovals.Where(r => r.Attribute != null && IsMerge(r.Attribute)))
+        {
+            var key = TypedValueKey(removal, removal.Attribute.Type);
+            if (key == null)
+                continue;
+            if (!removalsByKey.TryGetValue((removal.AttributeId, key), out var queue))
+                removalsByKey[(removal.AttributeId, key)] = queue = new Queue<MetaverseObjectAttributeValue>();
+            queue.Enqueue(removal);
+        }
+
+        if (removalsByKey.Count == 0)
+            return;
+
+        var collapsedRemovals = new List<MetaverseObjectAttributeValue>();
+        var collapsedAdditions = new HashSet<MetaverseObjectAttributeValue>(ReferenceEqualityComparer.Instance);
+        foreach (var addition in mvo.PendingAttributeValueAdditions.Where(a => a.Attribute != null && IsMerge(a.Attribute)))
+        {
+            var key = TypedValueKey(addition, addition.Attribute.Type);
+            if (key == null || !removalsByKey.TryGetValue((addition.AttributeId, key), out var queue) || queue.Count == 0)
+                continue;
+
+            var held = queue.Dequeue();
+            held.ContributedBySyncRuleId = addition.ContributedBySyncRuleId;
+            held.ContributedBySystemId = addition.ContributedBySystemId;
+            held.ContributedByKind = addition.ContributedByKind;
+            collapsedRemovals.Add(held);
+            collapsedAdditions.Add(addition);
+        }
+
+        foreach (var supply in mvo.PendingMergeSupplies.Where(a => a.Attribute != null))
+        {
+            var key = TypedValueKey(supply, supply.Attribute.Type);
+            if (key == null || !removalsByKey.TryGetValue((supply.AttributeId, key), out var queue) || queue.Count == 0)
+                continue;
+
+            var held = queue.Dequeue();
+            held.ContributedBySyncRuleId = supply.ContributedBySyncRuleId;
+            held.ContributedBySystemId = supply.ContributedBySystemId;
+            held.ContributedByKind = supply.ContributedByKind;
+            collapsedRemovals.Add(held);
+        }
+
+        if (collapsedRemovals.Count == 0)
+            return;
+
+        mvo.PendingAttributeValueRemovals.RemoveEach(collapsedRemovals);
+        mvo.PendingAttributeValueAdditions.RemoveAll(collapsedAdditions.Contains);
+        mvo.HasPendingProvenanceChanges = true;
+        Log.Debug("CollapseMergeRetags: re-tagged {Count} Merge value(s) to a surviving contributor on MVO {MvoId}",
+            collapsedRemovals.Count, mvo.Id);
+    }
+
+    /// <summary>
+    /// Stages the removal of each value this contributor holds in a Merge attribute (#3059) that
+    /// <paramref name="withdraw"/> selects. Rows another contributor holds are never touched.
+    /// </summary>
+    private static void WithdrawOwnMergeValues(
+        MetaverseObject mvo,
+        MetaverseAttribute attribute,
+        int? contributingSyncRuleId,
+        Func<MetaverseObjectAttributeValue, bool> withdraw)
+    {
+        if (contributingSyncRuleId == null)
+            return;
+
+        var removals = GetEffectiveAttributeValues(mvo, attribute.Id)
+            .Where(row => row.ContributedBySyncRuleId == contributingSyncRuleId && withdraw(row))
+            .ToList();
+        if (removals.Count == 0)
+            return;
+
+        mvo.PendingAttributeValueRemovals.AddRange(removals);
+        Log.Debug("WithdrawOwnMergeValues: Synchronisation Rule {RuleId} withdraws {Count} value(s) from Merge attribute {AttributeId} on MVO {MvoId}",
+            contributingSyncRuleId, removals.Count, attribute.Id, mvo.Id);
+    }
+
+    /// <summary>
+    /// Adds to an Accumulate or Merge attribute (#3059) each supplied value it does not already hold, stamped with this
+    /// contributor. No existing row's provenance changes, so a value first supplied by another contributor keeps that
+    /// contributor. Values this run has already staged count as held, so two rules on one Connected System supplying the
+    /// same value in the same pass add it once. Under Merge this contributor first withdraws each value it holds and no
+    /// longer supplies; under Accumulate nothing is removed.
     /// </summary>
     /// <param name="sources">The values this contributor supplies, in any form <paramref name="sourceKey"/> reads.</param>
     /// <param name="sourceKey">The key a supplied value is compared by.</param>
     /// <param name="heldKey">Reads a held row's key; false for a row holding no value of the attribute's type.</param>
     /// <param name="create">Builds the new row for a supplied value the attribute does not hold.</param>
     /// <param name="comparer">How keys compare.</param>
-    private static void AccumulateValues<TSource, TKey>(
+    private static void ContributeValues<TSource, TKey>(
         MetaverseObject mvo,
-        int attributeId,
+        MetaverseAttribute attribute,
         IEnumerable<TSource> sources,
         Func<TSource, TKey> sourceKey,
         TryGetHeldKey<TKey> heldKey,
         Func<TSource, MetaverseObjectAttributeValue> create,
-        IEqualityComparer<TKey> comparer) where TKey : notnull
+        IEqualityComparer<TKey> comparer,
+        int? contributingSyncRuleId) where TKey : notnull
     {
+        var attributeId = attribute.Id;
+        var sourceList = sources as IReadOnlyCollection<TSource> ?? sources.ToList();
+
+        if (IsMerge(attribute))
+        {
+            var supplied = new HashSet<TKey>(sourceList.Select(sourceKey), comparer);
+            WithdrawOwnMergeValues(mvo, attribute, contributingSyncRuleId,
+                row => !(heldKey(row, out var key) && supplied.Contains(key)));
+        }
+
         var held = new HashSet<TKey>(GetEffectiveAttributeValues(mvo, attributeId)
             .Concat(mvo.PendingAttributeValueAdditions.Where(av => av.AttributeId == attributeId))
             .Select(row => (IsHeld: heldKey(row, out var key), Key: key))
             .Where(entry => entry.IsHeld)
             .Select(entry => entry.Key), comparer);
 
-        var additions = sources.Where(source => held.Add(sourceKey(source))).Select(create).ToList();
+        var additions = new List<MetaverseObjectAttributeValue>();
+        HashSet<TKey>? ownKeys = null;
+        foreach (var source in sourceList)
+        {
+            if (held.Add(sourceKey(source)))
+            {
+                additions.Add(create(source));
+                continue;
+            }
+
+            // Under Merge, a value another contributor holds is noted as supplied by this one too, so it passes here rather
+            // than leaving the object should its holder withdraw it later in this pass.
+            if (!IsMerge(attribute) || contributingSyncRuleId == null)
+                continue;
+            ownKeys ??= new HashSet<TKey>(GetEffectiveAttributeValues(mvo, attributeId)
+                .Concat(mvo.PendingAttributeValueAdditions.Where(av => av.AttributeId == attributeId))
+                .Where(row => row.ContributedBySyncRuleId == contributingSyncRuleId)
+                .Select(row => (IsHeld: heldKey(row, out var key), Key: key))
+                .Where(entry => entry.IsHeld)
+                .Select(entry => entry.Key), comparer);
+            if (!ownKeys.Contains(sourceKey(source)))
+                mvo.PendingMergeSupplies.Add(create(source));
+        }
+
         if (additions.Count == 0)
             return;
 
         mvo.PendingAttributeValueAdditions.AddRange(additions);
-        Log.Debug("AccumulateValues: adding {AddCount} value(s) to Accumulate attribute {AttributeId} on MVO {MvoId}",
-            additions.Count, attributeId, mvo.Id);
+        Log.Debug("ContributeValues: adding {AddCount} value(s) to {Mode} attribute {AttributeId} on MVO {MvoId}",
+            additions.Count, attribute.ContributionMode, attributeId, mvo.Id);
     }
 
     /// <summary>
@@ -1396,10 +1551,11 @@ public partial class SyncEngine
         var targetAttribute = syncRuleMapping.TargetMetaverseAttribute!;
         comparer ??= EqualityComparer<TKey>.Default;
 
-        if (IsAccumulate(targetAttribute))
+        if (HasNoWinner(targetAttribute))
         {
-            AccumulateValues(mvo, targetAttribute.Id, sourceRows, sourceKey, heldKey,
-                row => NewTypedValue(mvo, targetAttribute, row, assign, contributingSystemId, contributingSyncRuleId), comparer);
+            ContributeValues(mvo, targetAttribute, sourceRows, sourceKey, heldKey,
+                row => NewTypedValue(mvo, targetAttribute, row, assign, contributingSystemId, contributingSyncRuleId), comparer,
+                contributingSyncRuleId);
             return;
         }
 
