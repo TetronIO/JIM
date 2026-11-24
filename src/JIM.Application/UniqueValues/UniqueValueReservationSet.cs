@@ -7,7 +7,7 @@ namespace JIM.Application.UniqueValues;
 
 /// <summary>
 /// A process-wide, thread-safe set of candidate values claimed by in-flight synchronisation runs (Unique Value
-/// Generation, #242, plan "The service"). Generalised from <c>ExampleDataValueTrackerStore</c>'s lock-free
+/// Generation, #242, plan "The service"). Generalised from the example data generator's original lock-free
 /// reserved-values dictionary: one instance lives on the worker for its whole process lifetime and is handed to
 /// every run, so that two schedule steps racing in parallel (release 4's parallel export batches, or two
 /// unrelated runs) can never both claim the same candidate before either has written it to the database. The
