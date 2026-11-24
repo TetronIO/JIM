@@ -174,7 +174,7 @@ public class ObjectMatchingServer
             {
                 Outcome = ObjectMatchingLookupOutcome.Ambiguous,
                 Candidates = ambiguity.Candidates,
-                Description = DescribeAmbiguity(ambiguity, previewing: true)
+                DescriptionDetail = DescribeAmbiguityMessage(ambiguity, previewing: true)
             };
         }
 
@@ -600,16 +600,21 @@ public class ObjectMatchingServer
 
     /// <summary>
     /// The error an ambiguous match records (#2052): how many identities the object matched, on what, and why that
-    /// stops it. The candidates themselves travel separately, so the message does not list ids.
+    /// stops it. The candidates themselves travel separately, so the message does not list ids. This is its British
+    /// English; <see cref="DescribeAmbiguityMessage"/> is the message behind it.
     /// </summary>
     /// <param name="ambiguity">The ambiguous match.</param>
     /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
-    public static string DescribeAmbiguity(MultipleMatchesException ambiguity, bool previewing = false)
+    public static string DescribeAmbiguity(MultipleMatchesException ambiguity, bool previewing = false) =>
+        DescribeAmbiguityMessage(ambiguity, previewing).ToEnglish();
+
+    /// <summary><see cref="DescribeAmbiguity"/> as a message, so the portal reads it in the viewer's language (#3094).</summary>
+    /// <param name="ambiguity">The ambiguous match.</param>
+    /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
+    public static JimMessage DescribeAmbiguityMessage(MultipleMatchesException ambiguity, bool previewing = false)
     {
-        var outcome = previewing ? "a synchronisation would neither join nor project it" : "it was neither joined nor projected";
-        return $"This object matches {CountOf(ambiguity)} Metaverse Objects{DescribeMatchedOn(ambiguity)}, so {outcome}. " +
-               "A Connected System Object can join only one Metaverse Object: correct the data, or the Object Matching Rule, " +
-               "so that its values identify one.";
+        var (values, more) = QuotedMatchValues(ambiguity);
+        return ActivityMessage.ImportAmbiguity(CountOf(ambiguity), ComparisonOf(ambiguity.Rule), values, more, previewing);
     }
 
     /// <summary>
@@ -624,12 +629,9 @@ public class ObjectMatchingServer
         if (distinct.Count < 2)
             return null;
 
-        var found = string.Join("; ", matches.Select(m =>
-            $"'{m.SyncRule.Name}' matches {m.Match.MetaverseObject.NameOrId} on {m.Match.Rule.DescribeComparison()} (\"{m.Match.MatchedValue}\")"));
-        var outcome = previewing ? "a synchronisation would neither join nor project it" : "it was neither joined nor projected";
-        var message = $"This object's import Synchronisation Rules match {distinct.Count} different Metaverse Objects: {found}. " +
-                      $"JIM does not choose between them, so {outcome}. Correct the data, or the rules' Object Matching Rules, " +
-                      "so that they identify one Metaverse Object.";
+        var messageDetail = ActivityMessage.ImportRuleDisagreement(distinct.Count,
+            matches.Select(m => (m.SyncRule.Name, m.Match.MetaverseObject.NameOrId, m.Match.Rule.DescribeComparisonMessage(), m.Match.MatchedValue)),
+            previewing);
 
         var candidates = distinct
             .OrderBy(m => m.Match.MetaverseObject.Name, StringComparer.OrdinalIgnoreCase)
@@ -649,7 +651,7 @@ public class ObjectMatchingServer
             })
             .ToList();
 
-        return new ImportRuleDisagreement(message, candidates);
+        return new ImportRuleDisagreement(messageDetail.ToEnglish(), candidates) { MessageDetail = messageDetail };
     }
 
     /// <summary>
@@ -661,32 +663,28 @@ public class ObjectMatchingServer
     /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
     public static JimMessage DescribeProvisioningAmbiguity(MultipleMatchesException ambiguity, string connectedSystemName, bool previewing = false)
     {
-        const int maxValuesShown = 10;
-        var values = ambiguity.MatchValues
-            .Take(maxValuesShown)
-            .Select(value => $"\"{Convert.ToString(value, CultureInfo.InvariantCulture)}\"")
-            .ToList();
-        var more = Math.Max(0, ambiguity.MatchValues.Count - maxValuesShown);
-        return ActivityMessage.ProvisioningAmbiguity(CountOf(ambiguity), connectedSystemName, ambiguity.Rule?.DescribeComparison(), values, more, previewing);
+        var (values, more) = QuotedMatchValues(ambiguity);
+        return ActivityMessage.ProvisioningAmbiguity(CountOf(ambiguity), connectedSystemName, ComparisonOf(ambiguity.Rule), values, more, previewing);
     }
+
+    /// <summary>What the ambiguous match's rule compares, as a message argument, or null where the rule is not known.</summary>
+    private static MessageArgument? ComparisonOf(ObjectMatchingRule? rule) =>
+        rule != null ? (MessageArgument)rule.DescribeComparisonMessage() : null;
 
     private static int CountOf(MultipleMatchesException ambiguity) =>
         ambiguity.Candidates.Count > 0 ? ambiguity.Candidates[0].CandidateTotal : ambiguity.Matches.Count;
 
-    /// <summary>" on Employee ID equals employeeNumber ("E1001")", or nothing when the rule is not known.</summary>
-    private static string DescribeMatchedOn(MultipleMatchesException ambiguity)
+    /// <summary>
+    /// The values an ambiguous match was made on, each in quotes, and how many more there were beyond the first ten shown.
+    /// </summary>
+    private static (IReadOnlyList<string> Values, int More) QuotedMatchValues(MultipleMatchesException ambiguity)
     {
-        if (ambiguity.Rule == null)
-            return string.Empty;
-
         const int maxValuesShown = 10;
         var values = ambiguity.MatchValues
             .Take(maxValuesShown)
             .Select(value => $"\"{Convert.ToString(value, CultureInfo.InvariantCulture)}\"")
             .ToList();
-        if (ambiguity.MatchValues.Count > maxValuesShown)
-            values.Add($"and {ambiguity.MatchValues.Count - maxValuesShown} more");
-        return $" on {ambiguity.Rule.DescribeComparison()} ({string.Join(", ", values)})";
+        return (values, Math.Max(0, ambiguity.MatchValues.Count - maxValuesShown));
     }
 
     /// <summary>

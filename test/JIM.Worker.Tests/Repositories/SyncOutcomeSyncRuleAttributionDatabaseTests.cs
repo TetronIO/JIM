@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
@@ -309,6 +311,90 @@ public class SyncOutcomeSyncRuleAttributionDatabaseTests
             Assert.That(mergedOutcome.ObjectMatchingRuleId, Is.EqualTo(12));
             Assert.That(mergedOutcome.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeId"));
             Assert.That(mergedOutcome.MatchedValue, Is.EqualTo("1007"));
+        }
+    }
+
+    /// <summary>
+    /// A corrected generated value's outcome stores its detail as a message beside the English (#3094). The update path's
+    /// parameterised INSERT is a writer of its own, so it needs its own round trip.
+    /// </summary>
+    [Test]
+    public async Task BulkUpdateRpeiOutcomesAsync_OutcomeWithDetailMessage_PersistsTheMessageAndItsEnglishAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Exported,
+            DisplayNameSnapshot = "Ann Bloggs"
+        };
+        var message = ActivityMessage.CollisionRemediated("Corporate AD", "mail", "ann@example.com", "ann2@example.com");
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([rpei]);
+
+            var remediated = new ActivityRunProfileExecutionItemSyncOutcome
+            {
+                Id = Guid.NewGuid(),
+                ActivityRunProfileExecutionItemId = rpei.Id,
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated,
+                DetailMessageDetail = message
+            };
+            await repository.Sync.BulkUpdateRpeiOutcomesAsync([rpei], [remediated]);
+        }
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.ActivityRunProfileExecutionItemSyncOutcomes
+            .AsNoTracking().SingleAsync(o => o.ActivityRunProfileExecutionItemId == rpei.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.DetailMessage, Is.EqualTo(message.ToEnglish()));
+            Assert.That(persisted.DetailMessageDetailJson, Is.EqualTo(MessageJson.Serialise(message)));
+        }
+    }
+
+    /// <summary>
+    /// The cross-page merge read carries an outcome's stored message (#3094), or a tree merged at page end would rewrite
+    /// it without its message.
+    /// </summary>
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_OutcomeWithDetailMessage_ReturnsTheMessageAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var csoId = await SeedConnectedSystemObjectAsync();
+        var message = ActivityMessage.CollisionRemediated("Corporate AD", "mail", "ann@example.com", "ann2@example.com");
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Exported,
+            ConnectedSystemObjectId = csoId,
+            DisplayNameSnapshot = "Ann Bloggs"
+        };
+        rpei.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated,
+            DetailMessageDetail = message
+        });
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([rpei]);
+        }
+
+        await using var readCtx = NewContext();
+        var merged = await new PostgresDataRepository(readCtx).Sync.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(activityId, [csoId]);
+
+        var mergedOutcome = merged.Single().Rpei.SyncOutcomes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mergedOutcome.DetailMessage, Is.EqualTo(message.ToEnglish()));
+            Assert.That(mergedOutcome.DetailMessageDetailJson, Is.EqualTo(MessageJson.Serialise(message)));
         }
     }
 

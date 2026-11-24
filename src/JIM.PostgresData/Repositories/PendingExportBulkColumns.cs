@@ -22,17 +22,18 @@ internal static class PendingExportBulkColumns
         "ErrorCount", "FailingSince", "LastAttemptedAt",
         "LastErrorMessage", "LastErrorStackTrace", "SourceMetaverseObjectId",
         "HasUnresolvedReferences", "CreatedAt", "ProvisioningSyncRuleId",
-        "QueuedByRunProfileExecutionItemId", "StagedByRunProfileExecutionItemIds"
+        "QueuedByRunProfileExecutionItemId", "StagedByRunProfileExecutionItemIds", "LastErrorMessageDetailJson"
     ];
 
     /// <summary>
     /// Update columns for the retry/reconciliation bulk update (SyncRepository.CsOperations.cs):
-    /// the status and failure fields mutated when Pending Exports are re-evaluated.
+    /// the status and failure fields mutated when Pending Exports are re-evaluated. LastErrorMessageDetailJson, the
+    /// message behind LastErrorMessage (#3094), travels with the English so the two can never disagree.
     /// </summary>
     internal static readonly string[] PendingExportsRetryUpdate =
     [
         "Status", "ChangeType", "ErrorCount", "FailingSince", "LastAttemptedAt",
-        "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences"
+        "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences", "LastErrorMessageDetailJson"
     ];
 
     /// <summary>
@@ -40,12 +41,14 @@ internal static class PendingExportBulkColumns
     /// update, plus ConnectedSystemObjectId (a provisioning export gains its CSO when the target
     /// object is created). ChangeType is included because a Create written in part, without the
     /// reference changes it could not resolve, becomes an Update at execution time (issue #1398):
-    /// the row now exists, so what is sent later must never be a second insert.
+    /// the row now exists, so what is sent later must never be a second insert. LastErrorMessageDetailJson travels with
+    /// LastErrorMessage, as in the retry update.
     /// </summary>
     internal static readonly string[] PendingExportsExportResultUpdate =
     [
         "Status", "ChangeType", "ErrorCount", "FailingSince", "LastAttemptedAt",
-        "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences", "ConnectedSystemObjectId"
+        "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences", "ConnectedSystemObjectId",
+        "LastErrorMessageDetailJson"
     ];
 
     /// <summary>

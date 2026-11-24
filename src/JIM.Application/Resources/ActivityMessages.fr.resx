@@ -1329,4 +1329,73 @@
   <data name="ExportNotConfirmedByImport" xml:space="preserve">
     <value>Nous avons exporté une modification, mais nous n’en avons pas reçu la confirmation lors d’une importation de confirmation. Détails : {0} attribut(s) : {1}. Une nouvelle tentative d’application de la modification aura lieu lors de la prochaine exécution d’exportation.</value>
   </data>
+  <data name="ImportAmbiguity" xml:space="preserve">
+    <value>Cet objet correspond à {0} objets Metaverse ; {1}. Un objet de système connecté ne peut être joint qu’à un seul objet Metaverse : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ImportAmbiguityOnRule" xml:space="preserve">
+    <value>Cet objet correspond à {0} objets Metaverse selon {1} ({2}) ; {3}. Un objet de système connecté ne peut être joint qu’à un seul objet Metaverse : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ImportOutcomeWasNot" xml:space="preserve">
+    <value>il n’a été ni joint ni projeté</value>
+  </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>une synchronisation ne le joindrait ni ne le projetterait</value>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>Les règles de synchronisation d’importation de cet objet correspondent à {0} objets Metaverse différents : {1}. JIM ne choisit pas entre eux, donc {2}. Corrigez les données, ou la règle de correspondance d’objets de chacune de ces règles, afin qu’elles identifient un seul objet Metaverse.</value>
+  </data>
+  <data name="ImportRuleDisagreementItem" xml:space="preserve">
+    <value>« {0} » correspond à {1} selon {2} (« {3} »)</value>
+  </data>
+  <data name="JoinedBySemicolon" xml:space="preserve">
+    <value>{0} ; {1}</value>
+  </data>
+  <data name="PasswordFilterChangesNamed" xml:space="preserve">
+    <value>Modifications de mot de passe : {0}</value>
+  </data>
+  <data name="PasswordStatusPending" xml:space="preserve">
+    <value>en attente</value>
+  </data>
+  <data name="PasswordStatusParked" xml:space="preserve">
+    <value>suspendues</value>
+  </data>
+  <data name="PasswordStatusExpired" xml:space="preserve">
+    <value>expirées</value>
+  </data>
+  <data name="PasswordStatusCancelled" xml:space="preserve">
+    <value>annulées</value>
+  </data>
+  <data name="PasswordFailureNone" xml:space="preserve">
+    <value>aucune</value>
+  </data>
+  <data name="PasswordFailureTransient" xml:space="preserve">
+    <value>cible indisponible</value>
+  </data>
+  <data name="PasswordFailureConfigurationFault" xml:space="preserve">
+    <value>erreur de configuration</value>
+  </data>
+  <data name="PasswordFailurePolicyRejection" xml:space="preserve">
+    <value>rejet par la stratégie</value>
+  </data>
+  <data name="PasswordFailureTargetObjectNotFound" xml:space="preserve">
+    <value>objet de système connecté introuvable</value>
+  </data>
+  <data name="PasswordFailureUnsupportedOperation" xml:space="preserve">
+    <value>opération non prise en charge</value>
+  </data>
+  <data name="PasswordStatusDelivering" xml:space="preserve">
+    <value>en cours de remise</value>
+  </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>Le connecteur a signalé cette modification comme non tentée, alors que l’exécution d’exportation n’a pas été annulée.</value>
+  </data>
+  <data name="ExportNoResult" xml:space="preserve">
+    <value>Le connecteur n’a renvoyé aucun résultat pour cette modification ; JIM ne peut donc pas savoir si elle a été écrite et elle sera renvoyée.</value>
+  </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>Cet objet devait être désactivé, mais le {0} qu’utilise « {1} » ne peut pas désactiver un compte ; rien n’a donc été envoyé. Remplacez l’action de déprovisionnement de la règle de synchronisation d’exportation par Supprimer ou Déconnecter.</value>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>Cet objet devait être désactivé, mais le connecteur qu’utilise « {0} » ne peut pas désactiver un compte ; rien n’a donc été envoyé. Remplacez l’action de déprovisionnement de la règle de synchronisation d’exportation par Supprimer ou Déconnecter.</value>
+  </data>
 </root>

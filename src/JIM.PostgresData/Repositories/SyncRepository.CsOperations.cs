@@ -1203,6 +1203,7 @@ public partial class SyncRepository
                     tracked.LastAttemptedAt = pe.LastAttemptedAt;
                     tracked.LastErrorMessage = pe.LastErrorMessage;
                     tracked.LastErrorStackTrace = pe.LastErrorStackTrace;
+                    tracked.LastErrorMessageDetailJson = pe.LastErrorMessageDetailJson;
                     tracked.HasUnresolvedReferences = pe.HasUnresolvedReferences;
                 }
 
@@ -1251,7 +1252,8 @@ public partial class SyncRepository
                     "LastAttemptedAt" timestamptz,
                     "LastErrorMessage" text,
                     "LastErrorStackTrace" text,
-                    "HasUnresolvedReferences" boolean
+                    "HasUnresolvedReferences" boolean,
+                    "LastErrorMessageDetailJson" text
                 ) ON COMMIT PRESERVE ROWS;
                 TRUNCATE _pe_bulk_update
                 """;
@@ -1286,6 +1288,10 @@ public partial class SyncRepository
                 else
                     await writer.WriteNullAsync();
                 await writer.WriteAsync(pe.HasUnresolvedReferences, NpgsqlTypes.NpgsqlDbType.Boolean);
+                if (pe.LastErrorMessageDetailJson is not null)
+                    await writer.WriteAsync(pe.LastErrorMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
+                else
+                    await writer.WriteNullAsync();
             }
             await writer.CompleteAsync();
         }
@@ -1658,6 +1664,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             await writer.WriteAsync(pe.StagedByRunProfileExecutionItemIds.ToArray(),
                 NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid);
+            if (pe.LastErrorMessageDetailJson is not null)
+                await writer.WriteAsync(pe.LastErrorMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

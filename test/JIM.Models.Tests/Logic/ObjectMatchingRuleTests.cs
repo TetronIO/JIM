@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using NUnit.Framework;
@@ -134,6 +136,45 @@ public class ObjectMatchingRuleTests
         var rule = SimpleModeRule();
 
         Assert.That(rule.DescribeComparison(), Is.EqualTo("201 equals 101"));
+    }
+
+    [Test]
+    public void DescribeComparisonMessage_EverySource_RendersTheEnglishDescribeComparisonWrote()
+    {
+        var attributeSource = new ObjectMatchingRule
+        {
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 201, Name = "Employee ID" },
+            Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "employeeId" } }]
+        };
+        var expressionSource = new ObjectMatchingRule
+        {
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 201, Name = "Employee ID" },
+            Sources = [new ObjectMatchingRuleSource { Order = 0, Expression = "\"E\" + Trim(cs[\"employeeId\"])" }]
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var rule in new[] { attributeSource, expressionSource, SimpleModeRule(), new ObjectMatchingRule() })
+                Assert.That(rule.DescribeComparisonMessage().ToEnglish(), Is.EqualTo(rule.DescribeComparison()));
+        }
+    }
+
+    [Test]
+    public void DescribeComparisonMessage_InFrenchAndGerman_KeepsTheNamesAndTranslatesTheComparison()
+    {
+        var rule = new ObjectMatchingRule
+        {
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 201, Name = "Employee ID" },
+            Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "employeeId" } }]
+        };
+        var french = CultureInfo.GetCultureInfo("fr");
+        var german = CultureInfo.GetCultureInfo("de");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(MessageRenderer.Render(rule.DescribeComparisonMessage(), french, french), Is.EqualTo("Employee ID est égal à employeeId"));
+            Assert.That(MessageRenderer.Render(rule.DescribeComparisonMessage(), german, german), Is.EqualTo("Employee ID entspricht employeeId"));
+        }
     }
 
     private static ObjectMatchingRule SimpleModeRule() => new()

@@ -167,4 +167,22 @@
   <data name="PasswordFilterWholeQueue" xml:space="preserve">
     <value>The Password Synchronization queue</value>
   </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronization would neither join nor project it</value>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>This object's import Synchronization Rules match {0} different Metaverse Objects: {1}. JIM does not choose between them, so {2}. Correct the data, or the rules' Object Matching Rules, so that they identify one Metaverse Object.</value>
+  </data>
+  <data name="PasswordStatusCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>This object was to be disabled, but the {0} that '{1}' uses cannot disable an account, so nothing was sent. Change the export Synchronization Rule's Deprovisioning Action to Delete or Disconnect.</value>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>This object was to be disabled, but the Connector that '{0}' uses cannot disable an account, so nothing was sent. Change the export Synchronization Rule's Deprovisioning Action to Delete or Disconnect.</value>
+  </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>The Connector reported this change as not attempted, although the export run was not canceled.</value>
+  </data>
 </root>

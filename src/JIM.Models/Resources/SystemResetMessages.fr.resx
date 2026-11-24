@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="HeaderAdministratorsRemoved" xml:space="preserve">
+    <value>Réinitialisation d’usine terminée (administrateurs supprimés).</value>
+  </data>
+  <data name="HeaderAdministratorsRetained" xml:space="preserve">
+    <value>Réinitialisation d’usine terminée (administrateurs conservés : {0}).</value>
+  </data>
+  <data name="NothingRemoved" xml:space="preserve">
+    <value>{0}
+
+Rien n’a été supprimé ; le système était déjà vide.</value>
+  </data>
+  <data name="RemovedList" xml:space="preserve">
+    <value>{0}
+
+Supprimé :
+{1}</value>
+  </data>
+  <data name="Joined" xml:space="preserve">
+    <value>{0}
+{1}</value>
+  </data>
+  <data name="RemovedConnectedSystemsOne" xml:space="preserve">
+    <value>• {0} système connecté</value>
+  </data>
+  <data name="RemovedConnectedSystemsOther" xml:space="preserve">
+    <value>• {0} systèmes connectés</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectsOne" xml:space="preserve">
+    <value>• {0} objet de système connecté</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectsOther" xml:space="preserve">
+    <value>• {0} objets de systèmes connectés</value>
+  </data>
+  <data name="RemovedMetaverseObjectsOne" xml:space="preserve">
+    <value>• {0} objet Metaverse</value>
+  </data>
+  <data name="RemovedMetaverseObjectsOther" xml:space="preserve">
+    <value>• {0} objets Metaverse</value>
+  </data>
+  <data name="RemovedMetaverseObjectChangesOne" xml:space="preserve">
+    <value>• {0} enregistrement de modification d’objet Metaverse</value>
+  </data>
+  <data name="RemovedMetaverseObjectChangesOther" xml:space="preserve">
+    <value>• {0} enregistrements de modification d’objets Metaverse</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectChangesOne" xml:space="preserve">
+    <value>• {0} enregistrement de modification d’objet de système connecté</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectChangesOther" xml:space="preserve">
+    <value>• {0} enregistrements de modification d’objets de systèmes connectés</value>
+  </data>
+  <data name="RemovedSynchronisationRulesOne" xml:space="preserve">
+    <value>• {0} règle de synchronisation</value>
+  </data>
+  <data name="RemovedSynchronisationRulesOther" xml:space="preserve">
+    <value>• {0} règles de synchronisation</value>
+  </data>
+  <data name="RemovedObjectMatchingRulesOne" xml:space="preserve">
+    <value>• {0} règle de correspondance d’objets</value>
+  </data>
+  <data name="RemovedObjectMatchingRulesOther" xml:space="preserve">
+    <value>• {0} règles de correspondance d’objets</value>
+  </data>
+  <data name="RemovedSchedulesOne" xml:space="preserve">
+    <value>• {0} planification</value>
+  </data>
+  <data name="RemovedSchedulesOther" xml:space="preserve">
+    <value>• {0} planifications</value>
+  </data>
+  <data name="RemovedScheduleExecutionsOne" xml:space="preserve">
+    <value>• {0} exécution de planification</value>
+  </data>
+  <data name="RemovedScheduleExecutionsOther" xml:space="preserve">
+    <value>• {0} exécutions de planification</value>
+  </data>
+  <data name="RemovedActivitiesOne" xml:space="preserve">
+    <value>• {0} activité</value>
+  </data>
+  <data name="RemovedActivitiesOther" xml:space="preserve">
+    <value>• {0} activités</value>
+  </data>
+  <data name="RemovedPendingExportsOne" xml:space="preserve">
+    <value>• {0} exportation en attente</value>
+  </data>
+  <data name="RemovedPendingExportsOther" xml:space="preserve">
+    <value>• {0} exportations en attente</value>
+  </data>
+  <data name="RemovedCustomMetaverseObjectTypesOne" xml:space="preserve">
+    <value>• {0} type d’objet Metaverse personnalisé</value>
+  </data>
+  <data name="RemovedCustomMetaverseObjectTypesOther" xml:space="preserve">
+    <value>• {0} types d’objets Metaverse personnalisés</value>
+  </data>
+  <data name="RemovedCustomMetaverseAttributesOne" xml:space="preserve">
+    <value>• {0} attribut Metaverse personnalisé</value>
+  </data>
+  <data name="RemovedCustomMetaverseAttributesOther" xml:space="preserve">
+    <value>• {0} attributs Metaverse personnalisés</value>
+  </data>
+  <data name="RemovedCustomRolesOne" xml:space="preserve">
+    <value>• {0} rôle personnalisé</value>
+  </data>
+  <data name="RemovedCustomRolesOther" xml:space="preserve">
+    <value>• {0} rôles personnalisés</value>
+  </data>
+  <data name="RemovedCustomConnectorDefinitionsOne" xml:space="preserve">
+    <value>• {0} définition de connecteur personnalisée</value>
+  </data>
+  <data name="RemovedCustomConnectorDefinitionsOther" xml:space="preserve">
+    <value>• {0} définitions de connecteur personnalisées</value>
+  </data>
+  <data name="RemovedCustomPredefinedSearchesOne" xml:space="preserve">
+    <value>• {0} recherche prédéfinie personnalisée</value>
+  </data>
+  <data name="RemovedCustomPredefinedSearchesOther" xml:space="preserve">
+    <value>• {0} recherches prédéfinies personnalisées</value>
+  </data>
+  <data name="RemovedCustomExampleDataSetsOne" xml:space="preserve">
+    <value>• {0} jeu de données d’exemple personnalisé</value>
+  </data>
+  <data name="RemovedCustomExampleDataSetsOther" xml:space="preserve">
+    <value>• {0} jeux de données d’exemple personnalisés</value>
+  </data>
+  <data name="RemovedCustomExampleDataTemplatesOne" xml:space="preserve">
+    <value>• {0} modèle de données d’exemple personnalisé</value>
+  </data>
+  <data name="RemovedCustomExampleDataTemplatesOther" xml:space="preserve">
+    <value>• {0} modèles de données d’exemple personnalisés</value>
+  </data>
+  <data name="RemovedCustomApiKeysOne" xml:space="preserve">
+    <value>• {0} clé d’API personnalisée</value>
+  </data>
+  <data name="RemovedCustomApiKeysOther" xml:space="preserve">
+    <value>• {0} clés d’API personnalisées</value>
+  </data>
+  <data name="RemovedTrustedCertificatesOne" xml:space="preserve">
+    <value>• {0} certificat approuvé</value>
+  </data>
+  <data name="RemovedTrustedCertificatesOther" xml:space="preserve">
+    <value>• {0} certificats approuvés</value>
+  </data>
+</root>

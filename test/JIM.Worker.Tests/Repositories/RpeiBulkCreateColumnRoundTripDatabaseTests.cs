@@ -127,6 +127,7 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             TargetEntityDescription = "displayName",
             DetailCount = 1,
             DetailMessage = "Jo Bloggs",
+            DetailMessageDetailJson = "{\"Catalogue\":\"JIM.Application:ActivityMessages\",\"Key\":\"ExportFailedNoReason\",\"Arguments\":[]}",
             ConnectedSystemObjectChangeId = null,
             SyncRuleId = 42,
             SyncRuleName = "HR Import",
@@ -210,6 +211,8 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedRoot.TargetEntityDescription, Is.EqualTo("displayName"));
             Assert.That(storedRoot.DetailCount, Is.EqualTo(1));
             Assert.That(storedRoot.DetailMessage, Is.EqualTo("Jo Bloggs"));
+            Assert.That(storedRoot.DetailMessageDetailJson,
+                Is.EqualTo("{\"Catalogue\":\"JIM.Application:ActivityMessages\",\"Key\":\"ExportFailedNoReason\",\"Arguments\":[]}"));
             Assert.That(storedRoot.Ordinal, Is.EqualTo(0));
             Assert.That(storedRoot.ConnectedSystemObjectChangeId, Is.Null);
             Assert.That(storedRoot.SyncRuleId, Is.EqualTo(42));
@@ -226,6 +229,7 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedChild.TargetEntityDescription, Is.EqualTo("employeeNumber"));
             Assert.That(storedChild.DetailCount, Is.Null);
             Assert.That(storedChild.DetailMessage, Is.Null);
+            Assert.That(storedChild.DetailMessageDetailJson, Is.Null);
             Assert.That(storedChild.SyncRuleId, Is.Null);
             Assert.That(storedChild.SyncRuleName, Is.Null);
             Assert.That(storedChild.StagedChangeType, Is.EqualTo(PendingExportChangeType.Update));

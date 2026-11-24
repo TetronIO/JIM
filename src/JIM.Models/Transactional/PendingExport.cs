@@ -4,6 +4,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
@@ -85,6 +86,30 @@ public class PendingExport
     public string? LastErrorMessage { get; set; }
 
     /// <summary>
+    /// <see cref="LastErrorMessage"/> as a stored message, so the portal can show it in the viewer's language (#3094).
+    /// Null where the error is worded by a Connector or another system, which stays as it wrote it, or was written before
+    /// messages existed; the portal then shows <see cref="LastErrorMessage"/>. Set it through
+    /// <see cref="LastErrorMessageDetail"/>, and clear it whenever <see cref="LastErrorMessage"/> is cleared or replaced
+    /// with plain text, so a message never outlives its English. Never returned by the REST API.
+    /// </summary>
+    public string? LastErrorMessageDetailJson { get; set; }
+
+    /// <summary>
+    /// The last error as a message. Setting it also sets <see cref="LastErrorMessage"/> to its British English, so the
+    /// two can never disagree.
+    /// </summary>
+    [NotMapped]
+    public JimMessage? LastErrorMessageDetail
+    {
+        get => MessageJson.Deserialise(LastErrorMessageDetailJson);
+        set
+        {
+            LastErrorMessageDetailJson = MessageJson.Serialise(value);
+            LastErrorMessage = value?.ToEnglish();
+        }
+    }
+
+    /// <summary>
     /// The stack trace from the last failed attempt, if available.
     /// </summary>
     public string? LastErrorStackTrace { get; set; }
@@ -97,6 +122,7 @@ public class PendingExport
         ErrorCount = 0;
         FailingSince = null;
         LastErrorMessage = null;
+        LastErrorMessageDetailJson = null;
         LastErrorStackTrace = null;
     }
 

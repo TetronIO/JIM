@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Logic;
 
@@ -11,4 +12,8 @@ namespace JIM.Models.Logic;
 /// </summary>
 /// <param name="Message">What each rule matched, and what to do about it.</param>
 /// <param name="Candidates">One candidate per Metaverse Object the rules found, ordered by display name.</param>
-public sealed record ImportRuleDisagreement(string Message, IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate> Candidates);
+public sealed record ImportRuleDisagreement(string Message, IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate> Candidates)
+{
+    /// <summary><see cref="Message"/> as a message the portal shows in the viewer's language (#3094); its English is exactly <see cref="Message"/>.</summary>
+    public required JimMessage MessageDetail { get; init; }
+}

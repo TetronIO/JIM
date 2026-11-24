@@ -190,4 +190,96 @@
     <value>Not delivered to Exchange: replaced by a newer declared state for this object, queued by a later export to {0}.</value>
     <comment>On the Activity of an Exchange change a newer one replaced. {0}: the Connected System's name.</comment>
   </data>
+  <data name="FilterOneChange" xml:space="preserve">
+    <value>One Exchange change</value>
+    <comment>The target of an administrator's action over the Exchange queue, naming one change.</comment>
+  </data>
+  <data name="FilterChanges" xml:space="preserve">
+    <value>{0} Exchange changes</value>
+    <comment>The target of an administrator's action over the Exchange queue, naming several chosen changes. {0}: how many, as plain digits (two or more).</comment>
+  </data>
+  <data name="FilterQueue" xml:space="preserve">
+    <value>The Exchange queue</value>
+    <comment>The target of an administrator's action over the whole Exchange queue.</comment>
+  </data>
+  <data name="FilterAnyChanges" xml:space="preserve">
+    <value>Exchange changes</value>
+    <comment>The target of an administrator's action over Exchange changes narrowed by an object rather than by state or failure.</comment>
+  </data>
+  <data name="FilterAnyChangesMatching" xml:space="preserve">
+    <value>Exchange changes matching "{0}"</value>
+    <comment>As FilterAnyChanges, narrowed by what the administrator searched for. {0}: the search text, as typed.</comment>
+  </data>
+  <data name="FilterNamedChanges" xml:space="preserve">
+    <value>{0} Exchange changes</value>
+    <comment>The target of an administrator's action over Exchange changes in the states and with the failures chosen. {0}: those, comma separated (the FilterState... and FilterKind... messages). English shows the values' names as they have always been written; the other languages put the list after a colon so no word has to agree with it.</comment>
+  </data>
+  <data name="FilterNamedChangesMatching" xml:space="preserve">
+    <value>{0} Exchange changes matching "{1}"</value>
+    <comment>As FilterNamedChanges, also narrowed by what the administrator searched for. {0}: the chosen states and failures, {1}: the search text, as typed.</comment>
+  </data>
+  <data name="FilterJoined" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Two chosen states or failures in a list, separated by a comma.</comment>
+  </data>
+  <data name="FilterStateQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>An Exchange change's state, inside a list of chosen filters (FilterNamedChanges). English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateDelivering" xml:space="preserve">
+    <value>Delivering</value>
+    <comment>An Exchange change's state: JIM is sending it now. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateRetrying" xml:space="preserve">
+    <value>Retrying</value>
+    <comment>An Exchange change's state: it failed and JIM will try again. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>An Exchange change's state: JIM has stopped trying until an administrator acts. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateDelivered" xml:space="preserve">
+    <value>Delivered</value>
+    <comment>An Exchange change's state: Exchange made it. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateWithdrawn" xml:space="preserve">
+    <value>Withdrawn</value>
+    <comment>An Exchange change's state: it was withdrawn before it was made. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateReplaced" xml:space="preserve">
+    <value>Replaced</value>
+    <comment>An Exchange change's state: a newer change took its place. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateRefused" xml:space="preserve">
+    <value>Refused</value>
+    <comment>An Exchange change's state: it was refused before it was queued. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateNotMade" xml:space="preserve">
+    <value>NotMade</value>
+    <comment>An Exchange change's state: it was not made. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterStateHeld" xml:space="preserve">
+    <value>Held</value>
+    <comment>An Exchange change's state: it is held back. English is the state's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterKindObjectNotFound" xml:space="preserve">
+    <value>ObjectNotFound</value>
+    <comment>How an Exchange change failed: Exchange has no such object. English is the failure kind's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterKindRefused" xml:space="preserve">
+    <value>Refused</value>
+    <comment>How an Exchange change failed: Exchange refused it. English is the failure kind's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterKindInsufficientPermissions" xml:space="preserve">
+    <value>InsufficientPermissions</value>
+    <comment>How an Exchange change failed: the account JIM uses lacks the rights. English is the failure kind's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterKindAuthenticationFailed" xml:space="preserve">
+    <value>AuthenticationFailed</value>
+    <comment>How an Exchange change failed: Exchange did not accept JIM's sign-in. English is the failure kind's name. Lower case: it follows a colon.</comment>
+  </data>
+  <data name="FilterKindUnreachable" xml:space="preserve">
+    <value>Unreachable</value>
+    <comment>How an Exchange change failed: Exchange could not be reached. English is the failure kind's name. Lower case: it follows a colon.</comment>
+  </data>
 </root>

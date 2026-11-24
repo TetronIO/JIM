@@ -10,6 +10,7 @@ using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
 using JIM.Models.Security;
 using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -206,7 +207,7 @@ public class ExchangeDeliveryServer
         {
             TargetType = ActivityTargetType.ExchangeRecipient,
             TargetOperationType = ActivityTargetOperationType.RetryExchangeRecipient,
-            TargetName = DescribeFilter(filter),
+            TargetNameDetail = DescribeFilter(filter),
             ConnectedSystemId = filter.ConnectedSystemId,
             MetaverseObjectId = filter.MetaverseObjectId,
             ConnectedSystemObjectId = filter.ConnectedSystemObjectId
@@ -278,28 +279,67 @@ public class ExchangeDeliveryServer
 
     /// <summary>
     /// Names what a retry ran over, for its Activity: what the administrator chose rather than what it resolved to,
-    /// because that is what they will look for later.
+    /// because that is what they will look for later. One sentence per shape, with the chosen states and failure kinds
+    /// named in the reader's language (#3094).
     /// </summary>
-    private static string DescribeFilter(PendingExchangeChangeFilter filter)
+    internal static JimMessage DescribeFilter(PendingExchangeChangeFilter filter)
     {
         if (filter.TargetsSpecificChanges)
-            return filter.Ids!.Count == 1 ? "One Exchange change" : $"{filter.Ids!.Count} Exchange changes";
+            return filter.Ids!.Count == 1
+                ? ExchangeMessage(nameof(ExchangeMessages.FilterOneChange))
+                : ExchangeMessage(nameof(ExchangeMessages.FilterChanges), (long)filter.Ids!.Count);
 
-        var parts = new List<string>();
+        var chosen = new List<JimMessage>();
         if (filter.State.HasValue)
-            parts.Add(filter.State.Value.ToString());
+            chosen.Add(ExchangeMessage(ExchangeStateKey(filter.State.Value)));
         if (filter.FailureKind.HasValue)
-            parts.Add(filter.FailureKind.Value.ToString());
+            chosen.Add(ExchangeMessage(ExchangeFailureKindKey(filter.FailureKind.Value)));
+        var named = chosen.Aggregate((JimMessage?)null, (joined, next) =>
+            joined is null ? next : ExchangeMessage(nameof(ExchangeMessages.FilterJoined), joined, next));
 
-        var described = parts.Count == 0 && filter.MetaverseObjectId == null && filter.ConnectedSystemObjectId == null
-                        && string.IsNullOrWhiteSpace(filter.SearchText)
-            ? "The Exchange queue"
-            : parts.Count == 0 ? "Exchange changes" : $"{string.Join(", ", parts)} Exchange changes";
+        var search = string.IsNullOrWhiteSpace(filter.SearchText) ? null : filter.SearchText.Trim();
+        if (named is null)
+        {
+            if (filter.MetaverseObjectId == null && filter.ConnectedSystemObjectId == null && search == null)
+                return ExchangeMessage(nameof(ExchangeMessages.FilterQueue));
 
-        return string.IsNullOrWhiteSpace(filter.SearchText)
-            ? described
-            : $"{described} matching \"{filter.SearchText.Trim()}\"";
+            return search == null
+                ? ExchangeMessage(nameof(ExchangeMessages.FilterAnyChanges))
+                : ExchangeMessage(nameof(ExchangeMessages.FilterAnyChangesMatching), search);
+        }
+
+        return search == null
+            ? ExchangeMessage(nameof(ExchangeMessages.FilterNamedChanges), named)
+            : ExchangeMessage(nameof(ExchangeMessages.FilterNamedChangesMatching), named, search);
     }
+
+    private static JimMessage ExchangeMessage(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(MessageCatalogues.Exchange, key, arguments);
+
+    private static string ExchangeStateKey(ExchangeChangeState state) => state switch
+    {
+        ExchangeChangeState.Queued => nameof(ExchangeMessages.FilterStateQueued),
+        ExchangeChangeState.Delivering => nameof(ExchangeMessages.FilterStateDelivering),
+        ExchangeChangeState.Retrying => nameof(ExchangeMessages.FilterStateRetrying),
+        ExchangeChangeState.Parked => nameof(ExchangeMessages.FilterStateParked),
+        ExchangeChangeState.Delivered => nameof(ExchangeMessages.FilterStateDelivered),
+        ExchangeChangeState.Withdrawn => nameof(ExchangeMessages.FilterStateWithdrawn),
+        ExchangeChangeState.Replaced => nameof(ExchangeMessages.FilterStateReplaced),
+        ExchangeChangeState.Refused => nameof(ExchangeMessages.FilterStateRefused),
+        ExchangeChangeState.NotMade => nameof(ExchangeMessages.FilterStateNotMade),
+        ExchangeChangeState.Held => nameof(ExchangeMessages.FilterStateHeld),
+        _ => throw new ArgumentOutOfRangeException(nameof(state), state, "An Exchange change state with no message.")
+    };
+
+    private static string ExchangeFailureKindKey(ExchangeChangeFailureKind kind) => kind switch
+    {
+        ExchangeChangeFailureKind.ObjectNotFound => nameof(ExchangeMessages.FilterKindObjectNotFound),
+        ExchangeChangeFailureKind.Refused => nameof(ExchangeMessages.FilterKindRefused),
+        ExchangeChangeFailureKind.InsufficientPermissions => nameof(ExchangeMessages.FilterKindInsufficientPermissions),
+        ExchangeChangeFailureKind.AuthenticationFailed => nameof(ExchangeMessages.FilterKindAuthenticationFailed),
+        ExchangeChangeFailureKind.Unreachable => nameof(ExchangeMessages.FilterKindUnreachable),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "An Exchange failure kind with no message.")
+    };
 
     /// <summary>
     /// One account's Exchange recipient (#2021, Phase 6): what is declared for it now, what the last import read back,

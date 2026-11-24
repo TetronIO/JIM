@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="HeaderAdministratorsRemoved" xml:space="preserve">
+    <value>Zurücksetzen auf Werkseinstellungen abgeschlossen (Administratoren entfernt).</value>
+  </data>
+  <data name="HeaderAdministratorsRetained" xml:space="preserve">
+    <value>Zurücksetzen auf Werkseinstellungen abgeschlossen (Administratoren beibehalten: {0}).</value>
+  </data>
+  <data name="NothingRemoved" xml:space="preserve">
+    <value>{0}
+
+Es wurde nichts entfernt; das System war bereits leer.</value>
+  </data>
+  <data name="RemovedList" xml:space="preserve">
+    <value>{0}
+
+Entfernt:
+{1}</value>
+  </data>
+  <data name="Joined" xml:space="preserve">
+    <value>{0}
+{1}</value>
+  </data>
+  <data name="RemovedConnectedSystemsOne" xml:space="preserve">
+    <value>• {0} verbundenes System</value>
+  </data>
+  <data name="RemovedConnectedSystemsOther" xml:space="preserve">
+    <value>• {0} verbundene Systeme</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectsOne" xml:space="preserve">
+    <value>• {0} Objekt im verbundenen System</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectsOther" xml:space="preserve">
+    <value>• {0} Objekte in verbundenen Systemen</value>
+  </data>
+  <data name="RemovedMetaverseObjectsOne" xml:space="preserve">
+    <value>• {0} Metaverse-Objekt</value>
+  </data>
+  <data name="RemovedMetaverseObjectsOther" xml:space="preserve">
+    <value>• {0} Metaverse-Objekte</value>
+  </data>
+  <data name="RemovedMetaverseObjectChangesOne" xml:space="preserve">
+    <value>• {0} Änderungsdatensatz eines Metaverse-Objekts</value>
+  </data>
+  <data name="RemovedMetaverseObjectChangesOther" xml:space="preserve">
+    <value>• {0} Änderungsdatensätze von Metaverse-Objekten</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectChangesOne" xml:space="preserve">
+    <value>• {0} Änderungsdatensatz eines Objekts im verbundenen System</value>
+  </data>
+  <data name="RemovedConnectedSystemObjectChangesOther" xml:space="preserve">
+    <value>• {0} Änderungsdatensätze von Objekten in verbundenen Systemen</value>
+  </data>
+  <data name="RemovedSynchronisationRulesOne" xml:space="preserve">
+    <value>• {0} Synchronisierungsregel</value>
+  </data>
+  <data name="RemovedSynchronisationRulesOther" xml:space="preserve">
+    <value>• {0} Synchronisierungsregeln</value>
+  </data>
+  <data name="RemovedObjectMatchingRulesOne" xml:space="preserve">
+    <value>• {0} Objektabgleichsregel</value>
+  </data>
+  <data name="RemovedObjectMatchingRulesOther" xml:space="preserve">
+    <value>• {0} Objektabgleichsregeln</value>
+  </data>
+  <data name="RemovedSchedulesOne" xml:space="preserve">
+    <value>• {0} Zeitplan</value>
+  </data>
+  <data name="RemovedSchedulesOther" xml:space="preserve">
+    <value>• {0} Zeitpläne</value>
+  </data>
+  <data name="RemovedScheduleExecutionsOne" xml:space="preserve">
+    <value>• {0} Zeitplanausführung</value>
+  </data>
+  <data name="RemovedScheduleExecutionsOther" xml:space="preserve">
+    <value>• {0} Zeitplanausführungen</value>
+  </data>
+  <data name="RemovedActivitiesOne" xml:space="preserve">
+    <value>• {0} Aktivität</value>
+  </data>
+  <data name="RemovedActivitiesOther" xml:space="preserve">
+    <value>• {0} Aktivitäten</value>
+  </data>
+  <data name="RemovedPendingExportsOne" xml:space="preserve">
+    <value>• {0} ausstehender Export</value>
+  </data>
+  <data name="RemovedPendingExportsOther" xml:space="preserve">
+    <value>• {0} ausstehende Exporte</value>
+  </data>
+  <data name="RemovedCustomMetaverseObjectTypesOne" xml:space="preserve">
+    <value>• {0} benutzerdefinierter Metaverse-Objekttyp</value>
+  </data>
+  <data name="RemovedCustomMetaverseObjectTypesOther" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Metaverse-Objekttypen</value>
+  </data>
+  <data name="RemovedCustomMetaverseAttributesOne" xml:space="preserve">
+    <value>• {0} benutzerdefiniertes Metaverse-Attribut</value>
+  </data>
+  <data name="RemovedCustomMetaverseAttributesOther" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Metaverse-Attribute</value>
+  </data>
+  <data name="RemovedCustomRolesOne" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Rolle</value>
+  </data>
+  <data name="RemovedCustomRolesOther" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Rollen</value>
+  </data>
+  <data name="RemovedCustomConnectorDefinitionsOne" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Connectordefinition</value>
+  </data>
+  <data name="RemovedCustomConnectorDefinitionsOther" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Connectordefinitionen</value>
+  </data>
+  <data name="RemovedCustomPredefinedSearchesOne" xml:space="preserve">
+    <value>• {0} eigene vordefinierte Suche</value>
+  </data>
+  <data name="RemovedCustomPredefinedSearchesOther" xml:space="preserve">
+    <value>• {0} eigene vordefinierte Suchen</value>
+  </data>
+  <data name="RemovedCustomExampleDataSetsOne" xml:space="preserve">
+    <value>• {0} benutzerdefinierter Beispieldatensatz</value>
+  </data>
+  <data name="RemovedCustomExampleDataSetsOther" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Beispieldatensätze</value>
+  </data>
+  <data name="RemovedCustomExampleDataTemplatesOne" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Beispieldatenvorlage</value>
+  </data>
+  <data name="RemovedCustomExampleDataTemplatesOther" xml:space="preserve">
+    <value>• {0} benutzerdefinierte Beispieldatenvorlagen</value>
+  </data>
+  <data name="RemovedCustomApiKeysOne" xml:space="preserve">
+    <value>• {0} benutzerdefinierter API-Schlüssel</value>
+  </data>
+  <data name="RemovedCustomApiKeysOther" xml:space="preserve">
+    <value>• {0} benutzerdefinierte API-Schlüssel</value>
+  </data>
+  <data name="RemovedTrustedCertificatesOne" xml:space="preserve">
+    <value>• {0} vertrauenswürdiges Zertifikat</value>
+  </data>
+  <data name="RemovedTrustedCertificatesOther" xml:space="preserve">
+    <value>• {0} vertrauenswürdige Zertifikate</value>
+  </data>
+</root>
