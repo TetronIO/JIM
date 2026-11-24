@@ -7941,6 +7941,13 @@ html[lang] .jim-section-stack > * {
     margin-block: 0 !important;
 }
 
+/* A VirtualisedDataGrid's built-in top margin (GridClass, mt-5 by default, which pages not yet in a stack rely on) sits
+   on the grid inside its scroll container, one level below the stack's children, so the rule above cannot reach it:
+   left alone it added 20px to the section gap. Neutralised here for the grid and its loading placeholder alike. */
+html[lang] .jim-section-stack > .jim-virtualised-list > * {
+    margin-block: 0 !important;
+}
+
 html[lang] .jim-section-stack > .jim-section-caption {
     margin-top: calc(var(--jim-space-caption) - var(--jim-space-section)) !important;
 }
