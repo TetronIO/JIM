@@ -775,13 +775,13 @@ namespace JIM.Application.Servers
                 return 0;
 
             var outOfMemory = await DescribeLikelyOutOfMemoryAsync();
-            var errorMessage = ActivityMessage.Create(nameof(ActivityMessages.WorkerTaskAbandoned), outOfMemory == null ? string.Empty : $"{outOfMemory} ");
+            var errorMessage = ActivityMessage.Create(nameof(ActivityMessages.WorkerTaskAbandoned), outOfMemory == null ? string.Empty : ActivityMessage.Create(nameof(ActivityMessages.JoinedBySpace), outOfMemory, string.Empty));
 
             foreach (var staleTask in staleTasks)
             {
                 // An Error, not a Warning: a run was lost, and an administrator reading the logs needs to see it.
                 Log.Error("RecoverStaleWorkerTasksAsync: Recovering stale worker task {TaskId} (last heartbeat: {LastHeartbeat}). {OutOfMemory}",
-                    staleTask.Id, staleTask.LastHeartbeat?.ToString("o") ?? "never", outOfMemory ?? string.Empty);
+                    staleTask.Id, staleTask.LastHeartbeat?.ToString("o") ?? "never", outOfMemory?.ToEnglish() ?? string.Empty);
 
                 // Fail the associated activity so it appears correctly in history
                 if (staleTask.Activity is { Status: ActivityStatus.InProgress })
@@ -809,7 +809,7 @@ namespace JIM.Application.Servers
         /// not or there is none. The operating system kills a process that exhausts memory without a word, so the
         /// last reading the Worker left is the only evidence JIM has after the fact.
         /// </summary>
-        private async Task<string?> DescribeLikelyOutOfMemoryAsync()
+        private async Task<JimMessage?> DescribeLikelyOutOfMemoryAsync()
         {
             var heartbeats = await Application.Repository.System.GetLatestServiceHeartbeatsAsync();
             var worker = heartbeats.FirstOrDefault(h => h.Service == JimService.WorkerSync);
@@ -817,9 +817,7 @@ namespace JIM.Application.Servers
                 return null;
 
             var reading = new MemoryReading { ProcessBytes = process, TotalBytes = total, AvailableBytes = available };
-            return MemoryPressure.IsLow(reading)
-                ? $"The Worker most likely ran out of memory: when it last reported, {MemoryPressure.Describe(reading, "the Worker")}. Give JIM more memory, or run less at once, then run it again."
-                : null;
+            return MemoryPressure.IsLow(reading) ? ActivityMessage.LikelyOutOfMemory(reading) : null;
         }
 
         #endregion

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScopingCriterionFailed" xml:space="preserve">
+    <value>The scoping criterion on '{0}' in the Synchronisation Rule '{1}' could not be evaluated, so this object's scope was left as it was. {2}</value>
+    <comment>{0} is the attribute, {1} the Synchronisation Rule's name, {2} why (a message or the other system's own words).</comment>
+  </data>
+  <data name="Unknown" xml:space="preserve">
+    <value>(unknown)</value>
+    <comment>Shown where a name is not known.</comment>
+  </data>
+  <data name="ExpressionEvaluationFailed" xml:space="preserve">
+    <value>Expression evaluation failed for target attribute '{0}': {1}</value>
+    <comment>{0} is the target attribute (or Unknown), {1} the reason.</comment>
+  </data>
+  <data name="ExpressionMissingInput" xml:space="preserve">
+    <value>Expression for target attribute '{0}' was not evaluated: no value for {1}. Missing Input Behaviour is set to Fail the object.</value>
+    <comment>{0} is the target attribute (or Unknown), {1} the inputs with no value.</comment>
+  </data>
+  <data name="ExpressionMissingInputDescribed" xml:space="preserve">
+    <value>{0} Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.</value>
+    <comment>{0} is the ExpressionMissingInput message.</comment>
+  </data>
+  <data name="ExpressionMissingInputDescribedDerived" xml:space="preserve">
+    <value>{0} The Attribute Flow is derived by Synchronisation Rule '{1}'. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.</value>
+    <comment>{0} is the ExpressionMissingInput message, {1} the Synchronisation Rule hosting the derived flow.</comment>
+  </data>
+  <data name="ExportRuleOverlap" xml:space="preserve">
+    <value>This Metaverse Object is in scope of {0} export Synchronisation Rules that target '{1}' in '{2}': {3}. Only one export rule may manage an object, so nothing is exported to that Connected System for it. Give the rules scopes that never overlap, or combine them into one rule.</value>
+    <comment>{0} is how many rules, {1} the Object Type, {2} the Connected System, {3} the rule names.</comment>
+  </data>
+  <data name="ExportRuleHandOver" xml:space="preserve">
+    <value>Left the scope of '{0}'. '{1}' still covers this object, so it now manages the account instead of it being deprovisioned.</value>
+    <comment>{0} is the rule the object left, {1} the rule that took it over.</comment>
+  </data>
+  <data name="ReferenceRecallScopingFailure" xml:space="preserve">
+    <value>{0} The references Metaverse Object {1} held to deleted objects were not removed from its accounts.</value>
+    <comment>{0} is why the scope could not be decided, {1} the Metaverse Object's id.</comment>
+  </data>
+  <data name="ExportObjectTypeConflict" xml:space="preserve">
+    <value>Metaverse Object {0}: Synchronisation Rule '{1}' targets Connected System Object Type '{2}' in '{3}', but this Metaverse Object is already represented there by a '{4}' object. A Metaverse Object can have only one Connected System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported Object Types their own Connected System over the same target.</value>
+    <comment>{0} is the Metaverse Object's id, {1} the rule, {2} the Object Type it targets, {3} the Connected System, {4} the Object Type already there.</comment>
+  </data>
+</root>

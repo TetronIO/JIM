@@ -89,4 +89,22 @@
   <data name="UnreadableRecordsOther" xml:space="preserve">
     <value>{0} Metaverse Objects recorded changes made outside synchronization that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.</value>
   </data>
+  <data name="ExprFlowDerived" xml:space="preserve">
+    <value> (derived by Synchronization Rule '{0}')</value>
+  </data>
+  <data name="ExportMissingInput" xml:space="preserve">
+    <value>{0} No Pending Export was generated for Metaverse Object {1} on '{2}'. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behavior.</value>
+  </data>
+  <data name="AfTargetImportDerived" xml:space="preserve">
+    <value>'{0}' (derived by Synchronization Rule '{1}')</value>
+  </data>
+  <data name="AfMissingInput" xml:space="preserve">
+    <value>The Expression for target attribute {0} was not evaluated because this object has no value for {1}, so {2}; the object's other attributes were unaffected. Missing Input Behavior is set to Fail this mapping on this Attribute Flow. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behavior.</value>
+  </data>
+  <data name="AfCredential" xml:space="preserve">
+    <value>Target attribute {0} holds credentials, so JIM never exports it through an Attribute Flow and {1}; the object's other attributes were unaffected. Remove the Attribute Flow targeting it. JIM delivers passwords only through Password Synchronization, on Connected Systems whose Connector supports it.</value>
+  </data>
+  <data name="GeneratedValueLostRace" xml:space="preserve">
+    <value>{0}'s generated value "{1}" was issued to another object at the same moment as this one; it will be regenerated the next time this object synchronizes.</value>
+  </data>
 </root>

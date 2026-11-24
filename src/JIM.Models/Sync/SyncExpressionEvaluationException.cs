@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Sync;
 
 /// <summary>
@@ -13,7 +16,7 @@ namespace JIM.Models.Sync;
 /// <c>ExpressionEvaluationError</c> RPEI for the object being processed.
 /// </para>
 /// </summary>
-public class SyncExpressionEvaluationException : Exception
+public class SyncExpressionEvaluationException : Exception, IJimMessageCarrier
 {
     /// <summary>
     /// The expression that failed to evaluate. May be null if the source expression was not available.
@@ -35,17 +38,30 @@ public class SyncExpressionEvaluationException : Exception
     public string? SyncRuleName { get; set; }
 
     public SyncExpressionEvaluationException(string? expression, string? targetAttributeName, Exception innerException)
-        : base(BuildMessage(targetAttributeName, innerException), innerException)
+        : this(BuildDetail(targetAttributeName, innerException), expression, targetAttributeName, innerException)
     {
+    }
+
+    private SyncExpressionEvaluationException(JimMessage detail, string? expression, string? targetAttributeName, Exception innerException)
+        : base(detail.ToEnglish(), innerException)
+    {
+        Detail = detail;
         Expression = expression;
         TargetAttributeName = targetAttributeName;
     }
 
-    private static string BuildMessage(string? targetAttributeName, Exception innerException)
+    /// <summary>The failure as a message, for the portal to show in the reader's language.</summary>
+    public JimMessage? Detail { get; }
+
+    private static JimMessage BuildDetail(string? targetAttributeName, Exception innerException)
     {
         // Deliberately exclude the raw expression from the base message so that logging the exception
         // object does not become a log-injection vector; the worker sanitises and includes the
         // expression explicitly when it records the RPEI and log line.
-        return $"Expression evaluation failed for target attribute '{targetAttributeName ?? "(unknown)"}': {innerException.Message}";
+        var cause = innerException.DetailOf() is { } detail && detail.ToEnglish() == innerException.Message
+            ? (MessageArgument)detail
+            : innerException.Message;
+        return JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExpressionEvaluationFailed),
+            targetAttributeName ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.Unknown)), cause);
     }
 }

@@ -652,4 +652,187 @@
   <data name="TargetRuleForUnknownType" xml:space="preserve">
     <value>Regel für Objekttyp</value>
   </data>
+  <data name="ImportOrphanedItem" xml:space="preserve">
+    <value>Interner Fehler: Für den Import wurde ein Ausführungselement erstellt (ExtId={0}), das Objekt im verbundenen System wurde jedoch nicht gespeichert. Objektverweis vorhanden={1}. Dies weist auf einen Fehler in der Persistenzschicht hin.</value>
+  </data>
+  <data name="ImportDuplicateAttributes" xml:space="preserve">
+    <value>Das importierte Objekt enthält mindestens ein doppeltes Attribut: {0}. Bitte entfernen Sie die Duplikate und versuchen Sie es erneut.</value>
+  </data>
+  <data name="ImportDuplicateExternalIdAcrossPages" xml:space="preserve">
+    <value>Doppelte externe ID „{0}“ über Importseiten hinweg gefunden. Ein Objekt mit dieser externen ID wurde bereits auf einer früheren Seite zurückgegeben, daher wurde diese Kopie abgelehnt. Dies kann auf ein Paging-Problem des Verzeichnisservers hindeuten.</value>
+  </data>
+  <data name="ImportDuplicateExternalIdInBatch" xml:space="preserve">
+    <value>Doppelte externe ID „{0}“ im selben Importstapel gefunden. Alle Objekte mit dieser externen ID wurden abgelehnt. Korrigieren Sie die Quelldaten, damit die externen IDs eindeutig sind.</value>
+  </data>
+  <data name="ImportCsoCreationFailed" xml:space="preserve">
+    <value>Das Objekt im verbundenen System konnte für das importierte Objekt mit der externen ID „{0}“ nicht erstellt werden. Es wurde kein spezifischer Fehler aufgezeichnet.</value>
+  </data>
+  <data name="ImportHashVerificationFailed" xml:space="preserve">
+    <value>Verifizierungsmodus: Der gespeicherte Import-Inhaltshash für das Objekt im verbundenen System {0} stimmte mit dem eingehenden Hash überein, der vollständige Vergleich ergab jedoch {1} geänderte Attributwert(e). Das Überspringen anhand des Inhaltshashs hätte diese Änderung übersehen.</value>
+  </data>
+  <data name="ImportUnexpectedAttribute" xml:space="preserve">
+    <value>Das Attribut „{0}“ des importierten Objekts wurde nicht erwartet.</value>
+  </data>
+  <data name="ExportScopingFailed" xml:space="preserve">
+    <value>{0} Für das Metaverse-Objekt {1} wurde nichts exportiert.</value>
+  </data>
+  <data name="FailureInContext" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="ContextSyncRunUnhandled" xml:space="preserve">
+    <value>Nicht behandelte Ausnahme bei der Ausführung des Synchronisierungslaufs</value>
+  </data>
+  <data name="ContextMemoryGuard" xml:space="preserve">
+    <value>Vom Speicherschutz des Workers gestoppt</value>
+  </data>
+  <data name="ContextCompleteFailed" xml:space="preserve">
+    <value>Die Aktivität konnte nach dem Synchronisierungslauf nicht abgeschlossen werden</value>
+  </data>
+  <data name="MemoryFiguresByWorker" xml:space="preserve">
+    <value>{0} von {1} belegt, davon {2} durch den Worker</value>
+  </data>
+  <data name="MemoryFiguresByThisService" xml:space="preserve">
+    <value>{0} von {1} belegt, davon {2} durch diesen Dienst</value>
+  </data>
+  <data name="MemoryRemedy" xml:space="preserve">
+    <value>Bei {0} beendet der Worker seine laufenden Arbeiten, statt mittendrin gestoppt zu werden; geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus.</value>
+  </data>
+  <data name="MemoryWarning" xml:space="preserve">
+    <value>Der Arbeitsspeicher war während dieser Ausführung knapp: {0}. {1}</value>
+  </data>
+  <data name="MemoryStop" xml:space="preserve">
+    <value>Der Worker hat diese Ausführung gestoppt, weil sein Arbeitsspeicher fast erschöpft war: {0}. Hätte er weitergemacht, hätte das Betriebssystem den Worker mittendrin gestoppt. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="MemoryAbort" xml:space="preserve">
+    <value>Der Worker hat diese Ausführung gestoppt und sich selbst neu gestartet, weil sein Arbeitsspeicher fast erschöpft war ({0}) und die Ausführung auf Aufforderung nicht angehalten hat. Hätte er weitergemacht, hätte das Betriebssystem den Worker ohne Vorwarnung gestoppt. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="OutOfMemory" xml:space="preserve">
+    <value>Diese Ausführung hat nicht genug Arbeitsspeicher gehabt und wurde gestoppt. In einem Container mit Speicherbegrenzung kann JIM bei etwa 75 % dieses Limits den Speicher erschöpfen. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="OutOfMemoryWithFigures" xml:space="preserve">
+    <value>Diese Ausführung hat nicht genug Arbeitsspeicher gehabt und wurde gestoppt (derzeit {0}). In einem Container mit Speicherbegrenzung kann JIM bei etwa 75 % dieses Limits den Speicher erschöpfen. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="LikelyOutOfMemory" xml:space="preserve">
+    <value>Der Worker hat sehr wahrscheinlich nicht genug Arbeitsspeicher gehabt: Zum Zeitpunkt seiner letzten Meldung waren {0}. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="UnknownValue" xml:space="preserve">
+    <value>(unbekannt)</value>
+  </data>
+  <data name="NoneValue" xml:space="preserve">
+    <value>(keine)</value>
+  </data>
+  <data name="ExprFlowFailed" xml:space="preserve">
+    <value>Die Auswertung des Ausdrucks ist{0} beim Fluss in das Attribut „{1}“{2} fehlgeschlagen: {3}. Ausdruck: {4}</value>
+  </data>
+  <data name="ExprFlowSubject" xml:space="preserve">
+    <value> für das Metaverse-Objekt {0}</value>
+  </data>
+  <data name="ExprFlowDerived" xml:space="preserve">
+    <value> (abgeleitet von der Synchronisierungsregel „{0}“)</value>
+  </data>
+  <data name="DriftNotChecked" xml:space="preserve">
+    <value>Die Driftprüfung konnte dieses Objekt nicht prüfen, daher wurde keine Korrektur vorbereitet. {0}</value>
+  </data>
+  <data name="ExportMissingInput" xml:space="preserve">
+    <value>{0} Für das Metaverse-Objekt {1} wurde in „{2}“ kein ausstehender Export erzeugt. Geben Sie den fehlenden Wert an, behandeln Sie sein Fehlen im Ausdruck oder ändern Sie das Verhalten bei fehlender Eingabe des Attributflusses.</value>
+  </data>
+  <data name="AfTargetExport" xml:space="preserve">
+    <value>„{0}“ auf „{1}“</value>
+  </data>
+  <data name="AfTargetImport" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="AfTargetImportDerived" xml:space="preserve">
+    <value>„{0}“ (abgeleitet von der Synchronisierungsregel „{1}“)</value>
+  </data>
+  <data name="AfOutcomeExport" xml:space="preserve">
+    <value>für dieses Attribut wurde kein ausstehender Export erzeugt</value>
+  </data>
+  <data name="AfOutcomeImport" xml:space="preserve">
+    <value>für dieses Attribut wurde kein Wert übertragen</value>
+  </data>
+  <data name="AfMissingInput" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} wurde nicht ausgewertet, weil dieses Objekt keinen Wert für {1} hat; {2}. Die übrigen Attribute des Objekts waren nicht betroffen. Das Verhalten bei fehlender Eingabe ist für diesen Attributfluss auf „Dieses Mapping fehlschlagen lassen“ gesetzt. Geben Sie den fehlenden Wert an, behandeln Sie sein Fehlen im Ausdruck oder ändern Sie das Verhalten bei fehlender Eingabe des Attributflusses.</value>
+  </data>
+  <data name="AfGeneratedBaseNotSingle" xml:space="preserve">
+    <value>Der Basisausdruck des generierten Werts für {0} hat mehr als einen Wert zurückgegeben; {1}. Die übrigen Attribute des Objekts waren nicht betroffen. Der Basisausdruck eines generierten Werts muss einen einzelnen Textwert liefern, kein Array: „{2}“.</value>
+  </data>
+  <data name="AfNotConvertible" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} hat „{1}“ zurückgegeben, was ein Attribut vom Typ {2} nicht aufnehmen kann; {3}. Das Attribut behält seinen aktuellen Wert, und die übrigen Attribute des Objekts waren nicht betroffen. Ändern Sie den Ausdruck so, dass er einen Wert vom Typ {2} zurückgibt: „{4}“.</value>
+  </data>
+  <data name="AfMultiValuedNamed" xml:space="preserve">
+    <value>„{0}“ hat {1} Werte, das Zielattribut {2} ist jedoch einwertig; {3}. Das Attribut behält seinen aktuellen Wert, und die übrigen Attribute des Objekts waren nicht betroffen. Verwenden Sie Where, Join (verknüpfen), Count, Min oder Max im Ausdruck, um festzulegen, welchen Wert es erhalten soll, oder ordnen Sie es einem mehrwertigen Attribut zu: „{4}“.</value>
+  </data>
+  <data name="AfMultiValued" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} hat {1} Werte zurückgegeben, das Attribut ist jedoch einwertig; {2}. Das Attribut behält seinen aktuellen Wert, und die übrigen Attribute des Objekts waren nicht betroffen. Ändern Sie den Ausdruck so, dass er einen Wert zurückgibt, oder ordnen Sie ihn einem mehrwertigen Attribut zu: „{3}“.</value>
+  </data>
+  <data name="AfDatesCollapse" xml:space="preserve">
+    <value>{0}, das Zielattribut {1} speichert Datumswerte jedoch auf {2} genau, sodass einige davon zum selben Datum werden; es werden daher {3} verschiedene Werte gesendet. Das Attribut und die übrigen Attribute des Objekts werden weiterhin exportiert. Wenn die Datumswerte getrennt bleiben müssen, halten Sie sie weiter auseinander als die Auflösung des verbundenen Systems, oder prüfen Sie die Datumsauflösung des Attributs auf der Registerkarte „Schema“ des verbundenen Systems.</value>
+  </data>
+  <data name="AfDatesNamed" xml:space="preserve">
+    <value>„{0}“ enthält {1} Datumswerte</value>
+  </data>
+  <data name="AfDatesExpression" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} hat {1} Datumswerte zurückgegeben</value>
+  </data>
+  <data name="AfResolutionTenMicroseconds" xml:space="preserve">
+    <value>zehn Mikrosekunden</value>
+  </data>
+  <data name="AfResolutionHundredMicroseconds" xml:space="preserve">
+    <value>hundert Mikrosekunden</value>
+  </data>
+  <data name="AfResolutionMillisecond" xml:space="preserve">
+    <value>die Millisekunde</value>
+  </data>
+  <data name="AfResolutionTenMilliseconds" xml:space="preserve">
+    <value>zehn Millisekunden</value>
+  </data>
+  <data name="AfResolutionHundredMilliseconds" xml:space="preserve">
+    <value>hundert Millisekunden</value>
+  </data>
+  <data name="AfResolutionSecond" xml:space="preserve">
+    <value>die Sekunde</value>
+  </data>
+  <data name="AfResolutionMinute" xml:space="preserve">
+    <value>die Minute</value>
+  </data>
+  <data name="AfResolutionDay" xml:space="preserve">
+    <value>den Tag</value>
+  </data>
+  <data name="AfResolutionMicrosecond" xml:space="preserve">
+    <value>die Mikrosekunde</value>
+  </data>
+  <data name="AfCredential" xml:space="preserve">
+    <value>Das Zielattribut {0} enthält Anmeldeinformationen, daher exportiert JIM es nie über einen Attributfluss, und {1}; die übrigen Attribute des Objekts waren nicht betroffen. Entfernen Sie den Attributfluss, der es als Ziel hat. JIM übermittelt Kennwörter nur über die Kennwortsynchronisierung, und zwar in verbundenen Systemen, deren Connector sie unterstützt.</value>
+  </data>
+  <data name="AfMultiToSingle" xml:space="preserve">
+    <value>{0} hat {1} Werte, das Zielattribut {2} ist jedoch einwertig; {3}. Ordnen Sie es einem mehrwertigen Attribut zu, reduzieren Sie die Quelle auf einen einzelnen Wert oder verwenden Sie einen Ausdruck, um einen Wert auszuwählen.</value>
+  </data>
+  <data name="AfSourceExport" xml:space="preserve">
+    <value>Mehrwertiges Metaverse-Quellattribut „{0}“</value>
+  </data>
+  <data name="AfSourceImport" xml:space="preserve">
+    <value>Mehrwertiges Quellattribut „{0}“</value>
+  </data>
+  <data name="GeneratedValueLostRace" xml:space="preserve">
+    <value>Der generierte Wert von {0}, „{1}“, wurde im selben Moment an ein anderes Objekt vergeben; er wird bei der nächsten Synchronisierung dieses Objekts neu generiert.</value>
+  </data>
+  <data name="GeneratedValueExhausted" xml:space="preserve">
+    <value>Für {0} wurde nach {1} Versuchen kein freier Wert gefunden; der letzte Kandidat „{2}“ wird bereits von {3} gehalten.</value>
+  </data>
+  <data name="GeneratedValueExhaustedForm" xml:space="preserve">
+    <value>Für {0} wurde nach {1} Versuchen kein freier Wert gefunden; der letzte Kandidat „{2}“ wurde übergangen, weil {3} bereits von {4} gehalten wird.</value>
+  </data>
+  <data name="GeneratedValueFormFragment" xml:space="preserve">
+    <value>dessen {0} (aus {1} gebildet), „{2}“,</value>
+  </data>
+  <data name="GeneratedValueNoCandidate" xml:space="preserve">
+    <value>(es wurde kein Kandidat ausprobiert)</value>
+  </data>
+  <data name="GeneratedValueAnotherObject" xml:space="preserve">
+    <value>einem anderen Objekt</value>
+  </data>
+  <data name="GeneratedValueWidthExceeded" xml:space="preserve">
+    <value>Der nächste Wert für {0} wäre „{1}“ und passt nicht mehr in die konfigurierte feste Breite von {2} Stellen.</value>
+  </data>
 </root>

@@ -1237,7 +1237,7 @@ public partial class SyncImportTaskProcessor
                 Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
                     hasCsoRef, LogSanitiser.Sanitise(extId));
                 orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
-                orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
+                ActivityMessage.SetError(orphanedRpei, ActivityMessage.Create(nameof(ActivityMessages.ImportOrphanedItem), extId, hasCsoRef.ToString()));
             }
         }
 
@@ -3781,7 +3781,7 @@ public partial class SyncImportTaskProcessor
                 if (duplicateAttributeNames is { Count: > 0 })
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
-                    activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+                    ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateAttributes), string.Join(", ", duplicateAttributeNames)));
 
                     // The item records the object as returned, both copies of the attribute included (#874); see
                     // RecordRejectedObjectSnapshot, in the finally below.
@@ -3858,7 +3858,7 @@ public partial class SyncImportTaskProcessor
                         else if (returnedOnAnEarlierPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. An object with this external ID was already returned on an earlier page, so this copy has been rejected. This may indicate a directory server paging issue.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateExternalIdAcrossPages), externalIdValue));
                             Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. An earlier page already returned it. Rejecting this copy.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
@@ -3869,7 +3869,7 @@ public partial class SyncImportTaskProcessor
                         if (repeatedOnThisPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateExternalIdInBatch), externalIdValue));
                             Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' at index {Index}. This page returns it more than once, so every copy is rejected.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
 
@@ -4080,7 +4080,7 @@ public partial class SyncImportTaskProcessor
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
                             var extIdForError = activityRunProfileExecutionItem.ExternalIdSnapshot ?? "[unknown]";
-                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{extIdForError}'. No specific error was recorded.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportCsoCreationFailed), extIdForError));
                             Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
                                 LogSanitiser.Sanitise(extIdForError));
                         }
@@ -4208,7 +4208,7 @@ public partial class SyncImportTaskProcessor
                             _verificationDangerousDisagreementCount++;
                             var changedAttrCount = connectedSystemObject.PendingAttributeValueAdditions.Count + connectedSystemObject.PendingAttributeValueRemovals.Count;
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Verification Mode: the stored import content hash for CSO {connectedSystemObject.Id} matched the incoming hash, but the honest diff found {changedAttrCount} changed attribute value(s). A content-hash skip would have missed this change.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportHashVerificationFailed), connectedSystemObject.Id.ToString(), ActivityMessage.Plain(changedAttrCount)));
                             Log.Error("ProcessImportObjectsAsync: Verification Mode DANGEROUS DISAGREEMENT for CSO {CsoId}: stored hash matched incoming hash but the diff found {ChangedAttrCount} changed attribute value(s).",
                                 connectedSystemObject.Id, changedAttrCount);
                         }
@@ -5526,7 +5526,7 @@ public partial class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.Id);
 
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
-                activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
+                ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportUnexpectedAttribute), importObjectAttribute.Name));
                 csoIsInvalid = true;
 
                 Log.Error("CreateConnectedSystemObjectFromImportObject: Set ErrorType={ErrorType}, ErrorMessage={ErrorMessage} on RPEI {RpeiId}",

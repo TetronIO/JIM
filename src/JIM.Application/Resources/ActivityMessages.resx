@@ -867,4 +867,237 @@
     <value>Rule for Object Type</value>
     <comment>An Object Matching Rule Activity target whose Object Type is unknown.</comment>
   </data>
+  <data name="ImportOrphanedItem" xml:space="preserve">
+    <value>Internal error: RPEI was created for import (ExtId={0}) but CSO was not persisted. CSO reference exists={1}. This indicates a bug in the persistence layer.</value>
+    <comment>An internal bug report stored on an execution item. {0} is the external ID, {1} is True or False.</comment>
+  </data>
+  <data name="ImportDuplicateAttributes" xml:space="preserve">
+    <value>The imported object has one or more duplicate attributes: {0}. Please de-duplicate and try again.</value>
+    <comment>{0} is a comma-separated list of attribute names.</comment>
+  </data>
+  <data name="ImportDuplicateExternalIdAcrossPages" xml:space="preserve">
+    <value>Duplicate external ID '{0}' found across import pages. An object with this external ID was already returned on an earlier page, so this copy has been rejected. This may indicate a directory server paging issue.</value>
+    <comment>{0} is the external ID.</comment>
+  </data>
+  <data name="ImportDuplicateExternalIdInBatch" xml:space="preserve">
+    <value>Duplicate external ID '{0}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.</value>
+    <comment>{0} is the external ID.</comment>
+  </data>
+  <data name="ImportCsoCreationFailed" xml:space="preserve">
+    <value>Failed to create Connected System Object for import object with external ID '{0}'. No specific error was recorded.</value>
+    <comment>{0} is the external ID.</comment>
+  </data>
+  <data name="ImportHashVerificationFailed" xml:space="preserve">
+    <value>Verification Mode: the stored import content hash for CSO {0} matched the incoming hash, but the honest diff found {1} changed attribute value(s). A content-hash skip would have missed this change.</value>
+    <comment>{0} is the object's id, {1} a plain count.</comment>
+  </data>
+  <data name="ImportUnexpectedAttribute" xml:space="preserve">
+    <value>Was not expecting the imported object attribute '{0}'.</value>
+    <comment>{0} is the attribute name.</comment>
+  </data>
+  <data name="ExportScopingFailed" xml:space="preserve">
+    <value>{0} Nothing was exported for Metaverse Object {1}.</value>
+    <comment>{0} is why the Scoping Criterion could not be decided (a message); {1} is the Metaverse Object's id.</comment>
+  </data>
+  <data name="FailureInContext" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} is what the Worker was doing (a message), {1} is the failure.</comment>
+  </data>
+  <data name="ContextSyncRunUnhandled" xml:space="preserve">
+    <value>Unhandled exception whilst executing sync run</value>
+    <comment>What the Worker was doing when a run failed.</comment>
+  </data>
+  <data name="ContextMemoryGuard" xml:space="preserve">
+    <value>Stopped by the Worker's memory guard</value>
+    <comment>What the Worker was doing when a run failed.</comment>
+  </data>
+  <data name="ContextCompleteFailed" xml:space="preserve">
+    <value>Failed to complete activity after sync run</value>
+    <comment>What the Worker was doing when a run failed.</comment>
+  </data>
+  <data name="MemoryFiguresByWorker" xml:space="preserve">
+    <value>{0} of {1} in use, {2} of it by the Worker</value>
+    <comment>Memory figures; {0}, {1} and {2} are sizes such as 57 GB.</comment>
+  </data>
+  <data name="MemoryFiguresByThisService" xml:space="preserve">
+    <value>{0} of {1} in use, {2} of it by this service</value>
+    <comment>Memory figures; {0}, {1} and {2} are sizes such as 57 GB.</comment>
+  </data>
+  <data name="MemoryRemedy" xml:space="preserve">
+    <value>At {0} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.</value>
+    <comment>{0} is a percentage such as 92%.</comment>
+  </data>
+  <data name="MemoryWarning" xml:space="preserve">
+    <value>Memory was low while this ran: {0}. {1}</value>
+    <comment>{0} is the memory figures, {1} is the remedy sentence.</comment>
+  </data>
+  <data name="MemoryStop" xml:space="preserve">
+    <value>The Worker stopped this run because its memory was nearly exhausted: {0}. Had it carried on, the operating system would have stopped the Worker part-way through. Give JIM more memory, or run less at once, then run it again.</value>
+    <comment>{0} is the memory figures.</comment>
+  </data>
+  <data name="MemoryAbort" xml:space="preserve">
+    <value>The Worker stopped this run and restarted itself because its memory was nearly exhausted ({0}) and the run did not stop when asked. Had it carried on, the operating system would have stopped the Worker without a word. Give JIM more memory, or run less at once, then run it again.</value>
+    <comment>{0} is the memory figures.</comment>
+  </data>
+  <data name="OutOfMemory" xml:space="preserve">
+    <value>This run ran out of memory and stopped. In a container with a memory limit, JIM can run out at about 75% of that limit. Give JIM more memory, or run less at once, then run it again.</value>
+  </data>
+  <data name="OutOfMemoryWithFigures" xml:space="preserve">
+    <value>This run ran out of memory and stopped (now {0}). In a container with a memory limit, JIM can run out at about 75% of that limit. Give JIM more memory, or run less at once, then run it again.</value>
+    <comment>{0} is the memory figures.</comment>
+  </data>
+  <data name="LikelyOutOfMemory" xml:space="preserve">
+    <value>The Worker most likely ran out of memory: when it last reported, {0}. Give JIM more memory, or run less at once, then run it again.</value>
+    <comment>{0} is the memory figures.</comment>
+  </data>
+  <data name="UnknownValue" xml:space="preserve">
+    <value>(unknown)</value>
+    <comment>Shown where a name is not known.</comment>
+  </data>
+  <data name="NoneValue" xml:space="preserve">
+    <value>(none)</value>
+    <comment>Shown where there is no value.</comment>
+  </data>
+  <data name="ExprFlowFailed" xml:space="preserve">
+    <value>Expression evaluation failed{0} flowing to attribute '{1}'{2}: {3}. Expression: {4}</value>
+    <comment>{0} is ExprFlowSubject or empty, {1} the attribute, {2} ExprFlowDerived or empty, {3} the reason, {4} the expression.</comment>
+  </data>
+  <data name="ExprFlowSubject" xml:space="preserve">
+    <value> for Metaverse Object {0}</value>
+    <comment>Starts with a space: it follows ExprFlowFailed's first words.</comment>
+  </data>
+  <data name="ExprFlowDerived" xml:space="preserve">
+    <value> (derived by Synchronisation Rule '{0}')</value>
+    <comment>Starts with a space: it follows the attribute name.</comment>
+  </data>
+  <data name="DriftNotChecked" xml:space="preserve">
+    <value>Drift Detection could not check this object, so no correction was staged. {0}</value>
+    <comment>{0} is why.</comment>
+  </data>
+  <data name="ExportMissingInput" xml:space="preserve">
+    <value>{0} No Pending Export was generated for Metaverse Object {1} on '{2}'. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.</value>
+    <comment>{0} is the failure, {1} the Metaverse Object's id, {2} the Connected System.</comment>
+  </data>
+  <data name="AfTargetExport" xml:space="preserve">
+    <value>'{0}' on '{1}'</value>
+    <comment>An attribute and the Connected System it is exported to.</comment>
+  </data>
+  <data name="AfTargetImport" xml:space="preserve">
+    <value>'{0}'</value>
+    <comment>An attribute.</comment>
+  </data>
+  <data name="AfTargetImportDerived" xml:space="preserve">
+    <value>'{0}' (derived by Synchronisation Rule '{1}')</value>
+    <comment>An attribute and the rule hosting its derived flow.</comment>
+  </data>
+  <data name="AfOutcomeExport" xml:space="preserve">
+    <value>no Pending Export was generated for this attribute</value>
+    <comment>A clause after 'so'.</comment>
+  </data>
+  <data name="AfOutcomeImport" xml:space="preserve">
+    <value>no value was flowed for this attribute</value>
+    <comment>A clause after 'so'.</comment>
+  </data>
+  <data name="AfMissingInput" xml:space="preserve">
+    <value>The Expression for target attribute {0} was not evaluated because this object has no value for {1}, so {2}; the object's other attributes were unaffected. Missing Input Behaviour is set to Fail this mapping on this Attribute Flow. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.</value>
+    <comment>{0} the target, {1} the inputs, {2} the outcome clause.</comment>
+  </data>
+  <data name="AfGeneratedBaseNotSingle" xml:space="preserve">
+    <value>The base Expression for the generated value targeting {0} returned more than one value, so {1}; the object's other attributes were unaffected. A generated value's base Expression must produce a single text value, not an array: '{2}'.</value>
+    <comment>{0} the target, {1} the outcome clause, {2} the expression.</comment>
+  </data>
+  <data name="AfNotConvertible" xml:space="preserve">
+    <value>The Expression for target attribute {0} returned '{1}', which a {2} attribute cannot hold, so {3}; the attribute keeps its current value and the object's other attributes were unaffected. Change the Expression so it returns a {2} value: '{4}'.</value>
+    <comment>{2} is a data type name.</comment>
+  </data>
+  <data name="AfMultiValuedNamed" xml:space="preserve">
+    <value>'{0}' has {1} values but target attribute {2} is single-valued, so {3}; the attribute keeps its current value and the object's other attributes were unaffected. Use Where, Join, Count, Min or Max in the Expression to say which value it should have, or map it to a multi-valued attribute: '{4}'.</value>
+  </data>
+  <data name="AfMultiValued" xml:space="preserve">
+    <value>The Expression for target attribute {0} returned {1} values but the attribute is single-valued, so {2}; the attribute keeps its current value and the object's other attributes were unaffected. Change the Expression so it returns one value, or map it to a multi-valued attribute: '{3}'.</value>
+  </data>
+  <data name="AfDatesCollapse" xml:space="preserve">
+    <value>{0}, but target attribute {1} holds dates to {2}, where some of them become the same date, so it is sent {3} distinct values. The attribute and the object's other attributes still export. If the dates must stay apart, keep them further apart than the Connected System's resolution, or check the attribute's Date Resolution on the Connected System's Schema tab.</value>
+    <comment>{0} is AfDatesNamed or AfDatesExpression, {2} a resolution phrase that follows 'to'.</comment>
+  </data>
+  <data name="AfDatesNamed" xml:space="preserve">
+    <value>'{0}' holds {1} dates</value>
+  </data>
+  <data name="AfDatesExpression" xml:space="preserve">
+    <value>The Expression for target attribute {0} returned {1} dates</value>
+  </data>
+  <data name="AfResolutionTenMicroseconds" xml:space="preserve">
+    <value>ten microseconds</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionHundredMicroseconds" xml:space="preserve">
+    <value>a hundred microseconds</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionMillisecond" xml:space="preserve">
+    <value>the millisecond</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionTenMilliseconds" xml:space="preserve">
+    <value>ten milliseconds</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionHundredMilliseconds" xml:space="preserve">
+    <value>a hundred milliseconds</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionSecond" xml:space="preserve">
+    <value>the second</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionMinute" xml:space="preserve">
+    <value>the minute</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionDay" xml:space="preserve">
+    <value>the day</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfResolutionMicrosecond" xml:space="preserve">
+    <value>the microsecond</value>
+    <comment>Follows 'to'.</comment>
+  </data>
+  <data name="AfCredential" xml:space="preserve">
+    <value>Target attribute {0} holds credentials, so JIM never exports it through an Attribute Flow and {1}; the object's other attributes were unaffected. Remove the Attribute Flow targeting it. JIM delivers passwords only through Password Synchronisation, on Connected Systems whose Connector supports it.</value>
+  </data>
+  <data name="AfMultiToSingle" xml:space="preserve">
+    <value>{0} has {1} values but target attribute {2} is single-valued, so {3}. Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.</value>
+    <comment>{0} is AfSourceExport or AfSourceImport.</comment>
+  </data>
+  <data name="AfSourceExport" xml:space="preserve">
+    <value>Multi-valued Metaverse source attribute '{0}'</value>
+  </data>
+  <data name="AfSourceImport" xml:space="preserve">
+    <value>Multi-valued source attribute '{0}'</value>
+  </data>
+  <data name="GeneratedValueLostRace" xml:space="preserve">
+    <value>{0}'s generated value "{1}" was issued to another object at the same moment as this one; it will be regenerated the next time this object synchronises.</value>
+    <comment>{0} is the attribute, {1} the value.</comment>
+  </data>
+  <data name="GeneratedValueExhausted" xml:space="preserve">
+    <value>No free value was found for {0} after {1} attempts; the last candidate, "{2}", is already held by {3}.</value>
+    <comment>{3} says what holds it (a message, or a name).</comment>
+  </data>
+  <data name="GeneratedValueExhaustedForm" xml:space="preserve">
+    <value>No free value was found for {0} after {1} attempts; the last candidate, "{2}", was passed over because {3} is already held by {4}.</value>
+    <comment>{3} is GeneratedValueFormFragment.</comment>
+  </data>
+  <data name="GeneratedValueFormFragment" xml:space="preserve">
+    <value>its {0} (built from {1}), "{2}",</value>
+  </data>
+  <data name="GeneratedValueNoCandidate" xml:space="preserve">
+    <value>(no candidate was tried)</value>
+  </data>
+  <data name="GeneratedValueAnotherObject" xml:space="preserve">
+    <value>another object</value>
+    <comment>Follows 'held by'.</comment>
+  </data>
+  <data name="GeneratedValueWidthExceeded" xml:space="preserve">
+    <value>The next value for {0} would be "{1}", which no longer fits the configured fixed width of {2} digits.</value>
+  </data>
 </root>
