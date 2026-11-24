@@ -37,6 +37,10 @@
 .PARAMETER Domain
     The tenant domain every user principal name is in.
 
+.PARAMETER InitialPassword
+    Whether the user export rule gives every user it creates an Initial Password (default: true). Scenario 039, the scale
+    run, leaves it out: a password is another write per user, and Scenario 036 proves it.
+
 .PARAMETER Template
     Accepted for runner compatibility. This scenario's data is its own CSV.
 
@@ -62,6 +66,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$Domain,
+
+    [Parameter(Mandatory=$false)]
+    [bool]$InitialPassword = $true,
 
     [Parameter(Mandatory=$false)]
     [string]$Template = "Nano",
@@ -331,15 +338,17 @@ New-JIMSyncRuleMapping -SyncRuleId $groupExportRule.id -TargetConnectedSystemAtt
 Write-Host "  OK Outbound rules created (users outside '$($script:Scenario036LeaverDepartment)', and every group, provision to Entra ID)" -ForegroundColor Green
 
 # Step 11: Initial Password
-Write-TestStep "Step 11" "Enabling the Initial Password on the user export rule"
+if ($InitialPassword) {
+    Write-TestStep "Step 11" "Enabling the Initial Password on the user export rule"
 
-# Generated from the policy JIM discovered when it read the schema, so no password is known to anyone. The account's
-# enabled state comes from HR through the accountEnabled flow, so the Initial Password leaves it alone.
-Set-JIMSyncRuleInitialPassword -Id $userExportRule.id -Enable -Source Discovered -ExpiryBehaviour RequireChangeAtNextSignIn `
-    -EnableAccount $false -ChangeReason "Integration test: every user JIM creates in Entra ID is given an Initial Password" | Out-Null
-$initialPassword = Get-JIMSyncRuleInitialPassword -Id $userExportRule.id
-if (-not $initialPassword.enabled) { throw "The Initial Password is not enabled on '$($script:Scenario036UserExportRuleName)'." }
-Write-Host "  OK Initial Password enabled (Source: Discovered, Expiry: RequireChangeAtNextSignIn)" -ForegroundColor Green
+    # Generated from the policy JIM discovered when it read the schema, so no password is known to anyone. The account's
+    # enabled state comes from HR through the accountEnabled flow, so the Initial Password leaves it alone.
+    Set-JIMSyncRuleInitialPassword -Id $userExportRule.id -Enable -Source Discovered -ExpiryBehaviour RequireChangeAtNextSignIn `
+        -EnableAccount $false -ChangeReason "Integration test: every user JIM creates in Entra ID is given an Initial Password" | Out-Null
+    $initialPassword = Get-JIMSyncRuleInitialPassword -Id $userExportRule.id
+    if (-not $initialPassword.enabled) { throw "The Initial Password is not enabled on '$($script:Scenario036UserExportRuleName)'." }
+    Write-Host "  OK Initial Password enabled (Source: Discovered, Expiry: RequireChangeAtNextSignIn)" -ForegroundColor Green
+}
 
 # Step 12: Run Profiles
 Write-TestStep "Step 12" "Creating Run Profiles"

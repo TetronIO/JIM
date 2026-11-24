@@ -3172,7 +3172,8 @@ if ($DirectoryType -eq "OpenLDAP") {
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
     # S033 (Initial Administrator Provisioning) uses no directory at all, only two header-only files of its own.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33) {
+    # S039 (the Entra ID Connector at scale) uses no directory either, and its template sizes the tenant's population.
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33, 39) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3272,7 +3273,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
     # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33, 39) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3945,7 +3946,8 @@ if ($adPopulateEntries.Count -gt 0) {
 # directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
 # the same substrate and asserts on every account it provisions, so it too needs an empty directory.
 # Skip for S033 (Initial Administrator Provisioning): it uses no directory, only two header-only files of its own.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33 -and -not $script:UsingRfcDirectorySnapshots) {
+# Skip for S039 (the Entra ID Connector at scale): it uses no directory; its template sizes the tenant's population.
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33, 39 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
