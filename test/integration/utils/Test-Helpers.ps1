@@ -4749,7 +4749,9 @@ function Assert-MvoAttributeValue {
     }
     elseif ($PSBoundParameters.ContainsKey('ExpectedValues')) {
         $realRows = @($rows | Where-Object { -not $_.NullValue })
-        $actualValues = @($realRows | ForEach-Object {
+        # Wrapped whole in @(): a pipeline yielding one value unwraps to a scalar, and .Count on a scalar throws under
+        # StrictMode, so an expected set of exactly one value would otherwise fail with "property 'Count' cannot be found".
+        $actualValues = @(@($realRows | ForEach-Object {
             if ($_.StringValue) { $_.StringValue }
             elseif ($_.ReferenceValueId) { $_.ReferenceValueId }
             elseif ($_.IntValue) { $_.IntValue }
@@ -4758,7 +4760,7 @@ function Assert-MvoAttributeValue {
             elseif ($_.DateTimeValue) { $_.DateTimeValue }
             elseif ($_.GuidValue) { $_.GuidValue }
             else { $null }
-        }) | Where-Object { $null -ne $_ }
+        }) | Where-Object { $null -ne $_ })
 
         $expectedSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$ExpectedValues, [System.StringComparer]::Ordinal)
         $actualSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$actualValues, [System.StringComparer]::Ordinal)
