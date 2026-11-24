@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 A Delta Import that finds an object deleted now confirms JIM's exported Delete of it and its exported removals of references to it, such as a leaver's group memberships, rather than leaving them waiting for a Full Import or, for the Delete, for ever.
 - 🐛 Behind an outbound proxy, the SCIM Connector now reads a service provider's certificate through the proxy, so **Fetch certificate** and a failed connection test show the certificate a TLS-inspecting proxy presents, ready to trust.
+- 🐛 A synchronisation that stops part-way, because the Worker stopped or a database write failed, no longer leaves duplicate Metaverse Objects or provisioned accounts with nothing queued to export: each page of objects is now saved whole or not at all, and the next run picks it up. (#2848)
 
 ## [1.0.0] - 2026-11-20
 

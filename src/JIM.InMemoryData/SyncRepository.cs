@@ -4763,6 +4763,9 @@ public partial class SyncRepository : ISyncRepository
     // The in-memory store has no transaction to hold; its writes land as they are made.
     public Task<ISyncRepositoryTransaction?> BeginTransactionAsync() => Task.FromResult<ISyncRepositoryTransaction?>(null);
 
+    // No transaction, so no savepoint: a step's writes land as they are made, as they always have here.
+    public Task<ISyncRepositorySavepoint?> CreateSavepointAsync() => Task.FromResult<ISyncRepositorySavepoint?>(null);
+
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
 

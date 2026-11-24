@@ -320,69 +320,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // page's tracker is cleared, below.
                 try
                 {
-                    // Batch persist all MVOs collected during this page.
-                    //
-                    // IMPORTANT DESIGN NOTE (Jan 2026):
-                    // We previously attempted to decouple progress updates from batch size by calling
-                    // UpdateActivityAsync mid-loop (every N objects). This DOES NOT WORK because:
-                    //
-                    // 1. When we set cso.MetaverseObject = mvo, EF's "relationship fixup" automatically
-                    //    adds the CSO to mvo.ConnectedSystemObjects (bidirectional nav property sync).
-                    //
-                    // 2. During SaveChangesAsync (triggered by activity updates), EF calls DetectChanges()
-                    //    which traverses all navigation properties to discover changes.
-                    //
-                    // 3. If CSOs were loaded with AsNoTracking() to improve query performance, EF will
-                    //    try to attach them when it discovers them via the MVO navigation, causing
-                    //    "another instance with same key is already tracked" errors.
-                    //
-                    // 4. Attempts to work around this (clearing collections, removing CSOs from collections,
-                    //    deferring FK updates) all failed because EF's relationship fixup is automatic
-                    //    and cannot be prevented without breaking the navigation property assignments.
-                    //
-                    // The solution is to use AsSplitQuery() instead of AsNoTracking() so all entities
-                    // are properly tracked, and only persist at page boundaries to batch database writes.
-                    // Progress updates at finer granularity would require a separate DbContext instance.
-                    await PersistPendingMetaverseObjectsAsync();
-
-                    // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle
-                    // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
-                    // THEN commit this page's generated assignments now the objects have real ids - deletion
-                    // must run first because a stale assignment being removed can share its (object, attribute) key
-                    // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's
-                    // doc comment. Both are no-ops for a run with no generated mappings, or a page with nothing to
-                    // commit/delete.
-                    using (Diagnostics.Sync.StartSpan("FlushGeneratedValueAssignmentDeletions"))
-                        await FlushGeneratedValueAssignmentDeletionsAsync();
-                    using (Diagnostics.Sync.StartSpan("CommitGeneratedValueAssignments"))
-                        await CommitGeneratedValueAssignmentsAsync();
-
-                    // create MVO change objects for change tracking (after MVOs persisted so IDs available)
-                    await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
-
-                    // evaluate queued drift detection (after MVOs persisted so corrective Pending Exports
-                    // capture real Metaverse Object ids, before the export flush persists them)
-                    await EvaluateQueuedDriftAsync();
-
-                    // batch evaluate exports for all MVOs that changed during this page
-                    await EvaluatePendingExportsAsync();
-
-                    // batch process Pending Export confirmations (deletes and updates)
-                    await FlushPendingExportOperationsAsync();
-
-                    // Resolve any Pending Export reference snapshots that couldn't be resolved during
-                    // per-object processing (e.g. groups processed before their member users on this page).
-                    // Must run after FlushPendingExportOperationsAsync (CSOs now in DB) and before
-                    // FlushHistoryAsync (RPEIs with snapshots persisted).
-                    using (Diagnostics.Sync.StartSpan("ResolvePendingExportReferenceSnapshots"))
-                        await ResolvePendingExportReferenceSnapshotsAsync();
-
-                    // batch delete obsolete CSOs
-                    using (Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations"))
-                        await FlushObsoleteCsoOperationsAsync();
-
-                    // batch delete MVOs marked for immediate deletion (0-grace-period)
-                    await FlushPendingMvoDeletionsAsync();
+                    // The page's state, written in one transaction (#2848): its Metaverse Objects, joins, generated values,
+                    // Pending Exports, provisioning and deletions land together or not at all.
+                    await FlushPageStateAsync(activeSyncRules);
 
                     // Record this page's history (its RPEIs and their change records, and its MVO change records): prepared
                     // and released before updating progress and clearing the change tracker, and written while the next

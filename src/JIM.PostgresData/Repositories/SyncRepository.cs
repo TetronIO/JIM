@@ -1212,6 +1212,95 @@ public partial class SyncRepository : ISyncRepository
         return new SyncRepositoryTransaction(await _context.Database.BeginTransactionAsync());
     }
 
+    /// <summary>Numbers this repository's savepoints, so each has a name of its own within its transaction.</summary>
+    private int _savepointSequence;
+
+    /// <inheritdoc />
+    public async Task<ISyncRepositorySavepoint?> CreateSavepointAsync()
+    {
+        var transaction = _context.Database.CurrentTransaction;
+        if (transaction == null || !_context.Database.IsRelational())
+            return null;
+
+        // Generated here and never from input, so it is always a plain identifier.
+        var name = $"jim_savepoint_{++_savepointSequence}";
+        var trackedJoins = CaptureTrackedJoinState(_context);
+        await transaction.CreateSavepointAsync(name);
+        return new SyncRepositorySavepoint(_context, transaction, name, trackedJoins);
+    }
+
+    /// <summary>
+    /// The join state of every Connected System Object the context tracks, for a savepoint to put back on rollback. Change
+    /// detection is suppressed while enumerating, for the reason given on <see cref="DetachTrackedEntities{T}"/>.
+    /// </summary>
+    private static List<TrackedJoinState> CaptureTrackedJoinState(DbContext context)
+    {
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            return context.ChangeTracker.Entries<ConnectedSystemObject>()
+                .Select(e => new TrackedJoinState(e.Entity, e.Entity.MetaverseObject, e.Entity.MetaverseObjectId, e.Entity.JoinType,
+                    e.Entity.DateJoined, e.Entity.JoinMethod, e.Entity.JoinSyncRuleId, e.Entity.JoinSyncRuleName,
+                    e.Entity.JoinObjectMatchingRuleId, e.Entity.JoinMatchValue))
+                .ToList();
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+    }
+
+    /// <summary>A tracked Connected System Object's join, as it stood when a savepoint was created.</summary>
+    private sealed record TrackedJoinState(
+        ConnectedSystemObject Cso, MetaverseObject? MetaverseObject, Guid? MetaverseObjectId, ConnectedSystemObjectJoinType JoinType,
+        DateTime? DateJoined, ConnectedSystemObjectJoinMethod? JoinMethod, int? JoinSyncRuleId, string? JoinSyncRuleName,
+        int? JoinObjectMatchingRuleId, string? JoinMatchValue)
+    {
+        public void Restore()
+        {
+            Cso.MetaverseObject = MetaverseObject;
+            Cso.MetaverseObjectId = MetaverseObjectId;
+            Cso.JoinType = JoinType;
+            Cso.DateJoined = DateJoined;
+            Cso.JoinMethod = JoinMethod;
+            Cso.JoinSyncRuleId = JoinSyncRuleId;
+            Cso.JoinSyncRuleName = JoinSyncRuleName;
+            Cso.JoinObjectMatchingRuleId = JoinObjectMatchingRuleId;
+            Cso.JoinMatchValue = JoinMatchValue;
+        }
+    }
+
+    /// <summary>
+    /// A savepoint in the context's open transaction (#2848). Rolling back to it undoes the database's writes since, and
+    /// puts back the tracked join state the raw-SQL join writers (the deletion disconnect and the Metaverse Object delete)
+    /// fixed up to match them. Nothing else the tracker holds needs it: a step that rolls back retries the same objects,
+    /// whose deletion brings the tracker and the database back into line, and a page's tracker is cleared once it is
+    /// written.
+    /// </summary>
+    private sealed class SyncRepositorySavepoint(
+        DbContext context, IDbContextTransaction transaction, string name, List<TrackedJoinState> trackedJoins) : ISyncRepositorySavepoint
+    {
+        public async Task RollbackAsync()
+        {
+            await transaction.RollbackToSavepointAsync(name);
+
+            var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+            context.ChangeTracker.AutoDetectChangesEnabled = false;
+            try
+            {
+                foreach (var join in trackedJoins)
+                    join.Restore();
+            }
+            finally
+            {
+                context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+            }
+        }
+
+        public Task ReleaseAsync() => transaction.ReleaseSavepointAsync(name);
+    }
+
     /// <summary>
     /// A transaction the caller commits; disposed uncommitted, it rolls back (EF Core's own disposal behaviour).
     /// </summary>

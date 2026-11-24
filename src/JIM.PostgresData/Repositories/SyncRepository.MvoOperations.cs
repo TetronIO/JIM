@@ -173,7 +173,11 @@ public partial class SyncRepository
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        // The rows and their values in one transaction; a caller already holding one (a synchronisation page, #2848)
+        // keeps it, and commits them with the rest of its writes.
+        await using var ownTransaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
 
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
@@ -184,7 +188,8 @@ public partial class SyncRepository
         if (attributeValueRows.Count > 0)
             await BulkInsertMvoAttributeValuesOnConnectionAsync(npgsqlConn, npgsqlTx, attributeValueRows);
 
-        await transaction.CommitAsync();
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
     }
 
@@ -460,8 +465,11 @@ public partial class SyncRepository
         try
         {
             // One transaction per batch: the row update, attribute-value inserts and deletes commit atomically,
-            // so a Metaverse Object is never left half-updated (Synchronisation Integrity: no partial state).
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            // so a Metaverse Object is never left half-updated (Synchronisation Integrity: no partial state). A caller
+            // already holding one (a synchronisation page, #2848) keeps it, and commits them with the rest of its writes.
+            await using var ownTransaction = _context.Database.CurrentTransaction == null
+                ? await _context.Database.BeginTransactionAsync()
+                : null;
 
             // 1. Update the MetaverseObjects rows (scalar columns), keyed by Id, with no xmin predicate.
             await BulkUpdateMvoRowsViaEfAsync(metaverseObjects);
@@ -519,7 +527,8 @@ public partial class SyncRepository
             if (provenanceUpdates.Count > 0)
                 await BulkUpdateMvoAttributeValueProvenanceViaEfAsync(provenanceUpdates);
 
-            await transaction.CommitAsync();
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
         }
         finally
         {

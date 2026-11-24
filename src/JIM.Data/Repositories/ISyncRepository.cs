@@ -2588,6 +2588,14 @@ public interface ISyncRepository
     /// </summary>
     Task<ISyncRepositoryTransaction?> BeginTransactionAsync();
 
+    /// <summary>
+    /// Creates a savepoint in the transaction this repository's writes are joining (#2848), so a step can roll back a
+    /// failed attempt and carry on in the same transaction. Returns null when no transaction is open, or when the
+    /// provider is not relational (the in-memory test repository): each write then lands as it is made, and there is
+    /// nothing to roll back to.
+    /// </summary>
+    Task<ISyncRepositorySavepoint?> CreateSavepointAsync();
+
     #endregion
 
     #region Generated Values (#242)

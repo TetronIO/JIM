@@ -314,19 +314,24 @@ public partial class SyncRepository
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        // One transaction for the rows and their values, so the rows carry the synchronisation-pending mark (#2092). A
+        // caller already holding one (a synchronisation page provisioning, #2848) keeps it, and commits them with the
+        // rest of its writes.
+        await using var ownTransaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
 
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
         var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
 
-        // One transaction for the rows and their values, so the rows carry the synchronisation-pending mark (#2092).
         await BulkInsertCsosOnConnectionAsync(npgsqlConn, npgsqlTx, connectedSystemObjects, synchronisationPending: true);
 
         if (attributeValueRows.Count > 0)
             await BulkInsertCsoAttributeValuesOnConnectionAsync(npgsqlConn, attributeValueRows, partitionCsoIds: null);
 
-        await transaction.CommitAsync();
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
 
         foreach (var cso in connectedSystemObjects)
