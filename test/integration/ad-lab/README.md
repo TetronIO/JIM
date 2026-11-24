@@ -52,6 +52,7 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | `host/Get-LabDomainController.ps1` | Hyper-V host | State, checkpoints and guest OS build (`-AsJson` for the runner) |
 | `host/Remove-LabDomainController.ps1` | Hyper-V host | Stops and removes the VM, its checkpoints and its disk (needs `-Force`) |
 | `host/Grant-LabDelegation.ps1` | Hyper-V host | Applies the delegation to a container created at run time (`-Tombstones` for Deleted Objects) |
+| `host/Initialize-LabHybridForest.ps1` | Hyper-V host | Prepares `dc-hybrid` after its build: creates `OU=CloudSync` and turns Windows Update on, Sundays at 10:00 UTC; see [The hybrid forest](#the-hybrid-forest) |
 | `host/Invoke-LabRebuild.ps1` | Hyper-V host | One phase of the monthly rebuild (`Prune`, `Build`, `Stage`, `Promote`, `Rollback`, `Status`): builds a candidate set beside the live one and swaps names only when the suite passes; see [Monthly rebuild](#monthly-rebuild) |
 | `host/Install-LabScripts.ps1` | Hyper-V host or the repository clone | Copies the host and guest scripts into `C:\jim-ad-lab` in the layout above, and does what `jim-lab` is refused (Host access); see [Deploying to the host](#deploying-to-the-host) |
 | `guest/autounattend.xml` | Guest (via ISO) | Template for the unattended install; rendered by the module |
@@ -629,7 +630,8 @@ differs from the other three in three ways:
 
 - **It is never reverted.** A revert would roll back what Cloud Sync has already copied, and the agent's own
   credentials with it. It has no checkpoint the runner uses, is not stopped by the power plan, and is left out of the
-  monthly rebuild (it is not in `settings.json`'s `domainControllers`); it is patched in place. Each run creates its objects in an organisational unit of its own under
+  monthly rebuild (it is not in `settings.json`'s `domainControllers`); it is patched in place, by Windows Update on
+  Sundays at 10:00 UTC, clear of the nightly (which starts at 01:23 UTC and is cut off after six hours). Each run creates its objects in an organisational unit of its own under
   `OU=CloudSync` and deletes that unit at the end, and a run first deletes any unit a failed run left.
 - **It must reach Microsoft.** The Cloud Sync agent makes outbound HTTPS connections only (no inbound port), to the
   endpoints in Microsoft's [Cloud Sync prerequisites](https://learn.microsoft.com/entra/identity/hybrid/cloud-sync/how-to-prerequisites#firewall-and-proxy-requirements).
@@ -646,8 +648,11 @@ not a verified domain is given the tenant's `onmicrosoft.com` suffix, which the 
 **One-time setup**, by an administrator, in this order:
 
 1. **The forest.** Build it as any domain controller (see Building a domain controller), with `-Name dc-hybrid -Domain
-   MERIDIAN.LOCAL` and its own address, at least 4 GB of memory, `-SkipBaselineCheckpoint`, and `-DnsForwarder` set to a
-   public resolver. Create `OU=CloudSync,DC=meridian,DC=local`.
+   MERIDIAN.LOCAL` and its own address (`10.99.0.14` on the lab host), at least 4 GB of memory, `-SkipBaselineCheckpoint`,
+   and `-DnsForwarder` set to a public resolver (`1.1.1.1`). Nothing uses its `svc-jim`, so a random password nobody
+   keeps will do for `-ServiceAccountPassword`. Then run `host/Initialize-LabHybridForest.ps1`, which creates
+   `OU=CloudSync,DC=meridian,DC=local` and turns Windows Update back on for this machine alone. Re-running the build's
+   `Verify` phase on `dc-hybrid` afterwards reports updates as on; that is expected here.
 2. **Its route to Microsoft.** Confirm the host's NAT is in place (host prerequisite 2), then from `dc-hybrid`:
    `Test-NetConnection login.microsoftonline.com -Port 443`.
 3. **The tenant.** Create a new Microsoft Entra tenant, and in it a cloud-only account with the Hybrid Identity
