@@ -356,4 +356,7 @@
   <data name="ContributionModeUnsupported" xml:space="preserve">
     <value>Le mode de contribution {0} n’est pas disponible pour un attribut {1}.</value>
   </data>
+  <data name="ContributionModeMergeNotForReference" xml:space="preserve">
+    <value>Le mode de contribution « Fusionner » n’est pas disponible pour les attributs de référence. Utilisez le mode de contribution « Priorité » pour un attribut de référence.</value>
+  </data>
 </root>

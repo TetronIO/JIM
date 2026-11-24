@@ -476,5 +476,11 @@ public enum AttributeContributionMode
     /// the contributor; only an administrator can. Not available for Reference attributes, because a reference cannot
     /// outlive the Metaverse Object it points to.
     /// </summary>
-    Accumulate = 1
+    Accumulate = 1,
+
+    /// <summary>
+    /// Every applicable contributor adds its values, and a value is removed only when no contributor still supplies it.
+    /// Not available for Reference attributes.
+    /// </summary>
+    Merge = 2
 }

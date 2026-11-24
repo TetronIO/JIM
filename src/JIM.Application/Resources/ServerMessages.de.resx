@@ -354,4 +354,7 @@
   <data name="ContributionModeUnsupported" xml:space="preserve">
     <value>Der Beitragsmodus {0} ist für ein Attribut vom Typ {1} nicht verfügbar.</value>
   </data>
+  <data name="ContributionModeMergeNotForReference" xml:space="preserve">
+    <value>Der Beitragsmodus „Zusammenführen“ ist für Referenzattribute nicht verfügbar. Verwenden Sie für ein Referenzattribut den Beitragsmodus „Priorität“.</value>
+  </data>
 </root>

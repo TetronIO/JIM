@@ -26,6 +26,13 @@ public class AttributeContributionModeRulesTests
     public void IsPermitted_Accumulate_NeedsAMultiValuedNonReferenceAttribute(AttributeDataType type, AttributePlurality plurality, bool expected) =>
         Assert.That(AttributeContributionModeRules.IsPermitted(AttributeContributionMode.Accumulate, type, plurality), Is.EqualTo(expected));
 
+    [TestCase(AttributeDataType.Text, AttributePlurality.MultiValued, true)]
+    [TestCase(AttributeDataType.Number, AttributePlurality.MultiValued, true)]
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued, false)]
+    [TestCase(AttributeDataType.Reference, AttributePlurality.MultiValued, false)]
+    public void IsPermitted_Merge_NeedsAMultiValuedNonReferenceAttribute(AttributeDataType type, AttributePlurality plurality, bool expected) =>
+        Assert.That(AttributeContributionModeRules.IsPermitted(AttributeContributionMode.Merge, type, plurality), Is.EqualTo(expected));
+
     [Test]
     public void Constrain_AModeTheAttributeCannotUse_FallsBackToPriority() =>
         Assert.That(AttributeContributionModeRules.Constrain(AttributeContributionMode.Accumulate, AttributeDataType.Text, AttributePlurality.SingleValued),
@@ -37,6 +44,9 @@ public class AttributeContributionModeRulesTests
             Is.EqualTo(AttributeContributionMode.Accumulate));
 
     [TestCase(AttributeContributionMode.Accumulate, AttributeContributionMode.Priority, true)]
+    [TestCase(AttributeContributionMode.Accumulate, AttributeContributionMode.Merge, true)]
+    [TestCase(AttributeContributionMode.Merge, AttributeContributionMode.Accumulate, false)]
+    [TestCase(AttributeContributionMode.Priority, AttributeContributionMode.Merge, false)]
     [TestCase(AttributeContributionMode.Accumulate, AttributeContributionMode.Accumulate, false)]
     [TestCase(AttributeContributionMode.Priority, AttributeContributionMode.Accumulate, false)]
     [TestCase(AttributeContributionMode.Priority, AttributeContributionMode.Priority, false)]
