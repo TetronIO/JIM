@@ -1286,7 +1286,7 @@
     <value>„Kennwort läuft nie ab“ wurde für dieses Konto geändert, aber der Export, den JIM zurückgehalten hat, bis das Konto ein Kennwort hatte, enthält noch das userAccountControl des Attributflusses und schreibt es, samt „Kennwort läuft nie ab“, zurück, sobald er freigegeben wird.</value>
   </data>
   <data name="PasswordPutBackEnforced" xml:space="preserve">
-    <value>„Kennwort läuft nie ab“ wurde für dieses Konto geändert, aber die Synchronisierungsregel {0} schreibt ihr userAccountControl mit aktiviertem „Enforce State“, daher stellt die nächste Synchronisierung den Wert des Attributflusses wieder her und damit auch, ob das Kennwort nie abläuft; solange dieser Wert „Kennwort läuft nie ab“ gesetzt lässt, verlangt Active Directory beim nächsten Anmelden keine Änderung.</value>
+    <value>„Kennwort läuft nie ab“ wurde für dieses Konto geändert, aber die Synchronisierungsregel {0} schreibt ihr userAccountControl mit aktiviertem „Zustand erzwingen“, daher stellt die nächste Synchronisierung den Wert des Attributflusses wieder her und damit auch, ob das Kennwort nie abläuft; solange dieser Wert „Kennwort läuft nie ab“ gesetzt lässt, verlangt Active Directory beim nächsten Anmelden keine Änderung.</value>
   </data>
   <data name="PasswordNoteLeftToExportSet" xml:space="preserve">
     <value>„Kennwort läuft nie ab“ wurde dem Export überlassen, der userAccountControl schreibt und die Einstellung setzt, daher läuft das Kennwort nie ab.</value>
