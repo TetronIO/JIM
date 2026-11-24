@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -220,7 +221,8 @@ public class ReferenceSweepRepositoryDatabaseTests
             await using var ctx = NewContext();
             await new PostgresDataRepository(ctx).Sync.UpdateUnresolvedReferenceReportsAsync(
             [
-                new UnresolvedReferenceReport(items[0].Id, 2, ActivityRunProfileExecutionItemErrorType.UnresolvedReference, "two unresolved"),
+                new UnresolvedReferenceReport(items[0].Id, 2, ActivityRunProfileExecutionItemErrorType.UnresolvedReference, "two unresolved",
+                    MessageJson.Serialise(JimMessage.Create("JIM.Application:ActivityMessages", "UnresolvedExample", "x"))),
                 new UnresolvedReferenceReport(items[1].Id, 1, ErrorType: null, ErrorMessage: null)
             ]);
 
@@ -230,6 +232,8 @@ public class ReferenceSweepRepositoryDatabaseTests
             {
                 Assert.That((stored[items[0].Id].UnresolvedReferenceCount, stored[items[0].Id].ErrorType, stored[items[0].Id].ErrorMessage),
                     Is.EqualTo(((int?)2, (ActivityRunProfileExecutionItemErrorType?)ActivityRunProfileExecutionItemErrorType.UnresolvedReference, "two unresolved")));
+                Assert.That(stored[items[0].Id].ErrorMessageDetail?.ToEnglish(), Is.EqualTo("For example: x."), "The message is written with the English it belongs to");
+                Assert.That(stored[items[1].Id].ErrorMessageDetailJson, Is.Null, "An item whose error slot the report did not take keeps what it had");
                 Assert.That((stored[items[1].Id].UnresolvedReferenceCount, stored[items[1].Id].ErrorType, stored[items[1].Id].ErrorMessage, stored[items[1].Id].ErrorStackTrace),
                     Is.EqualTo(((int?)1, (ActivityRunProfileExecutionItemErrorType?)ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed, "kept", "kept trace")));
             }

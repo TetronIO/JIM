@@ -2854,7 +2854,7 @@ if (-not $SkipReset) {
     # New-Scenario-016-TestDatabase.ps1 rather than by their being new: it drops and recreates its whole
     # schema, and a content hash of the generated script decides whether it needs to. A stale Scenario 016
     # database is therefore not reachable. Everything else here stays ephemeral.
-    docker compose @script:IntegrationComposeArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim --profile keycloak-scim down -v --remove-orphans 2>&1 | Out-Null
+    docker compose @script:IntegrationComposeArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim --profile keycloak-scim --profile graph down -v --remove-orphans 2>&1 | Out-Null
     if ($isActiveDirectoryRun) {
         # The ad-lab profile (the LDAP toolbox) is named only for an Active Directory run: taking it down for
         # every run would also release its image to the end-of-run prune, and rebuild it next time.
@@ -3172,7 +3172,8 @@ if ($DirectoryType -eq "OpenLDAP") {
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
     # S033 (Initial Administrator Provisioning) uses no directory at all, only two header-only files of its own.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33) {
+    # S039 and S040 (the Entra ID Connector at scale) use no directory either, and their template sizes the tenant's population.
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33, 39, 40) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3272,7 +3273,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
     # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33, 39, 40) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3372,6 +3373,35 @@ if ($scenarioNumber -eq 15) {
         exit 1
     }
     Write-Success "SCIM test service provider started"
+}
+
+# Start the stand-in Microsoft Graph service for Scenario 040 (#3053), the Entra ID Connector at scale without Graph's
+# rate limits. Always --build, as for the SCIM provider: the image is built from the working tree
+# (test/JIM.TestGraphService), the same simulated tenant the unit suite drives. While it runs it answers for
+# login.microsoftonline.com and graph.microsoft.com on jim-network, which is why only Scenario 040 starts it.
+if ($scenarioNumber -eq 40) {
+    Write-Step "Building and starting the stand-in Microsoft Graph service..."
+    $graphServices = @(if ($script:Lane.Active) { "graph-service" })
+    $graphServiceResult = docker compose @script:IntegrationComposeArgs --profile graph up -d --build @graphServices 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start the stand-in Microsoft Graph service"
+        Write-Host "${GRAY}$graphServiceResult${NC}"
+        exit 1
+    }
+
+    Write-Step "Waiting for the stand-in Microsoft Graph service's certificate..."
+    $graphCertReady = $false
+    for ($graphWait = 0; $graphWait -lt 24; $graphWait++) {
+        docker exec graph-service test -f /certificates/graph-service.pem 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { $graphCertReady = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    if (-not $graphCertReady) {
+        Write-Failure "The stand-in Microsoft Graph service did not write its certificate within 120s"
+        docker logs graph-service --tail 20 2>&1 | ForEach-Object { Write-Host "${GRAY}$_${NC}" }
+        exit 1
+    }
+    Write-Success "Stand-in Microsoft Graph service started"
 }
 
 # Start Keycloak for Scenario 028 (#2349), the SCIM Connector against Keycloak's own SCIM API. Readiness is Keycloak's
@@ -3945,7 +3975,8 @@ if ($adPopulateEntries.Count -gt 0) {
 # directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
 # the same substrate and asserts on every account it provisions, so it too needs an empty directory.
 # Skip for S033 (Initial Administrator Provisioning): it uses no directory, only two header-only files of its own.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33 -and -not $script:UsingRfcDirectorySnapshots) {
+# Skip for S039 and S040 (the Entra ID Connector at scale): they use no directory; the template sizes the tenant's population.
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33, 39, 40 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"

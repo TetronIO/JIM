@@ -5,7 +5,9 @@ using JIM.Models.Connectors;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Exchange;
+using JIM.Connectors.Resources;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -292,8 +294,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         }
 
         var manageExchange = settingValues.SingleOrDefault(sv => sv.Setting.Name == LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS);
-        if (LdapExchangeSettings.DirectoryTypeRefusal(manageExchange?.CheckboxValue == true, directoryType) is { } refusal)
-            response.Add(new ConnectorSettingValueValidationResult { SettingValue = manageExchange, ErrorMessage = refusal });
+        if (LdapExchangeSettings.DirectoryTypeRefusalMessage(manageExchange?.CheckboxValue == true, directoryType) is { } refusal)
+            response.Add(ConnectorSettingValueValidationResult.Failure(manageExchange, refusal));
 
         return response;
     }
@@ -2043,19 +2045,14 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         }
         catch (InvalidSettingValuesException)
         {
-            return new ConnectorSettingValueValidationResult
-            {
-                ErrorMessage = "Unable to test connectivity due to missing directory server, port, username and/or password values"
-            };
+            return ConnectorSettingValueValidationResult.Failure(null,
+                JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.LdapConnectivityMissingValues)));
         }
         catch (Exception ex)
         {
             logger.Error(ex, $"TestDirectoryConnectivity failed");
-            return new ConnectorSettingValueValidationResult
-            {
-                ErrorMessage = $"Unable to connect. Message: {ex.Message}",
-                Exception = ex
-            };
+            return ConnectorSettingValueValidationResult.Failure(null,
+                JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.LdapConnectivityFailed), ex.Message), ex);
         }
     }
     #endregion

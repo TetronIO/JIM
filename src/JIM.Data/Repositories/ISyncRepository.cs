@@ -8,6 +8,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Exchange;
+using JIM.Models.Localisation;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -1074,6 +1075,19 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesToAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
 
     /// <summary>
+    /// The Pending Exports of a Connected System holding an exported removal of a reference to any of the given Connected
+    /// System Objects (a Remove awaiting confirmation whose <c>ResolvedReferenceCsoId</c> names one), with their attribute
+    /// value changes and those changes' attributes, untracked. A Delta Import that learns the target deleted those objects
+    /// confirms such removals: nothing can still refer to an object the target deleted (#3053).
+    /// </summary>
+    /// <remarks>
+    /// Asked only when an import learned of deletions, once per run. <c>ResolvedReferenceCsoId</c> carries no index (it is a
+    /// soft pointer, written at bulk-export scale), so the query reads the system's Pending Exports' changes through their
+    /// Pending Export.
+    /// </remarks>
+    Task<List<PendingExport>> GetPendingExportsAwaitingRemovalOfReferencesToAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets the count of Pending Exports for a Connected System.
     /// Used by the export processor to determine paging.
     /// </summary>
@@ -1717,6 +1731,13 @@ public interface ISyncRepository
     /// Convenience method that updates only the Message property.
     /// </summary>
     Task UpdateActivityMessageAsync(Activity activity, string message);
+
+    /// <summary>
+    /// Updates an activity's message field with a message the portal shows in the viewer's language (#3039); the English
+    /// written beside it is the message's British English. For a run's outcome, which stays on the Activity: progress
+    /// narration is written as English text only.
+    /// </summary>
+    Task UpdateActivityMessageAsync(Activity activity, JimMessage message);
 
     /// <summary>
     /// Updates activity progress fields using an independent database connection,

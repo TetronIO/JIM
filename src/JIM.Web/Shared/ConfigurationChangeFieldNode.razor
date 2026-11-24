@@ -74,6 +74,10 @@
 
     private bool _render;
     private string _label = string.Empty;
+    // Labels for the value tokens below, read per use so each viewer's language is the one shown.
+    private static string NotSet => ActivityText.ActivityFieldNotSet;
+    private static string SecretSet => ActivityText.ActivityFieldSecretSet;
+    private static string Removed => ActivityText.ActivityFieldRemoved;
     private string _indent = string.Empty;
 
     // Display strings prefer the captured human-friendly DisplayValue (resolved FK name, spaced enum), falling back to
@@ -146,24 +150,24 @@
             // Inside a wholly added / removed item the secret is a single token, matching its non-secret siblings.
             if (Context != DiffRenderContext.Normal)
             {
-                (_rightText, _rightClass) = ("secret set", "fh-secret");
+                (_rightText, _rightClass) = (SecretSet, "fh-secret");
                 return;
             }
 
             switch (Node.ChangeType)
             {
                 case ConfigurationDiffChangeType.Added:
-                    (_leftText, _leftClass) = ("not set", "fh-none");
+                    (_leftText, _leftClass) = (NotSet, "fh-none");
                     _showArrow = true;
-                    (_rightText, _rightClass) = ("secret set", "fh-secret");
+                    (_rightText, _rightClass) = (SecretSet, "fh-secret");
                     break;
                 case ConfigurationDiffChangeType.Removed:
-                    (_leftText, _leftClass) = ("secret set", "fh-secret");
+                    (_leftText, _leftClass) = (SecretSet, "fh-secret");
                     _showArrow = true;
-                    (_rightText, _rightClass) = ("removed", "fh-none");
+                    (_rightText, _rightClass) = (Removed, "fh-none");
                     break;
                 default:
-                    (_rightText, _rightClass) = ("secret changed; value hidden", "fh-secret");
+                    (_rightText, _rightClass) = (ActivityText.ActivityFieldSecretChanged, "fh-secret");
                     break;
             }
             return;
@@ -184,14 +188,14 @@
         switch (Node.ChangeType)
         {
             case ConfigurationDiffChangeType.Added:
-                (_leftText, _leftClass) = ("not set", "fh-none");
+                (_leftText, _leftClass) = (NotSet, "fh-none");
                 _showArrow = true;
                 (_rightText, _rightClass) = (_newDisplay, "fh-new");
                 break;
             case ConfigurationDiffChangeType.Removed:
                 (_leftText, _leftClass) = (_oldDisplay, "fh-old");
                 _showArrow = true;
-                (_rightText, _rightClass) = ("removed", "fh-none");
+                (_rightText, _rightClass) = (Removed, "fh-none");
                 break;
             default:
                 (_leftText, _leftClass) = (_oldDisplay, "fh-old");

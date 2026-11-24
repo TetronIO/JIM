@@ -19,6 +19,9 @@ using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
 using JIM.Utilities;
@@ -237,23 +240,23 @@ public partial class MetaverseServer
     private async Task RenameMetaverseObjectTypeCoreAsync(int objectTypeId, string newName, string newPluralName, string? icon, Func<MetaverseObjectType, Task> auditedUpdateAsync)
     {
         if (string.IsNullOrWhiteSpace(newName))
-            throw new ArgumentException("A Metaverse Object Type name is required.", nameof(newName));
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNameRequired)), nameof(newName));
         if (string.IsNullOrWhiteSpace(newPluralName))
-            throw new ArgumentException("A Metaverse Object Type plural name is required.", nameof(newPluralName));
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ObjectTypePluralNameRequired)), nameof(newPluralName));
 
         var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, includeChildObjects: false)
-            ?? throw new ArgumentException($"Metaverse Object Type {objectTypeId} not found.", nameof(objectTypeId));
+            ?? throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNotFound), objectTypeId.ToString()), nameof(objectTypeId));
 
         if (objectType.BuiltIn)
-            throw new InvalidOperationException($"Cannot rename or re-icon built-in Metaverse Object Type '{objectType.Name}'.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypeBuiltInCannotRename), objectType.Name));
 
         var trimmedName = newName.Trim();
         var trimmedPluralName = newPluralName.Trim();
 
         if (!await IsMetaverseObjectTypeNameAvailableAsync(trimmedName, objectTypeId))
-            throw new InvalidOperationException($"A Metaverse Object Type named '{trimmedName}' already exists.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNameExists), trimmedName));
         if (!await IsMetaverseObjectTypePluralNameAvailableAsync(trimmedPluralName, objectTypeId))
-            throw new InvalidOperationException($"A Metaverse Object Type with plural name '{trimmedPluralName}' already exists.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypePluralNameExists), trimmedPluralName));
 
         objectType.Name = trimmedName;
         objectType.PluralName = trimmedPluralName;
@@ -548,7 +551,7 @@ public partial class MetaverseServer
             TargetType = ActivityTargetType.MetaverseObjectType,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Metaverse Object Type '{objectTypeName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInMetaverseObjectType), objectTypeName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -579,7 +582,7 @@ public partial class MetaverseServer
             TargetType = ActivityTargetType.MetaverseAttribute,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Metaverse Attribute '{attributeName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInMetaverseAttribute), attributeName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -633,13 +636,13 @@ public partial class MetaverseServer
     private async Task RenameMetaverseAttributeCoreAsync(int attributeId, string newName, Func<MetaverseAttribute, Task> auditedUpdateAsync)
     {
         if (string.IsNullOrWhiteSpace(newName))
-            throw new ArgumentException("A Metaverse Attribute name is required.", nameof(newName));
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNameRequired)), nameof(newName));
 
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(attributeId, withChangeTracking: true)
-            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+            ?? throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new InvalidOperationException($"Cannot rename built-in Metaverse Attribute '{attribute.Name}'.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotRename), attribute.Name));
 
         if (!await Application.Repository.Metaverse.IsMetaverseAttributeNameUniqueAsync(newName, attributeId))
             throw new MetaverseAttributeNameConflictException(newName);
@@ -651,7 +654,7 @@ public partial class MetaverseServer
             var readers = await GetMetaverseAttributeExpressionReadersAsync(attribute.Id, attribute.Name);
             if (readers.Count > 0)
                 throw new AttributeReadByConfigurationException(
-                    $"Metaverse Attribute '{attribute.Name}' cannot be renamed while Expressions read it by name. Change these first:", readers);
+                    ServerMessage.Create(nameof(ServerMessages.AttributeRenameReadByExpressions), attribute.Name), readers);
         }
 
         attribute.Name = newName;
@@ -692,22 +695,22 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(standardMappings);
 
         if (standardMappings.Any(m => m.Standard == AttributeStandard.NotSet))
-            throw new ArgumentException("Every Standard Mapping requires a standard.", nameof(standardMappings));
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.StandardMappingNeedsStandard)), nameof(standardMappings));
         if (standardMappings.Any(m => string.IsNullOrWhiteSpace(m.CounterpartName)))
-            throw new ArgumentException("Every Standard Mapping requires a counterpart attribute name.", nameof(standardMappings));
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.StandardMappingNeedsCounterpart)), nameof(standardMappings));
 
         var duplicateGroup = standardMappings
             .GroupBy(m => (m.Standard, CounterpartName: m.CounterpartName.Trim()))
             .FirstOrDefault(g => g.Count() > 1);
         if (duplicateGroup != null)
-            throw new ArgumentException($"Duplicate Standard Mapping: {duplicateGroup.Key.Standard} '{duplicateGroup.Key.CounterpartName}'.", nameof(standardMappings));
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.StandardMappingDuplicate), duplicateGroup.Key.Standard.ToString(), duplicateGroup.Key.CounterpartName), nameof(standardMappings));
 
         // the mappings are child rows of the attribute, so load the attribute tracked with them included
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attributeId, withChangeTracking: true)
-            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+            ?? throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new InvalidOperationException($"Cannot modify the Standard Mappings of built-in Metaverse Attribute '{attribute.Name}'; they are maintained by JIM.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.StandardMappingsBuiltInCannotModify), attribute.Name));
 
         // reconcile in place so retained mappings keep their identity: remove absent, update notes on matches, add new
         var staleMappings = attribute.StandardMappings
@@ -760,10 +763,10 @@ public partial class MetaverseServer
     private async Task BindAttributeToObjectTypeCoreAsync(int attributeId, int metaverseObjectTypeId, Func<Activity, Task> createActivityAsync, string? changeReason)
     {
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(attributeId)
-            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+            ?? throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new InvalidOperationException($"Cannot modify the bindings of built-in Metaverse Attribute '{attribute.Name}'.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.BindingsBuiltInCannotModify), attribute.Name));
 
         var activity = new Activity
         {
@@ -836,7 +839,7 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(attribute);
 
         if (attribute.BuiltIn)
-            throw new InvalidOperationException($"Cannot delete built-in Metaverse Attribute '{attribute.Name}'.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotDelete), attribute.Name));
 
         var impact = await EvaluateAttributeDeletionAsync(attribute);
 
@@ -914,7 +917,7 @@ public partial class MetaverseServer
     public async Task<AttributeUnassignImpact> EvaluateAttributeUnassignAsync(int attributeId, int metaverseObjectTypeId)
     {
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attributeId)
-            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+            ?? throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, false);
         var objectsWithValues = await Application.Repository.Metaverse.GetAttributeValueObjectCountByTypeAsync(attributeId, metaverseObjectTypeId);
@@ -959,7 +962,7 @@ public partial class MetaverseServer
         var impact = await EvaluateAttributeUnassignAsync(attributeId, metaverseObjectTypeId);
 
         if (impact.BuiltIn)
-            throw new InvalidOperationException($"Cannot unassign built-in Metaverse Attribute '{impact.AttributeName}'.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotUnassign), impact.AttributeName));
 
         // Nothing bound to remove, or blocked by stored values or by configuration reading the attribute on this
         // type: make no change and report via the impact.
@@ -1053,10 +1056,10 @@ public partial class MetaverseServer
     private async Task<AttributeSchemaChangeImpact> ChangeMetaverseAttributeSchemaCoreAsync(int attributeId, AttributeDataType newType, AttributePlurality newPlurality, Func<MetaverseAttribute, Task> auditedUpdateAsync)
     {
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(attributeId, withChangeTracking: true)
-            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+            ?? throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new InvalidOperationException($"Cannot change the type or plurality of built-in Metaverse Attribute '{attribute.Name}'.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotChangeType), attribute.Name));
 
         EnsureAttributeCapability(newType, newPlurality);
         EnsureContributionModeCompatible(attribute.ContributionMode, newType, newPlurality);
@@ -1110,17 +1113,12 @@ public partial class MetaverseServer
         if (AttributeContributionModeRules.IsPermitted(mode, type, plurality))
             return;
 
-        if (plurality != AttributePlurality.MultiValued)
-            throw new UnsupportedContributionModeException(mode, type, plurality,
-                $"The {mode} contribution mode applies only to multi-valued attributes. Set the mode to Priority before making the attribute single-valued.");
-
-        if (type == AttributeDataType.Reference)
-            throw new UnsupportedContributionModeException(mode, type, plurality,
-                $"The {mode} contribution mode is not available for Reference attributes, because a reference is removed when the Metaverse Object it points to is deleted. " +
-                "To keep a history of references, record the referenced object's identifier as text in a separate multi-valued text attribute.");
-
-        throw new UnsupportedContributionModeException(mode, type, plurality,
-            $"The {mode} contribution mode is not available for a {type} attribute.");
+        var detail = plurality != AttributePlurality.MultiValued
+            ? ServerMessage.Create(nameof(ServerMessages.ContributionModeNeedsMultiValued), mode.ToString())
+            : type == AttributeDataType.Reference
+                ? ServerMessage.Create(nameof(ServerMessages.ContributionModeNotForReference), mode.ToString())
+                : ServerMessage.Create(nameof(ServerMessages.ContributionModeUnsupported), mode.ToString(), type.ToString());
+        throw new UnsupportedContributionModeException(mode, type, plurality, detail);
     }
 
     /// <summary>
@@ -1188,7 +1186,7 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(objectType);
 
         if (objectType.BuiltIn)
-            throw new InvalidOperationException($"Cannot delete built-in Metaverse Object Type '{objectType.Name}'.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypeBuiltInCannotDelete), objectType.Name));
 
         var impact = await EvaluateObjectTypeDeletionAsync(objectType);
 
@@ -2521,22 +2519,22 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(criteria);
 
         if (criteria.FromDate.HasValue && criteria.ToDate.HasValue && criteria.FromDate.Value > criteria.ToDate.Value)
-            throw new ArgumentException("The time range ends before it starts.");
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchTimeRangeInverted)));
 
         if (criteria.AttributeConditions.Count > MaxChangeSearchConditions)
-            throw new ArgumentException($"A search can combine at most {MaxChangeSearchConditions} attribute conditions.");
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchTooManyConditions), MaxChangeSearchConditions.ToString()));
 
         var conditions = new List<ResolvedAttributeChangeCondition>();
         foreach (var condition in criteria.AttributeConditions)
         {
             if (!Enum.IsDefined(condition.Operator))
-                throw new ArgumentException($"'{condition.Operator}' is not a recognised attribute change operator.");
+                throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchOperatorUnknown), condition.Operator.ToString()));
 
             var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(condition.AttributeId)
-                ?? throw new ArgumentException($"There is no Metaverse Attribute with id {condition.AttributeId}.");
+                ?? throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchAttributeUnknown), condition.AttributeId.ToString()));
 
             if (!AttributeChangeConditionParser.TryParse(attribute.Type, condition.Value, out var match, out var error))
-                throw new ArgumentException($"{attribute.Name}: {error}");
+                throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchConditionInvalid), attribute.Name, error ?? string.Empty));
 
             conditions.Add(new ResolvedAttributeChangeCondition
             {
@@ -2556,7 +2554,7 @@ public partial class MetaverseServer
             Conditions = conditions,
             MatchMode = Enum.IsDefined(criteria.MatchMode)
                 ? criteria.MatchMode
-                : throw new ArgumentException($"'{criteria.MatchMode}' is not a recognised condition match mode.")
+                : throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchMatchModeUnknown), criteria.MatchMode.ToString()))
         };
     }
 

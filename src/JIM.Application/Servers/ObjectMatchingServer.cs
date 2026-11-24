@@ -3,6 +3,8 @@
 
 using System.Globalization;
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -180,8 +182,7 @@ public class ObjectMatchingServer
             return new ObjectMatchingLookup
             {
                 Outcome = ObjectMatchingLookupOutcome.NoMatch,
-                Description = "No Metaverse Object holds these values, so a synchronisation would try the next Object Matching Rule, " +
-                              "and project the object if no rule matches and its Synchronisation Rule projects."
+                DescriptionDetail = ServerMessage.Create(nameof(ServerMessages.LookupNoMatch))
             };
         }
 
@@ -199,14 +200,13 @@ public class ObjectMatchingServer
             MetaverseObjectId = identity.Id,
             MetaverseObjectName = identity.Name,
             MetaverseObjectTypeName = identity.Type?.Name,
-            Description = outcome switch
+            DescriptionDetail = outcome switch
             {
                 ObjectMatchingLookupOutcome.AlreadyJoined =>
-                    $"This object is already joined to {name}, the Metaverse Object it matches on {match.MatchedValue}.",
+                    ServerMessage.Create(nameof(ServerMessages.LookupAlreadyJoined), name, match.MatchedValue),
                 ObjectMatchingLookupOutcome.JoinedToAnother =>
-                    $"The values match {name} on {match.MatchedValue}, but another Connected System Object from this Connected System " +
-                    "is already joined to it, so a synchronisation would record that this object could not join.",
-                _ => $"A synchronisation would join this object to {name}, matched on {match.MatchedValue}."
+                    ServerMessage.Create(nameof(ServerMessages.LookupJoinedToAnother), name, match.MatchedValue),
+                _ => ServerMessage.Create(nameof(ServerMessages.LookupWouldJoin), name, match.MatchedValue)
             }
         };
     }

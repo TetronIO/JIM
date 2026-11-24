@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -2649,6 +2650,18 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public virtual Task<List<PendingExport>> GetPendingExportsAwaitingRemovalOfReferencesToAsync(int connectedSystemId,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var targets = connectedSystemObjectIds.ToHashSet();
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.AttributeValueChanges.Any(avc => avc.ChangeType == PendingExportAttributeChangeType.Remove
+                      && avc.Status is PendingExportAttributeChangeStatus.ExportedPendingConfirmation or PendingExportAttributeChangeStatus.ExportedNotConfirmed
+                      && avc.ResolvedReferenceCsoId is { } target && targets.Contains(target)))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
     {
         var count = _pendingExportsByCs.TryGetValue(connectedSystemId, out var ids) ? ids.Count : 0;
@@ -2899,6 +2912,15 @@ public partial class SyncRepository : ISyncRepository
             throw new InvalidOperationException($"Simulated failure updating the Activity message to '{message}'.");
 
         activity.Message = message;
+        activity.MessageDetailJson = null;
+        _activities[activity.Id] = activity;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateActivityMessageAsync(Activity activity, JimMessage message)
+    {
+        Interlocked.Increment(ref _activityWriteCount);
+        activity.MessageDetail = message;
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }

@@ -1,0 +1,430 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SyncRuleObjectTypesCannotChange" xml:space="preserve">
+    <value>The {0} of Synchronisation Rule '{1}' cannot be changed once it is saved: its Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of its Object Types. Create a new Synchronisation Rule for the other Object Type instead.</value>
+    <comment>{0} is one of the three ChangedObjectTypes* phrases (a noun phrase, masculine in French); {1} is the Synchronisation Rule's name.</comment>
+  </data>
+  <data name="ChangedObjectTypesBoth" xml:space="preserve">
+    <value>Connected System Object Type and Metaverse Object Type</value>
+    <comment>Noun phrase naming both object types; used inside SyncRuleObjectTypesCannotChange.</comment>
+  </data>
+  <data name="ChangedObjectTypeConnectedSystem" xml:space="preserve">
+    <value>Connected System Object Type</value>
+    <comment>Noun phrase; used inside SyncRuleObjectTypesCannotChange.</comment>
+  </data>
+  <data name="ChangedObjectTypeMetaverse" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Noun phrase; used inside SyncRuleObjectTypesCannotChange.</comment>
+  </data>
+  <data name="SyncRuleEnabledOnDeselectedObjectType" xml:space="preserve">
+    <value>Synchronisation Rule '{0}' cannot be enabled because its Object Type '{1}' is not selected on the Connected System. Select the Object Type first, or save the Synchronisation Rule disabled.</value>
+    <comment>{0} is the rule's name; {1} the Object Type's name.</comment>
+  </data>
+  <data name="SyncRuleDeprovisionDisableUnsupported" xml:space="preserve">
+    <value>Synchronisation Rule '{0}' cannot deprovision with Disable: the {1} that '{2}' uses cannot disable an account. Choose Delete or Disconnect.</value>
+    <comment>{0} is the rule's name; {1} is the Connector's name (for example JIM LDAP Connector); {2} is the Connected System's name. Disable, Delete and Disconnect are the deprovision actions as the portal labels them.</comment>
+  </data>
+  <data name="ObjectTypeStillManagedOne" xml:space="preserve">
+    <value>Object Type '{0}' cannot be deselected while an enabled Synchronisation Rule still manages it: {2}. Disable that Synchronisation Rule first, or keep the Object Type selected.</value>
+    <comment>{0} is the Object Type's name; {1} is the count of rules (unused in the singular); {2} is the rule's name.</comment>
+  </data>
+  <data name="ObjectTypeStillManagedOther" xml:space="preserve">
+    <value>Object Type '{0}' cannot be deselected while {1} enabled Synchronisation Rules still manage it: {2}. Disable those Synchronisation Rules first, or keep the Object Type selected.</value>
+    <comment>{0} is the Object Type's name; {1} is the count of rules; {2} is their names, comma separated.</comment>
+  </data>
+  <data name="AttributeDeselectionRefusal" xml:space="preserve">
+    <value>An attribute a Scoping Criterion reads cannot be deselected: it would stop being imported, so the criterion would decide scope on values that are never refreshed, and on no value at all for objects imported afterwards. Change these first:</value>
+    <comment>Followed by the list of readers.</comment>
+  </data>
+  <data name="SchemaRefreshRemovalRefusal" xml:space="preserve">
+    <value>Apply and Remove is refused: configuration reads an attribute the Connected System no longer reports. Change these first, or apply without removing:</value>
+    <comment>Apply and Remove is a button label in the schema refresh preview. Followed by the list of readers.</comment>
+  </data>
+  <data name="AttributeReadersRefusal" xml:space="preserve">
+    <value>{0} {1}.</value>
+    <comment>{0} is the refusal sentence; {1} is the readers' descriptions, joined with semicolons.</comment>
+  </data>
+  <data name="ConnectorFallbackName" xml:space="preserve">
+    <value>the Connector</value>
+    <comment>Stands in for a Connector's name when it is not known; used inside ConnectorDefinedAttributeNameCollision.</comment>
+  </data>
+  <data name="ConnectorDefinedAttributeNameCollision" xml:space="preserve">
+    <value>{0} defines an attribute named '{1}' on the '{2}' Object Type, but '{3}' already has an attribute of that name. A Connector-defined Attribute must have a name the Connected System's own attributes cannot have. The schema was not changed.</value>
+    <comment>{0} is the Connector's name or ConnectorFallbackName; {1} the attribute; {2} the Object Type; {3} the Connected System.</comment>
+  </data>
+  <data name="MappingSourceTypeNotSet" xml:space="preserve">
+    <value>Source attribute '{0}' has type NotSet. Attributes must have a defined type before they can be used in mappings.</value>
+    <comment>NotSet is the name of a data type value (not translated).</comment>
+  </data>
+  <data name="MappingTargetTypeNotSet" xml:space="preserve">
+    <value>Target attribute '{0}' has type NotSet. Attributes must have a defined type before they can be used in mappings.</value>
+    <comment>NotSet is the name of a data type value (not translated).</comment>
+  </data>
+  <data name="MappingTypeMismatch" xml:space="preserve">
+    <value>Type mismatch: source attribute '{0}' ({1}) is not compatible with target attribute '{2}' ({3}). Source and target attributes must have the same type.</value>
+    <comment>{1} and {3} are data type names.</comment>
+  </data>
+  <data name="MappingTargetReadOnly" xml:space="preserve">
+    <value>Cannot create export Attribute Flow to read-only attribute '{0}'. This attribute is marked as read-only by the Connected System and cannot be written to.</value>
+  </data>
+  <data name="DuplicateMappingTargetNamed" xml:space="preserve">
+    <value>Synchronisation Rule '{0}' already has an Attribute Flow targeting '{1}'; only one mapping per target attribute is supported, and a disabled mapping still counts. To fall back between source attributes within one rule, use a single expression mapping (for example attribute_1 ?? attribute_2). To arbitrate between sources with Attribute Priority, define the second flow on a separate, differently-scoped Synchronisation Rule.</value>
+    <comment>{0} is the rule's name; {1} the target attribute. The expression example is code and stays as written.</comment>
+  </data>
+  <data name="DuplicateMappingTargetUnnamed" xml:space="preserve">
+    <value>This Synchronisation Rule already has an Attribute Flow targeting '{0}'; only one mapping per target attribute is supported, and a disabled mapping still counts. To fall back between source attributes within one rule, use a single expression mapping (for example attribute_1 ?? attribute_2). To arbitrate between sources with Attribute Priority, define the second flow on a separate, differently-scoped Synchronisation Rule.</value>
+    <comment>{0} is the target attribute.</comment>
+  </data>
+  <data name="MappingSettingsNoChanges" xml:space="preserve">
+    <value>No settings were supplied to change.</value>
+  </data>
+  <data name="MappingNoExpressionSource" xml:space="preserve">
+    <value>This Attribute Flow has no Expression source, so Expression settings do not apply to it. Delete the mapping and create it with an Expression source instead.</value>
+  </data>
+  <data name="MappingSeveralExpressionSources" xml:space="preserve">
+    <value>This Attribute Flow has more than one Expression source, so it is ambiguous which Expression to replace.</value>
+  </data>
+  <data name="MappingImportOnlySettings" xml:space="preserve">
+    <value>Null is a value, inbound value processing and case normalisation apply to import mappings only.</value>
+    <comment>Null is a value, Inbound value processing and Case normalisation are setting names in the Attribute Flow editor.</comment>
+  </data>
+  <data name="MappingExportOnlySettings" xml:space="preserve">
+    <value>Initial Export Only applies to export mappings only.</value>
+    <comment>Initial Export Only is a setting name.</comment>
+  </data>
+  <data name="KeepUniqueNotApplicable" xml:space="preserve">
+    <value>Keep unique applies only to an Attribute Flow that builds its value with an Expression (a value built from a generated value), not to a direct flow or to a generated value itself.</value>
+    <comment>Keep unique is a switch name in the Attribute Flow editor.</comment>
+  </data>
+  <data name="TargetPrefixed" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} is a target attribute's name; {1} is a nested message.</comment>
+  </data>
+  <data name="MappingNotGenerated" xml:space="preserve">
+    <value>This Attribute Flow is not a generated mapping, so generation settings do not apply to it.</value>
+  </data>
+  <data name="RestartMappingNotFound" xml:space="preserve">
+    <value>No Attribute Flow mapping was found with ID {0}.</value>
+    <comment>{0} is the mapping's id.</comment>
+  </data>
+  <data name="RestartNotGenerated" xml:space="preserve">
+    <value>This Attribute Flow is not a generated mapping; "Start again" only applies to generated mappings.</value>
+    <comment>Start again is a button label.</comment>
+  </data>
+  <data name="ExclusionNoMetaverseTarget" xml:space="preserve">
+    <value>A value generated for {0} is checked only in its own Connected System, so it cannot exclude Connected Systems; remove the exclusions.</value>
+    <comment>{0} is an attribute's name or ExclusionThisAttribute.</comment>
+  </data>
+  <data name="ExclusionThisAttribute" xml:space="preserve">
+    <value>this attribute</value>
+    <comment>Stands in for an attribute's name when it is not known.</comment>
+  </data>
+  <data name="ExclusionTheGeneratedAttribute" xml:space="preserve">
+    <value>the generated attribute</value>
+    <comment>Stands in for an attribute's name when it is not known.</comment>
+  </data>
+  <data name="ExclusionNotExcludable" xml:space="preserve">
+    <value>Connected System "{0}" cannot be excluded from {1}'s availability checks: no export Attribute Flow sends {1} to it unchanged.</value>
+    <comment>{0} is the Connected System's name; {1} an attribute name or ExclusionTheGeneratedAttribute.</comment>
+  </data>
+  <data name="ExclusionMissingSystem" xml:space="preserve">
+    <value>Connected System {0} cannot be excluded from {1}'s availability checks: it does not exist.</value>
+    <comment>{0} is the Connected System's id; {1} an attribute name or ExclusionTheGeneratedAttribute.</comment>
+  </data>
+  <data name="PriorityNoContributions" xml:space="preserve">
+    <value>No import attribute contributions exist for Metaverse attribute {0} on Metaverse Object Type {1}.</value>
+    <comment>{0} and {1} are ids.</comment>
+  </data>
+  <data name="PriorityDuplicateMappings" xml:space="preserve">
+    <value>The attribute priority order contains duplicate mapping identifiers.</value>
+  </data>
+  <data name="PriorityMismatchBase" xml:space="preserve">
+    <value>The attribute priority order must list every contributing mapping for the attribute exactly once, and no others.</value>
+  </data>
+  <data name="PriorityMissing" xml:space="preserve">
+    <value>Missing: {0}.</value>
+    <comment>{0} is the missing mappings, comma separated.</comment>
+  </data>
+  <data name="PriorityNotContributors" xml:space="preserve">
+    <value>Not contributors to this attribute: {0}. Reload the current order and try again.</value>
+    <comment>{0} is the mappings, comma separated.</comment>
+  </data>
+  <data name="PriorityMappingOfRule" xml:space="preserve">
+    <value>mapping {0} (Synchronisation Rule '{1}')</value>
+    <comment>{0} is the mapping's id; {1} the rule's name.</comment>
+  </data>
+  <data name="PriorityMapping" xml:space="preserve">
+    <value>mapping {0}</value>
+    <comment>{0} is the mapping's id.</comment>
+  </data>
+  <data name="PriorityNotAContributor" xml:space="preserve">
+    <value>Mapping {0} is not a contributor to Metaverse attribute {1} on Metaverse Object Type {2}.</value>
+    <comment>All three are ids.</comment>
+  </data>
+  <data name="ListPair" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Joins two items of a list with a comma; applied repeatedly to join more.</comment>
+  </data>
+  <data name="MessagePair" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Joins two sentences with a space; applied repeatedly to join more.</comment>
+  </data>
+  <data name="ScopingCriterionCannotBeSaved" xml:space="preserve">
+    <value>Scoping criterion on '{0}' cannot be saved: {1}</value>
+    <comment>{0} is the criterion's attribute or expression; {1} the reason (text from the expression checker).</comment>
+  </data>
+  <data name="ScopingCriterionLeftAsWas" xml:space="preserve">
+    <value>Scoping criterion on '{0}' is not valid, and was left as it was: {1}</value>
+    <comment>{0} is the criterion's attribute or expression; {1} the reason.</comment>
+  </data>
+  <data name="MappingRemovalChoicesUpdatesOnly" xml:space="preserve">
+    <value>Mapping removal choices apply to updates only: a Synchronisation Rule being created has no persisted Attribute Flow mappings to remove.</value>
+  </data>
+  <data name="MappingRemovalChoicesDuplicate" xml:space="preserve">
+    <value>Mapping removal choices contain a duplicate mapping id, making the intent ambiguous.</value>
+  </data>
+  <data name="MappingRemovalChoiceStillPresent" xml:space="preserve">
+    <value>Mapping removal choice for mapping {0} names a mapping still present on the Synchronisation Rule; a choice may only describe a staged removal.</value>
+    <comment>{0} is the mapping's id.</comment>
+  </data>
+  <data name="MappingRemovalChoiceMissing" xml:space="preserve">
+    <value>Mapping removal choice for mapping {0} names a mapping that does not exist; it may already have been deleted, in which case its choice was made then.</value>
+    <comment>{0} is the mapping's id.</comment>
+  </data>
+  <data name="MappingRemovalChoiceWrongRule" xml:space="preserve">
+    <value>Mapping removal choice for mapping {0} names a mapping that does not belong to Synchronisation Rule {1}.</value>
+    <comment>Both are ids.</comment>
+  </data>
+  <data name="ConnectorNoSchemaImport" xml:space="preserve">
+    <value>The '{0}' connector does not support schema import.</value>
+    <comment>{0} is the Connector's name.</comment>
+  </data>
+  <data name="ConnectorNoPasswordChannel" xml:space="preserve">
+    <value>The '{0}' connector does not support setting passwords, so there is no password channel to check.</value>
+    <comment>{0} is the Connector's name.</comment>
+  </data>
+  <data name="ConnectorNoDirectoryDiscovery" xml:space="preserve">
+    <value>The '{0}' connector does not support directory server discovery.</value>
+    <comment>{0} is the Connector's name.</comment>
+  </data>
+  <data name="ConnectorNoDiscoveryForSetting" xml:space="preserve">
+    <value>The '{0}' connector cannot discover servers for the setting '{1}'.</value>
+    <comment>{0} is the Connector's name; {1} the setting's name.</comment>
+  </data>
+  <data name="ConnectorNoCatalogue" xml:space="preserve">
+    <value>The '{0}' connector cannot describe what its source contains.</value>
+    <comment>{0} is the Connector's name.</comment>
+  </data>
+  <data name="ConnectorNoHierarchyImport" xml:space="preserve">
+    <value>The '{0}' connector does not support hierarchy import.</value>
+    <comment>{0} is the Connector's name.</comment>
+  </data>
+  <data name="ConnectedSystemNotFoundById" xml:space="preserve">
+    <value>No Connected System found with id {0}.</value>
+    <comment>{0} is the id.</comment>
+  </data>
+  <data name="RunProfileVerifyFullImportOnly" xml:space="preserve">
+    <value>VerifyImportContentHashes can only be enabled on a Full Import Run Profile.</value>
+    <comment>VerifyImportContentHashes is a property name (not translated).</comment>
+  </data>
+  <data name="RunProfileNoConnectedSystem" xml:space="preserve">
+    <value>No such Connected System found!</value>
+  </data>
+  <data name="RunProfileNotValidForConnector" xml:space="preserve">
+    <value>Run Profile is not valid for the Connector!</value>
+  </data>
+  <data name="SaveWarningProjectionConflict" xml:space="preserve">
+    <value>The import Synchronisation Rule '{0}' also projects '{1}' objects from '{2}', but as '{3}'. A synchronisation projects nothing for an object both rules have in scope, and reports it as a Projection Type Conflict. Give the rules scopes that never overlap, or have them project into one Metaverse Object Type.</value>
+    <comment>{0} is the other rule's name; {1} the Connected System Object Type; {2} the Connected System; {3} the Metaverse Object Type. Projection Type Conflict is the name of an outcome shown in Activities.</comment>
+  </data>
+  <data name="SaveWarningExportRulesOverlap" xml:space="preserve">
+    <value>The export Synchronisation Rule '{0}' also manages '{1}' objects in '{2}' for '{3}'. Only one export rule may manage an object: a synchronisation exports nothing to this Connected System for an object both rules have in scope, and reports it as Export Rules Overlap. Give the rules scopes that never overlap, or combine them into one rule.</value>
+    <comment>{0} is the other rule's name; {1} the Connected System Object Type; {2} the Connected System; {3} the Metaverse Object Type. Export Rules Overlap is the name of an outcome shown in Activities.</comment>
+  </data>
+  <data name="SaveWarningExportObjectTypesDiffer" xml:space="preserve">
+    <value>The export Synchronisation Rule '{0}' provisions '{1}' objects to '{2}' as '{3}', and this rule provisions them as {4}. Each can have only one object in '{2}', so where both rules' scopes cover the same one, only one rule provisions it and the other reports Synchronisation Failed for it on every synchronisation. Make sure the scopes never overlap.</value>
+    <comment>{0} is the other rule's name; {1} the Metaverse Object Type; {2} the Connected System; {3} the other rule's Connected System Object Type; {4} is this rule's Object Type in quotes (SaveWarningThisObjectType) or SaveWarningADifferentObjectType. Synchronisation Failed is an outcome name.</comment>
+  </data>
+  <data name="SaveWarningThisObjectType" xml:space="preserve">
+    <value>'{0}'</value>
+    <comment>{0} is this rule's Connected System Object Type name.</comment>
+  </data>
+  <data name="SaveWarningADifferentObjectType" xml:space="preserve">
+    <value>a different Object Type</value>
+    <comment>Stands in when this rule's Object Type is not known.</comment>
+  </data>
+  <data name="SaveWarningConnectorDefinedOverlap" xml:space="preserve">
+    <value>'{0}' is defined by the {1} and written to the Connected System through '{2}', which this rule also flows, from a different source. Each export may overwrite the other's value. Flow one of them, or give both the same source.</value>
+    <comment>{0} is the Connector-defined attribute; {1} is the Connector's name; {2} the attribute it is realised through.</comment>
+  </data>
+  <data name="PassThroughText" xml:space="preserve">
+    <value>{0}</value>
+    <comment>Text another part of JIM or a connected system produced, shown as it is (it is not translated). {0} is that text.</comment>
+  </data>
+  <data name="SemicolonPair" xml:space="preserve">
+    <value>{0}; {1}</value>
+    <comment>Joins two items of a list with a semicolon; applied repeatedly to join more.</comment>
+  </data>
+  <data name="ReaderOwnerSyncRule" xml:space="preserve">
+    <value>Synchronisation Rule '{0}'</value>
+    <comment>Names the owner of something that reads an attribute; {0} is the rule's name. Used inside the Reader* descriptions.</comment>
+  </data>
+  <data name="ReaderOwnerExampleDataTemplate" xml:space="preserve">
+    <value>Example Data Template '{0}'</value>
+    <comment>Names the owner of something that reads an attribute; {0} is the template's name.</comment>
+  </data>
+  <data name="ReaderOwnerObjectType" xml:space="preserve">
+    <value>Connected System Object Type '{0}'</value>
+    <comment>Names the owner of something that reads an attribute; {0} is the Object Type's name.</comment>
+  </data>
+  <data name="ReaderScopingCriterionExpression" xml:space="preserve">
+    <value>Scoping Criterion Expression {0} in {1}</value>
+    <comment>{0} is the Expression's text (code, not translated); {1} is a Reader owner phrase.</comment>
+  </data>
+  <data name="ReaderScopingCriterionAttribute" xml:space="preserve">
+    <value>Scoping Criterion on '{0}' in {1}</value>
+    <comment>{0} is the attribute's name; {1} is a Reader owner phrase.</comment>
+  </data>
+  <data name="ReaderAttributeFlowExpression" xml:space="preserve">
+    <value>Attribute Flow Expression into '{0}' in {1}</value>
+    <comment>{0} is the target attribute's name; {1} is a Reader owner phrase.</comment>
+  </data>
+  <data name="ReaderObjectMatchingRuleExpression" xml:space="preserve">
+    <value>Object Matching Rule Expression {0} in {1}</value>
+    <comment>{0} is the Expression's text (code, not translated); {1} is a Reader owner phrase.</comment>
+  </data>
+  <data name="ReaderExampleDataExpression" xml:space="preserve">
+    <value>Expression for '{0}' in {1}</value>
+    <comment>{0} is the attribute's name; {1} is a Reader owner phrase.</comment>
+  </data>
+  <data name="ReaderOther" xml:space="preserve">
+    <value>{0} in {1}</value>
+    <comment>{0} is the kind of reader as a code name (not translated); {1} is a Reader owner phrase.</comment>
+  </data>
+  <data name="UrefAmbiguousFinding" xml:space="preserve">
+    <value>This value matches objects of more than one Object Type ({0}), and attribute '{1}' does not declare which one it references.</value>
+    <comment>{0} is the Object Types' names, comma separated; {1} the attribute's name.</comment>
+  </data>
+  <data name="UrefAmbiguousRemedy" xml:space="preserve">
+    <value>Declare its target Object Type on the Schema tab if the Connector supports doing so.</value>
+    <comment>The Schema tab's name is as the portal labels it.</comment>
+  </data>
+  <data name="UrefNotFoundFinding" xml:space="preserve">
+    <value>Nothing with this value has been imported into {0}.</value>
+    <comment>{0} is the Connected System's name.</comment>
+  </data>
+  <data name="UrefNotFoundNoContainmentRemedy" xml:space="preserve">
+    <value>Run a Full Import to rule out a missed change. If it is still unresolved, the source refers to an object that is not in it, or one whose Object Type is not imported.</value>
+    <comment>Exécutez une importation complète pour écarter un changement manqué. Si la référence reste non résolue, la source fait référence à un objet qui n’en fait pas partie, ou dont le type d’objets n’est pas importé.</comment>
+  </data>
+  <data name="UrefNotFoundRemedy" xml:space="preserve">
+    <value>Run a Full Import to rule out a missed change.</value>
+    <comment>Exécutez une importation complète pour écarter un changement manqué.</comment>
+  </data>
+  <data name="UrefOutsideConnectedSystemFinding" xml:space="preserve">
+    <value>This value is in none of {0}'s partitions, so JIM cannot import the object it names.</value>
+    <comment>{0} is the Connected System's name.</comment>
+  </data>
+  <data name="UrefOutsideRemedyWarn" xml:space="preserve">
+    <value>If references like this are expected, set Unresolved Reference Handling to Ignore so runs stop reporting them.</value>
+    <comment>Unresolved Reference Handling is a Connected System setting; Ignore is one of its choices.</comment>
+  </data>
+  <data name="UrefOutsideRemedyIgnore" xml:space="preserve">
+    <value>Runs already leave references like this unreported; nothing in JIM needs changing if they are expected.</value>
+    <comment>Les exécutions ne signalent déjà pas de telles références ; rien ne doit être modifié dans JIM si elles sont attendues.</comment>
+  </data>
+  <data name="UrefOutsideRemedyDefault" xml:space="preserve">
+    <value>If references like this are expected, set Unresolved Reference Handling to Warn.</value>
+    <comment>Unresolved Reference Handling is a Connected System setting; Warn is one of its choices.</comment>
+  </data>
+  <data name="UrefPartitionNotSelectedFinding" xml:space="preserve">
+    <value>Partition {0} is not selected.</value>
+    <comment>{0} is the partition's identifier.</comment>
+  </data>
+  <data name="UrefSelectOnScopeTabRemedy" xml:space="preserve">
+    <value>Select it on the Scope tab, then run a Full Import.</value>
+    <comment>The Scope tab's name is as the portal labels it.</comment>
+  </data>
+  <data name="UrefNotFoundInScopeFinding" xml:space="preserve">
+    <value>{0} is in Container Scope, but nothing with this value has been imported.</value>
+    <comment>{0} is the Container's or partition's identifier.</comment>
+  </data>
+  <data name="UrefNotFoundInScopeRemedy" xml:space="preserve">
+    <value>Run a Full Import to rule out a missed change. If it is still unresolved, the object no longer exists in {0}, or its Object Type is not imported.</value>
+    <comment>{0} is the Connected System's name.</comment>
+  </data>
+  <data name="UrefContainerExcludedFinding" xml:space="preserve">
+    <value>{0} is excluded from Container Scope.</value>
+    <comment>{0} is the Container's identifier.</comment>
+  </data>
+  <data name="UrefContainerExcludedRemedy" xml:space="preserve">
+    <value>If its objects belong in JIM, lift the exclusion on the Scope tab, then run a Full Import.</value>
+    <comment>Si ses objets doivent figurer dans JIM, levez l’exclusion dans l’onglet Périmètre, puis exécutez une importation complète.</comment>
+  </data>
+  <data name="UrefContainerNotInScopeFinding" xml:space="preserve">
+    <value>{0} is not in Container Scope.</value>
+    <comment>{0} is the Container's identifier.</comment>
+  </data>
+  <data name="UrefOutsideEveryContainerFinding" xml:space="preserve">
+    <value>The object sits in {0}, outside every Container JIM knows of.</value>
+    <comment>{0} is the partition's identifier.</comment>
+  </data>
+  <data name="UrefOutsideEveryContainerRemedy" xml:space="preserve">
+    <value>Refresh the hierarchy on the Scope tab, then select the Container that holds it and run a Full Import.</value>
+    <comment>Actualisez la hiérarchie dans l’onglet Périmètre, puis sélectionnez le conteneur qui le contient et exécutez une importation complète.</comment>
+  </data>
+  <data name="UrefGroupAmbiguousFinding" xml:space="preserve">
+    <value>These values match objects of more than one Object Type, on attributes that do not declare which one they reference.</value>
+    <comment>Ces valeurs correspondent à des objets de plusieurs types d’objets, sur des attributs qui ne déclarent pas auquel ils font référence.</comment>
+  </data>
+  <data name="UrefGroupAmbiguousRemedy" xml:space="preserve">
+    <value>Declare each attribute's target Object Type on the Schema tab if the Connector supports doing so.</value>
+    <comment>Déclarez le type d’objets cible de chaque attribut dans l’onglet Schéma si le connecteur le permet.</comment>
+  </data>
+  <data name="HeldUnderAnotherDataType" xml:space="preserve">
+    <value>{0} is held as {1}{2}: a schema refresh changed its data type and no import has read it since. Run a Full Import to read it as its new type; {3}.</value>
+    <comment>{0} is HeldSubject*; {1} the data type it is held as (a code name, not translated); {2} is HeldNotAsCurrentType or empty (an empty text); {3} is what then happens (HeldAfterImport*).</comment>
+  </data>
+  <data name="HeldNotAsCurrentType" xml:space="preserve">
+    <value>, not as its {0} type</value>
+    <comment>{0} is the attribute's current data type (a code name, not translated). Begins with a comma.</comment>
+  </data>
+  <data name="HeldSubjectAttribute" xml:space="preserve">
+    <value>The Connected System attribute '{0}'</value>
+    <comment>Starts a sentence; {0} is the attribute's name.</comment>
+  </data>
+  <data name="HeldSubjectInput" xml:space="preserve">
+    <value>The input {0}</value>
+    <comment>Starts a sentence; {0} is the input as written in an Expression (code, not translated).</comment>
+  </data>
+  <data name="HeldSubjectInputs" xml:space="preserve">
+    <value>The inputs {0}</value>
+    <comment>Starts a sentence; {0} is the inputs as written in an Expression, comma separated (code, not translated).</comment>
+  </data>
+  <data name="HeldAfterImportMatched" xml:space="preserve">
+    <value>the object is matched on the next synchronisation</value>
+    <comment>Ends a sentence.</comment>
+  </data>
+  <data name="HeldAfterImportScope" xml:space="preserve">
+    <value>the object's scope is decided at the next synchronisation</value>
+    <comment>Ends a sentence.</comment>
+  </data>
+  <data name="PriorityNotUsedUnderAccumulate" xml:space="preserve">
+    <value>The Metaverse attribute '{0}' uses the Accumulate contribution mode, so every contributor adds its values and the priority order is not used. Set the attribute's contribution mode to Priority to order its contributors.</value>
+    <comment>{0} is the attribute's name.</comment>
+  </data>
+</root>

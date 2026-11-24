@@ -44,9 +44,9 @@
             @if (!string.IsNullOrWhiteSpace(SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No {PluralName.ToLowerInvariant()} match \"{SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, MetaverseText.AtNoMatch, PluralName.ToLowerInvariant(), SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => SetSearchAsync(string.Empty))" />
             }
             else
@@ -116,7 +116,7 @@
 
     /// <summary>Placeholder for the search box.</summary>
     [Parameter]
-    public string SearchPlaceholder { get; set; } = "Search attribute name or value";
+    public string SearchPlaceholder { get; set; } = MetaverseText.AtSearchPlaceholder;
 
     /// <summary>Extra classes for the table.</summary>
     [Parameter]
@@ -164,6 +164,7 @@
     private TableGroupDefinition<TItem>? _groupDefinition;
     private Func<TItem, object>? _groupDefinitionKey;
 
+    // i18n: exempt - CSS class names, not text
     private string CssClass => string.IsNullOrWhiteSpace(Class) ? "jim-attribute-table" : $"jim-attribute-table {Class}";
 
     protected override void OnParametersSet()

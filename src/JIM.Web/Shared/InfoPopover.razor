@@ -1,3 +1,4 @@
+@using System.Globalization
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
@@ -9,7 +10,7 @@
    with the text beside it are fixed here once. Opens on click rather than on hover because the content
    can carry a link; MudMenu is JIM's existing pattern for an icon-triggered popover. *@
 <MudMenu Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Default"
-         AriaLabel="@($"About {Title}")" Class="jim-info-button ms-1">
+         AriaLabel="@string.Format(CultureInfo.CurrentCulture, SharedText.InfoAbout, Title)" Class="jim-info-button ms-1">
     <div class="jim-info-popover">
         <div class="jim-info-popover-title">@Title</div>
         <div class="jim-info-popover-body">@ChildContent</div>
@@ -19,13 +20,13 @@
                 @if (!string.IsNullOrEmpty(DocsUrl))
                 {
                     <MudLink Href="@DocsUrl" Target="_blank" rel="noopener" Class="jim-info-popover-link">
-                        Documentation
+                        @SharedText.InfoDocumentation
                     </MudLink>
                 }
                 @if (!string.IsNullOrEmpty(GlossaryAnchor))
                 {
                     <MudLink Href="@DocsSite.GlossaryUrl(GlossaryAnchor)" Target="_blank" rel="noopener" Class="jim-info-popover-link">
-                        Glossary
+                        @SharedText.InfoGlossary
                     </MudLink>
                 }
             </div>

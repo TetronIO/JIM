@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LabelEquals" xml:space="preserve">
+    <value>ist gleich</value>
+  </data>
+  <data name="LabelNotEquals" xml:space="preserve">
+    <value>ist ungleich</value>
+  </data>
+  <data name="LabelStartsWith" xml:space="preserve">
+    <value>beginnt mit</value>
+  </data>
+  <data name="LabelNotStartsWith" xml:space="preserve">
+    <value>beginnt nicht mit</value>
+  </data>
+  <data name="LabelEndsWith" xml:space="preserve">
+    <value>endet auf</value>
+  </data>
+  <data name="LabelNotEndsWith" xml:space="preserve">
+    <value>endet nicht auf</value>
+  </data>
+  <data name="LabelContains" xml:space="preserve">
+    <value>enthält</value>
+  </data>
+  <data name="LabelNotContains" xml:space="preserve">
+    <value>enthält nicht</value>
+  </data>
+  <data name="LabelLessThan" xml:space="preserve">
+    <value>ist kleiner als</value>
+  </data>
+  <data name="LabelLessThanOrEquals" xml:space="preserve">
+    <value>ist kleiner oder gleich</value>
+  </data>
+  <data name="LabelGreaterThan" xml:space="preserve">
+    <value>ist größer als</value>
+  </data>
+  <data name="LabelGreaterThanOrEquals" xml:space="preserve">
+    <value>ist größer oder gleich</value>
+  </data>
+  <data name="LabelHasValue" xml:space="preserve">
+    <value>hat einen Wert</value>
+  </data>
+  <data name="LabelHasNoValue" xml:space="preserve">
+    <value>hat keinen Wert</value>
+  </data>
+  <data name="LabelMatchesPattern" xml:space="preserve">
+    <value>entspricht dem Muster</value>
+  </data>
+  <data name="LabelNotMatchesPattern" xml:space="preserve">
+    <value>entspricht nicht dem Muster</value>
+  </data>
+  <data name="LabelDateBefore" xml:space="preserve">
+    <value>vor</value>
+  </data>
+  <data name="LabelDateOnOrBefore" xml:space="preserve">
+    <value>am oder vor</value>
+  </data>
+  <data name="LabelDateAfter" xml:space="preserve">
+    <value>nach</value>
+  </data>
+  <data name="LabelDateOnOrAfter" xml:space="preserve">
+    <value>am oder nach</value>
+  </data>
+</root>

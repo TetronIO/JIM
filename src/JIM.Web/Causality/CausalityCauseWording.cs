@@ -3,7 +3,10 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using System.Globalization;
 using JIM.Models.Enums;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
 
@@ -45,9 +48,9 @@ public static class CausalityCauseWording
         {
             parts.Add(new CausalityCauseSentencePart(metaverseChangeType switch
             {
-                ObjectChangeType.Projected => $"{Subject(cohort)} was projected to the Metaverse",
-                ObjectChangeType.Joined => $"{Subject(cohort)} was joined to this existing Metaverse Object",
-                _ => "This Metaverse Object was created directly in JIM"
+                ObjectChangeType.Projected => Format(CausalityText.CauseProjected, Subject(cohort)),
+                ObjectChangeType.Joined => Format(CausalityText.CauseJoined, Subject(cohort)),
+                _ => CausalityText.CauseCreatedDirectly
             }));
             return parts;
         }
@@ -58,15 +61,15 @@ public static class CausalityCauseWording
         if (cohort.SourceImportChangeType is { } importChangeType)
         {
             var systemName = string.IsNullOrWhiteSpace(cohort.ConnectedSystemName)
-                ? "the source system"
+                ? CausalityText.CauseSourceSystemFallback
                 : cohort.ConnectedSystemName;
             parts.Add(new CausalityCauseSentencePart(importChangeType switch
             {
                 ObjectChangeType.Updated =>
-                    $"{Subject(cohort)} was imported from {systemName} with changed attributes",
+                    Format(CausalityText.CauseImportedChanged, Subject(cohort), systemName),
                 ObjectChangeType.Deleted =>
-                    $"{Subject(cohort)}'s Connected System Object was deleted from {systemName}",
-                _ => $"{Subject(cohort)} was imported into {systemName} as a new Connected System Object"
+                    Format(CausalityText.CauseImportDeleted, Subject(cohort), systemName),
+                _ => Format(CausalityText.CauseImportAdded, Subject(cohort), systemName)
             }));
             return parts;
         }
@@ -75,7 +78,7 @@ public static class CausalityCauseWording
         {
             case CausalEdgeType.ExportCausedImportConfirmation:
                 parts.Add(new CausalityCauseSentencePart(
-                    $"{Subject(cohort)} {(plural ? "were" : "was")} exported, and this import confirms {(plural ? "them" : "it")}"));
+                    Format(plural ? CausalityText.CauseExportConfirmedOther : CausalityText.CauseExportConfirmedOne, Subject(cohort))));
                 break;
 
             case CausalEdgeType.PendingExportQueueingCausedExportExecution:
@@ -86,36 +89,37 @@ public static class CausalityCauseWording
                 // edges written before the reason codes existed and keeps their original sentence. Several
                 // members here are several runs staging one object's export (#2100), so the object is named once
                 // and the runs are counted.
-                var stagedBy = IsStagedBySeveralRuns(cohort) ? $" in {cohort.MemberCount} synchronisations" : string.Empty;
                 parts.Add(new CausalityCauseSentencePart(cohort.ReasonCode switch
                 {
                     CausalReasonCode.ExportCreateStaged when !string.IsNullOrWhiteSpace(cohort.ConnectedSystemName) =>
-                        $"{Subject(cohort)} was provisioned to {cohort.ConnectedSystemName}, so this run created the Connected System Object",
+                        Format(CausalityText.CauseProvisionedTo, Subject(cohort), cohort.ConnectedSystemName),
                     CausalReasonCode.ExportCreateStaged =>
-                        $"{Subject(cohort)} was provisioned, so this run created the Connected System Object",
+                        Format(CausalityText.CauseProvisioned, Subject(cohort)),
                     CausalReasonCode.ExportUpdateStaged =>
-                        $"{Subject(cohort)}'s Metaverse Object changed{stagedBy}, so this run applied the changes to the Connected System Object",
+                        IsStagedBySeveralRuns(cohort)
+                            ? Format(CausalityText.CauseMetaverseChangedSeveralRuns, Subject(cohort), cohort.MemberCount)
+                            : Format(CausalityText.CauseMetaverseChanged, Subject(cohort)),
                     CausalReasonCode.ExportDeleteStaged =>
-                        $"The Metaverse Object {Subject(cohort)} was deleted, so this run deleted the Connected System Object",
+                        Format(CausalityText.CauseMetaverseDeleted, Subject(cohort)),
                     CausalReasonCode.ExportDisableStaged =>
-                        $"{Subject(cohort)} was deprovisioned, so this run disabled the Connected System Object",
+                        Format(CausalityText.CauseDeprovisionedDisabled, Subject(cohort)),
                     _ when IsStagedBySeveralRuns(cohort) =>
-                        $"{cohort.MemberCount} synchronisations of {Subject(cohort)} staged this change, and this run exported it",
-                    _ => $"A synchronisation of {Subject(cohort)} staged this change, and this run exported it"
+                        Format(CausalityText.CauseStagedBySeveralRuns, cohort.MemberCount, Subject(cohort)),
+                    _ => Format(CausalityText.CauseStagedByOneRun, Subject(cohort))
                 }));
                 break;
             }
 
             case CausalEdgeType.MetaverseObjectDeletionCausedDeprovision:
                 parts.Add(new CausalityCauseSentencePart(
-                    $"{Subject(cohort)} {(plural ? "were" : "was")} deleted, so this deprovisioning was queued"));
+                    Format(plural ? CausalityText.CauseDeprovisionQueuedOther : CausalityText.CauseDeprovisionQueuedOne, Subject(cohort))));
                 break;
 
             case CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion:
                 // A grace-period deletion (#1811): the cause is the run that scheduled it, often days earlier, and
                 // the Deletion Rule that decided it is attributed by the reason phrase, as on the cascade edges.
                 parts.Add(new CausalityCauseSentencePart(
-                    $"{Subject(cohort)} {(plural ? "were" : "was")} scheduled for deletion, and this run deleted {(plural ? "them" : "it")} once the grace period ended"));
+                    Format(plural ? CausalityText.CauseGraceDeletionOther : CausalityText.CauseGraceDeletionOne, Subject(cohort))));
                 break;
 
             case CausalEdgeType.ExportRejectionCausedGeneratedValueRevision:
@@ -124,17 +128,17 @@ public static class CausalityCauseWording
                 // (see ShowConnectedSystemChip). The reason code alone decides the verb: what remediation did
                 // is fixed by the code, not by anything else the cohort carries.
                 var rejectingSystem = string.IsNullOrWhiteSpace(cohort.ConnectedSystemName)
-                    ? "The target Connected System"
+                    ? CausalityText.CauseRejectingSystemFallback
                     : cohort.ConnectedSystemName;
                 parts.Add(new CausalityCauseSentencePart(cohort.ReasonCode switch
                 {
                     CausalReasonCode.GeneratedValueAlreadyInUse =>
-                        $"{rejectingSystem} rejected the generated value as already in use, so JIM generated a new one",
+                        Format(CausalityText.CauseRejectedAlreadyInUse, rejectingSystem),
                     CausalReasonCode.GeneratedValueAnchoredElsewhere =>
-                        $"{rejectingSystem} rejected the generated value, but another Connected System already holds it, so the object needs a decision",
+                        Format(CausalityText.CauseRejectedAnchoredElsewhere, rejectingSystem),
                     CausalReasonCode.GeneratedValueRenameAuthorised =>
-                        $"{rejectingSystem} rejected the generated value and an administrator allowed the rename, so JIM generated a new one",
-                    _ => $"{rejectingSystem} rejected the generated value, so JIM revised it"
+                        Format(CausalityText.CauseRejectedRenameAuthorised, rejectingSystem),
+                    _ => Format(CausalityText.CauseRejectedRevised, rejectingSystem)
                 }));
                 break;
 
@@ -172,7 +176,7 @@ public static class CausalityCauseWording
         // The queueing seam's reasons are already told by its sentence; the one thing left to attribute is a
         // create's provisioning decision, which reads on from the Synchronisation Rule chip as its subject.
         if (cohort.ReasonCode is CausalReasonCode.ExportCreateStaged)
-            return cohort.SyncRuleId.HasValue ? "made the provisioning decision" : null;
+            return cohort.SyncRuleId.HasValue ? CausalityText.ReasonProvisioningDecision : null;
         if (cohort.ReasonCode is CausalReasonCode.ExportUpdateStaged or CausalReasonCode.ExportDeleteStaged or CausalReasonCode.ExportDisableStaged)
             return null;
 
@@ -182,27 +186,25 @@ public static class CausalityCauseWording
             ? cohort.ReasonCode switch
             {
                 CausalReasonCode.LastConnectorDisconnected =>
-                    "held the last remaining connection, so the Deletion Rule deleted them",
+                    CausalityText.ReasonLastConnectionHeld,
                 CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured =>
-                    "held the last remaining connection, so the Deletion Rule deleted them " +
-                    "(no authoritative sources were configured)",
+                    CausalityText.ReasonLastConnectionHeldNoSources,
                 CausalReasonCode.AllAuthoritativeSourcesDisconnected =>
-                    "was the last authoritative source to disconnect, so the Deletion Rule deleted them",
+                    CausalityText.ReasonLastAuthoritativeDisconnected,
                 CausalReasonCode.AuthoritativeSourceDisconnected =>
-                    "was an authoritative source and disconnected, so the Deletion Rule deleted them",
+                    CausalityText.ReasonAuthoritativeDisconnected,
                 _ => null
             }
             : cohort.ReasonCode switch
             {
                 CausalReasonCode.LastConnectorDisconnected =>
-                    "The last remaining connection was removed, so the Deletion Rule deleted them",
+                    CausalityText.ReasonLastConnectionRemoved,
                 CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured =>
-                    "The last remaining connection was removed, so the Deletion Rule deleted them " +
-                    "(no authoritative sources were configured)",
+                    CausalityText.ReasonLastConnectionRemovedNoSources,
                 CausalReasonCode.AllAuthoritativeSourcesDisconnected =>
-                    "The last authoritative source disconnected, so the Deletion Rule deleted them",
+                    CausalityText.ReasonLastAuthoritativeSourceDisconnected,
                 CausalReasonCode.AuthoritativeSourceDisconnected =>
-                    "An authoritative source disconnected, so the Deletion Rule deleted them",
+                    CausalityText.ReasonAuthoritativeSourceDisconnected,
                 _ => null
             };
     }
@@ -219,9 +221,9 @@ public static class CausalityCauseWording
             // "No earlier", not "end of the chain": the footer sits under the story's furthest-back column,
             // which in the reader's left-to-right time order is where the story STARTS, so a phrase about
             // ending read backwards there.
-            CausalChainResolution.NoFurtherCauses => "No earlier causes recorded",
-            CausalChainResolution.CauseNotRetained => "What caused this is no longer retained",
-            CausalChainResolution.DepthLimitReached => "More causes exist beyond this point",
+            CausalChainResolution.NoFurtherCauses => CausalityText.EndingNoFurtherCauses,
+            CausalChainResolution.CauseNotRetained => CausalityText.EndingCauseNotRetained,
+            CausalChainResolution.DepthLimitReached => CausalityText.EndingDepthLimitReached,
             _ => null
         };
     }
@@ -250,7 +252,7 @@ public static class CausalityCauseWording
         ArgumentNullException.ThrowIfNull(nearest);
 
         var more = nearest.TotalCohortCount - 1;
-        return more < 1 ? string.Empty : $", and {more} more {(more == 1 ? "cause" : "causes")}";
+        return more < 1 ? string.Empty : Format(PluralRules.Choose(more, CausalityText.MoreCausesSuffixOne, CausalityText.MoreCausesSuffixOther), more);
     }
 
     /// <summary>
@@ -259,7 +261,7 @@ public static class CausalityCauseWording
     public static string MembersLabel(CausalChainCohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
-        return $"Show the {cohort.MemberCount} {MembersNoun(cohort)}";
+        return Format(CausalityText.ShowMembersLabel, cohort.MemberCount, MembersNoun(cohort));
     }
 
     /// <summary>
@@ -269,7 +271,7 @@ public static class CausalityCauseWording
     public static string HideMembersLabel(CausalChainCohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
-        return $"Hide the {cohort.MemberCount} {MembersNoun(cohort)}";
+        return Format(CausalityText.HideMembersLabel, cohort.MemberCount, MembersNoun(cohort));
     }
 
     /// <summary>
@@ -289,6 +291,9 @@ public static class CausalityCauseWording
             // as the queueing seam above names its own system, so a chip here would restate it with no role.
             && cohort.EdgeType != CausalEdgeType.ExportRejectionCausedGeneratedValueRevision;
     }
+
+    private static string Format(string template, params object[] arguments) =>
+        string.Format(CultureInfo.CurrentCulture, template, arguments);
 
     /// <summary>
     /// "10 Users", or the single cause's own name where the cohort speaks for one: a cohort of one is the
@@ -320,7 +325,7 @@ public static class CausalityCauseWording
     /// staged by several, otherwise the objects.
     /// </summary>
     private static string MembersNoun(CausalChainCohort cohort) =>
-        IsStagedBySeveralRuns(cohort) ? "synchronisations" : Noun(cohort);
+        IsStagedBySeveralRuns(cohort) ? CausalityText.MembersNounSynchronisations : Noun(cohort);
 
     /// <summary>
     /// The cohort's own noun, singular or plural to match its size, falling back to a generic where the
@@ -332,7 +337,7 @@ public static class CausalityCauseWording
         if (!string.IsNullOrWhiteSpace(noun))
             return noun;
 
-        return cohort.MemberCount == 1 ? "object" : "objects";
+        return cohort.MemberCount == 1 ? CausalityText.MembersNounObjectOne : CausalityText.MembersNounObjectOther;
     }
 
     /// <summary>
@@ -346,21 +351,24 @@ public static class CausalityCauseWording
         string? effectName,
         bool plural)
     {
-        var lead = $"{Subject(cohort)} {(plural ? "were" : "was")} deleted, so ";
+        var subject = Subject(cohort);
 
         if (string.IsNullOrWhiteSpace(cohort.AttributeName))
         {
-            var target = string.IsNullOrWhiteSpace(effectName)
-                ? "the references to them were removed"
-                : $"the references to them were removed from {effectName}";
-            parts.Add(new CausalityCauseSentencePart(lead + target));
+            var sentence = string.IsNullOrWhiteSpace(effectName)
+                ? Format(plural ? CausalityText.CauseReferencesRemovedOther : CausalityText.CauseReferencesRemovedOne, subject)
+                : Format(plural ? CausalityText.CauseReferencesRemovedFromOther : CausalityText.CauseReferencesRemovedFromOne, subject, effectName);
+            parts.Add(new CausalityCauseSentencePart(sentence));
             return;
         }
 
         // Singular "they" throughout: a cause is as often a person as a group, and the chain must not
         // guess a pronoun for either.
-        var owner = string.IsNullOrWhiteSpace(effectName) ? string.Empty : $"{effectName}'s ";
-        parts.Add(new CausalityCauseSentencePart($"{lead}they were removed from {owner}"));
+        // The sentence stops where the highlighted attribute name begins; the one space between them is layout.
+        var removedFrom = string.IsNullOrWhiteSpace(effectName)
+            ? Format(plural ? CausalityText.CauseAttributeRemovedOther : CausalityText.CauseAttributeRemovedOne, subject)
+            : Format(plural ? CausalityText.CauseAttributeRemovedOwnerOther : CausalityText.CauseAttributeRemovedOwnerOne, subject, effectName);
+        parts.Add(new CausalityCauseSentencePart(removedFrom + " "));
         parts.Add(new CausalityCauseSentencePart(cohort.AttributeName, IsAttributeName: true));
     }
 }

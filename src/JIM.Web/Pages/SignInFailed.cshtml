@@ -1,12 +1,16 @@
 @page "/sign-in-failed"
 @model JIM.Web.Pages.SignInFailedModel
+@using System.Globalization
+@using System.Net
+@using JIM.Web.Resources
 @{
     Layout = "_ErrorPageLayout";
-    ViewData["Title"] = "Sign-in could not complete";
+    ViewData["Title"] = SignInText.FailedTitle;
 }
 
+@* i18n: exempt - a Razor section declaration, not text *@
 @section Illustration {
-    <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A sign-in loop between JIM and the identity provider, halted by a stop sign, with a cookie crumbling away">
+    <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="@SignInText.FailedIllustrationLabel">
         <defs>
             <marker id="jim-err-loop-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto">
                 <path d="M0 0 L10 5 L0 10 Z" fill="var(--jim-error-shape-secondary)"/>
@@ -36,7 +40,7 @@
         </g>
         <g>
             <rect x="254" y="122" width="88" height="56" rx="14" fill="var(--jim-error-shape-tertiary)"/>
-            <text x="298" y="158" text-anchor="middle" font-family="'Space Grotesk', 'IBM Plex Sans', sans-serif" font-size="22" font-weight="600" fill="var(--jim-error-badge-text-dark)">IdP</text>
+            <text x="298" y="158" text-anchor="middle" font-family="'Space Grotesk', 'IBM Plex Sans', sans-serif" font-size="22" font-weight="600" fill="var(--jim-error-badge-text-dark)">@SignInText.IllustrationIdentityProviderAbbreviation</text>
         </g>
 
         @* JIM's stop sign, sitting on the return leg of the loop. The background-coloured outline cuts the arc. *@
@@ -78,39 +82,38 @@
     </svg>
 }
 
-<h1 class="jim-error-title">Sign-in could not complete</h1>
-<p class="jim-error-subtitle">JIM stopped the sign-in rather than keep sending you back to your identity provider.</p>
+<h1 class="jim-error-title">@SignInText.FailedTitle</h1>
+<p class="jim-error-subtitle">@SignInText.FailedSubtitle</p>
 
 @if (Model.IsPlainHttp)
 {
+    @* The templates are our own resource text, encoded, with only our own literal markup passed into them. *@
     <p class="jim-error-detail">
-        You are connected to JIM over plain HTTP. Your browser discards the cookies sign-in depends on unless the
-        connection is secure, so <strong>browser access from other machines requires HTTPS</strong>.
+        @Html.Raw(string.Format(CultureInfo.CurrentCulture, WebUtility.HtmlEncode(SignInText.FailedPlainHttp),
+            "<strong>" + WebUtility.HtmlEncode(SignInText.FailedPlainHttpEmphasis) + "</strong>"))
     </p>
     <p class="jim-error-detail">
-        If your address bar already shows <code>https://</code>, TLS ends at a reverse proxy that JIM has not been
-        told to trust. Set <code>JIM_TRUSTED_PROXIES</code> so JIM can see the original connection was secure.
+        @Html.Raw(string.Format(CultureInfo.CurrentCulture, WebUtility.HtmlEncode(SignInText.FailedBehindProxy),
+            "<code>https://</code>", "<code>JIM_TRUSTED_PROXIES</code>"))
     </p>
 }
 else
 {
     <p class="jim-error-detail">
-        Your browser came back from the identity provider without the cookies JIM set when sign-in began, even
-        after JIM restarted it. Check that your browser accepts cookies from this site, and that any reverse
-        proxy in front of JIM passes cookies through unchanged.
+        @SignInText.FailedCookiesMissing
     </p>
 }
 
-<p class="jim-error-detail">If you do not look after this JIM deployment, pass these details to whoever does.</p>
+<p class="jim-error-detail">@SignInText.PassOnToAdministrator</p>
 
 <ul class="jim-error-links">
-    <li><a href="@Model.TlsAndReverseProxyDocsUrl" target="_blank" rel="noopener noreferrer">Serving JIM over HTTPS</a></li>
-    <li><a href="@Model.SignInLoopsDocsUrl" target="_blank" rel="noopener noreferrer">Troubleshooting sign-in loops</a></li>
+    <li><a href="@Model.TlsAndReverseProxyDocsUrl" target="_blank" rel="noopener noreferrer">@SignInText.FailedDocsHttps</a></li>
+    <li><a href="@Model.SignInLoopsDocsUrl" target="_blank" rel="noopener noreferrer">@SignInText.FailedDocsLoops</a></li>
 </ul>
 
 <div class="jim-error-actions">
     <a href="/" class="jim-error-button jim-error-button-filled">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-        Try Again
+        @SignInText.TryAgain
     </a>
 </div>

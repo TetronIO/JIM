@@ -10,7 +10,7 @@
    the matches as object chips, and says which object the values were loaded from. The Attribute Flow, Scope and
    Object Matching testers share it, so finding an object works the same in each. *@
 <div class="@Class">
-    <SearchField Value="@_search" ValueChanged="SearchAsync" Label="@Label" Placeholder="Search by name" />
+    <SearchField Value="@_search" ValueChanged="SearchAsync" Label="@Label" Placeholder="@SyncRuleText.TestObjectSearchPlaceholder" />
     @if (_results.Count > 0)
     {
         <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
@@ -18,7 +18,7 @@
             {
                 var choice = found;
                 <MudButton Variant="Variant.Text" Size="Size.Small" Class="pa-0" OnClick="@(() => PickAsync(choice))"
-                           aria-label="@($"Load values from {choice.Name}")">
+                           aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.TestObjectLoadAria, choice.Name)">
                     <ObjectChip Kind="Kind" TypeName="@choice.TypeName" Name="@choice.Name" Class="ma-0" />
                 </MudButton>
             }
@@ -26,12 +26,13 @@
     }
     else if (!string.IsNullOrWhiteSpace(_search) && _searched)
     {
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">No objects match.</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@SyncRuleText.TestObjectNoMatch</MudText>
     }
     @if (_loadedName != null)
     {
         <MudText Typo="Typo.body2" Class="mt-2">
-            Values loaded from <strong>@_loadedName</strong>. Change any of them to try a variation.
+            @((MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.TestObjectLoadedFrom,
+                $"<strong>{System.Net.WebUtility.HtmlEncode(_loadedName)}</strong>"))
         </MudText>
     }
 </div>

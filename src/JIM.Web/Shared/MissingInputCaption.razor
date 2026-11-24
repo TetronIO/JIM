@@ -4,14 +4,14 @@
 @* The heading of a tester's "If an input has no value" table (#2471): the Missing Input Behaviour that decides what the
    table shows, with a link to the setting, which sits in the other pane of the Attribute Flow dialog. *@
 <div class="d-flex align-center flex-wrap gap-1">
-    <MudText Typo="Typo.caption" Class="mud-text-secondary">If an input has no value</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.MissingInputHeading</MudText>
     @if (!string.IsNullOrEmpty(Choice))
     {
         <MudText Typo="Typo.caption" Class="mud-text-secondary">&middot; @Choice</MudText>
     }
     @if (OnChange.HasDelegate)
     {
-        <MudLink Typo="Typo.caption" Class="ml-1" OnClick="OnChange" data-testid="jim-missing-input-change">Change</MudLink>
+        <MudLink Typo="Typo.caption" Class="ml-1" OnClick="OnChange" data-testid="jim-missing-input-change">@SyncRuleText.MissingInputChangeLink</MudLink>
     }
 </div>
 

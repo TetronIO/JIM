@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SynchronisedDeprovisioningAbandoned" xml:space="preserve">
+    <value>A Synchronized Deprovisioning run was abandoned partway and the deletion completed immediately. The remaining contributed attribute values were kept without provenance (they can no longer be recalled), surviving contributors were not re-elected, and downstream systems were not corrected.</value>
+  </data>
+  <data name="ContributedValuesKept" xml:space="preserve">
+    <value>Contributed attribute values were kept: {0} value(s) across {1} Metaverse Object(s) remain in place with no Synchronization Rule provenance.</value>
+  </data>
+  <data name="ContributedValuesKeptForFlow" xml:space="preserve">
+    <value>Contributed attribute values were kept for the removed {0} Attribute Flow: {1} value(s) across {2} Metaverse Object(s) remain in place with no Synchronization Rule provenance.</value>
+  </data>
+  <data name="SyncRuleDeletionRecalled" xml:space="preserve">
+    <value>Recalled {0} attribute value(s) across {1} Metaverse Object(s): {2} re-elected to a surviving contributor, {3} cleared (no remaining contributor); {4} Pending Export(s) staged. The Synchronization Rule has been deleted.</value>
+  </data>
+  <data name="ScopeReconciliationFullPass" xml:space="preserve">
+    <value>Evaluated {0} object(s) in full for {1} Synchronization Rule(s) whose expression criteria compare against a relative date, which no stored value can narrow.</value>
+  </data>
+  <data name="RetentionPasswordActivitiesOne" xml:space="preserve">
+    <value>{0} Password Synchronization Activity</value>
+  </data>
+  <data name="RetentionPasswordActivitiesOther" xml:space="preserve">
+    <value>{0} Password Synchronization Activities</value>
+  </data>
+  <data name="ImportIncompleteRefusal" xml:space="preserve">
+    <value>Run Profile '{0}' cannot run: an import of Connected System '{1}' stopped part-way through saving what it read{2}, so the Connector Space holds only part of that import. Synchronizing it now could remove Metaverse references to objects the import had not yet saved, and export those removals. {3}</value>
+  </data>
+  <data name="ImportIncompleteRemedy" xml:space="preserve">
+    <value>Run a Full Import of this Connected System to completion{0}; synchronization can run once one has.</value>
+  </data>
+  <data name="ImportStillIncomplete" xml:space="preserve">
+    <value>An earlier import stopped part-way through saving what it read{0}, so synchronization of this Connected System is refused. {1}, so it cannot repair that. {2}</value>
+  </data>
+  <data name="DeselectedBecauseOne" xml:space="preserve">
+    <value>an enabled Synchronization Rule still manages it: {1}.</value>
+  </data>
+  <data name="DeselectedBecauseOther" xml:space="preserve">
+    <value>{0} enabled Synchronization Rules still manage it: {1}.</value>
+  </data>
+  <data name="DeselectedDisableOne" xml:space="preserve">
+    <value>that Synchronization Rule</value>
+  </data>
+  <data name="DeselectedDisableOther" xml:space="preserve">
+    <value>those Synchronization Rules</value>
+  </data>
+  <data name="ExportCancelledBeforeStart" xml:space="preserve">
+    <value>Canceled before export</value>
+  </data>
+  <data name="ExportCancelled" xml:space="preserve">
+    <value>Export canceled</value>
+  </data>
+  <data name="ExportWithdrawnOne" xml:space="preserve">
+    <value>1 queued change was withdrawn instead of exported, because no enabled Synchronization Rule or Attribute Flow authorized it any more, or the object was no longer joined{1}</value>
+  </data>
+  <data name="ExportWithdrawnOther" xml:space="preserve">
+    <value>{0} queued changes were withdrawn instead of exported, because no enabled Synchronization Rule or Attribute Flow authorized them any more, or the object was no longer joined{1}</value>
+  </data>
+  <data name="InitialPasswordMarkingFailedOne" xml:space="preserve">
+    <value>1 account had its enabled state written by this export, but JIM could not check whether an Initial Password is still owed to it. If one is, delivering it may follow its Synchronization Rule rather than the Attribute Flow; the service log names the account, and Operations &gt; Passwords shows whether a password is waiting for it.</value>
+  </data>
+  <data name="InitialPasswordMarkingFailedOther" xml:space="preserve">
+    <value>{0} accounts had their enabled state written by this export, but JIM could not check whether an Initial Password is still owed to any of them. Where one is, delivering it may follow its Synchronization Rule rather than the Attribute Flow; the service log names the accounts, and Operations &gt; Passwords shows which have a password waiting.</value>
+  </data>
+  <data name="UnresolvableReferencesWarning" xml:space="preserve">
+    <value>{0} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronization Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.</value>
+  </data>
+  <data name="ConfigurationChangeNotRecorded" xml:space="preserve">
+    <value>The change was saved, but JIM could not record that the next synchronization of {0} must process every {1} object, so it may not reach the objects that already exist. Run a Full Synchronization of {0} to apply it.</value>
+  </data>
+  <data name="StepNotRunExecutionCancelled" xml:space="preserve">
+    <value>Not run: the Schedule Execution was canceled.</value>
+  </data>
+  <data name="UnreadableRecordsOne" xml:space="preserve">
+    <value>1 Metaverse Object recorded changes made outside synchronization that could not be read; it was reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected object again to deliver its values.</value>
+  </data>
+  <data name="UnreadableRecordsOther" xml:space="preserve">
+    <value>{0} Metaverse Objects recorded changes made outside synchronization that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.</value>
+  </data>
+</root>

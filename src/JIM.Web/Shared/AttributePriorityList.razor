@@ -22,7 +22,7 @@
 else if (_contributors.Count == 0 && string.IsNullOrEmpty(PendingContributorSystemName))
 {
     <MudAlert Severity="Severity.Info" Dense="true">
-        This attribute has no import contributors, so it has no priority to manage.
+        @SyncRuleText.PriorityNoContributors
     </MudAlert>
 }
 else if (_accumulate)
@@ -74,12 +74,12 @@ else
         {
             <div style="width: 40px;"></div>
         }
-        <div style="width: 64px;">Priority</div>
-        <div style="flex: 1 1 0;">Connected System</div>
-        <div style="flex: 1 1 0;">Synchronisation Rule</div>
+        <div style="width: 64px;">@SyncRuleText.PriorityColumn</div>
+        <div style="flex: 1 1 0;">@SyncRuleText.ConnectedSystemTerm</div>
+        <div style="flex: 1 1 0;">@SyncRuleText.SingularSyncRule</div>
         <div style="width: 150px;">
-            <MudTooltip Text="When set, if this Synchronisation Rule is connected and in scope but supplies no value, it asserts no value (no fall-through to a lower-priority contributor)." Arrow="true" Placement="Placement.Top">
-                Null is a value
+            <MudTooltip Text="@SyncRuleText.PriorityNullTooltip" Arrow="true" Placement="Placement.Top">
+                @SyncRuleText.NullIsValueLabel
             </MudTooltip>
         </div>
     </div>
@@ -107,11 +107,11 @@ else
                         @contributor.SyncRuleName
                         @if (isThisMapping)
                         {
-                            <span class="mud-text-secondary ml-1">(this mapping)</span>
+                            <span class="mud-text-secondary ml-1">@SyncRuleText.ThisMapping</span>
                         }
                         @if (!contributor.SyncRuleEnabled)
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">Disabled</MudChip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">@SyncRuleText.ChipDisabled</MudChip>
                         }
                     </div>
                     <div style="width: 150px;">
@@ -128,7 +128,7 @@ else
                 <div class="apt-row apt-row-current d-flex align-center px-2 py-2">
                     <div style="width: 64px;">@(_contributors.Count + 1)</div>
                     <div style="flex: 1 1 0;">@PendingContributorSystemName</div>
-                    <div style="flex: 1 1 0;" class="mud-text-secondary">this mapping, once saved</div>
+                    <div style="flex: 1 1 0;" class="mud-text-secondary">@SyncRuleText.PendingMappingOnceSaved</div>
                     <div style="width: 150px;">
                         <MudIcon Icon="@(PendingContributorNullIsValue ? Icons.Material.Filled.CheckBox : Icons.Material.Filled.CheckBoxOutlineBlank)"
                                  Class="mud-text-secondary" />
@@ -149,7 +149,7 @@ else
             <ItemRenderer>
                 <div class="apt-row d-flex align-center px-2 py-2 @(context.SyncRuleEnabled ? null : "mud-text-disabled")">
                     <div class="apt-drag-handle" style="width: 40px;">
-                        <MudTooltip Text="Drag to reorder" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@SyncRuleText.DragToReorder" Arrow="true" Placement="Placement.Top">
                             <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mud-text-secondary" />
                         </MudTooltip>
                     </div>
@@ -168,8 +168,8 @@ else
                         @context.SyncRuleName
                         @if (!context.SyncRuleEnabled)
                         {
-                            <MudTooltip Text="This Synchronisation Rule is disabled. It holds its position but never contributes during synchronisation." Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">Disabled</MudChip>
+                            <MudTooltip Text="@SyncRuleText.SyncRuleDisabledTooltip" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">@SyncRuleText.ChipDisabled</MudChip>
                             </MudTooltip>
                         }
                     </div>
@@ -187,13 +187,13 @@ else
             @if (_dirty)
             {
                 <MudText Typo="Typo.body2" Color="Color.Warning" Class="mr-2">
-                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" />Unsaved changes
+                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" />@SyncRuleText.UnsavedChanges
                 </MudText>
             }
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_dirty || _saving)"
-                       StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Save order</MudButton>
+                       StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">@SyncRuleText.SaveOrder</MudButton>
             <MudButton Variant="Variant.Text" Color="Color.Default" Disabled="@(!_dirty || _saving)"
-                       OnClick="ResetAsync">Reset</MudButton>
+                       OnClick="ResetAsync">@SyncRuleText.ResetLabel</MudButton>
         </div>
     }
 }
@@ -315,7 +315,7 @@ else
     private async Task<bool> ConfirmPriorityChangeAsync(IReadOnlyList<(int MappingId, bool NullIsValue)> ordered)
     {
         var preflight = await EvaluatePriorityChangeAsync(ordered);
-        return await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight, "Attribute Priority", MetaverseAttributeName);
+        return await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight, SyncRuleText.AttributePriorityTitle, MetaverseAttributeName);
     }
 
     // Its own unit of work, disposed before the dialog opens: the save that follows uses another.
@@ -344,13 +344,13 @@ else
             _contributors = result.Select(AttributePriorityContributorDto.FromEntity).ToList();
             _original = _contributors.Select(c => (c.MappingId, c.NullIsValue)).ToList();
             _dirty = false;
-            Snackbar.Add("Attribute priority order saved.", Severity.Success);
+            Snackbar.Add(SyncRuleText.PriorityOrderSaved, Severity.Success);
             await OnSaved.InvokeAsync();
             _dropContainer?.Refresh();
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Data.Common.DbException or ObjectDisposedException)
         {
-            Snackbar.Add($"Failed to save attribute priority order: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PriorityOrderFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {

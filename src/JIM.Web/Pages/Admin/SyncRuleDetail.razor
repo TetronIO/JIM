@@ -24,10 +24,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span>
-    <PageInfo Title="Synchronisation Rule" DocsPage="configuration/synchronisation-rules.md">
-        A Synchronisation Rule says how objects of one type flow between a Connected System and the Metaverse: which objects are in scope, how they match, and which attributes flow.
+<PageTitle>@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.SyncRuleTitle, _syncRuleNameOrCreate)</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@SyncRuleText.SyncRuleLabel</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span>
+    <PageInfo Title="@SyncRuleText.SingularSyncRule" DocsPage="configuration/synchronisation-rules.md">
+        @SyncRuleText.SyncRuleInfo
     </PageInfo>
 </MudText>
 <div class="d-flex justify-space-between align-center">
@@ -42,7 +42,7 @@
 {
     <div class="d-flex flex-column align-center justify-center mt-16">
         <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-        <MudText Typo="Typo.body2" Class="mt-4 mud-text-secondary">Loading Synchronisation Rule...</MudText>
+        <MudText Typo="Typo.body2" Class="mt-4 mud-text-secondary">@SyncRuleText.LoadingSyncRule</MudText>
     </div>
 }
 else if (_syncRule != null)
@@ -72,18 +72,18 @@ else if (_syncRule != null)
        the breadcrumbs directly (a new rule), whose own 16px padding makes up the rest of the 24px. *@
     <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-6" Class="@(ShowIdentityStrip ? "mt-6" : "mt-2")" @bind-ActivePanelIndex="_activeTabIndex">
 
-        <MudTabPanel Text="Details">
+        <MudTabPanel Text="@SyncRuleText.TabDetails">
             <SyncRuleDetailsTab SyncRule="_syncRule"
                                 ConnectedSystemNames="_connectedSystemNames"
                                 MetaverseObjectTypes="_metaverseObjectTypes"
                                 OnChanged="OnChildChanged" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Matching">
+        <MudTabPanel Text="@SyncRuleText.TabMatching">
             <SyncRuleMatchingTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Scope">
+        <MudTabPanel Text="@SyncRuleText.TabScope">
             <SyncRuleScopeTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
@@ -94,7 +94,7 @@ else if (_syncRule != null)
         {
             @* Badged with the parked count, which is what the panel's collapsed title used to carry. Accounts
                waiting on a person must be visible without opening the tab to find out. *@
-            <MudTabPanel Text="Passwords" BadgeColor="Color.Warning"
+            <MudTabPanel Text="@SyncRuleText.TabPasswords" BadgeColor="Color.Warning"
                          BadgeData="@(_parkedInitialPasswordCount > 0 ? _parkedInitialPasswordCount.ToString("N0") : null)">
                 <SyncRuleInitialPasswordTab SyncRule="_syncRule"
                                             OnInitialPasswordIssuesChanged="OnInitialPasswordIssuesChanged"
@@ -102,7 +102,7 @@ else if (_syncRule != null)
             </MudTabPanel>
         }
 
-        <MudTabPanel Text="Attribute Flow">
+        <MudTabPanel Text="@SyncRuleText.AttributeFlowTitle">
             <SyncRuleAttributeFlowTab @ref="_attributeFlowTab" SyncRule="_syncRule" MappingRemovalChoices="_mappingRemovalChoices" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
@@ -111,30 +111,28 @@ else if (_syncRule != null)
            show, so the panel loads afresh each time it is opened, after any save made on another tab. *@
         @if (_syncRule.Id > 0)
         {
-            <MudTabPanel Text="Tests">
+            <MudTabPanel Text="@SyncRuleText.TabTests">
                 <ConfigurationTestCasesPanel SyncRuleId="_syncRule.Id" />
             </MudTabPanel>
         }
 
         @if (_syncRule.Id > 0)
         {
-            <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-                <ConfigurationChangesTab TargetType="ActivityTargetType.SynchronisationRule" ObjectId="_syncRule.Id" ObjectTypeLabel="Synchronisation Rule" />
+            <MudTabPanel Text="@SyncRuleText.TabChanges" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+                <ConfigurationChangesTab TargetType="ActivityTargetType.SynchronisationRule" ObjectId="_syncRule.Id" ObjectTypeLabel="@SyncRuleText.SingularSyncRule" />
             </MudTabPanel>
         }
 
         @if (_syncRule.Id > 0)
         {
-            <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error" ID="@("danger-zone")">
+            <MudTabPanel Text="@SyncRuleText.TabDangerZone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error" ID="@("danger-zone")">
                 <MudPaper Class="pa-4 jim-paper-danger-zone" Outlined="false">
-                    <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
+                    <MudText Typo="Typo.h5" Class="mb-3">@SyncRuleText.TabDangerZone</MudText>
                     <MudText Class="mud-text-secondary mb-4">
-                        Deleting this Synchronisation Rule is permanent and cannot be undone. All configuration and Attribute Flow
-                        mappings will be lost. If this rule contributed Metaverse attribute values, you will choose whether they
-                        are recalled or kept.
+                        @SyncRuleText.DangerDeleteText
                     </MudText>
                     <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
-                        DropShadow="false" Color="Color.Error">Delete Synchronisation Rule</MudButton>
+                        DropShadow="false" Color="Color.Error">@SyncRuleText.DeleteSyncRuleButton</MudButton>
                 </MudPaper>
             </MudTabPanel>
         }
@@ -151,13 +149,13 @@ else if (_syncRule != null)
         @if (validationIssues.Count > 0)
         {
             <MudAlert Severity="Severity.Warning" NoIcon="true" Class="mb-4">
-                <MudText Class="mb-3">There are issues:</MudText>
+                <MudText Class="mb-3">@SyncRuleText.IssuesHeading</MudText>
                 @foreach (var item in validationIssues)
                 {
                     <div class="d-flex align-center mb-2">
                         <MudIcon Class="mr-2" Color="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
                             Icon="@(item.Level == ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)" />
-                        <MudText>@item.Message</MudText>
+                        <MudText>@MessageDisplay.Show(item.Detail, item.Message)</MudText>
                     </div>
                 }
             </MudAlert>
@@ -165,7 +163,7 @@ else if (_syncRule != null)
 
         <MudStack Row="true" Spacing="2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleCreateOrUpdateSyncRuleAsync"
-                Disabled="@(validationIssues.Any(issue => issue.Level > ValidityStatusItemLevel.Warning))" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Synchronisation Rule
+                Disabled="@(validationIssues.Any(issue => issue.Level > ValidityStatusItemLevel.Warning))" DropShadow="false">@(_syncRule.Id == 0 ? SyncRuleText.CreateSyncRuleButton : SyncRuleText.UpdateSyncRuleButton)
             </MudButton>
             @* Preview (#1115): the two destructive toggles (Deprovisioning Action, Out-of-Scope Action) can turn *@
             @* a routine scope exit into a deletion wave, so they are the settings that most need answering       *@
@@ -181,7 +179,7 @@ else if (_syncRule != null)
                     <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDestructiveTogglesAsync"
                         Disabled="@_startingPreview">
-                        Preview Deprovisioning Impact
+                        @SyncRuleText.PreviewDeprovisioningButton
                     </MudButton>
                 }
                 @* Preview (#1436): a Scoping Criteria edit decides which objects the rule manages at all, and what *@
@@ -192,7 +190,7 @@ else if (_syncRule != null)
                     <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.FilterAlt" OnClick="PreviewScopingCriteriaAsync"
                         Disabled="@_startingPreview">
-                        Preview Scope Impact
+                        @SyncRuleText.PreviewScopeButton
                     </MudButton>
                 }
                 @* Preview (#1437): an Attribute Flow edit rewrites values on every object the rule already      *@
@@ -203,7 +201,7 @@ else if (_syncRule != null)
                     <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
                         Disabled="@_startingPreview">
-                        Preview Attribute Flow Impact
+                        @SyncRuleText.PreviewAttributeFlowButton
                     </MudButton>
                 }
                 @* Preview (#1462): the behaviour toggles are a fourth question. Scope decides which objects, the *@
@@ -214,7 +212,7 @@ else if (_syncRule != null)
                     <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.ToggleOn" OnClick="PreviewBehaviourAsync"
                         Disabled="@_startingPreview">
-                        Preview Behaviour Impact
+                        @SyncRuleText.PreviewBehaviourButton
                     </MudButton>
                 }
             }
@@ -228,13 +226,12 @@ else if (_syncRule != null)
             {
                 <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-preview-stale">
-                    The Deprovisioning Action or Out-of-Scope Action has been edited since this preview ran, so it no
-                    longer describes what saving would do. Preview again for an answer about the current settings.
+                    @SyncRuleText.StaleDeprovisioning
                 </MudAlert>
             }
 
             <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
-                                             Title="Preview: Deprovisioning Impact"
+                                             Title="@SyncRuleText.PreviewTitleDeprovisioning"
                                              OnPreviewChanged="OnDestructiveTogglePreviewChanged"
                                              OnClose="CloseDestructiveTogglePreview"
                                              Class="mt-6" />
@@ -248,13 +245,12 @@ else if (_syncRule != null)
             {
                 <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-scope-preview-stale">
-                    The Scoping Criteria have been edited since this preview ran, so it no longer describes what
-                    saving would do. Preview again for an answer about the current criteria.
+                    @SyncRuleText.StaleScope
                 </MudAlert>
             }
 
             <ConfigurationChangePreviewPanel ActivityId="@scopePreviewActivityId"
-                                             Title="Preview: Scope Impact"
+                                             Title="@SyncRuleText.PreviewTitleScope"
                                              OnPreviewChanged="OnScopingPreviewChanged"
                                              OnClose="CloseScopingPreview"
                                              Class="mt-6" />
@@ -268,13 +264,12 @@ else if (_syncRule != null)
             {
                 <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-behaviour-preview-stale">
-                    The behaviour toggles have been edited since this preview ran, so it no longer describes what
-                    saving would do. Preview again for an answer about the current settings.
+                    @SyncRuleText.StaleBehaviour
                 </MudAlert>
             }
 
             <ConfigurationChangePreviewPanel ActivityId="@behaviourPreviewActivityId"
-                                             Title="Preview: Behaviour Impact"
+                                             Title="@SyncRuleText.PreviewTitleBehaviour"
                                              OnPreviewChanged="OnBehaviourPreviewChanged"
                                              OnClose="CloseBehaviourPreview"
                                              Class="mt-6" />
@@ -288,13 +283,12 @@ else if (_syncRule != null)
             {
                 <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-attribute-flow-preview-stale">
-                    The Attribute Flow has been edited since this preview ran, so it no longer describes what saving
-                    would do. Preview again for an answer about the current mappings.
+                    @SyncRuleText.StaleAttributeFlow
                 </MudAlert>
             }
 
             <ConfigurationChangePreviewPanel ActivityId="@attributeFlowPreviewActivityId"
-                                             Title="Preview: Attribute Flow Impact"
+                                             Title="@SyncRuleText.PreviewTitleAttributeFlow"
                                              OnPreviewChanged="OnAttributeFlowPreviewChanged"
                                              OnClose="CloseAttributeFlowPreview"
                                              Class="mt-6" />
@@ -310,7 +304,7 @@ else if (_syncRule != null)
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
-    private string _syncRuleNameOrCreate = "New";
+    private string _syncRuleNameOrCreate = SyncRuleText.NewLabel;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private SyncRule? _syncRule;
     private bool _isLoading = true;
@@ -420,9 +414,9 @@ else if (_syncRule != null)
 
         _breadcrumbs =
         [
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Administration", href: "/admin"),
-            new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
+            new BreadcrumbItem(SyncRuleText.BreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem(SyncRuleText.BreadcrumbAdministration, href: "/admin"),
+            new BreadcrumbItem(SyncRuleText.SyncRulesTitle, href: "/admin/sync-rules/")
         ];
 
         if (Id != null)
@@ -456,9 +450,9 @@ else if (_syncRule != null)
         {
             // create a new Synchronisation Rule
             _syncRule = new SyncRule();
-            _syncRuleNameOrCreate = "New";
+            _syncRuleNameOrCreate = SyncRuleText.NewLabel;
             _previewBaseline = null;
-            _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
+            _breadcrumbs.Add(new BreadcrumbItem(SyncRuleText.NewLabel, href: null, disabled: true));
             _connectedSystemNames = await _jim.ConnectedSystems.GetConnectedSystemNamesAsync();
             _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
@@ -580,7 +574,7 @@ else if (_syncRule != null)
             _previewActivityId = null;
             _previewedProposal = null;
             _preview = null;
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -664,7 +658,7 @@ else if (_syncRule != null)
             _scopePreviewActivityId = null;
             _previewedScopingProposal = null;
             _scopePreview = null;
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -746,7 +740,7 @@ else if (_syncRule != null)
             _attributeFlowPreviewActivityId = null;
             _previewedAttributeFlowProposal = null;
             _attributeFlowPreview = null;
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -821,7 +815,7 @@ else if (_syncRule != null)
             _behaviourPreviewActivityId = null;
             _previewedBehaviourProposal = null;
             _behaviourPreview = null;
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -864,7 +858,7 @@ else if (_syncRule != null)
         // Metaverse-Derived Attribute Flows read. Name them first; with none, the save goes on exactly as before.
         if (!isSyncRuleNew && _persistedEnabled && !_syncRule.Enabled && await ConfirmDependantsAsync(
                 jim => jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDisableAsync(_syncRule),
-                "Disable Synchronisation Rule?", "disable this Synchronisation Rule", "Disable") == false)
+                SyncRuleText.DisableSyncRuleQuestion, SyncRuleText.DisableSyncRuleChange, SyncRuleText.DisableButton) == false)
             return;
 
         // #1256: projecting into a type deleted When Authoritative Source Disconnected from a system that is not one of its
@@ -883,7 +877,7 @@ else if (_syncRule != null)
         var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(_syncRule);
         var confirming = ConfirmingPreview;
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                "Synchronisation Rule", _syncRule.Name,
+                SyncRuleText.SingularSyncRule, _syncRule.Name,
                 ConfigurationChangePreviewCounts.ForConfirmation(confirming.Preview, confirming.IsStale),
                 ConfigurationChangePreviewCounts.ForConfirmationVerdict(confirming.Preview, confirming.IsStale)))
             return;
@@ -920,7 +914,7 @@ else if (_syncRule != null)
             {
                 // the Application layer refuses configurations the engine cannot honour, such as two Attribute Flows
                 // targeting the same attribute (#1532); surface its message rather than an unhandled error.
-                Snackbar.Add(ex.Message, Severity.Error);
+                Snackbar.Add(ex.ToDisplayText(), Severity.Error);
                 return;
             }
         }
@@ -935,7 +929,7 @@ else if (_syncRule != null)
             // the snackbar is enqueued before navigating; ISnackbar is circuit-scoped and the provider
             // lives in the layout, so the message survives the soft navigation and shows on the edit page.
             case true when isSyncRuleNew:
-                Snackbar.Add("Synchronisation Rule created.", Severity.Success);
+                Snackbar.Add(SyncRuleText.SyncRuleCreated, Severity.Success);
                 ReportSequenceSkips();
                 ReportSaveWarnings();
                 NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
@@ -947,14 +941,14 @@ else if (_syncRule != null)
                 _persistedEnabled = _syncRule.Enabled;
                 _persistedProjectedTypeId = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(_syncRule);
                 await LoadReviewStateAsync();
-                Snackbar.Add("Changes saved.", Severity.Success);
+                Snackbar.Add(SyncRuleText.ChangesSaved, Severity.Success);
                 ReportSequenceSkips();
                 ReportSaveWarnings();
                 if (_attributeFlowTab != null)
                     await _attributeFlowTab.RefreshDerivedFlowStepsAsync();
                 break;
             case false:
-                Snackbar.Add("There was a problem saving your changes. Please check the details and try again.", Severity.Error);
+                Snackbar.Add(SyncRuleText.SaveProblem, Severity.Error);
                 break;
         }
     }
@@ -976,7 +970,7 @@ else if (_syncRule != null)
         // A save warning runs to several sentences, more than the default five seconds allows anyone to read, so it
         // stays until the administrator closes it.
         foreach (var warning in _syncRule?.SaveWarnings ?? [])
-            Snackbar.Add(warning, Severity.Warning, options => options.RequireInteraction = true);
+            Snackbar.Add(MessageDisplay.Show(_syncRule?.DescribeSaveWarning(warning), warning) ?? warning, Severity.Warning, options => options.RequireInteraction = true);
     }
 
     private void ReportSequenceSkips()
@@ -989,11 +983,12 @@ else if (_syncRule != null)
             if (mapping.Generation?.SequenceSkippedAhead is not { } skip)
                 continue;
 
-            var attributeName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "the attribute";
+            var attributeName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? SyncRuleText.TheAttribute;
             var fixedWidth = mapping.Generation?.FixedWidth;
             Snackbar.Add(
-                $"{attributeName}: the counter skipped ahead from {GeneratedValuePreviewHelpers.FormatSequenceIdentifier(skip.From, fixedWidth)} " +
-                $"to {GeneratedValuePreviewHelpers.FormatSequenceIdentifier(skip.To, fixedWidth)}. Numbers in between will never be assigned.",
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.SequenceSkippedAhead, attributeName,
+                    GeneratedValuePreviewHelpers.FormatSequenceIdentifier(skip.From, fixedWidth),
+                    GeneratedValuePreviewHelpers.FormatSequenceIdentifier(skip.To, fixedWidth)),
                 Severity.Info);
         }
     }
@@ -1012,14 +1007,14 @@ else if (_syncRule != null)
         // Attribute Flows read. Name them first; that confirmation stands in for the plain one below.
         var dependantsConfirmed = await ConfirmDependantsAsync(
             jim => jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDeletionAsync(_syncRule),
-            "Delete Synchronisation Rule?", "delete this Synchronisation Rule", "Delete");
+            SyncRuleText.DeleteSyncRuleTitle, SyncRuleText.DeleteSyncRuleChange, CommonText.Delete);
         if (dependantsConfirmed == false)
             return;
 
         var keepContributedValues = false;
         if (summary.TotalValues == 0 && dependantsConfirmed == null)
         {
-            var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
+            var confirmationResult = await DialogService.ShowMessageBoxAsync(SyncRuleText.WarningTitle, SyncRuleText.DeleteSyncRuleQuestion, yesText: SyncRuleText.DeleteConfirmButton, cancelText: CommonText.Cancel);
             if (!confirmationResult.HasValue || !confirmationResult.Value)
                 return;
         }
@@ -1045,10 +1040,10 @@ else if (_syncRule != null)
         // navigating; ISnackbar is circuit-scoped, so the message survives the soft navigation.
         if (result is { RecallQueued: true, RecallActivityId: { } recallActivityId })
         {
-            Snackbar.Add($"Synchronisation Rule deletion queued: recalling values from {result.AffectedObjectCount:N0} Metaverse Object(s).",
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.SyncRuleDeletionQueued, result.AffectedObjectCount),
                 Severity.Success, config =>
                 {
-                    config.Action = "View Activity";
+                    config.Action = SyncRuleText.ViewActivityAction;
                     config.OnClick = _ =>
                     {
                         NavManager.NavigateTo($"/activity/{recallActivityId}");

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
@@ -191,7 +193,7 @@ public class AuthServer
             try
             {
                 await Application.Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
-                roleActivity.Message = $"Assigned {Constants.BuiltInRoles.Administrator} role to initial administrator";
+                roleActivity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.InitialAdministratorRoleAssigned), Constants.BuiltInRoles.Administrator);
                 await Application.Activities.CompleteActivityAsync(roleActivity);
             }
             catch (Exception ex)
@@ -202,7 +204,7 @@ public class AuthServer
                 throw;
             }
 
-            activity.Message = $"Created initial administrator '{user.NameOrId}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.InitialAdministratorCreated), user.NameOrId);
             await Application.Activities.CompleteActivityAsync(activity);
 
             Log.Information("AuthServer: Initial admin user created and assigned {Role} role.", Constants.BuiltInRoles.Administrator);

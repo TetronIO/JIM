@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Utilities;
@@ -74,7 +76,7 @@ public class SecurityAuditServer
             {
                 TargetType = ActivityTargetType.Authentication,
                 TargetOperationType = ActivityTargetOperationType.Authenticate,
-                TargetName = "Interactive sign-in succeeded",
+                TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetInteractiveSignInSucceeded)),
                 Message = "Interactive sign-in succeeded",
                 ClientIpAddress = clientIp
             };

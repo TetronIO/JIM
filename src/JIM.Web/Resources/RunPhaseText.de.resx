@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Import_Connect" xml:space="preserve">
+    <value>Verbindung zum verbundenen System wird hergestellt</value>
+  </data>
+  <data name="Import_Fetch" xml:space="preserve">
+    <value>Objekte werden importiert</value>
+  </data>
+  <data name="Import_Process" xml:space="preserve">
+    <value>Importierte Objekte werden verarbeitet</value>
+  </data>
+  <data name="Import_Deletions" xml:space="preserve">
+    <value>Löschungen werden verarbeitet</value>
+  </data>
+  <data name="Import_References" xml:space="preserve">
+    <value>Referenzen werden aufgelöst</value>
+  </data>
+  <data name="Import_Save" xml:space="preserve">
+    <value>Änderungen werden gespeichert</value>
+  </data>
+  <data name="Import_Reconcile" xml:space="preserve">
+    <value>Ausstehende Exporte werden abgeglichen</value>
+  </data>
+  <data name="Import_Record" xml:space="preserve">
+    <value>Ergebnisse werden aufgezeichnet</value>
+  </data>
+  <data name="Sync_Prepare" xml:space="preserve">
+    <value>Vorbereitung</value>
+  </data>
+  <data name="Sync_Process" xml:space="preserve">
+    <value>Objekte des verbundenen Systems werden verarbeitet</value>
+  </data>
+  <data name="Sync_Crosspagereferences" xml:space="preserve">
+    <value>Seitenübergreifende Referenzen werden aufgelöst</value>
+  </data>
+  <data name="Sync_Scopereview" xml:space="preserve">
+    <value>Exporte werden geprüft</value>
+  </data>
+  <data name="Export_Prepare" xml:space="preserve">
+    <value>Export wird vorbereitet</value>
+  </data>
+  <data name="Export_Execute" xml:space="preserve">
+    <value>Export läuft</value>
+  </data>
+  <data name="Export_Deferred" xml:space="preserve">
+    <value>Zurückgestellte Änderungen werden exportiert</value>
+  </data>
+  <data name="Export_References" xml:space="preserve">
+    <value>Referenzen im Änderungsverlauf werden aufgelöst</value>
+  </data>
+  <data name="Export_Containers" xml:space="preserve">
+    <value>Neue Container werden ausgewählt</value>
+  </data>
+</root>

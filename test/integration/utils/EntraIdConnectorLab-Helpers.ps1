@@ -263,6 +263,68 @@ function Invoke-EntraIdConnectorLabGraph {
     }
 }
 
+function Invoke-EntraIdConnectorLabGraphBatch {
+    <#
+    .SYNOPSIS
+        Sends Graph requests twenty at a time through $batch, Graph's limit, and returns one answer per request, in the
+        order given: each with its Status and Body. A request Graph throttled or found busy is sent again, in a later
+        batch, after the longest Retry-After it asked for; any other answer, refusals included, is returned for the
+        caller to judge.
+
+    .DESCRIPTION
+        A scale run creates and deletes tens of thousands of objects; one request each would take hours.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][securestring]$Token,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Requests,
+        [int]$MaximumAttempts = 6
+    )
+
+    $answers = [object[]]::new($Requests.Count)
+    $pending = [System.Collections.Generic.List[int]]::new()
+    for ($index = 0; $index -lt $Requests.Count; $index++) { $pending.Add($index) }
+    for ($attempt = 1; $pending.Count -gt 0; $attempt++) {
+        $again = [System.Collections.Generic.List[int]]::new()
+        $wait = 0
+        for ($start = 0; $start -lt $pending.Count; $start += 20) {
+            $chunk = $pending.GetRange($start, [Math]::Min(20, $pending.Count - $start))
+            $batch = @{ requests = @($chunk | ForEach-Object {
+                $request = $Requests[$_]
+                $sent = @{ id = "$_"; method = $request.method; url = $request.url }
+                $body = Get-EntraIdConnectorLabValue -Object $request -Name 'body'
+                if ($null -ne $body) { $sent.body = $body; $sent.headers = @{ 'Content-Type' = 'application/json' } }
+                $sent
+            }) }
+            $answer = Invoke-EntraIdConnectorLabGraph -Token $Token -Method Post -Path '/$batch' -Body $batch
+            foreach ($response in @($answer.responses)) {
+                $index = [int]$response.id
+                $status = [int]$response.status
+                if ($status -in 429, 503, 504 -and $attempt -lt $MaximumAttempts) {
+                    $again.Add($index)
+                    $retryAfter = 0
+                    $value = Get-EntraIdConnectorLabValue -Object (Get-EntraIdConnectorLabValue -Object $response -Name 'headers') -Name 'Retry-After'
+                    if (-not [int]::TryParse([string]$value, [ref]$retryAfter)) { $retryAfter = [Math]::Min(60, [Math]::Pow(2, $attempt)) }
+                    $wait = [Math]::Max($wait, $retryAfter)
+                    continue
+                }
+                $answers[$index] = [PSCustomObject]@{ Status = $status; Body = (Get-EntraIdConnectorLabValue -Object $response -Name 'body') }
+            }
+        }
+        if ($again.Count -gt 0) { Start-Sleep -Seconds ([Math]::Max(1, $wait)) }
+        $pending = $again
+    }
+    return , $answers
+}
+
+# Graph's error in a $batch answer, for a refusal the caller reports.
+function Get-EntraIdConnectorLabBatchError {
+    param([object]$Answer)
+    $graphError = Get-EntraIdConnectorLabValue -Object $Answer.Body -Name 'error'
+    if ($graphError) { return "$(Get-EntraIdConnectorLabValue $graphError 'code'): $(Get-EntraIdConnectorLabValue $graphError 'message')" }
+    return ''
+}
+
 function Get-EntraIdConnectorLabGraphCollection {
     <#
     .SYNOPSIS
@@ -497,18 +559,53 @@ function Remove-EntraIdConnectorLabObject {
                 ([string]$_.displayName).StartsWith($match, [StringComparison]::Ordinal) -and
                 (-not $created -or ([DateTime]$created).ToUniversalTime() -lt $cutoff) })
             $quiet = if ($doomed.Count -eq 0) { $quiet + 1 } else { 0 }
-            foreach ($object in $doomed) {
-                $null = $handled.Add([string]$object.id)
-                try {
-                    $null = Invoke-EntraIdConnectorLabGraph -Token $Token -Method Delete -Path "/$kind/$($object.id)"
-                    $deleted++
-                }
-                catch {
-                    # Already gone (JIM deleted it, or another run's sweep did) is what was wanted.
-                    if ("$($_.Exception.Message)" -notmatch '\(404\)') { throw }
+            if ($doomed.Count -eq 0) { continue }
+            foreach ($object in $doomed) { $null = $handled.Add([string]$object.id) }
+            $requests = @($doomed | ForEach-Object { @{ method = 'DELETE'; url = "/$kind/$($_.id)" } })
+            $answers = Invoke-EntraIdConnectorLabGraphBatch -Token $Token -Requests $requests
+            for ($index = 0; $index -lt $requests.Count; $index++) {
+                $status = $answers[$index].Status
+                if ($status -ge 200 -and $status -lt 300) { $deleted++ }
+                # Already gone (JIM deleted it, or another run's sweep did) is what was wanted.
+                elseif ($status -ne 404) {
+                    throw "Microsoft Graph refused DELETE $($requests[$index].url) ($status): $(Get-EntraIdConnectorLabBatchError $answers[$index])"
                 }
             }
         }
     }
     return $deleted
+}
+
+function Remove-EntraIdConnectorLabDeletedUser {
+    <#
+    .SYNOPSIS
+        Purges users from Entra ID's deleted items, by id, and returns how many it purged. One already purged, or never
+        deleted, counts as nothing to do.
+
+    .DESCRIPTION
+        A deleted user counts against the tenant's object limit for 30 days. Purged, it counts for a quarter, still for
+        30 days (measured on the JIM test tenant), so a scale run purges what it made rather than waiting. The CI app does
+        this: it holds User.DeleteRestore.All. Groups cannot be purged with an application permission, so a scale run
+        keeps its groups few.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test harness; purges only what runs created.')]
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory)][securestring]$Token,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Id
+    )
+
+    if ($Id.Count -eq 0) { return 0 }
+    $requests = @($Id | ForEach-Object { @{ method = 'DELETE'; url = "/directory/deletedItems/$_" } })
+    $answers = Invoke-EntraIdConnectorLabGraphBatch -Token $Token -Requests $requests
+    $purged = 0
+    for ($index = 0; $index -lt $requests.Count; $index++) {
+        $status = $answers[$index].Status
+        if ($status -ge 200 -and $status -lt 300) { $purged++ }
+        elseif ($status -ne 404) {
+            throw "Microsoft Graph refused DELETE $($requests[$index].url) ($status): $(Get-EntraIdConnectorLabBatchError $answers[$index])"
+        }
+    }
+    return $purged
 }

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NameMustBeSet" xml:space="preserve">
+    <value>Der Name muss festgelegt sein</value>
+  </data>
+  <data name="ConnectedSystemMustBeSet" xml:space="preserve">
+    <value>Das verbundene System muss festgelegt sein</value>
+  </data>
+  <data name="ConnectedSystemObjectTypeMustBeSet" xml:space="preserve">
+    <value>Der Objekttyp des verbundenen Systems muss festgelegt sein</value>
+  </data>
+  <data name="MetaverseObjectTypeMustBeSet" xml:space="preserve">
+    <value>Der Metaverse-Objekttyp muss festgelegt sein</value>
+  </data>
+  <data name="DirectionMustBeSet" xml:space="preserve">
+    <value>Die Richtung muss festgelegt sein</value>
+  </data>
+  <data name="NoObjectMatchingRules" xml:space="preserve">
+    <value>Es wurden keine Objektabgleichsregeln definiert. Das ist zwar gültig, wird aber nicht empfohlen. Objektabgleichsregeln helfen, Synchronisierungsfehler in seltenen, aber wichtigen Szenarien zu minimieren</value>
+  </data>
+  <data name="NoAttributeFlowRules" xml:space="preserve">
+    <value>Es wurden keine Attributflussregeln definiert. Das ist zwar gültig, bedeutet aber, dass zwischen den beiden Systemen keine Daten fließen</value>
+  </data>
+  <data name="CredentialAttributeFlow" xml:space="preserve">
+    <value>Der Attributfluss mit „{0}“ muss entfernt werden: Er enthält Anmeldeinformationen, die JIM nie über einen Attributfluss importiert oder exportiert. JIM stellt Kennwörter nur über die Kennwortsynchronisierung zu, in verbundenen Systemen, deren Connector sie unterstützt.</value>
+  </data>
+  <data name="CredentialLikeAttributeFlow" xml:space="preserve">
+    <value>Der Attributfluss mit Ziel „{0}“ könnte ein Kennwort übertragen. Falls ja, verwenden Sie stattdessen die Kennwortsynchronisierung für das verbundene System: Ein als Attribut übertragenes Kennwort wird in den Attributwerten von Metaverse-Objekten und Objekten im verbundenen System, im Änderungsverlauf, in ausstehenden Exporten, Exportvorschauen, Suchergebnissen und Datenbanksicherungen gespeichert. Ist dieses Attribut kein Kennwort, ist nichts zu tun.</value>
+  </data>
+</root>

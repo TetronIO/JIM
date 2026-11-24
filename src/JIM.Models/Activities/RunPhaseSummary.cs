@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+
 namespace JIM.Models.Activities;
 
 /// <summary>
@@ -28,6 +30,17 @@ public class RunPhaseSummary
     /// at all. Holding on to the last step instead would report finished work as still going.
     /// </summary>
     public string? CurrentStepName { get; set; }
+
+    /// <summary>
+    /// The key of the running step (<see cref="RunPhaseKeys"/>), which the portal translates the name by. Null
+    /// whenever <see cref="CurrentStepName"/> is.
+    /// </summary>
+    /// <remarks>
+    /// Not serialised: this type reaches the REST API through the worker task list, and the key was added for the
+    /// portal's translation only (#3030), not as a change to the API's response.
+    /// </remarks>
+    [JsonIgnore]
+    public string? CurrentStepKey { get; set; }
 
     /// <summary>
     /// Where the running step sits among the run's own steps, 1-based so it reads as "step 3 of 8".
@@ -70,6 +83,7 @@ public class RunPhaseSummary
         return new RunPhaseSummary
         {
             CurrentStepName = current?.Name,
+            CurrentStepKey = current?.Key,
             CurrentStepNumber = RunPhaseReading.PositionOf(phaseList, current),
             TotalSteps = steps.Count,
             Steps = steps.Select(p => new RunPhaseStep

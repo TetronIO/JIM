@@ -13,6 +13,7 @@
 @using JIM.Web.Shared
 @using JIM.Web.Services
 @using Microsoft.JSInterop
+@using System.Globalization
 @using Utilities;
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
@@ -24,7 +25,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>@(MetaverseObject == null ? "Loading…" : $"{MetaverseObjectType?.Name}: {_displayName}")</PageTitle>
+<PageTitle>@(MetaverseObject == null ? MetaverseText.TvLoadingEllipsis : string.Format(CultureInfo.CurrentCulture, MetaverseText.TvPageTitle, MetaverseObjectType?.Name, _displayName))</PageTitle>
 
 <LoadingGate IsLoading="@(MetaverseObject == null)">
     <Loading>
@@ -32,13 +33,13 @@
     </Loading>
     <LongLoadMessage>
         <MudAlert Severity="Severity.Info">
-            Still loading. Large objects can take a few seconds to retrieve.
+            @MetaverseText.TvStillLoading
         </MudAlert>
     </LongLoadMessage>
     <Loaded>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span>
-    <PageInfo Title="Metaverse Object" DocsPage="configuration/metaverse-objects.md">
-        A Metaverse Object is JIM's one view of an identity, built from the Connected Systems it is connected to. Each value can tell you where it came from.
+<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@string.Format(CultureInfo.CurrentCulture, MetaverseText.TvTypeNameHeading, MetaverseObjectType?.Name)</span> <span class="mud-primary-text">@_displayName</span>
+    <PageInfo Title="@MetaverseText.MetaverseObjectNoun" DocsPage="configuration/metaverse-objects.md">
+        @MetaverseText.TvPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -72,14 +73,14 @@
             {
                 @* Which view of the details: a choice of view, so the segmented control, not a button group. *@
                 <SegmentedToggle TValue="string" Options="@DetailViewModes" Value="@_detailViewMode"
-                                 ValueChanged="OnDetailViewModeChangedAsync" AriaLabel="Details view" Class="my-auto me-2" />
+                                 ValueChanged="OnDetailViewModeChangedAsync" AriaLabel="@MetaverseText.TvDetailsView" Class="my-auto me-2" />
             }
         </Header>
         <ChildContent>
-        <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
+        <MudTabPanel Text="@MetaverseText.DetailsTab" Icon="@Icons.Material.Filled.Info">
             @if (_detailViewMode == "table")
             {
-                <MvoDetailsTable MetaverseObject="MetaverseObject" ObjectTypeName="@(MetaverseObjectType?.Name ?? "object")"
+                <MvoDetailsTable MetaverseObject="MetaverseObject" ObjectTypeName="@(MetaverseObjectType?.Name ?? MetaverseText.TvObjectFallback)"
                                  AttributeValueTotalCounts="_attributeValueTotalCounts"
                                  Provenance="_object.Provenance" ProvenanceLoading="_object.ProvenanceLoading"
                                  GroupBy="@_inspectGroupBy" OnGroupByChanged="OnInspectGroupByChangedAsync"
@@ -99,7 +100,7 @@
             }
         </MudTabPanel>
 
-        <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeBadge()" BadgeColor="Color.Primary">
+        <MudTabPanel Text="@MetaverseText.MvotChanges" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeBadge()" BadgeColor="Color.Primary">
             <div>
                 @if (_object.ChangeHistoryLoading && _object.ChangeHistoryRows.Count == 0)
                 {
@@ -109,7 +110,7 @@
                 }
                 else if (_object.ChangeCount == 0 && _object.Retirements.Count == 0)
                 {
-                    <MudAlert Severity="Severity.Info">No change history recorded for this object.</MudAlert>
+                    <MudAlert Severity="Severity.Info">@MetaverseText.TvNoHistory</MudAlert>
                 }
                 else
                 {
@@ -127,7 +128,7 @@
                                 {
                                     <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="me-2" />
                                 }
-                                Load more (@($"{_object.ChangeHistoryTotal - _object.ChangeHistoryRows.Count:N0}") remaining)
+                                @string.Format(CultureInfo.CurrentCulture, MetaverseText.TvLoadMore, (_object.ChangeHistoryTotal - _object.ChangeHistoryRows.Count).ToString("N0", CultureInfo.CurrentCulture))
                             </MudButton>
                         </div>
                     }
@@ -135,13 +136,13 @@
             </div>
         </MudTabPanel>
 
-        <MudTabPanel Text="Properties" Icon="@Icons.Material.Filled.Assignment">
+        <MudTabPanel Text="@MetaverseText.TvProperties" Icon="@Icons.Material.Filled.Assignment">
             <MudPaper Class="pa-4" Outlined="true">
                 <MudGrid Spacing="4">
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Id</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@MetaverseText.TvId</MudText>
                         <br />
-                        <MudTooltip Text="Click to copy">
+                        <MudTooltip Text="@MetaverseText.TvClickToCopy">
                             <ChildContent>
                                 <MudText Typo="Typo.body1" Style="cursor: pointer; word-break: break-all;" @onclick="@(() => CopyToClipboardAsync(MetaverseObject.Id.ToString()))">
                                     @MetaverseObject.Id
@@ -150,7 +151,7 @@
                         </MudTooltip>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Created</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@CommonText.ColumnCreated</MudText>
                         <br />
                         <MudTooltip Text="@MetaverseObject.Created.ToString("O")">
                             <ChildContent>
@@ -159,7 +160,7 @@
                         </MudTooltip>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Created By</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@MetaverseText.TvCreatedBy</MudText>
                         <br />
                         @if (_object.CreatedByHref != null)
                         {
@@ -171,7 +172,7 @@
                         }
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Last Updated</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@CommonText.ColumnLastUpdated</MudText>
                         @if (MetaverseObject.LastUpdated.HasValue)
                         {
                             <MudTooltip Text="@MetaverseObject.LastUpdated.Value.ToString("O")">
@@ -186,7 +187,7 @@
                         }
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Last Updated By</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@MetaverseText.TvLastUpdatedBy</MudText>
                         <br />
                         @if (_object.LastUpdatedByHref != null)
                         {
@@ -198,12 +199,12 @@
                         }
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Status</MudText>
-                        <MudText Typo="Typo.body1">@MetaverseObject.Status</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@CommonText.ColumnStatus</MudText>
+                        <MudText Typo="Typo.body1">@MetaverseObject.Status.ForDisplay()</MudText>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Origin</MudText>
-                        <MudText Typo="Typo.body1">@MetaverseObject.Origin</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@MetaverseText.TvOrigin</MudText>
+                        <MudText Typo="Typo.body1">@MetaverseObject.Origin.ForDisplay()</MudText>
                     </MudItem>
                 </MudGrid>
             </MudPaper>
@@ -215,7 +216,7 @@
         @* (#1519, D-S6). Which systems hold data about someone is not something every signed-in user may *@
         @* see about every other person, so the tab carries its own Administrator gate, as Password does.  *@
         <AuthorizeView Roles="Administrator" Context="connectionsAuth">
-            <MudTabPanel Text="Connections" Icon="@Icons.Material.Filled.Hub" BadgeColor="Color.Primary"
+            <MudTabPanel Text="@MetaverseText.TvConnections" Icon="@Icons.Material.Filled.Hub" BadgeColor="Color.Primary"
                          BadgeData="@(_object.ConnectorCount > 0 ? _object.ConnectorCount.ToString("N0") : null)">
                 <div>
                     <MetaverseObjectConnectionsTable IsLoading="_object.ConnectionsLoading" IsLoaded="_object.ConnectionsLoaded"
@@ -249,14 +250,12 @@
                         <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-preview-outbound">
                             <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary" Class="mt-1" />
                             <MudStack Spacing="1" Class="flex-grow-1">
-                                <MudText Typo="Typo.h6">Preview Exports</MudText>
+                                <MudText Typo="Typo.h6">@MetaverseText.TvPreviewExports</MudText>
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    What JIM would export for this Metaverse Object as it stands: where it would be
-                                    provisioned, updated or deprovisioned under each enabled export Synchronisation Rule.
-                                    Nothing is imported first.
+                                    @MetaverseText.TvPreviewExportsIntro
                                     @if (_object.Connections.Count > 0)
                                     {
-                                        <text>To preview synchronising one of its connections, use that row's Preview Sync.</text>
+                                        <text>@MetaverseText.TvPreviewSyncHint</text>
                                     }
                                 </MudText>
                             </MudStack>
@@ -264,7 +263,7 @@
                                        Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">
-                                @(_object.OutboundPreviewLoading ? "Previewing…" : "Preview")
+                                @(_object.OutboundPreviewLoading ? MetaverseText.TvPreviewing : MetaverseText.TvPreview)
                             </MudButton>
                         </MudStack>
                     </MudPaper>
@@ -287,10 +286,10 @@
         @* the page's (issue #1172). Badged red with the changes nothing will move without a person: parked plus *@
         @* expired, the same count the Passwords tab of Operations carries per person.                            *@
         <AuthorizeView Roles="Administrator" Context="passwordAuth">
-            <MudTabPanel Text="Password" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Error"
+            <MudTabPanel Text="@MetaverseText.TvPassword" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Error"
                          BadgeData="@(_object.PasswordAttentionCount > 0 ? _object.PasswordAttentionCount.ToString("N0") : null)">
                 <MetaverseObjectPasswordPanel MetaverseObjectId="@(MetaverseObject?.Id ?? Guid.Empty)"
-                                              MetaverseObjectTypeName="@(MetaverseObjectType?.Name ?? "Metaverse Object")"
+                                              MetaverseObjectTypeName="@(MetaverseObjectType?.Name ?? MetaverseText.PwdFallbackTypeName)"
                                               Events="@_object.PasswordEvents"
                                               QueuedChanges="@_object.QueuedPasswordChanges"
                                               Accounts="@_object.PasswordAccounts"
@@ -454,7 +453,7 @@
 
         // The name only when there is one: an object with no display name would otherwise be titled with a
         // dangling colon.
-        var title = string.IsNullOrWhiteSpace(_displayName) ? "Set Password" : $"Set Password: {_displayName}";
+        var title = string.IsNullOrWhiteSpace(_displayName) ? MetaverseText.SpdSetPassword : string.Format(CultureInfo.CurrentCulture, MetaverseText.TvSetPasswordTitle, _displayName);
         var dialog = await DialogService.ShowAsync<SetPasswordDialog>(title, parameters,
             new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
 
@@ -523,7 +522,7 @@
                 user, null);
 
             Snackbar.Add(
-                retried == 0 ? "Nothing was retried; the change is no longer on the queue." : "The password change will be attempted again.",
+                retried == 0 ? MetaverseText.TvNothingRetried : MetaverseText.TvWillRetry,
                 retried == 0 ? Severity.Info : Severity.Success);
         }
         finally
@@ -554,7 +553,7 @@
         {
             var cancelled = await CancelPasswordChangeAsync(state.ObjectId, connectedSystemId);
             Snackbar.Add(
-                cancelled == 0 ? "Nothing was stopped; the change is no longer on the queue." : "The password change will not be delivered.",
+                cancelled == 0 ? MetaverseText.TvNothingStopped : MetaverseText.TvWillNotDeliver,
                 cancelled == 0 ? Severity.Info : Severity.Success);
         }
         finally
@@ -645,11 +644,11 @@
     private int _activeTabIndex = 0;
     private string _detailViewMode = "form";
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<string>> DetailViewModes =
+    private static IReadOnlyList<SegmentedToggleOption<string>> DetailViewModes =>
     [
-        new("form", "Form", Icon: Icons.Material.Filled.ViewModule),
-        new("tabs", "Tabs", Icon: Icons.Material.Filled.Tab),
-        new("table", "Inspect", Tooltip: "Attributes with their sources and history", Icon: Icons.Material.Filled.ManageSearch)
+        new("form", MetaverseText.TvViewForm, Icon: Icons.Material.Filled.ViewModule),
+        new("tabs", MetaverseText.TvViewTabs, Icon: Icons.Material.Filled.Tab),
+        new("table", MetaverseText.TvViewInspect, Tooltip: MetaverseText.TvInspectTooltip, Icon: Icons.Material.Filled.ManageSearch)
     ];
     private Dictionary<string, int> _attributeValueTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
@@ -1010,7 +1009,7 @@
             state.ConnectionPreviewContext = new CausalityPageContext(
                 ConnectedSystemId: connection.ConnectedSystemId,
                 ConnectedSystemName: connection.ConnectedSystemName,
-                RunProfileName: "Full Synchronisation",
+                RunProfileName: MetaverseText.TvFullSynchronisation,
                 CsoId: connection.ConnectedSystemObjectId,
                 CsoConnectedSystemId: connection.ConnectedSystemId,
                 CsoConnectedSystemName: connection.ConnectedSystemName,
@@ -1024,7 +1023,7 @@
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.TvSyncPreviewFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -1061,7 +1060,7 @@
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.TvSyncPreviewFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -1080,7 +1079,7 @@
         return new CausalityPageContext(
             ConnectedSystemId: null,
             ConnectedSystemName: null,
-            RunProfileName: "outbound evaluation",
+            RunProfileName: MetaverseText.TvOutboundEvaluation,
             CsoId: null,
             CsoConnectedSystemId: null,
             CsoConnectedSystemName: null,

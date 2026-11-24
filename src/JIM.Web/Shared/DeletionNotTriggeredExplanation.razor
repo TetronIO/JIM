@@ -9,37 +9,61 @@
     decision-time policy snapshot (#119). Renders inline so a host alert can lead with its own headline
     ("The Metaverse Object was not deleted.") and follow with this recorded reasoning, in the trigger
     mode vocabulary, without any current-configuration caveat.
+
+    Each sentence is one resource string; the values it names are set in bold where the English sets them
+    (see Rich), so a translation can put them where its grammar needs them.
 *@
 
 @switch (Snapshot.DeletionRule)
 {
     case MetaverseObjectDeletionRule.Manual:
-        @RulePrefix<text> was set to <strong>manual deletion only</strong>; automatic deletion was disabled.</text>
+        if (string.IsNullOrEmpty(ObjectTypeName))
+        {
+            @Rich(ConnectorSpaceText.DelManualUntyped, (ConnectorSpaceText.DelManualLabel, true))
+        }
+        else
+        {
+            @Rich(ConnectorSpaceText.DelManualTyped, (ObjectTypeName, true), (ConnectorSpaceText.DelManualLabel, true))
+        }
         break;
 
     case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
-        @RulePrefix<text> required <strong>all connectors</strong> to be disconnected; other Connected System Objects remained connected.</text>
+        if (string.IsNullOrEmpty(ObjectTypeName))
+        {
+            @Rich(ConnectorSpaceText.DelLastConnectorUntyped, (ConnectorSpaceText.DelAllConnectors, true))
+        }
+        else
+        {
+            @Rich(ConnectorSpaceText.DelLastConnectorTyped, (ObjectTypeName, true), (ConnectorSpaceText.DelAllConnectors, true))
+        }
         break;
 
     case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
-        @if (TriggeringSystemWasNotASource)
+        if (TriggeringSystemWasNotASource)
         {
-            <text><strong>@Snapshot.TriggeringSystemName</strong> was not configured as an authoritative source, so its disconnection did not trigger deletion.</text>
+            @Rich(ConnectorSpaceText.DelNotSourceSystem, (Snapshot.TriggeringSystemName ?? string.Empty, true))
         }
         else if (Snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
                  && Snapshot.RemainingConnectedSourceSystemNames.Count > 0)
         {
-            <text>The trigger mode was <strong>All sources disconnect</strong>: <strong>@Snapshot.TriggeringSystemName</strong> disconnected,
-                but @Snapshot.RemainingConnectedSourceSystemIds.Count of @Snapshot.SelectedSourceSystemIds.Count selected sources remained
-                connected (<strong>@string.Join(", ", Snapshot.RemainingConnectedSourceSystemNames)</strong>).</text>
+            @Rich(ConnectorSpaceText.DelAllSourcesMode,
+                (ConnectorSpaceText.DelAllSourcesLabel, true),
+                (Snapshot.TriggeringSystemName ?? string.Empty, true),
+                (Snapshot.RemainingConnectedSourceSystemIds.Count.ToString(), false),
+                (Snapshot.SelectedSourceSystemIds.Count.ToString(), false),
+                (string.Join(", ", Snapshot.RemainingConnectedSourceSystemNames), true))
+        }
+        else if (string.IsNullOrEmpty(ObjectTypeName))
+        {
+            @Rich(ConnectorSpaceText.DelAuthoritativeUntyped)
         }
         else
         {
-            @RulePrefix<text> required an authoritative source to disconnect; the recorded conditions did not trigger deletion.</text>
+            @Rich(ConnectorSpaceText.DelAuthoritativeTyped, (ObjectTypeName, true))
         }
         break;
 }
-<text> This explanation reflects the deletion policy recorded when this Activity ran.</text>
+<text> @ConnectorSpaceText.DelExplainFooter</text>
 
 @code {
     /// <summary>
@@ -59,17 +83,38 @@
         && !Snapshot.SelectedSourceSystemIds.Contains(triggeringSystemId);
 
     /// <summary>
-    /// "The deletion rule for Person objects" when the type name is known, otherwise "The deletion rule".
+    /// Renders a resource sentence in which each <c>{n}</c> stands for one of the values, in the order given. A value
+    /// flagged for emphasis is set in bold. The values are text, so Blazor encodes them; the sentence itself never
+    /// passes through markup.
     /// </summary>
-    private RenderFragment RulePrefix => __builder =>
+    private static RenderFragment Rich(string template, params (string Text, bool Emphasis)[] values) => builder =>
     {
-        if (!string.IsNullOrEmpty(ObjectTypeName))
+        var sequence = 0;
+        var position = 0;
+        while (position < template.Length)
         {
-            <text>The deletion rule for <strong>@ObjectTypeName</strong> objects</text>
-        }
-        else
-        {
-            <text>The deletion rule</text>
+            var open = template.IndexOf('{', position);
+            if (open < 0)
+            {
+                builder.AddContent(sequence++, template[position..]);
+                break;
+            }
+
+            var close = template.IndexOf('}', open);
+            builder.AddContent(sequence++, template[position..open]);
+            var (text, emphasis) = values[int.Parse(template[(open + 1)..close], System.Globalization.CultureInfo.InvariantCulture)];
+            if (emphasis)
+            {
+                builder.OpenElement(sequence++, "strong");
+                builder.AddContent(sequence++, text);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(sequence++, text);
+            }
+
+            position = close + 1;
         }
     };
 }

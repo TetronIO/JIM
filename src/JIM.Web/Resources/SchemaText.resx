@@ -1,0 +1,2029 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DataFlowPriorityUnranked" xml:space="preserve">
+    <value>Unranked</value>
+    <comment>Priority column, for a contribution that has never been given a position (the sentinel, not a number).</comment>
+  </data>
+  <data name="DataFlowPriorityOfContributors" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>Priority column: this contribution's position, then the number of contributors sharing its Metaverse Attribute.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipOutbound" xml:space="preserve">
+    <value>Priority orders competing contributions into the Metaverse, so it applies to Inbound flows only.</value>
+    <comment>Tooltip on the Priority cell of an Outbound flow.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorUnranked" xml:space="preserve">
+    <value>This is the only contributor to this Metaverse Attribute, so it is not competing with anything and has never needed a position.</value>
+    <comment>Tooltip: the only contribution to a Metaverse Attribute, never given a position.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorRanked" xml:space="preserve">
+    <value>This is the only contributor to this Metaverse Attribute, so its position decides nothing until another Synchronisation Rule contributes to it.</value>
+    <comment>Tooltip: the only contribution to a Metaverse Attribute, already given a position.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipUnpositionedOfMany" xml:space="preserve">
+    <value>This contribution has never been given a position, so it ranks lowest of the {0} contributors to this Metaverse Attribute. Give it a position to change that.</value>
+    <comment>Tooltip: an unpositioned contribution among several. {0} is the number of contributors.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipOrdered" xml:space="preserve">
+    <value>{0} Synchronisation Rules contribute to this Metaverse Attribute; the lowest-numbered contribution with a value wins.</value>
+    <comment>Tooltip on a Priority cell among several contributors. {0} is always two or more.</comment>
+  </data>
+  <data name="DataFlowDirectionInbound" xml:space="preserve">
+    <value>Inbound</value>
+    <comment>Direction of a Synchronisation Rule flow: into the Metaverse.</comment>
+  </data>
+  <data name="DataFlowDirectionOutbound" xml:space="preserve">
+    <value>Outbound</value>
+    <comment>Direction of a Synchronisation Rule flow: out of the Metaverse.</comment>
+  </data>
+  <data name="ResolutionTenMicroseconds" xml:space="preserve">
+    <value>Ten Microseconds</value>
+    <comment>A DateTime resolution, as the attribute editor names it.</comment>
+  </data>
+  <data name="ResolutionHundredMicroseconds" xml:space="preserve">
+    <value>Hundred Microseconds</value>
+    <comment>A DateTime resolution.</comment>
+  </data>
+  <data name="ResolutionTenMilliseconds" xml:space="preserve">
+    <value>Ten Milliseconds</value>
+    <comment>A DateTime resolution.</comment>
+  </data>
+  <data name="ResolutionHundredMilliseconds" xml:space="preserve">
+    <value>Hundred Milliseconds</value>
+    <comment>A DateTime resolution.</comment>
+  </data>
+  <data name="WatermarkNextDeltaImportReadsAfter" xml:space="preserve">
+    <value>Next Delta Import reads changes after</value>
+    <comment>Partition scope line: the position a Delta Import reads from. The position follows this text.</comment>
+  </data>
+  <data name="WatermarkRecordedAt" xml:space="preserve">
+    <value>Recorded {0}</value>
+    <comment>Partition scope line: when the watermark was recorded. {0} is a relative time such as '3 hours ago'.</comment>
+  </data>
+  <data name="WatermarkUnreadable" xml:space="preserve">
+    <value>The recorded watermark could not be read. The next Delta Import reads every object in this partition, as a Full Import does, and records a new one.</value>
+    <comment>Partition scope line when the recorded watermark cannot be read.</comment>
+  </data>
+  <data name="WatermarkNone" xml:space="preserve">
+    <value>No watermark recorded. The next Delta Import reads every object in this partition, as a Full Import does, and records one.</value>
+    <comment>Partition scope line when no watermark has been recorded yet.</comment>
+  </data>
+  <data name="RetrieveSchemaIntro" xml:space="preserve">
+    <value>Retrieve the schema from the Connected System, to be able to select which object types and attributes you want to manage with JIM.</value>
+    <comment>Schema tab, before any schema has been retrieved.</comment>
+  </data>
+  <data name="RetrievingSchema" xml:space="preserve">
+    <value>Retrieving Schema</value>
+    <comment>Button label while the schema is retrieved.</comment>
+  </data>
+  <data name="RetrieveSchema" xml:space="preserve">
+    <value>Retrieve Schema</value>
+    <comment>Button label.</comment>
+  </data>
+  <data name="RefreshCompleteTitle" xml:space="preserve">
+    <value>Schema Refresh Complete</value>
+    <comment>Result alert title on success.</comment>
+  </data>
+  <data name="RefreshFailedTitle" xml:space="preserve">
+    <value>Schema Refresh Failed</value>
+    <comment>Result alert title on failure.</comment>
+  </data>
+  <data name="FoundSummary" xml:space="preserve">
+    <value>Found {0} with {1}.</value>
+    <comment>Schema refresh result. {0} is the object type count phrase, {1} the attribute count phrase (both markup).</comment>
+  </data>
+  <data name="ObjectTypeCountOne" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; object type</value>
+    <comment>Count phrase, one object type. {0} is the number.</comment>
+  </data>
+  <data name="ObjectTypeCountOther" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; object types</value>
+    <comment>Count phrase, several object types. {0} is the number.</comment>
+  </data>
+  <data name="AttributeCountOne" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; attribute</value>
+    <comment>Count phrase, one attribute. {0} is the number.</comment>
+  </data>
+  <data name="AttributeCountOther" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; attributes</value>
+    <comment>Count phrase, several attributes. {0} is the number.</comment>
+  </data>
+  <data name="SelectedByConnector" xml:space="preserve">
+    <value>Selected because the Connector requires them:</value>
+    <comment>Info alert label listing attributes the Connector needs.</comment>
+  </data>
+  <data name="SelectedByConnectorExplain" xml:space="preserve">
+    <value>The Connector cannot work without these attributes' values, so they are always imported and cannot be unselected.</value>
+    <comment>Explains the Connector-required attributes.</comment>
+  </data>
+  <data name="CredentialAttributesBlockedOne" xml:space="preserve">
+    <value>{0} credential attribute blocked:</value>
+    <comment>Alert label, one blocked credential attribute. Plural rule: one form.</comment>
+  </data>
+  <data name="CredentialAttributesBlockedOther" xml:space="preserve">
+    <value>{0} credential attributes blocked:</value>
+    <comment>Alert label, several blocked credential attributes. {0} is the count.</comment>
+  </data>
+  <data name="CredentialAttributesExplain" xml:space="preserve">
+    <value>These hold credential material and are never managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.</value>
+    <comment>Explains blocked credential attributes.</comment>
+  </data>
+  <data name="DiscoveryWarningsLabel" xml:space="preserve">
+    <value>Discovery warnings:</value>
+    <comment>Alert label.</comment>
+  </data>
+  <data name="DiscoveryWarningsText" xml:space="preserve">
+    <value>The Connector could not discover everything and worked around the gaps below. Review them so a missing attribute can be traced to the Connected System rather than JIM.</value>
+    <comment>Explains discovery warnings; the warnings follow as a list.</comment>
+  </data>
+  <data name="NoChangesDetected" xml:space="preserve">
+    <value>No changes detected. The schema is up to date.</value>
+    <comment>Shown after a refresh that found no changes.</comment>
+  </data>
+  <data name="ActionRequiredLabel" xml:space="preserve">
+    <value>Action Required:</value>
+    <comment>Warning alert label.</comment>
+  </data>
+  <data name="ActionRequiredText" xml:space="preserve">
+    <value>Some attributes that were removed are still referenced by Synchronisation Rules. Please update your Synchronisation Rules to remove references to these attributes.</value>
+    <comment>Warning after a refresh that removed attributes still in use.</comment>
+  </data>
+  <data name="EditSchemaAttributeTitle" xml:space="preserve">
+    <value>Edit Schema Attribute:</value>
+    <comment>Dialog title; the attribute's name follows.</comment>
+  </data>
+  <data name="DataTypeLockedPlural" xml:space="preserve">
+    <value>The data type and plurality of this Connected System attribute cannot be changed as it is being referenced by either a Synchronisation Rule, or has values already populated.</value>
+    <comment>Locked-attribute error when the Connector supports plurality.</comment>
+  </data>
+  <data name="DataTypeLocked" xml:space="preserve">
+    <value>The data type of this Connected System attribute cannot be changed as it is being referenced by either a Synchronisation Rule, or has values already populated.</value>
+    <comment>Locked-attribute error when the Connector does not support plurality.</comment>
+  </data>
+  <data name="DataTypeChangeable" xml:space="preserve">
+    <value>This Connector supports changing the data type of a Connected System attribute. This might be because the data type was detected automatically, and might need adjusting if not right.</value>
+    <comment>Info in the edit attribute dialog.</comment>
+  </data>
+  <data name="ChooseDataType" xml:space="preserve">
+    <value>Please choose a data type</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ValuesPerObject" xml:space="preserve">
+    <value>Values per object</value>
+    <comment>Field label for plurality.</comment>
+  </data>
+  <data name="SingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Plurality option.</comment>
+  </data>
+  <data name="MultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Plurality option.</comment>
+  </data>
+  <data name="MultiValuedColumnHelp" xml:space="preserve">
+    <value>A multi-valued column holds its values separated by the Multi-Value Delimiter, such as {0}.</value>
+    <comment>Helper text. {0} is an example value in code (markup).</comment>
+  </data>
+  <data name="SetByAdministrator" xml:space="preserve">
+    <value>An administrator set this, so a schema refresh keeps it.</value>
+    <comment>Helper text when an administrator overrode the discovered value.</comment>
+  </data>
+  <data name="CurrentlyDiscoveredFromFile" xml:space="preserve">
+    <value>Currently as discovered from the file. Changing it makes it yours, and a schema refresh keeps it.</value>
+    <comment>Helper text when the value came from the file.</comment>
+  </data>
+  <data name="CurrentlyDiscoveredFromSchema" xml:space="preserve">
+    <value>Currently as discovered from the Connected System's schema. Changing it makes it yours, and a schema refresh keeps it.</value>
+    <comment>Helper text when the value came from the Connected System's schema.</comment>
+  </data>
+  <data name="CaseExactHelp" xml:space="preserve">
+    <value>When ticked, values differing only in case identify different things: {0} and {1} are two values. When clear, they are the same value, which is how most identifiers behave.</value>
+    <comment>Helper text for case-exact values. {0} and {1} are example values in code (markup).</comment>
+  </data>
+  <data name="ValuesCaseExact" xml:space="preserve">
+    <value>Values are case-exact</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="DatesHeldTo" xml:space="preserve">
+    <value>Dates are held to</value>
+    <comment>Field label for the date-time resolution.</comment>
+  </data>
+  <data name="ResolutionHelp" xml:space="preserve">
+    <value>The finest step of time the Connected System keeps. JIM sends each date taken down to it, and compares at it, so a fraction the Connected System cannot hold is never exported again and again.</value>
+    <comment>Helper text for date-time resolution.</comment>
+  </data>
+  <data name="ConfirmChange" xml:space="preserve">
+    <value>Confirm Change</value>
+    <comment>Dialog confirm button.</comment>
+  </data>
+  <data name="ObjectTypesAndSelected" xml:space="preserve">
+    <value>{0} Object Types, {1} selected</value>
+    <comment>Schema status line. {0} and {1} are counts.</comment>
+  </data>
+  <data name="SchemaInfoTitle" xml:space="preserve">
+    <value>Schema</value>
+    <comment>Info popover title on the schema status line.</comment>
+  </data>
+  <data name="SchemaInfoBody" xml:space="preserve">
+    <value>The Object Types and Attributes JIM has read from the Connected System. Refreshing retrieves the latest and shows you what changed before anything is applied. Nothing is deleted by a refresh: entries the Connected System no longer reports are retained in JIM and flagged for your attention. Ensure the Connected System identity has the permissions needed to read the full schema; a partial read can make entries appear removed when they are not.</value>
+    <comment>Info popover body on the schema status line.</comment>
+  </data>
+  <data name="RefreshingSchema" xml:space="preserve">
+    <value>Refreshing Schema</value>
+    <comment>Button label while the schema refreshes.</comment>
+  </data>
+  <data name="RefreshSchema" xml:space="preserve">
+    <value>Refresh Schema</value>
+    <comment>Button label.</comment>
+  </data>
+  <data name="ChooseObjectTypes" xml:space="preserve">
+    <value>Choose which object types JIM should manage</value>
+    <comment>Heading of the Object Types tab.</comment>
+  </data>
+  <data name="ChooseObjectTypesHelp" xml:space="preserve">
+    <value>Each type you select gets its own tab above, where you choose the attributes to import or export. To maximise system performance, select only the types you actually need.</value>
+    <comment>Explains the Object Types tab.</comment>
+  </data>
+  <data name="SearchObjectTypes" xml:space="preserve">
+    <value>Search object types</value>
+    <comment>Search box label.</comment>
+  </data>
+  <data name="SearchObjectTypesHelp" xml:space="preserve">
+    <value>Show only types whose name contains a specific value</value>
+    <comment>Search box helper text.</comment>
+  </data>
+  <data name="ChipAll" xml:space="preserve">
+    <value>All ({0})</value>
+    <comment>Filter chip. {0} is the count.</comment>
+  </data>
+  <data name="ChipSelected" xml:space="preserve">
+    <value>Selected ({0})</value>
+    <comment>Filter chip. {0} is the count.</comment>
+  </data>
+  <data name="NoObjectTypesMatch" xml:space="preserve">
+    <value>No object types match the current filter.</value>
+    <comment>Shown when the filter hides every object type.</comment>
+  </data>
+  <data name="AttributesSelectedOf" xml:space="preserve">
+    <value>{0} of {1} attributes selected</value>
+    <comment>Tooltip on an object type card. {0} is selected, {1} the total.</comment>
+  </data>
+  <data name="ShowingObjectTypes" xml:space="preserve">
+    <value>Showing {0} of {1} object types</value>
+    <comment>Footer under the object type cards. {0} shown, {1} visible in total.</comment>
+  </data>
+  <data name="InternalTypesHiddenOne" xml:space="preserve">
+    <value>{0} internal object type is hidden.</value>
+    <comment>Alert when one internal object type is hidden. Plural rule: one form.</comment>
+  </data>
+  <data name="InternalTypesHiddenOther" xml:space="preserve">
+    <value>{0} internal object types are hidden.</value>
+    <comment>Alert when several internal object types are hidden. {0} is the count.</comment>
+  </data>
+  <data name="InternalTypesExplain" xml:space="preserve">
+    <value>These are classes the Connected System uses for its own configuration or operation.</value>
+    <comment>Explains internal object types.</comment>
+  </data>
+  <data name="ShowInternalTypes" xml:space="preserve">
+    <value>Show internal object types</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="InternalTypesShown" xml:space="preserve">
+    <value>Internal object types are shown.</value>
+    <comment>Alert when internal types are shown.</comment>
+  </data>
+  <data name="HideInternalTypes" xml:space="preserve">
+    <value>Hide internal object types</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="AttributeSelection" xml:space="preserve">
+    <value>Attribute Selection</value>
+    <comment>Heading of the attribute selection panel.</comment>
+  </data>
+  <data name="AttributeSelectionHelp" xml:space="preserve">
+    <value>Select which attributes you would like JIM to import, or export for this object type. To maximise system performance, only select those you actually need.</value>
+    <comment>Explains attribute selection.</comment>
+  </data>
+  <data name="FilterByClass" xml:space="preserve">
+    <value>Filter by class</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="FilterByClassHelp" xml:space="preserve">
+    <value>Show only attributes with a particular class</value>
+    <comment>Helper text under the class filter.</comment>
+  </data>
+  <data name="SelectAttributesCsv" xml:space="preserve">
+    <value>Select attributes via CSV</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="SelectAttributesCsvHelp" xml:space="preserve">
+    <value>Quick-select by comma-separated list, e.g. DisplayName,sAMAccountName</value>
+    <comment>Helper text. The names are attribute names.</comment>
+  </data>
+  <data name="TypeFilterLabel" xml:space="preserve">
+    <value>Type:</value>
+    <comment>Chip group label.</comment>
+  </data>
+  <data name="PluralityFilterLabel" xml:space="preserve">
+    <value>Plurality:</value>
+    <comment>Chip group label.</comment>
+  </data>
+  <data name="WritabilityFilterLabel" xml:space="preserve">
+    <value>Writability:</value>
+    <comment>Chip group label.</comment>
+  </data>
+  <data name="SelectionFilterLabel" xml:space="preserve">
+    <value>Selection:</value>
+    <comment>Chip group label.</comment>
+  </data>
+  <data name="ChipSelectedOnly" xml:space="preserve">
+    <value>Selected Only ({0})</value>
+    <comment>Filter chip. {0} is the count.</comment>
+  </data>
+  <data name="OperationalAttributesHiddenOne" xml:space="preserve">
+    <value>{0} operational attribute is hidden.</value>
+    <comment>Alert when one operational attribute is hidden. Plural rule: one form.</comment>
+  </data>
+  <data name="OperationalAttributesHiddenOther" xml:space="preserve">
+    <value>{0} operational attributes are hidden.</value>
+    <comment>Alert when several operational attributes are hidden. {0} is the count.</comment>
+  </data>
+  <data name="OperationalAttributesExplain" xml:space="preserve">
+    <value>The Connected System maintains these for its own operation, such as when an entry was created or when a sign-in last failed; JIM can import them but never export them.</value>
+    <comment>Explains operational attributes.</comment>
+  </data>
+  <data name="ShowOperationalAttributes" xml:space="preserve">
+    <value>Show operational attributes</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="OperationalAttributesShown" xml:space="preserve">
+    <value>Operational attributes are shown.</value>
+    <comment>Alert when operational attributes are shown.</comment>
+  </data>
+  <data name="HideOperationalAttributes" xml:space="preserve">
+    <value>Hide operational attributes</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="AttributeSingular" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Singular noun for the attribute grid's row count.</comment>
+  </data>
+  <data name="AttributePlural" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Plural noun for the attribute grid's row count.</comment>
+  </data>
+  <data name="SearchByName" xml:space="preserve">
+    <value>Search by name</value>
+    <comment>Search box placeholder.</comment>
+  </data>
+  <data name="ColumnSelected" xml:space="preserve">
+    <value>Selected</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ColumnExternalId" xml:space="preserve">
+    <value>External ID</value>
+    <comment>Column heading, and the chip on the External ID attribute.</comment>
+  </data>
+  <data name="ColumnClass" xml:space="preserve">
+    <value>Class</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ColumnPlurality" xml:space="preserve">
+    <value>Plurality</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ColumnCaseExact" xml:space="preserve">
+    <value>Case-exact</value>
+    <comment>Column heading, and the chip on a case-exact attribute.</comment>
+  </data>
+  <data name="ColumnDateResolution" xml:space="preserve">
+    <value>Date Resolution</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ColumnWritability" xml:space="preserve">
+    <value>Writability</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ColumnAction" xml:space="preserve">
+    <value>Action</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="CredentialAttributeTooltip" xml:space="preserve">
+    <value>This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow.</value>
+    <comment>Tooltip on the disabled switch of a credential attribute.</comment>
+  </data>
+  <data name="ExternalIdUnselectable" xml:space="preserve">
+    <value>This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly.</value>
+    <comment>Tooltip on the disabled switch of an External ID attribute.</comment>
+  </data>
+  <data name="ConnectorNeedsValuesUnselectable" xml:space="preserve">
+    <value>This attribute cannot be unselected because the Connector cannot work without its values, so it is always imported.</value>
+    <comment>Tooltip on the disabled switch of a Connector-required attribute.</comment>
+  </data>
+  <data name="SecondaryIdChip" xml:space="preserve">
+    <value>Secondary ID</value>
+    <comment>Chip on a secondary External ID attribute.</comment>
+  </data>
+  <data name="OperationalTooltip" xml:space="preserve">
+    <value>An operational attribute: the Connected System maintains it for its own operation, and it belongs to no class. JIM can import it but never export it.</value>
+    <comment>Tooltip on the Operational chip.</comment>
+  </data>
+  <data name="OperationalChip" xml:space="preserve">
+    <value>Operational</value>
+    <comment>Chip in the Class column.</comment>
+  </data>
+  <data name="ReferenceTypeTooltip" xml:space="preserve">
+    <value>This Reference attribute declares that it points at the '{0}' Object Type, so references resolve within that Object Type alone. Declared by the Connected System's schema; read-only.</value>
+    <comment>Tooltip on a Reference type chip. {0} is the referenced Object Type's name.</comment>
+  </data>
+  <data name="ReferenceChip" xml:space="preserve">
+    <value>Reference ({0})</value>
+    <comment>Chip for a Reference attribute. {0} is the referenced Object Type's name.</comment>
+  </data>
+  <data name="PluralitySetTooltip" xml:space="preserve">
+    <value>Set by an administrator, so a schema refresh keeps it.</value>
+    <comment>Tooltip on the Plurality chip.</comment>
+  </data>
+  <data name="PluralityDiscoveredTooltip" xml:space="preserve">
+    <value>Discovered from the Connected System's schema.</value>
+    <comment>Tooltip on the Plurality chip.</comment>
+  </data>
+  <data name="CaseExactTooltipSet" xml:space="preserve">
+    <value>Values differing only in case identify different things. Set by an administrator, so a schema refresh keeps it.</value>
+    <comment>Tooltip on the Case-exact chip.</comment>
+  </data>
+  <data name="CaseExactTooltipDiscovered" xml:space="preserve">
+    <value>Values differing only in case identify different things. Discovered from the Connected System's schema.</value>
+    <comment>Tooltip on the Case-exact chip.</comment>
+  </data>
+  <data name="ResolutionTooltipSet" xml:space="preserve">
+    <value>The finest step of time the Connected System holds these dates to. Set by an administrator, so a schema refresh keeps it.</value>
+    <comment>Tooltip on the Date Resolution chip.</comment>
+  </data>
+  <data name="ResolutionTooltipDiscovered" xml:space="preserve">
+    <value>The finest step of time the Connected System holds these dates to. Discovered from the Connected System's schema.</value>
+    <comment>Tooltip on the Date Resolution chip.</comment>
+  </data>
+  <data name="ResolutionTooltipUndiscovered" xml:space="preserve">
+    <value>Not yet discovered: refresh the schema to discover it. Until then JIM holds and sends these dates to the microsecond.</value>
+    <comment>Tooltip on the Date Resolution chip when none has been discovered.</comment>
+  </data>
+  <data name="NoAttributesMatch" xml:space="preserve">
+    <value>No attributes match "{0}"</value>
+    <comment>Empty state heading. {0} is the search text.</comment>
+  </data>
+  <data name="TryDifferentSearch" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="NoAttributesSelected" xml:space="preserve">
+    <value>No attributes are selected for this object type</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="ChooseAllAbove" xml:space="preserve">
+    <value>Choose All above to see everything the Connected System reported, then select the attributes JIM should manage.</value>
+    <comment>Empty state detail when nothing is selected.</comment>
+  </data>
+  <data name="NoAttributesMatchFilters" xml:space="preserve">
+    <value>No attributes match these filters</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="ClearFilterToWiden" xml:space="preserve">
+    <value>Clear a class, type, plurality or writability filter above to widen the list.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="NoAttributesDiscovered" xml:space="preserve">
+    <value>No attributes were discovered for this object type</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="RetrieveAgainOnceReported" xml:space="preserve">
+    <value>Retrieve the schema again once the Connected System reports attributes for it.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="SettingsHeading" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Heading of the object type settings panel.</comment>
+  </data>
+  <data name="ExternalIdSelectRequired" xml:space="preserve">
+    <value>This connector requires you to select the attribute that is used as the External ID. Please select one below.</value>
+    <comment>Explains the External ID picker, shown for Connectors that need one chosen.</comment>
+  </data>
+  <data name="ExternalIdAttributeLabel" xml:space="preserve">
+    <value>External ID Attribute</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ExternalIdRequiredError" xml:space="preserve">
+    <value>You must select an attribute as the External ID.</value>
+    <comment>Required-field error.</comment>
+  </data>
+  <data name="RemoveContributedLabel" xml:space="preserve">
+    <value>Remove contributed attributes when source objects are deleted</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="RemoveContributedHelp" xml:space="preserve">
+    <value>When enabled, this will remove attribute values on joined Metaverse Objects contributed by this system, for this object type when the source object is deleted.</value>
+    <comment>Caption under the switch.</comment>
+  </data>
+  <data name="PreviewChanges" xml:space="preserve">
+    <value>Preview Changes</value>
+    <comment>Button that previews the schema selection.</comment>
+  </data>
+  <data name="PreviewStale" xml:space="preserve">
+    <value>The schema selection has been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current selection.</value>
+    <comment>Warning shown when the selection changed after the preview ran.</comment>
+  </data>
+  <data name="SchemaSelectionPreviewTitle" xml:space="preserve">
+    <value>Preview: Schema Selection</value>
+    <comment>Preview panel title.</comment>
+  </data>
+  <data name="ApplyFailed" xml:space="preserve">
+    <value>Failed to apply the schema changes: {0}</value>
+    <comment>Snackbar when applying a schema refresh fails. {0} is the error message.</comment>
+  </data>
+  <data name="AppliedDisabled" xml:space="preserve">
+    <value>Schema applied; the dependent configuration has been disabled.</value>
+    <comment>Snackbar after applying with dependents disabled.</comment>
+  </data>
+  <data name="AppliedRemoved" xml:space="preserve">
+    <value>Schema applied; the dependent configuration has been removed.</value>
+    <comment>Snackbar after applying with dependents removed.</comment>
+  </data>
+  <data name="AppliedRemovedQueued" xml:space="preserve">
+    <value>Schema applied; the dependent configuration has been removed and the data removal queued. Follow it from the Operations tab.</value>
+    <comment>Snackbar after applying with the data removal queued.</comment>
+  </data>
+  <data name="AppliedRemovedNotQueued" xml:space="preserve">
+    <value>Schema applied and configuration removed, but the data removal could not be queued: {0}</value>
+    <comment>Error snackbar. {0} is the reason the removal could not be queued.</comment>
+  </data>
+  <data name="RemoveObjectTypeQuestion" xml:space="preserve">
+    <value>Remove object type?</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="RemoveObjectTypeMessage" xml:space="preserve">
+    <value>Remove {0} from the object types JIM manages? This clears its attribute selection and configuration for this Connected System. You can add it again later, but you will need to reconfigure it.</value>
+    <comment>Confirmation message. {0} is the Object Type's name, in code (markup).</comment>
+  </data>
+  <data name="ConnectedSystemTermName" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>The noun naming the thing being changed, in the change acknowledgement dialog.</comment>
+  </data>
+  <data name="AttributeChangesSaved" xml:space="preserve">
+    <value>Your attribute changes have been saved.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="DeselectedStillRead" xml:space="preserve">
+    <value>A deselected attribute is still read by: {0}. It is no longer imported, so these read values that are never refreshed.</value>
+    <comment>Warning snackbar. {0} is the list of readers.</comment>
+  </data>
+  <data name="PreviewStartFailed" xml:space="preserve">
+    <value>Failed to start the preview: {0}</value>
+    <comment>Error snackbar. {0} is the error message.</comment>
+  </data>
+  <data name="AttributesSelected" xml:space="preserve">
+    <value>Attributes selected.</value>
+    <comment>Success snackbar after quick-selecting by CSV.</comment>
+  </data>
+  <data name="SkippedCredentialAttributes" xml:space="preserve">
+    <value>Skipped {0}: credential attributes cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.</value>
+    <comment>Warning snackbar. {0} is the list of skipped attribute names.</comment>
+  </data>
+  <data name="DataTypeNotChanged" xml:space="preserve">
+    <value>The data type could not be changed.</value>
+    <comment>Fallback error when the data type change fails.</comment>
+  </data>
+  <data name="PluralityNotChanged" xml:space="preserve">
+    <value>The plurality could not be changed.</value>
+    <comment>Fallback error when the plurality change fails.</comment>
+  </data>
+  <data name="AttributeUpdatedSingleValued" xml:space="preserve">
+    <value>Attribute updated, and made single-valued: a Boolean holds one value. Save your changes to apply it.</value>
+    <comment>Success snackbar when a Boolean attribute was made single-valued.</comment>
+  </data>
+  <data name="AttributeUpdated" xml:space="preserve">
+    <value>Attribute updated. Save your changes to apply it.</value>
+    <comment>Success snackbar after editing an attribute.</comment>
+  </data>
+  <data name="CsvParsingErrorTitle" xml:space="preserve">
+    <value>CSV Parsing Error</value>
+    <comment>Dialog title.</comment>
+  </data>
+  <data name="DataTypeNotSet" xml:space="preserve">
+    <value>Not Set</value>
+    <comment>Attribute data type: not yet set.</comment>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Text</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Number</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>Date Time</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binary</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Reference</value>
+    <comment>Attribute data type: a reference to another Object Type.</comment>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>Guid</value>
+    <comment>Attribute data type: a globally unique identifier.</comment>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Boolean</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>Long Number</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeDecimal" xml:space="preserve">
+    <value>Decimal</value>
+    <comment>Attribute data type: a high-precision decimal number.</comment>
+  </data>
+  <data name="ObjectTypesTab" xml:space="preserve">
+    <value>Object Types</value>
+    <comment>Tab heading: the object types discovery and selection tab.</comment>
+  </data>
+  <data name="ValueOfTotal" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>A count of a total, for example '3 of 10'. {0} is the count, {1} the total.</comment>
+  </data>
+  <data name="ContainersSelected" xml:space="preserve">
+    <value>Containers selected</value>
+    <comment>Scope summary label.</comment>
+  </data>
+  <data name="PartitionsManagedOne" xml:space="preserve">
+    <value>Partition managed</value>
+    <comment>Scope summary label, one partition. Plural rule: one form.</comment>
+  </data>
+  <data name="PartitionsManagedOther" xml:space="preserve">
+    <value>Partitions managed</value>
+    <comment>Scope summary label, several partitions.</comment>
+  </data>
+  <data name="ContainersExcludedOne" xml:space="preserve">
+    <value>Container excluded</value>
+    <comment>Scope summary label, one Container excluded. Plural rule: one form.</comment>
+  </data>
+  <data name="ContainersExcludedOther" xml:space="preserve">
+    <value>Containers excluded</value>
+    <comment>Scope summary label, several Containers excluded.</comment>
+  </data>
+  <data name="RetrieveHierarchyIntro" xml:space="preserve">
+    <value>Retrieve the {0} hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</value>
+    <comment>Shown before any hierarchy is retrieved. {0} is the Connector's name for partitions and Containers, such as 'directory partition'.</comment>
+  </data>
+  <data name="RetrieveHierarchy" xml:space="preserve">
+    <value>Retrieve Hierarchy</value>
+    <comment>Button label.</comment>
+  </data>
+  <data name="RetrievingHierarchy" xml:space="preserve">
+    <value>Retrieving Hierarchy</value>
+    <comment>Button label while retrieving.</comment>
+  </data>
+  <data name="HierarchyLastRetrieved" xml:space="preserve">
+    <value>Hierarchy last retrieved {0}</value>
+    <comment>Scope hint. {0} is a relative time such as '2 hours ago'.</comment>
+  </data>
+  <data name="HierarchyAsRetrievedFrom" xml:space="preserve">
+    <value>The hierarchy as last retrieved from {0}</value>
+    <comment>Scope hint when no retrieval time is known. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="RefreshingHierarchyTitle" xml:space="preserve">
+    <value>Refreshing the hierarchy</value>
+    <comment>Info popover title.</comment>
+  </data>
+  <data name="RefreshHierarchyInfo" xml:space="preserve">
+    <value>Refreshing reads the partitions and Containers again and preserves your selections where possible: existing ones are matched by their external ID, so renamed or moved items keep their selection state. Partitions and Containers that no longer exist in the Connected System (deleted OUs, permission changes) are removed. Make sure the Connected System identity has the permissions needed to retrieve the hierarchy.</value>
+    <comment>Info popover body on the Scope tab.</comment>
+  </data>
+  <data name="Refreshing" xml:space="preserve">
+    <value>Refreshing</value>
+    <comment>Button label while refreshing the hierarchy.</comment>
+  </data>
+  <data name="RefreshButton" xml:space="preserve">
+    <value>Refresh</value>
+    <comment>Button label.</comment>
+  </data>
+  <data name="HierarchyRefreshedSummary" xml:space="preserve">
+    <value>Hierarchy refreshed: {0}</value>
+    <comment>Result panel title. {0} is the change summary.</comment>
+  </data>
+  <data name="SelectedItemsRemoved" xml:space="preserve">
+    <value>Selected items removed</value>
+    <comment>Result chip.</comment>
+  </data>
+  <data name="RunProfilesDisabled" xml:space="preserve">
+    <value>Run Profiles disabled</value>
+    <comment>Result chip and heading.</comment>
+  </data>
+  <data name="PartitionsSelected" xml:space="preserve">
+    <value>Partitions selected</value>
+    <comment>Result chip and heading.</comment>
+  </data>
+  <data name="CopyChanges" xml:space="preserve">
+    <value>Copy Changes</value>
+    <comment>Button that copies the refresh changes.</comment>
+  </data>
+  <data name="RunProfileHeader" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PartitionRemovedHeader" xml:space="preserve">
+    <value>Partition removed</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PartitionsSelectedExplain" xml:space="preserve">
+    <value>A selected Container moved into each of these partitions. A Container is only imported while its partition is selected, so JIM selected the partition to keep it in scope.</value>
+    <comment>Explains partitions selected because a Container moved into them.</comment>
+  </data>
+  <data name="PartitionNoun" xml:space="preserve">
+    <value>Partition</value>
+    <comment>A noun: the Connector's partition, shown in tables.</comment>
+  </data>
+  <data name="ContainerNoun" xml:space="preserve">
+    <value>Container</value>
+    <comment>A noun: a Container, shown in tables.</comment>
+  </data>
+  <data name="ContainersMovedIn" xml:space="preserve">
+    <value>Containers moved in</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="WasSelected" xml:space="preserve">
+    <value>Was Selected</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="RemovedHeading" xml:space="preserve">
+    <value>Removed</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="AddedHeading" xml:space="preserve">
+    <value>Added</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="RenamedHeading" xml:space="preserve">
+    <value>Renamed</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="OldName" xml:space="preserve">
+    <value>Old Name</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="NewName" xml:space="preserve">
+    <value>New Name</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="MovedHeading" xml:space="preserve">
+    <value>Moved</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="OldParent" xml:space="preserve">
+    <value>Old Parent</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="NewParent" xml:space="preserve">
+    <value>New Parent</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="NoPartitionsSelectedLabel" xml:space="preserve">
+    <value>No partitions or containers have been selected.</value>
+    <comment>Bold lead-in of the warning.</comment>
+  </data>
+  <data name="NoPartitionsSelectedBody" xml:space="preserve">
+    <value>You must select at least one partition{0} before you can configure Object Matching Rules or create Run Profiles.</value>
+    <comment>Warning body. {0} is the clause for containers, or nothing.</comment>
+  </data>
+  <data name="AndContainerWithinPartition" xml:space="preserve">
+    <value> and at least one container within that partition</value>
+    <comment>Clause added when the Connector has containers. Starts with a space.</comment>
+  </data>
+  <data name="ContainerScopeEditorLabel" xml:space="preserve">
+    <value>Container Scope editor</value>
+    <comment>Accessible name of the mode toggle.</comment>
+  </data>
+  <data name="ScopeTextModeHelp" xml:space="preserve">
+    <value>One statement per line, in hierarchy order. This states the whole of Container Scope: a Container it does not name is not managed.</value>
+    <comment>Helper under the mode toggle, in text mode.</comment>
+  </data>
+  <data name="ScopeTreeModeHelp" xml:space="preserve">
+    <value>Tick the Containers to manage. Advanced states the same scope as text, for a hierarchy too large to click through.</value>
+    <comment>Helper under the mode toggle, in tree mode.</comment>
+  </data>
+  <data name="ContainerScopeLabel" xml:space="preserve">
+    <value>Container Scope</value>
+    <comment>Text field label.</comment>
+  </data>
+  <data name="ScopeTextHelper" xml:space="preserve">
+    <value>include (or +) or exclude (or -), an optional one-level, then the Container's path. Blank lines and lines beginning with # are ignored.</value>
+    <comment>Helper text. The keywords include and exclude are typed by the administrator and are not translated.</comment>
+  </data>
+  <data name="ScopeNotApplied" xml:space="preserve">
+    <value>This Container Scope was not applied.</value>
+    <comment>Error alert lead-in.</comment>
+  </data>
+  <data name="NothingChanged" xml:space="preserve">
+    <value>Nothing has been changed.</value>
+    <comment>Error alert follow-up.</comment>
+  </data>
+  <data name="ScopeErrorLine" xml:space="preserve">
+    <value>Line {0}: {1}</value>
+    <comment>One scope problem. {0} is the line number, {1} the message.</comment>
+  </data>
+  <data name="ScopeApplyingExplain" xml:space="preserve">
+    <value>Applying edits the selection; nothing reaches the Connected System until you save.</value>
+    <comment>Helper beside the Apply button.</comment>
+  </data>
+  <data name="ManagePartition" xml:space="preserve">
+    <value>Manage this partition</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="UnsavedChangesImports" xml:space="preserve">
+    <value>Unsaved changes to what this Connected System imports</value>
+    <comment>Pending-changes status.</comment>
+  </data>
+  <data name="NoUnsavedChanges" xml:space="preserve">
+    <value>No unsaved changes</value>
+    <comment>Saved-state status.</comment>
+  </data>
+  <data name="ScopePreviewStale" xml:space="preserve">
+    <value>The selection has been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current selection.</value>
+    <comment>Warning shown when the selection changed after the preview ran.</comment>
+  </data>
+  <data name="ScopePreviewTitle" xml:space="preserve">
+    <value>Preview: Partitions and Containers</value>
+    <comment>Preview panel title.</comment>
+  </data>
+  <data name="ScopeSimple" xml:space="preserve">
+    <value>Simple</value>
+    <comment>Scope editor mode toggle: the tree.</comment>
+  </data>
+  <data name="ScopeAdvanced" xml:space="preserve">
+    <value>Advanced</value>
+    <comment>Scope editor mode toggle: the text.</comment>
+  </data>
+  <data name="ScopeAppliedSave" xml:space="preserve">
+    <value>Container Scope applied. Save your changes to send them to the Connected System.</value>
+    <comment>Success snackbar after applying the text.</comment>
+  </data>
+  <data name="RefreshCancelled" xml:space="preserve">
+    <value>Hierarchy refresh cancelled. Nothing was changed.</value>
+    <comment>Info snackbar.</comment>
+  </data>
+  <data name="RefreshedDisabledOne" xml:space="preserve">
+    <value>Hierarchy refreshed. Disabled {0} Run Profile that targeted a removed partition.</value>
+    <comment>Warning snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="RefreshedDisabledOther" xml:space="preserve">
+    <value>Hierarchy refreshed. Disabled {0} Run Profiles that targeted a removed partition.</value>
+    <comment>Warning snackbar. {0} is the count.</comment>
+  </data>
+  <data name="RefreshedWithWarnings" xml:space="preserve">
+    <value>Hierarchy refreshed with warnings. Some selected items were removed.</value>
+    <comment>Warning snackbar.</comment>
+  </data>
+  <data name="RefreshedKeepInScope" xml:space="preserve">
+    <value>Hierarchy refreshed: {0}, to keep in scope the selected Containers that moved into them.</value>
+    <comment>Info snackbar. {0} is the change summary.</comment>
+  </data>
+  <data name="RefreshedNoChanges" xml:space="preserve">
+    <value>Hierarchy refreshed. No changes detected.</value>
+    <comment>Info snackbar.</comment>
+  </data>
+  <data name="RefreshFailed" xml:space="preserve">
+    <value>Hierarchy refresh failed: {0}</value>
+    <comment>Error snackbar. {0} is the error.</comment>
+  </data>
+  <data name="RetrieveFailed" xml:space="preserve">
+    <value>Failed to retrieve hierarchy: {0}</value>
+    <comment>Error snackbar. {0} is the error.</comment>
+  </data>
+  <data name="DiscardUnsavedTitle" xml:space="preserve">
+    <value>Discard unsaved changes?</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="DiscardUnsavedBody" xml:space="preserve">
+    <value>Refreshing the hierarchy discards your unsaved changes to what this Connected System imports.</value>
+    <comment>Confirmation dialog body.</comment>
+  </data>
+  <data name="DiscardAndRefresh" xml:space="preserve">
+    <value>Discard and Refresh</value>
+    <comment>Confirm button.</comment>
+  </data>
+  <data name="ClipboardTitle" xml:space="preserve">
+    <value>Hierarchy Refresh Results</value>
+    <comment>Clipboard report: title.</comment>
+  </data>
+  <data name="ClipboardSummary" xml:space="preserve">
+    <value>Summary: {0}</value>
+    <comment>Clipboard report: summary line.</comment>
+  </data>
+  <data name="ClipboardTotalPartitions" xml:space="preserve">
+    <value>Total Partitions: {0}</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardTotalContainers" xml:space="preserve">
+    <value>Total Containers: {0}</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardRunProfilesDisabled" xml:space="preserve">
+    <value>RUN PROFILES DISABLED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardRunProfile" xml:space="preserve">
+    <value>  {0} (partition {1})</value>
+    <comment>Clipboard report line: Run Profile and partition.</comment>
+  </data>
+  <data name="ClipboardPartitionsSelected" xml:space="preserve">
+    <value>PARTITIONS SELECTED (a selected Container moved into each):</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardPartitionSelectedLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1}): {2}</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardRemoved" xml:space="preserve">
+    <value>REMOVED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardRemovedPartition" xml:space="preserve">
+    <value>  [Partition] {0} ({1}){2}</value>
+    <comment>Clipboard report line. {2} is the 'was selected' note.</comment>
+  </data>
+  <data name="ClipboardRemovedContainer" xml:space="preserve">
+    <value>  [Container] {0} ({1}){2}</value>
+    <comment>Clipboard report line. {2} is the 'was selected' note.</comment>
+  </data>
+  <data name="ClipboardWasSelected" xml:space="preserve">
+    <value> - WAS SELECTED!</value>
+    <comment>Clipboard report note on a removed selected item.</comment>
+  </data>
+  <data name="ClipboardAdded" xml:space="preserve">
+    <value>ADDED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardPartitionLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1})</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardContainerLine" xml:space="preserve">
+    <value>  [Container] {0} ({1})</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardRenamed" xml:space="preserve">
+    <value>RENAMED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardRenamedPartition" xml:space="preserve">
+    <value>  [Partition] "{0}" -&gt; "{1}" ({2})</value>
+    <comment>Clipboard report line: old name, new name, external ID.</comment>
+  </data>
+  <data name="ClipboardRenamedContainer" xml:space="preserve">
+    <value>  [Container] "{0}" -&gt; "{1}" ({2})</value>
+    <comment>Clipboard report line: old name, new name, external ID.</comment>
+  </data>
+  <data name="ClipboardMoved" xml:space="preserve">
+    <value>MOVED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardMovedContainer" xml:space="preserve">
+    <value>  [Container] {0}: {1} -&gt; {2}</value>
+    <comment>Clipboard report line: name, old location, new location.</comment>
+  </data>
+  <data name="ClipboardRoot" xml:space="preserve">
+    <value>(root)</value>
+    <comment>Clipboard report: a location with no parent or partition.</comment>
+  </data>
+  <data name="ChangesCopied" xml:space="preserve">
+    <value>Changes copied to clipboard</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="ChangesCopyFailed" xml:space="preserve">
+    <value>Failed to copy to clipboard. Please copy manually.</value>
+    <comment>Warning snackbar.</comment>
+  </data>
+  <data name="HierarchySaved" xml:space="preserve">
+    <value>Your hierarchy changes have been saved.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="PreviewTitle" xml:space="preserve">
+    <value>Schema Refresh Preview</value>
+    <comment>Panel heading.</comment>
+  </data>
+  <data name="PreviewIntro" xml:space="preserve">
+    <value>The Connected System reported the changes below. {0}; review them, then decide how to proceed.</value>
+    <comment>Panel intro. {0} is the emphasised 'Nothing has been applied yet' (markup).</comment>
+  </data>
+  <data name="PreviewNothingApplied" xml:space="preserve">
+    <value>Nothing has been applied yet</value>
+    <comment>Emphasised in the panel intro.</comment>
+  </data>
+  <data name="PreviewDiscoveryText" xml:space="preserve">
+    <value>The Connector could not discover everything and worked around the gaps below. A partial read can make Object Types or Attributes appear removed when they are not; check these before applying.</value>
+    <comment>Text after the Discovery warnings label.</comment>
+  </data>
+  <data name="PreviewCredentialExplain" xml:space="preserve">
+    <value>These hold credential material and are never managed by JIM.</value>
+    <comment>Explains blocked credential attributes.</comment>
+  </data>
+  <data name="PreviewAdditions" xml:space="preserve">
+    <value>Additions: safe to apply</value>
+    <comment>Heading above the additions table.</comment>
+  </data>
+  <data name="PreviewAdditionsRenames" xml:space="preserve">
+    <value>Additions and renames: safe to apply</value>
+    <comment>Heading above the additions table when there are renames.</comment>
+  </data>
+  <data name="PreviewClassificationHeading" xml:space="preserve">
+    <value>Object Type classification: review before applying</value>
+    <comment>Heading above the classification changes.</comment>
+  </data>
+  <data name="PreviewReclassifiedBody" xml:space="preserve">
+    <value>Applying this refresh can change {0}. By default, each object that would change Object Type is refused at the next import and reported as an {1} error; JIM keeps it exactly as it is, so nothing is deprovisioned. If the change is intended, run a Full Import Run Profile with {2} enabled to carry it out. Cancelling keeps the current classification.</value>
+    <comment>Warning body with three emphasised names (markup). Canceling is the US spelling.</comment>
+  </data>
+  <data name="PreviewReclassifiedWhich" xml:space="preserve">
+    <value>which Object Type existing entries resolve to</value>
+    <comment>Emphasised in the reclassified warning.</comment>
+  </data>
+  <data name="PreviewObjectTypeChangedError" xml:space="preserve">
+    <value>Object Type Changed</value>
+    <comment>Emphasised error name in the reclassified warning.</comment>
+  </data>
+  <data name="PreviewAllowObjectTypeChanges" xml:space="preserve">
+    <value>Allow Object Type Changes</value>
+    <comment>Emphasised option name in the reclassified warning.</comment>
+  </data>
+  <data name="PreviewLearnMore" xml:space="preserve">
+    <value>Learn more</value>
+    <comment>Link beside the reclassified warning.</comment>
+  </data>
+  <data name="PreviewDestructiveHeading" xml:space="preserve">
+    <value>Destructive: review before proceeding</value>
+    <comment>Heading above the removals table.</comment>
+  </data>
+  <data name="PreviewDependentsHeading" xml:space="preserve">
+    <value>Configuration that depends on these changes</value>
+    <comment>Heading above the dependents list.</comment>
+  </data>
+  <data name="PreviewSyncRuleWord" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>The noun before a Synchronisation Rule's link.</comment>
+  </data>
+  <data name="PreviewRuleBoundTo" xml:space="preserve">
+    <value>is bound to Object Type {0}, with {1}.</value>
+    <comment>Dependent list line after the rule's link. {0} is the Object Type name, {1} the mapping count.</comment>
+  </data>
+  <data name="PreviewMappingsOne" xml:space="preserve">
+    <value>{0} mapping</value>
+    <comment>Mapping count phrase, one. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewMappingsOther" xml:space="preserve">
+    <value>{0} mappings</value>
+    <comment>Mapping count phrase, several.</comment>
+  </data>
+  <data name="PreviewMappingWord" xml:space="preserve">
+    <value>Mapping</value>
+    <comment>Start of a dependent mapping line.</comment>
+  </data>
+  <data name="PreviewOnWord" xml:space="preserve">
+    <value>on</value>
+    <comment>Within a dependent mapping line.</comment>
+  </data>
+  <data name="PreviewMappingDisabled" xml:space="preserve">
+    <value>disabled.</value>
+    <comment>End of a disabled mapping line.</comment>
+  </data>
+  <data name="PreviewMappingDeleted" xml:space="preserve">
+    <value>deleted.</value>
+    <comment>End of a deleted mapping line.</comment>
+  </data>
+  <data name="PreviewRuleDisabledSuffix" xml:space="preserve">
+    <value>disabled, with its {0}.</value>
+    <comment>Follows the rule's link in the disable plan. {0} is the mapping count phrase.</comment>
+  </data>
+  <data name="PreviewRuleDeletedSuffix" xml:space="preserve">
+    <value>deleted, with its {0}.</value>
+    <comment>Follows the rule's link in the remove plan. {0} is the mapping count phrase.</comment>
+  </data>
+  <data name="PreviewMatchingRule" xml:space="preserve">
+    <value>Object Matching Rule on {0}: {1}</value>
+    <comment>A matching rule that depends on a removed attribute. {0} is its context, {1} the reason.</comment>
+  </data>
+  <data name="PreviewReaderLine" xml:space="preserve">
+    <value>{0} reads an attribute the Connected System no longer reports.</value>
+    <comment>A configuration item that reads a removed attribute.</comment>
+  </data>
+  <data name="PreviewOpen" xml:space="preserve">
+    <value>Open</value>
+    <comment>Link to a configuration item that reads a removed attribute.</comment>
+  </data>
+  <data name="PreviewRemovalUnavailable" xml:space="preserve">
+    <value>Apply &amp; Remove is unavailable.</value>
+    <comment>Emphasised lead of the removal-refused notice.</comment>
+  </data>
+  <data name="PreviewRemovalRefused" xml:space="preserve">
+    <value>{0} It would delete attributes that {1} still read, and JIM does not remove those for you: a Scoping Criterion left reading nothing takes objects out of scope. Change them first, or use {2}, which keeps the attributes.</value>
+    <comment>Removal-refused notice. {0} is the emphasised lead, {1} the reader count phrase, {2} the disable option's name.</comment>
+  </data>
+  <data name="PreviewReaderCountOne" xml:space="preserve">
+    <value>{0} configuration item above</value>
+    <comment>Count phrase for the removal-refused notice, one item. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewReaderCountOther" xml:space="preserve">
+    <value>{0} configuration items above</value>
+    <comment>Count phrase for the removal-refused notice, several items.</comment>
+  </data>
+  <data name="PreviewRetainedBody" xml:space="preserve">
+    <value>Object Types and Attributes the Connected System no longer reports are {0} in JIM when you apply; nothing is deleted, but their values stop refreshing, and objects of a removed Object Type will be obsoleted by the next Full Import whether or not you apply. Attribute definition changes are applied, and a mapping validated against the old definition may no longer behave as intended.</value>
+    <comment>Warning. {0} is the emphasised word 'retained' (markup).</comment>
+  </data>
+  <data name="PreviewRetainedWord" xml:space="preserve">
+    <value>retained</value>
+    <comment>Emphasised in the retained warning.</comment>
+  </data>
+  <data name="PreviewActionRequiredText" xml:space="preserve">
+    <value>Some attributes that are no longer reported are still referenced by Synchronisation Rules. Please update your Synchronisation Rules to remove references to these attributes.</value>
+    <comment>Warning after the preview when attributes are still referenced.</comment>
+  </data>
+  <data name="PreviewApplyButton" xml:space="preserve">
+    <value>Apply Schema Changes</value>
+    <comment>Button: apply without removals.</comment>
+  </data>
+  <data name="PreviewApplyDisableButton" xml:space="preserve">
+    <value>Apply &amp; Disable Dependents…</value>
+    <comment>Button: opens the disable plan.</comment>
+  </data>
+  <data name="PreviewApplyRemoveButton" xml:space="preserve">
+    <value>Apply &amp; Remove…</value>
+    <comment>Button: opens the remove plan.</comment>
+  </data>
+  <data name="PreviewApplyDisableName" xml:space="preserve">
+    <value>Apply &amp; Disable Dependents</value>
+    <comment>The option's name, inside a sentence.</comment>
+  </data>
+  <data name="PreviewApplyRemoveName" xml:space="preserve">
+    <value>Apply &amp; Remove</value>
+    <comment>The option's name, inside a sentence.</comment>
+  </data>
+  <data name="PreviewDisableDialogTitle" xml:space="preserve">
+    <value>Apply schema and disable dependents?</value>
+    <comment>Disable plan dialog title.</comment>
+  </data>
+  <data name="PreviewDisableIntro" xml:space="preserve">
+    <value>The new schema is recorded, and everything below is {0} with the stated reason so nothing runs against entries the Connected System no longer reports. No objects or values are touched. Re-enabling is a manual choice per rule or mapping.</value>
+    <comment>Disable plan intro. {0} is the emphasised word 'disabled' (markup).</comment>
+  </data>
+  <data name="PreviewDisabledWord" xml:space="preserve">
+    <value>disabled</value>
+    <comment>Emphasised in the disable plan intro.</comment>
+  </data>
+  <data name="PreviewMatchingNoDisabled" xml:space="preserve">
+    <value>Object Matching has no disabled state, so these need your attention separately:</value>
+    <comment>Notice above the matching rules that cannot be disabled.</comment>
+  </data>
+  <data name="PreviewMatchingReason" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>A matching rule's context and reason. {0} is the context, {1} the reason.</comment>
+  </data>
+  <data name="PreviewBack" xml:space="preserve">
+    <value>Back</value>
+    <comment>Button closing a plan dialog.</comment>
+  </data>
+  <data name="PreviewApplyDisableConfirm" xml:space="preserve">
+    <value>Apply &amp; Disable</value>
+    <comment>Confirm button of the disable plan.</comment>
+  </data>
+  <data name="PreviewRemoveDialogTitle" xml:space="preserve">
+    <value>Apply schema and remove dependents?</value>
+    <comment>Remove plan dialog title.</comment>
+  </data>
+  <data name="PreviewDeletesLead" xml:space="preserve">
+    <value>This deletes configuration and identity data.</value>
+    <comment>Emphasised lead of the remove plan's warning.</comment>
+  </data>
+  <data name="PreviewDeletesBody" xml:space="preserve">
+    <value>The configuration below is deleted, and the data removal runs as a background task you can follow from the Operations queue.</value>
+    <comment>Body of the remove plan's warning.</comment>
+  </data>
+  <data name="PreviewConfigDeleted" xml:space="preserve">
+    <value>Configuration deleted</value>
+    <comment>Heading in the remove plan.</comment>
+  </data>
+  <data name="PreviewDataRemoved" xml:space="preserve">
+    <value>Data removed</value>
+    <comment>Heading in the remove plan.</comment>
+  </data>
+  <data name="PreviewObjectsObsoleteOne" xml:space="preserve">
+    <value>{0} Connected System Object of Object Type {1} marked Obsolete.</value>
+    <comment>Removal impact line. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewObjectsObsoleteOther" xml:space="preserve">
+    <value>{0} Connected System Objects of Object Type {1} marked Obsolete.</value>
+    <comment>Removal impact line. {0} is the count, {1} the Object Type name (markup).</comment>
+  </data>
+  <data name="PreviewStoredValuesOne" xml:space="preserve">
+    <value>{0} stored value of attribute {1} on {2} deleted.</value>
+    <comment>Removal impact line. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewStoredValuesOther" xml:space="preserve">
+    <value>{0} stored values of attribute {1} on {2} deleted.</value>
+    <comment>Removal impact line. {0} is the count (markup).</comment>
+  </data>
+  <data name="PreviewObsoletedBody" xml:space="preserve">
+    <value>Obsoleted objects flow through the standard deprovisioning pipeline on the next synchronisation run: disconnection, attribute recall, grace periods and Metaverse Deletion Rules all apply as configured.</value>
+    <comment>Explains what happens to obsoleted objects.</comment>
+  </data>
+  <data name="PreviewMatchingNotDeleted" xml:space="preserve">
+    <value>Object Matching Rules are not deleted by this option, so these need your attention separately:</value>
+    <comment>Notice above the matching rules the remove plan leaves in place.</comment>
+  </data>
+  <data name="PreviewApplyRemoveConfirm" xml:space="preserve">
+    <value>Apply &amp; Remove</value>
+    <comment>Confirm button of the remove plan.</comment>
+  </data>
+  <data name="PreviewCancelTitle" xml:space="preserve">
+    <value>Cancel without applying?</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="PreviewCancelBody" xml:space="preserve">
+    <value>Cancelling does not preserve the status quo. The next Full Import will find no objects of a removed Object Type and obsolete them regardless, and the source now sends redefined attributes in their new form, so mappings validated against the old definition may misbehave. You can re-run the refresh at any time to decide.</value>
+    <comment>Confirmation dialog body. Canceling is the US spelling.</comment>
+  </data>
+  <data name="PreviewCancelRefresh" xml:space="preserve">
+    <value>Cancel Refresh</value>
+    <comment>Confirm button of the cancel dialog.</comment>
+  </data>
+  <data name="PreviewKeepReviewing" xml:space="preserve">
+    <value>Keep Reviewing</value>
+    <comment>Cancel button of the cancel dialog.</comment>
+  </data>
+  <data name="PreviewViaExpression" xml:space="preserve">
+    <value> (read by its Expression)</value>
+    <comment>Suffix on a mapping line that is read by an Expression. Starts with a space.</comment>
+  </data>
+  <data name="MatchingRulesSharedIntro" xml:space="preserve">
+    <value>Matching Rules are defined here per object type and shared across all Synchronisation Rules.</value>
+    <comment>Intro on the Object Matching tab in Simple mode.</comment>
+  </data>
+  <data name="MatchingRulesPerRuleIntro" xml:space="preserve">
+    <value>Matching Rules are configured on each individual Synchronisation Rule.</value>
+    <comment>Intro on the Object Matching tab in Advanced mode.</comment>
+  </data>
+  <data name="AdvancedModeInfo" xml:space="preserve">
+    <value>In Advanced Mode, matching rules are configured on each individual Synchronisation Rule. This allows different matching logic for different scenarios.</value>
+    <comment>Info alert in Advanced mode.</comment>
+  </data>
+  <data name="GoToSyncRules" xml:space="preserve">
+    <value>Go to Synchronisation Rules</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="NoObjectTypesConfigured" xml:space="preserve">
+    <value>No object types have been configured. Import the schema first to configure Object Matching Rules.</value>
+    <comment>Warning when there is no schema.</comment>
+  </data>
+  <data name="NoObjectTypesSelected" xml:space="preserve">
+    <value>No object types have been selected. Select object types in the Schema tab first.</value>
+    <comment>Warning when no object type is selected.</comment>
+  </data>
+  <data name="SwitchToMode" xml:space="preserve">
+    <value>Switch to {0} Mode</value>
+    <comment>Mode switch dialog title. {0} is Simple or Advanced.</comment>
+  </data>
+  <data name="AdvancedModeName" xml:space="preserve">
+    <value>Advanced Mode</value>
+    <comment>The mode's name, inside the switch dialog's text.</comment>
+  </data>
+  <data name="SimpleModeName" xml:space="preserve">
+    <value>Simple Mode</value>
+    <comment>The mode's name, inside the switch dialog's text.</comment>
+  </data>
+  <data name="SwitchingToAdvancedBody" xml:space="preserve">
+    <value>Switching to {0} will allow you to configure different matching rules for each Synchronisation Rule.</value>
+    <comment>Switch dialog body. {0} is the mode name (markup).</comment>
+  </data>
+  <data name="MatchingRulesCopiedNote" xml:space="preserve">
+    <value>The current matching rules will be copied to all existing import Synchronisation Rules for this Connected System, giving you a starting point to customise.</value>
+    <comment>Info in the switch to Advanced dialog.</comment>
+  </data>
+  <data name="SwitchingToSimpleBody" xml:space="preserve">
+    <value>Switching to {0} will configure matching rules here, shared across all Synchronisation Rules.</value>
+    <comment>Switch dialog body. {0} is the mode name (markup).</comment>
+  </data>
+  <data name="MigrationLabel" xml:space="preserve">
+    <value>Migration:</value>
+    <comment>Warning alert lead-in.</comment>
+  </data>
+  <data name="MigrationBody" xml:space="preserve">
+    <value>Matching rules from Synchronisation Rules will be analysed and migrated to the object type level:</value>
+    <comment>Warning alert body.</comment>
+  </data>
+  <data name="MigrationSame" xml:space="preserve">
+    <value>If all Synchronisation Rules have the same matching rules, they will be used directly.</value>
+    <comment>Migration case.</comment>
+  </data>
+  <data name="MigrationDifferent" xml:space="preserve">
+    <value>If Synchronisation Rules have different matching rules, the most common configuration will be selected.</value>
+    <comment>Migration case.</comment>
+  </data>
+  <data name="MigrationCleared" xml:space="preserve">
+    <value>Matching rules will be cleared from all Synchronisation Rules after migration.</value>
+    <comment>Migration outcome.</comment>
+  </data>
+  <data name="ObjectMatchingPreviewImpact" xml:space="preserve">
+    <value>Preview Impact</value>
+    <comment>Button: previews the change before it is saved.</comment>
+  </data>
+  <data name="SwitchingMode" xml:space="preserve">
+    <value>Switching...</value>
+    <comment>Button while the mode switches.</comment>
+  </data>
+  <data name="SwitchMode" xml:space="preserve">
+    <value>Switch Mode</value>
+    <comment>Confirm button of the mode switch dialog.</comment>
+  </data>
+  <data name="PreviewObjectMatchingTitle" xml:space="preserve">
+    <value>Preview: Object Matching Impact</value>
+    <comment>Preview panel title.</comment>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Add Matching Rule</value>
+    <comment>Panel heading and button.</comment>
+  </data>
+  <data name="MatchingRulesFor" xml:space="preserve">
+    <value>Matching Rules for {0}</value>
+    <comment>Heading. {0} is the Object Type name (markup, in an accent span).</comment>
+  </data>
+  <data name="UnworkableOne" xml:space="preserve">
+    <value>{0} matching rule cannot match anything.</value>
+    <comment>Error alert lead-in. Plural rule: one form.</comment>
+  </data>
+  <data name="UnworkableOther" xml:space="preserve">
+    <value>{0} matching rules cannot match anything.</value>
+    <comment>Error alert lead-in. {0} is the count.</comment>
+  </data>
+  <data name="UnworkableBodyOne" xml:space="preserve">
+    <value>Objects that should join an existing Metaverse Object will project a new one instead. Remove and recreate it:</value>
+    <comment>Error alert body, one rule.</comment>
+  </data>
+  <data name="UnworkableBodyOther" xml:space="preserve">
+    <value>Objects that should join an existing Metaverse Object will project a new one instead. Remove and recreate them:</value>
+    <comment>Error alert body, several rules.</comment>
+  </data>
+  <data name="UnworkableRuleLine" xml:space="preserve">
+    <value>Rule {0}: {1}</value>
+    <comment>One unworkable rule. {0} is its position, {1} the reason.</comment>
+  </data>
+  <data name="ObjectMatchingRuleSingular" xml:space="preserve">
+    <value>Object Matching Rule</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="ObjectMatchingRulePlural" xml:space="preserve">
+    <value>Object Matching Rules</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="SearchByAttributeOrExpression" xml:space="preserve">
+    <value>Search by attribute name or expression</value>
+    <comment>Search box placeholder.</comment>
+  </data>
+  <data name="MatchValueColumn" xml:space="preserve">
+    <value>Match Value</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="OperatorColumn" xml:space="preserve">
+    <value>Operator</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="EqualsOperator" xml:space="preserve">
+    <value>equals</value>
+    <comment>The operator in each rule row.</comment>
+  </data>
+  <data name="MetaverseAttributeColumn" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="CaseSensitiveColumn" xml:space="preserve">
+    <value>Case Sensitive</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ActionsColumn" xml:space="preserve">
+    <value>Actions</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MoveUp" xml:space="preserve">
+    <value>Move up</value>
+    <comment>Tooltip on the move-up button.</comment>
+  </data>
+  <data name="MoveDown" xml:space="preserve">
+    <value>Move down</value>
+    <comment>Tooltip on the move-down button.</comment>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>No Object Matching Rules match "{0}"</value>
+    <comment>Empty state heading when the search matches nothing. {0} is the search text.</comment>
+  </data>
+  <data name="NoRulesConfigured" xml:space="preserve">
+    <value>No Object Matching Rules configured</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="NoRulesHint" xml:space="preserve">
+    <value>Objects of this type will only match if they are manually joined. Use the Add Matching Rule panel above to define one.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="MatchingRuleCreated" xml:space="preserve">
+    <value>Matching rule has been created.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="MatchingRuleCreateFailed" xml:space="preserve">
+    <value>Failed to create matching rule. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="DeleteMatchingRuleTitle" xml:space="preserve">
+    <value>Delete Matching Rule</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="DeleteMatchingRuleMessage" xml:space="preserve">
+    <value>Are you sure you want to delete this matching rule? This action cannot be undone.</value>
+    <comment>Confirmation dialog body.</comment>
+  </data>
+  <data name="MatchingRuleDeleted" xml:space="preserve">
+    <value>Matching rule has been deleted.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="MatchingRuleDeleteFailed" xml:space="preserve">
+    <value>Failed to delete matching rule. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="MatchingRuleCaseState" xml:space="preserve">
+    <value>Matching rule is now {0}.</value>
+    <comment>Success snackbar. {0} is the case-sensitivity.</comment>
+  </data>
+  <data name="CaseSensitiveWord" xml:space="preserve">
+    <value>case-sensitive</value>
+    <comment>Used in the case-sensitivity message.</comment>
+  </data>
+  <data name="CaseInsensitiveWord" xml:space="preserve">
+    <value>case-insensitive</value>
+    <comment>Used in the case-sensitivity message.</comment>
+  </data>
+  <data name="MatchingRuleUpdateFailed" xml:space="preserve">
+    <value>Failed to update matching rule. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="MatchingRulesReorderFailed" xml:space="preserve">
+    <value>Failed to reorder matching rules. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="ModeSwitchFailed" xml:space="preserve">
+    <value>Failed to switch mode: {0}</value>
+    <comment>Error snackbar. {0} is the reason.</comment>
+  </data>
+  <data name="ModeSwitchFailedGeneric" xml:space="preserve">
+    <value>Failed to switch mode. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="SwitchedToAdvancedOne" xml:space="preserve">
+    <value>Switched to Advanced Mode. Matching rules copied to {0} Synchronisation Rule.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="SwitchedToAdvancedOther" xml:space="preserve">
+    <value>Switched to Advanced Mode. Matching rules copied to {0} Synchronisation Rules.</value>
+    <comment>Success snackbar. {0} is the count.</comment>
+  </data>
+  <data name="SwitchedToSimpleOne" xml:space="preserve">
+    <value>Switched to Simple Mode. Matching rules set on {0} object type.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="SwitchedToSimpleOther" xml:space="preserve">
+    <value>Switched to Simple Mode. Matching rules set on {0} object types.</value>
+    <comment>Success snackbar. {0} is the count.</comment>
+  </data>
+  <data name="DataFlowIntro" xml:space="preserve">
+    <value>Every attribute data flow configured across all Connected Systems, in both directions. Use it to answer "where does this attribute's value come from, and what writes it out?" without opening each Synchronisation Rule.</value>
+    <comment>Intro on the system-wide Data Flow page.</comment>
+  </data>
+  <data name="DataFlowDirectionLabel" xml:space="preserve">
+    <value>Direction</value>
+    <comment>Filter label.</comment>
+  </data>
+  <data name="DataFlowMetaverseObjectType" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Filter label and column heading.</comment>
+  </data>
+  <data name="DataFlowMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Filter label and column heading.</comment>
+  </data>
+  <data name="MultipleContributorsTooltip" xml:space="preserve">
+    <value>Show only Inbound flows whose Metaverse Attribute is fed by more than one Synchronisation Rule. This is a normal arrangement; it is simply where the priority order decides which value wins.</value>
+    <comment>Tooltip on the Multiple contributors switch.</comment>
+  </data>
+  <data name="MultipleContributors" xml:space="preserve">
+    <value>Multiple contributors</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="SearchScopeText" xml:space="preserve">
+    <value>Search matches Synchronisation Rules, Connected Systems, object types, attribute names on either side, and expression text. The attribute filters cannot match a flow whose relevant side is an expression, because an expression's attribute references live in its text; search finds those.</value>
+    <comment>Helper under the filters: what the search matches.</comment>
+  </data>
+  <data name="DataFlowSingular" xml:space="preserve">
+    <value>Data Flow</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="DataFlowPlural" xml:space="preserve">
+    <value>Data Flows</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="SearchDataFlows" xml:space="preserve">
+    <value>Search data flows</value>
+    <comment>Search box placeholder.</comment>
+  </data>
+  <data name="DataFlowCsObjectType" xml:space="preserve">
+    <value>Connected System Object Type</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="DataFlowCsAttribute" xml:space="preserve">
+    <value>Connected System Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="DirectionTooltip" xml:space="preserve">
+    <value>{0}: the value moves this way</value>
+    <comment>Tooltip on the direction arrow. {0} is Inbound or Outbound.</comment>
+  </data>
+  <data name="DataFlowPriority" xml:space="preserve">
+    <value>Priority</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="PriorityColumnTooltip" xml:space="preserve">
+    <value>Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are.</value>
+    <comment>Tooltip on the Priority column heading.</comment>
+  </data>
+  <data name="NullIsValueTooltip" xml:space="preserve">
+    <value>This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor.</value>
+    <comment>Tooltip on the Null is a value chip.</comment>
+  </data>
+  <data name="DataFlowNullIsValue" xml:space="preserve">
+    <value>Null is a value</value>
+    <comment>Column heading and chip for the null-is-value option.</comment>
+  </data>
+  <data name="DriftCorrectionTooltip" xml:space="preserve">
+    <value>Drift Correction is on for this rule: a value changed in the Connected System is corrected back to the Metaverse's value.</value>
+    <comment>Tooltip on the Enforce State chip.</comment>
+  </data>
+  <data name="DataFlowEnforceState" xml:space="preserve">
+    <value>Enforce State</value>
+    <comment>Column heading and chip for the enforce-state option.</comment>
+  </data>
+  <data name="DisabledRuleTooltip" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled, so this flow is configured but moves no data.</value>
+    <comment>Tooltip on the Disabled chip.</comment>
+  </data>
+  <data name="DataFlowNoMatchSearch" xml:space="preserve">
+    <value>No data flows match "{0}"</value>
+    <comment>Empty state heading. {0} is the search text.</comment>
+  </data>
+  <data name="DataFlowNoMatchFilters" xml:space="preserve">
+    <value>No data flows match these filters</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="DataFlowClearFilter" xml:space="preserve">
+    <value>Clear one of the filters above to widen the list.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="DataFlowNoneConfigured" xml:space="preserve">
+    <value>No data flows are configured</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="DataFlowNoneHint" xml:space="preserve">
+    <value>Add Attribute Flows to a Synchronisation Rule and they will appear here.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="DataFlowOptions" xml:space="preserve">
+    <value>Options</value>
+    <comment>Column heading when no direction is chosen.</comment>
+  </data>
+  <data name="AuxDialogTitle" xml:space="preserve">
+    <value>Auxiliary classes for {0}</value>
+    <comment>Dialog title. {0} is the Object Type's name.</comment>
+  </data>
+  <data name="AuxNoneDefined" xml:space="preserve">
+    <value>{0} defines no auxiliary classes, so there is nothing to merge into {1}.</value>
+    <comment>Shown when the schema has no auxiliary classes. {0} is the Connected System, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxIntro" xml:space="preserve">
+    <value>Only the classes you enable here shape the schema; suggestions never apply themselves. A merged class's attributes join the Object Type at the next schema refresh.</value>
+    <comment>Intro in the auxiliary classes dialog.</comment>
+  </data>
+  <data name="AuxSearchLabel" xml:space="preserve">
+    <value>Search auxiliary classes</value>
+    <comment>Search box label.</comment>
+  </data>
+  <data name="AuxChipSuggested" xml:space="preserve">
+    <value>Suggested ({0})</value>
+    <comment>Filter chip. {0} is the count.</comment>
+  </data>
+  <data name="AuxChipInUse" xml:space="preserve">
+    <value>In use ({0})</value>
+    <comment>Filter chip. {0} is the count.</comment>
+  </data>
+  <data name="AuxNothingSuggested" xml:space="preserve">
+    <value>Nothing is suggested. Run discovery below, or show every class in the schema.</value>
+    <comment>Empty list when nothing is suggested.</comment>
+  </data>
+  <data name="AuxNoMatch" xml:space="preserve">
+    <value>No auxiliary class matches that name.</value>
+    <comment>Empty list after a search.</comment>
+  </data>
+  <data name="AuxDitContentRuleTooltip" xml:space="preserve">
+    <value>{0} publishes a DIT Content Rule saying this class may attach to {1} entries. It is a statement of what is permitted, not of what is in use.</value>
+    <comment>Tooltip on the suggested-by-DIT chip. {0} is the Connected System, {1} the Object Type. DIT is an LDAP term.</comment>
+  </data>
+  <data name="AuxSuggestedDit" xml:space="preserve">
+    <value>suggested: DIT Content Rule</value>
+    <comment>Chip for a class the DIT Content Rule permits.</comment>
+  </data>
+  <data name="AuxSuggestedInUse" xml:space="preserve">
+    <value>suggested: in use on {0} entries</value>
+    <comment>Chip for a class observed by discovery. {0} is the count.</comment>
+  </data>
+  <data name="AuxAttributeCountOne" xml:space="preserve">
+    <value>+{0} attribute</value>
+    <comment>Button: the attributes a class adds. Plural rule: one form.</comment>
+  </data>
+  <data name="AuxAttributeCountOther" xml:space="preserve">
+    <value>+{0} attributes</value>
+    <comment>Button: the attributes a class adds. {0} is the count.</comment>
+  </data>
+  <data name="AuxNoOwnAttributes" xml:space="preserve">
+    <value>This class defines no attributes of its own.</value>
+    <comment>Shown when a class adds no attributes.</comment>
+  </data>
+  <data name="AuxRequired" xml:space="preserve">
+    <value>required</value>
+    <comment>Marks a required attribute.</comment>
+  </data>
+  <data name="AuxCredentialNotSelectable" xml:space="preserve">
+    <value>credential, never selectable</value>
+    <comment>Marks a credential attribute.</comment>
+  </data>
+  <data name="AuxNotYetRead" xml:space="preserve">
+    <value>These classes come from the schema. JIM has not yet read {0}'s entries to find which of them are in use.</value>
+    <comment>Discovery status before any run. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxDiscoverInUse" xml:space="preserve">
+    <value>Discover classes in use</value>
+    <comment>Button that opens discovery.</comment>
+  </data>
+  <data name="AuxDiscoverAgain" xml:space="preserve">
+    <value>Discover again</value>
+    <comment>Button that opens discovery after a run.</comment>
+  </data>
+  <data name="AuxDiscoveryIntro" xml:space="preserve">
+    <value>Discovery reads {0}'s entries to find which auxiliary classes they actually carry. It only adds suggestions to the list above; every auxiliary class in the schema is listed for enabling either way.</value>
+    <comment>Explains discovery. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxQuickSample" xml:space="preserve">
+    <value>Quick sample</value>
+    <comment>Radio option.</comment>
+  </data>
+  <data name="AuxQuickSampleHelp" xml:space="preserve">
+    <value>Reads the first entries of each Object Type. Fast. A directory returns entries in its own order, so a rarely used class can be missed; the results are ranked suggestions, never limits.</value>
+    <comment>Explains the quick sample.</comment>
+  </data>
+  <data name="AuxFullScan" xml:space="preserve">
+    <value>Full scan</value>
+    <comment>Radio option.</comment>
+  </data>
+  <data name="AuxFullScanHelp" xml:space="preserve">
+    <value>Reads every entry in scope, asking for its class membership and nothing else. Complete, and the only scope whose answer of "this class is not in use" means anything. It can take a long time on a large directory, and runs as an Activity you can watch and cancel.</value>
+    <comment>Explains the full scan.</comment>
+  </data>
+  <data name="AuxEntriesPerType" xml:space="preserve">
+    <value>Entries to read per Object Type</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="AuxApplying" xml:space="preserve">
+    <value>Applying</value>
+    <comment>Button while the classes are applied.</comment>
+  </data>
+  <data name="AuxChangeFailed" xml:space="preserve">
+    <value>The auxiliary classes of '{0}' could not be changed.</value>
+    <comment>Error snackbar. {0} is the Object Type.</comment>
+  </data>
+  <data name="AuxCarriesOne" xml:space="preserve">
+    <value>'{0}' now carries {1} auxiliary class. Refresh the schema to bring in the attributes.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="AuxCarriesOther" xml:space="preserve">
+    <value>'{0}' now carries {1} auxiliary classes. Refresh the schema to bring in the attributes.</value>
+    <comment>Success snackbar. {1} is the count.</comment>
+  </data>
+  <data name="AuxRemovedOne" xml:space="preserve">
+    <value>{0} auxiliary class is no longer merged into '{1}'.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="AuxRemovedOther" xml:space="preserve">
+    <value>{0} auxiliary classes are no longer merged into '{1}'.</value>
+    <comment>Success snackbar. {0} is the count.</comment>
+  </data>
+  <data name="AuxDiscoveryQueued" xml:space="preserve">
+    <value>Discovery queued. Its progress and results are on its Activity.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxDiscoveryNotStarted" xml:space="preserve">
+    <value>Discovery could not be started.</value>
+    <comment>Error snackbar fallback.</comment>
+  </data>
+  <data name="AuxObservationTooltip" xml:space="preserve">
+    <value>The last discovery run saw this class on {0} of the entries it read. A quick sample counts within the sample, not within the whole population.</value>
+    <comment>Tooltip on the in-use chip. {0} is the count.</comment>
+  </data>
+  <data name="AuxStatusRunning" xml:space="preserve">
+    <value>Running</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusComplete" xml:space="preserve">
+    <value>Last completed</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusCancelled" xml:space="preserve">
+    <value>Cancelled, partial</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusFailed" xml:space="preserve">
+    <value>Failed</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusNotRun" xml:space="preserve">
+    <value>Not run</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxRunQuickSample" xml:space="preserve">
+    <value>Quick sample ({0} per Object Type)</value>
+    <comment>Describes a discovery run. {0} is the count.</comment>
+  </data>
+  <data name="AuxRunStarted" xml:space="preserve">
+    <value>started {0}</value>
+    <comment>Describes a run in progress. {0} is a relative time.</comment>
+  </data>
+  <data name="AuxRunSummary" xml:space="preserve">
+    <value>{0}, {1}, {2} entries read</value>
+    <comment>Describes a discovery run: scope, when, entries read.</comment>
+  </data>
+  <data name="AuxHeading" xml:space="preserve">
+    <value>Auxiliary Classes</value>
+    <comment>Panel heading and its info popover title.</comment>
+  </data>
+  <data name="AuxPanelInfo" xml:space="preserve">
+    <value>The classes this Object Type is made of: its own structural class, plus the auxiliary classes merged into it, whose attributes join the Object Type at the next schema refresh. Only the classes you enable shape the schema; suggestions never apply themselves.</value>
+    <comment>Info popover body on the auxiliary classes panel.</comment>
+  </data>
+  <data name="AuxPanelNoneDefined" xml:space="preserve">
+    <value>{0} defines no auxiliary classes, so there is nothing to merge into this Object Type.</value>
+    <comment>Shown when the schema has no auxiliary classes. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxMadeOf" xml:space="preserve">
+    <value>Made of</value>
+    <comment>Label before the composition chips.</comment>
+  </data>
+  <data name="AuxAddClass" xml:space="preserve">
+    <value>Add auxiliary class</value>
+    <comment>Button that opens the auxiliary classes dialog.</comment>
+  </data>
+  <data name="AuxMergedCount" xml:space="preserve">
+    <value>{0} of {1} auxiliary classes merged</value>
+    <comment>Count of merged classes. {0} merged, {1} in total (formatted numbers).</comment>
+  </data>
+  <data name="AuxPanelNotYetRead" xml:space="preserve">
+    <value>JIM has not yet read {0}'s entries to find which auxiliary classes are in use; Add auxiliary class offers to discover them.</value>
+    <comment>Discovery status before any run. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxViewActivity" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Link to the discovery run's Activity.</comment>
+  </data>
+  <data name="AuxCancelledRunNote" xml:space="preserve">
+    <value>A cancelled run keeps what it found. Those classes are genuinely in use; the ones it never reached are simply unknown.</value>
+    <comment>Shown after a cancelled discovery run.</comment>
+  </data>
+  <data name="AuxCarrierIntro" xml:space="preserve">
+    <value>Every entry in {0} carries exactly one structural class. Name the one JIM should write alongside {1} when it creates an entry of this Object Type.</value>
+    <comment>Provisioning intro for an auxiliary Object Type. {0} is the Connected System, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxProvisioning" xml:space="preserve">
+    <value>Provisioning</value>
+    <comment>Panel heading for an auxiliary Object Type.</comment>
+  </data>
+  <data name="AuxCarrierLabel" xml:space="preserve">
+    <value>Structural Carrier Class</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="AuxCarrierUnset" xml:space="preserve">
+    <value>Until a carrier is chosen, JIM can import {0} objects but cannot create them.</value>
+    <comment>Warning. {0} is the Object Type.</comment>
+  </data>
+  <data name="AuxCarrierCreate" xml:space="preserve">
+    <value>On create, JIM writes both {0} and {1}.</value>
+    <comment>Caption under the carrier picker. {0} is the carrier class, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxOfferChangeFailed" xml:space="preserve">
+    <value>'{0}' could not be changed.</value>
+    <comment>Error snackbar. {0} is the class.</comment>
+  </data>
+  <data name="AuxMergedMessage" xml:space="preserve">
+    <value>'{0}' merged into '{1}'. Refresh the schema to bring in its attributes.</value>
+    <comment>Success snackbar. {0} the class, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxUnmergedMessage" xml:space="preserve">
+    <value>'{0}' is no longer merged into '{1}'.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxCarrierChangeFailed" xml:space="preserve">
+    <value>The Structural Carrier Class for '{0}' could not be changed.</value>
+    <comment>Error snackbar. {0} is the Object Type.</comment>
+  </data>
+  <data name="AuxCarrierRemoved" xml:space="preserve">
+    <value>'{0}' no longer has a Structural Carrier Class, so JIM cannot create its objects.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxCarrierSet" xml:space="preserve">
+    <value>'{0}' objects will be created as '{1}'.</value>
+    <comment>Success snackbar. {0} is the Object Type, {1} the carrier class.</comment>
+  </data>
+  <data name="AuxRunFinished" xml:space="preserve">
+    <value>The discovery run has already finished.</value>
+    <comment>Info snackbar.</comment>
+  </data>
+  <data name="AuxCancelRequested" xml:space="preserve">
+    <value>Cancellation requested. What the run has already found is kept.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxRunBy" xml:space="preserve">
+    <value> by {0}</value>
+    <comment>Appended to a discovery run's description. {0} is the initiator's name.</comment>
+  </data>
+  <data name="AuxRunSummaryBy" xml:space="preserve">
+    <value>{0}, {1}{2}, {3} entries read</value>
+    <comment>Describes a discovery run. {2} is ' by name' or nothing.</comment>
+  </data>
+  <data name="DataFlowSources" xml:space="preserve">
+    <value>Sources</value>
+    <comment>Title of the list of a flow's sources, opened from the first one.</comment>
+  </data>
+  <data name="ChangeTypeHeader" xml:space="preserve">
+    <value>Change Type</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ChangeDetailsHeader" xml:space="preserve">
+    <value>Details</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ChangeObjectTypesAdded" xml:space="preserve">
+    <value>Object Types Added</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeObjectTypesUpdated" xml:space="preserve">
+    <value>Object Types Updated</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeObjectTypesRenamed" xml:space="preserve">
+    <value>Object Types Renamed</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeClassificationRecorded" xml:space="preserve">
+    <value>Object Type Classification Recorded</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeAttributesAdded" xml:space="preserve">
+    <value>Attributes Added ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeAttributesRenamed" xml:space="preserve">
+    <value>Attributes Renamed ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeObjectTypesNoLongerReported" xml:space="preserve">
+    <value>Object Types No Longer Reported</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeAttributesNoLongerReported" xml:space="preserve">
+    <value>Attributes No Longer Reported ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeAttributeDefinitionsChanged" xml:space="preserve">
+    <value>Attribute Definitions Changed ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeClassificationChanged" xml:space="preserve">
+    <value>Object Type Classification Changed ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeAspectDataType" xml:space="preserve">
+    <value>data type</value>
+    <comment>The aspect of an attribute that changed.</comment>
+  </data>
+  <data name="ChangeAspectPlurality" xml:space="preserve">
+    <value>plurality</value>
+    <comment>The aspect of an attribute that changed.</comment>
+  </data>
+  <data name="ChangeAspectWritability" xml:space="preserve">
+    <value>writability</value>
+    <comment>The aspect of an attribute that changed.</comment>
+  </data>
+  <data name="ChangeDefinitionLine" xml:space="preserve">
+    <value>{0}: {1} {2} → {3}</value>
+    <comment>An attribute definition change. {0} attribute name, {1} the aspect, {2} the old value, {3} the new value.</comment>
+  </data>
+  <data name="ChangeAspectClassKind" xml:space="preserve">
+    <value>class kind</value>
+    <comment>The aspect of a classification that changed.</comment>
+  </data>
+  <data name="ChangeAspectInheritedClasses" xml:space="preserve">
+    <value>inherited classes</value>
+    <comment>The aspect of a classification that changed.</comment>
+  </data>
+  <data name="ChangeClassificationLine" xml:space="preserve">
+    <value>{0} {1} → {2}</value>
+    <comment>A classification change. {0} the aspect, {1} the old values, {2} the new values.</comment>
+  </data>
+  <data name="ChangeNone" xml:space="preserve">
+    <value>none</value>
+    <comment>Shown for an empty list of classes.</comment>
+  </data>
+  <data name="RemovedPartitionIntro" xml:space="preserve">
+    <value>The Connected System no longer has {0} that {1} {2}. Removing {3} would leave {4} reading every selected partition, so nothing from this refresh has been saved yet.</value>
+    <comment>Dialog intro. {0} is the partition phrase, {1} the Run Profile count, {2} the verb, {3} the pronoun, {4} the Run Profile reference.</comment>
+  </data>
+  <data name="RemovedPartitionPartitionOne" xml:space="preserve">
+    <value>a partition</value>
+    <comment>Partition phrase, one partition. Plural rule: one form.</comment>
+  </data>
+  <data name="RemovedPartitionPartitionOther" xml:space="preserve">
+    <value>partitions</value>
+    <comment>Partition phrase, several partitions.</comment>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOne" xml:space="preserve">
+    <value>1 Run Profile</value>
+    <comment>Run Profile count, one. Plural rule: one form.</comment>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOther" xml:space="preserve">
+    <value>{0} Run Profiles</value>
+    <comment>Run Profile count, several. {0} is the count.</comment>
+  </data>
+  <data name="RemovedPartitionTargetsOne" xml:space="preserve">
+    <value>targets</value>
+    <comment>Verb, one Run Profile. Plural rule: one form.</comment>
+  </data>
+  <data name="RemovedPartitionTargetsOther" xml:space="preserve">
+    <value>target</value>
+    <comment>Verb, several Run Profiles.</comment>
+  </data>
+  <data name="RemovedPartitionItOne" xml:space="preserve">
+    <value>it</value>
+    <comment>Pronoun for one partition.</comment>
+  </data>
+  <data name="RemovedPartitionItOther" xml:space="preserve">
+    <value>them</value>
+    <comment>Pronoun for several partitions.</comment>
+  </data>
+  <data name="RemovedPartitionThatSingle" xml:space="preserve">
+    <value>that Run Profile</value>
+    <comment>Reference to one Run Profile.</comment>
+  </data>
+  <data name="RemovedPartitionThoseOther" xml:space="preserve">
+    <value>those Run Profiles</value>
+    <comment>Reference to several Run Profiles.</comment>
+  </data>
+  <data name="RemovedPartitionExplain" xml:space="preserve">
+    <value>{0} applies the refresh and disables each one, keeping its other settings. Enable it again on the Run Profiles tab, choosing the partition it reads. {1} applies nothing from this refresh.</value>
+    <comment>Explains the choices. {0} is the Disable button's name, {1} the Cancel button's name.</comment>
+  </data>
+  <data name="DisableRunProfiles" xml:space="preserve">
+    <value>Disable Run Profiles</value>
+    <comment>Button that applies the refresh with the Run Profiles disabled.</comment>
+  </data>
+  <data name="RunProfilesTargetRemoved" xml:space="preserve">
+    <value>Run Profiles target a removed partition</value>
+    <comment>Dialog title.</comment>
+  </data>
+</root>

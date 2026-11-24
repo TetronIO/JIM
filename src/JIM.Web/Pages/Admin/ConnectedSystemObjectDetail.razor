@@ -1,4 +1,4 @@
-﻿@page "/admin/connected-systems/{CsId:int}/connector-space/{CsoId}"
+@page "/admin/connected-systems/{CsId:int}/connector-space/{CsoId}"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application.Services
 @using JIM.Models.Logic
@@ -21,7 +21,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>@(ConnectedSystemObject == null ? "Loading…" : $"Connected System Object: {GetDisplayIdentifier()}")</PageTitle>
+<PageTitle>@(ConnectedSystemObject == null ? ConnectorSpaceText.CsoLoadingTitle : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoPageTitle, GetDisplayIdentifier()))</PageTitle>
 
 <LoadingGate IsLoading="@(ConnectedSystemHeader == null || ConnectedSystemObject == null)">
     <Loading>
@@ -29,13 +29,13 @@
     </Loading>
     <LongLoadMessage>
         <MudAlert Severity="Severity.Info">
-            Still loading. Large objects can take a few seconds to retrieve.
+            @ConnectorSpaceText.CsoStillLoading
         </MudAlert>
     </LongLoadMessage>
     <Loaded>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Object:</span> <span class="mud-primary-text">@GetDisplayIdentifier()</span>
-    <PageInfo Title="Connected System Object" DocsPage="configuration/connector-space.md#connected-system-objects">
-        A view of this object as staged within JIM. This includes any attribute values imported from the Connected System, as well as any Pending Export changes awaiting export.
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@ConnectorSpaceText.CsoHeadingLabel</span> <span class="mud-primary-text">@GetDisplayIdentifier()</span>
+    <PageInfo Title="@ConnectorSpaceText.CsoTerm" DocsPage="configuration/connector-space.md#connected-system-objects">
+        @ConnectorSpaceText.CsoPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -47,7 +47,7 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
             @* Object Type *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">Type:</MudText>
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">@ConnectorSpaceText.CsoLabelType</MudText>
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Primary">
                     @ConnectedSystemObject.Type.Name
                 </MudChip>
@@ -56,9 +56,9 @@
 
             @* Status *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">Status:</MudText>
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">@ConnectorSpaceText.CsoLabelStatus</MudText>
                 <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(ConnectedSystemObject.Status)">
-                    @ConnectedSystemObject.Status.ToString().SplitOnCapitalLetters()
+                    @ConnectedSystemObject.Status.ForDisplay()
                 </MudChip>
             </MudStack>
             <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
@@ -66,7 +66,7 @@
             @* Created *@
             <MudTooltip Text="@ConnectedSystemObject.Created.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Created:</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">@ConnectorSpaceText.CsoLabelCreated</MudText>
                     <MudText Typo="Typo.body1">@ConnectedSystemObject.Created.ToRelativeTime()</MudText>
                 </MudStack>
             </MudTooltip>
@@ -78,7 +78,7 @@
                 <MudTooltip Text="@ConnectedSystemObject.LastUpdated.Value.ToFriendlyDate()" Arrow="true"
                     Placement="Placement.Top">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">Updated:</MudText>
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@ConnectorSpaceText.CsoLabelUpdated</MudText>
                         <MudText Typo="Typo.body1">@ConnectedSystemObject.LastUpdated.Value.ToRelativeTime()</MudText>
                     </MudStack>
                 </MudTooltip>
@@ -89,14 +89,14 @@
             {
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Metaverse Object:</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">@ConnectorSpaceText.CsoLabelMetaverseObject</MudText>
                     <MudLink Typo="Typo.body1" Href="@Utilities.GetMetaverseObjectHref(ConnectedSystemObject.MetaverseObject)">
                         @ConnectedSystemObject.MetaverseObject.NameOrId
                     </MudLink>
                 </MudStack>
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Join Type:</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">@ConnectorSpaceText.CsoLabelJoinType</MudText>
                     <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(ConnectedSystemObject.JoinType)">
                         @ConnectedSystemObject.JoinType
                     </MudChip>
@@ -110,13 +110,13 @@
             <MudButton Variant="Variant.Filled" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
                        Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
-                @(_previewLoading ? "Previewing…" : "Preview Sync")
+                @(_previewLoading ? ConnectorSpaceText.CsoPreviewing : ConnectorSpaceText.CsoPreviewSync)
             </MudButton>
 
             @* Opens the Causality Explorer on this object (#2100): what happened to it, newest first, and why. *@
             <MudButton Variant="Variant.Filled" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Hub" Href="@($"/causality/connected-system-objects/{ConnectedSystemObject.Id}")"
-                       data-testid="jim-cso-explore-causality">Explore causality</MudButton>
+                       data-testid="jim-cso-explore-causality">@ConnectorSpaceText.CsoExploreCausality</MudButton>
 
             @* Offered only where the Connector can actually set a password, so the action is never presented *@
             @* against a Connected System that could not carry it out (issue #1121), and only for an account   *@
@@ -126,7 +126,7 @@
             {
                 <MudButton Variant="Variant.Filled" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
-                           data-testid="jim-cso-set-password">Set Password</MudButton>
+                           data-testid="jim-cso-set-password">@ConnectorSpaceText.CsoSetPassword</MudButton>
             }
         </MudStack>
 
@@ -159,12 +159,9 @@
     @if (PendingExport != null && _pendingExportTotalCount > 0)
     {
         <MudPaper Class="pa-4 mt-6" Outlined="true">
-            <MudText Typo="Typo.h6">Pending Exports</MudText>
+            <MudText Typo="Typo.h6">@ConnectorSpaceText.CsoPendingExportsTitle</MudText>
             <MudText Typo="Typo.subtitle1" Class="my-3">
-                The following attribute changes are pending for this Connected System. These may be awaiting export, or have
-                already been exported
-                and are awaiting confirmation via a subsequent import. Once confirmed, these changes will be reflected in the
-                Connected System Object attribute values below.
+                @ConnectorSpaceText.CsoPendingExportsIntro
             </MudText>
             @* Queued changes are unbounded (one Pending Export can carry every value of a large group), so the
                grid streams windows from a range read rather than the page loading them all. No column offers a
@@ -175,21 +172,21 @@
                                  StateKey="@CsoId"
                                  DefaultSortBy="@SourceOrderSort"
                                  LoadWindow="LoadPendingExportWindowAsync"
-                                 SearchPlaceholder="Search Pending Exports..."
-                                 SingularName="Change"
-                                 PluralName="Changes">
+                                 SearchPlaceholder="@ConnectorSpaceText.CsoSearchPendingExports"
+                                 SingularName="@ConnectorSpaceText.CsoChangeSingular"
+                                 PluralName="@ConnectorSpaceText.CsoChangePlural">
                 <Columns>
-                    <TemplateColumn Title="Attribute" Sortable="false">
+                    <TemplateColumn Title="@ConnectorSpaceText.CsoColumnAttribute" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Attribute</MudText>
+                            <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnAttribute</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
-                            @(context.Item.Attribute?.Name ?? $"Attribute {context.Item.AttributeId}")
+                            @(context.Item.Attribute?.Name ?? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoAttributeFallback, context.Item.AttributeId))
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Change Type" Sortable="false">
+                    <TemplateColumn Title="@ConnectorSpaceText.CsoColumnChangeType" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Change Type</MudText>
+                            <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnChangeType</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
                             <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.Item.ChangeType)">
@@ -197,9 +194,9 @@
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Value" Sortable="false">
+                    <TemplateColumn Title="@ConnectorSpaceText.CsoColumnValue" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Value</MudText>
+                            <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnValue</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
                             @* A value bound for the Connected System is an identifier or a literal, so it takes the
@@ -208,27 +205,27 @@
                             <TextValueDisplay Value="@GetAttributeValue(context.Item)" Class="jim-text-code" />
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Status" Sortable="false">
+                    <TemplateColumn Title="@CommonText.ColumnStatus" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Status</MudText>
+                            <MudText Typo="Typo.button">@CommonText.ColumnStatus</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
                             <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Item.Status)">
-                                @context.Item.Status.ToString().SplitOnCapitalLetters()
+                                @context.Item.Status.ForDisplay()
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Export Attempts" Sortable="false">
+                    <TemplateColumn Title="@ConnectorSpaceText.CsoColumnExportAttempts" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Export Attempts</MudText>
+                            <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnExportAttempts</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
                             @context.Item.ExportAttemptCount
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Last Exported" Sortable="false">
+                    <TemplateColumn Title="@ConnectorSpaceText.CsoColumnLastExported" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Last Exported</MudText>
+                            <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnLastExported</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
                             @if (context.Item.LastExportedAt.HasValue)
@@ -247,16 +244,16 @@
                     @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                     {
                         <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                         PrimaryText="@($"No queued changes match \"{grid.SearchText}\"")"
-                                         SecondaryText="Try a different search term, or clear the search."
-                                         ActionText="Clear Search"
+                                         PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoPendingNoSearchMatch, grid.SearchText)"
+                                         SecondaryText="@CommonText.TrySearchAgain"
+                                         ActionText="@CommonText.ClearSearch"
                                          OnAction="@(() => grid.ClearSearchAsync())" />
                     }
                     else
                     {
                         <TableEmptyState Icon="@Icons.Material.Filled.PublishedWithChanges"
-                                         PrimaryText="No changes are queued for this object"
-                                         SecondaryText="Changes appear here while a Pending Export waits to be exported, and are cleared once the Connected System confirms them." />
+                                         PrimaryText="@ConnectorSpaceText.CsoPendingNoneQueued"
+                                         SecondaryText="@ConnectorSpaceText.CsoPendingNoneQueuedHint" />
                     }
                 </EmptyContent>
             </VirtualisedDataGrid>
@@ -269,7 +266,7 @@
        own, so its content supplies the same gap itself below. See JIM.Web/CLAUDE.md "Tab content spacing". *@
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
                       TabPanelsClass="pa-0">
-        <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
+        <MudTabPanel Text="@ConnectorSpaceText.CsoTabAttributes" Icon="@Icons.Material.Filled.ListAlt">
             @* One row per attribute. The object's attribute values were loaded with the rest of the page (capped
                per multi-valued attribute), so the search and the five sorts run over that list in memory. *@
             <CascadingValue Value="@_unresolvedReferenceCauses">
@@ -282,11 +279,11 @@
                             RowClassFunc="@((group, _) => group.TotalCount > 1 ? "jim-attr-row-mva" : string.Empty)"
                             Class="mt-5">
                 <HeaderContent>
-                    <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
-                    <MudTh Class="jim-attr-header-value"><VirtualisedSortHeader Title="Value" Name="value" /></MudTh>
-                    <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="Type" Name="type" /></MudTh>
-                    <MudTh Class="jim-attr-header-plurality"><VirtualisedSortHeader Title="Plurality" Name="plurality" /></MudTh>
-                    <MudTh Class="jim-attr-header-extid"><VirtualisedSortHeader Title="External ID?" Name="externalid" /></MudTh>
+                    <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="@ConnectorSpaceText.CsoColumnAttribute" Name="attribute" /></MudTh>
+                    <MudTh Class="jim-attr-header-value"><VirtualisedSortHeader Title="@ConnectorSpaceText.CsoColumnValue" Name="value" /></MudTh>
+                    <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" /></MudTh>
+                    <MudTh Class="jim-attr-header-plurality"><VirtualisedSortHeader Title="@ConnectorSpaceText.CsoColumnPlurality" Name="plurality" /></MudTh>
+                    <MudTh Class="jim-attr-header-extid"><VirtualisedSortHeader Title="@ConnectorSpaceText.CsoColumnExternalIdQuestion" Name="externalid" /></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd Class="jim-attr-name">
@@ -294,14 +291,14 @@
                         <ConnectorDefinedChip Attribute="@context.Values.FirstOrDefault()?.Attribute" ConnectorName="@ConnectedSystemHeader?.ConnectorName" />
                         @if (IsUnmanagedAttribute(context))
                         {
-                            <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
+                            <MudTooltip Text="@ConnectorSpaceText.CsoUnmanagedTooltip" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">@ConnectorSpaceText.CsoChipUnmanaged</MudChip>
                             </MudTooltip>
                         }
                         @if (IsCreateOnlyAttribute(context))
                         {
                             <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Set on creation only</MudChip>
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">@ConnectorSpaceText.CsoChipCreateOnly</MudChip>
                             </MudTooltip>
                         }
                     </MudTd>
@@ -324,16 +321,16 @@
                         <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
                     </MudTd>
                     <MudTd Class="jim-attr-plurality">
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? ConnectorSpaceText.CsoPluralityMulti : ConnectorSpaceText.CsoPluralitySingle)</MudText>
                     </MudTd>
                     <MudTd>
                         @if (IsExternalId(context.Values[0]))
                         {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">@ConnectorSpaceText.DeletedColumnExternalId</MudChip>
                         }
                         else if (IsSecondaryExternalId(context.Values[0]))
                         {
-                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">@ConnectorSpaceText.CsoChipSecondaryId</MudChip>
                         }
                         else
                         {
@@ -343,13 +340,13 @@
                 </RowTemplate>
                 <EmptyContent>
                     <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                                     PrimaryText="This object has no attribute values"
-                                     SecondaryText="Values appear here once an Import brings them in from the Connected System." />
+                                     PrimaryText="@ConnectorSpaceText.CsoNoAttributeValues"
+                                     SecondaryText="@ConnectorSpaceText.CsoNoAttributeValuesHint" />
                 </EmptyContent>
             </AttributeTable>
             </CascadingValue>
         </MudTabPanel>
-        <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
+        <MudTabPanel Text="@ConnectorSpaceText.CsoTabChangeHistory" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
             @* mt-5 here matches the gap the Attributes grid gives itself above, since the panels carry none. *@
             <div class="mt-5">
             @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
@@ -360,7 +357,7 @@
             }
             else if (_changeCount == 0)
             {
-                <MudAlert Severity="Severity.Info">No change history recorded for this object.</MudAlert>
+                <MudAlert Severity="Severity.Info">@ConnectorSpaceText.CsoNoChangeHistory</MudAlert>
             }
             else
             {
@@ -378,7 +375,7 @@
                             {
                                 <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="me-2" />
                             }
-                            Load more (@($"{_changeHistoryTotal - _changeHistoryRows.Count:N0}") remaining)
+                            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoLoadMore, (_changeHistoryTotal - _changeHistoryRows.Count).ToString("N0"))
                         </MudButton>
                     </div>
                 }
@@ -507,7 +504,7 @@
             { x => x.ConfirmStopTrying, ConfirmStopPasswordChangeAsync }
         };
 
-        await DialogService.ShowAsync<SetPasswordDialog>("Set Password", parameters,
+        await DialogService.ShowAsync<SetPasswordDialog>(ConnectorSpaceText.CsoSetPassword, parameters,
             new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
     }
 
@@ -631,11 +628,11 @@
 
         Breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Administration", href: "/admin"),
-            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(ConnectorSpaceText.DeletedHomeBreadcrumb, href: "/", icon: Icons.Material.Filled.Home),
+            new(ConnectorSpaceText.DeletedAdministrationBreadcrumb, href: "/admin"),
+            new(ConnectorSpaceText.CsoBreadcrumbConnectedSystems, href: "/admin/connected-systems/"),
             new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
-            new("Connector Space", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
+            new(ConnectorSpaceText.CsoBreadcrumbConnectorSpace, href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
             new(GetDisplayIdentifier(), href: null, disabled: true)
         };
 
@@ -959,11 +956,11 @@
             using var jim = JimFactory.Create();
             _previewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(CsId, ConnectedSystemObject.Id);
             if (_previewResult.HasBlockingErrors)
-                Snackbar.Add("The Sync Preview found something that would stop the synchronisation; see the details below.", Severity.Warning);
+                Snackbar.Add(ConnectorSpaceText.CsoPreviewBlocking, Severity.Warning);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoPreviewFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -987,7 +984,7 @@
         return new CausalityPageContext(
             ConnectedSystemId: CsId,
             ConnectedSystemName: ConnectedSystemHeader?.Name,
-            RunProfileName: "Full Synchronisation",
+            RunProfileName: ConnectorSpaceText.CsoFullSynchronisation,
             CsoId: ConnectedSystemObject?.Id,
             CsoConnectedSystemId: CsId,
             CsoConnectedSystemName: ConnectedSystemHeader?.Name,

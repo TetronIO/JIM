@@ -203,4 +203,52 @@ public class PendingExportUnresolvedReferencesDatabaseTests
                 "each change's attribute is hydrated for the resolver");
         }
     }
+
+    /// <summary>
+    /// #3053: the lookup a Delta Import makes once it learns the target deleted objects returns exactly the Pending Exports of
+    /// that Connected System holding an exported removal of a reference to one, with each change's attribute hydrated: not a
+    /// removal still to be sent, not an addition of a reference to one, and not another Connected System's.
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportsAwaitingRemovalOfReferencesToAsync_ReturnsOnlyExportedRemovalsOfReferencesToTheGivenObjectsAsync()
+    {
+        var (systemAId, systemBId, attributeAId) = await SeedTwoSystemsAsync();
+        var deleted = Guid.NewGuid();
+
+        PendingExport Removal(int systemId, Guid target, PendingExportAttributeChangeStatus status,
+            PendingExportAttributeChangeType changeType = PendingExportAttributeChangeType.Remove)
+        {
+            var pendingExport = BuildPendingExport(systemId, PendingExportStatus.Exported, hasUnresolvedReferences: false, attributeAId);
+            var change = pendingExport.AttributeValueChanges[0];
+            change.ChangeType = changeType;
+            change.Status = status;
+            change.ResolvedReferenceCsoId = target;
+            return pendingExport;
+        }
+
+        var exported = Removal(systemAId, deleted, PendingExportAttributeChangeStatus.ExportedPendingConfirmation);
+        var notConfirmedYet = Removal(systemAId, deleted, PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+        var stillToBeSent = Removal(systemAId, deleted, PendingExportAttributeChangeStatus.Pending);
+        var addition = Removal(systemAId, deleted, PendingExportAttributeChangeStatus.ExportedPendingConfirmation, PendingExportAttributeChangeType.Add);
+        var someoneElse = Removal(systemAId, Guid.NewGuid(), PendingExportAttributeChangeStatus.ExportedPendingConfirmation);
+        var otherSystem = Removal(systemBId, deleted, PendingExportAttributeChangeStatus.ExportedPendingConfirmation);
+
+        await using (var seed = NewContext())
+        {
+            seed.PendingExports.AddRange(exported, notConfirmedYet, stillToBeSent, addition, someoneElse, otherSystem);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var result = await repository.Sync.GetPendingExportsAwaitingRemovalOfReferencesToAsync(systemAId, [deleted]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Select(pe => pe.Id), Is.EquivalentTo(new[] { exported.Id, notConfirmedYet.Id }));
+            Assert.That(result.SelectMany(pe => pe.AttributeValueChanges).Select(c => c.Attribute?.Name), Is.All.EqualTo("manager"),
+                "each change's attribute is hydrated");
+        }
+    }
 }

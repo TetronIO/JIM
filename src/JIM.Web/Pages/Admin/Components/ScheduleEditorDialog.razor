@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Scheduling
@@ -16,7 +17,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-2" Style="vertical-align: middle;" />
-            @(ScheduleId.HasValue ? "Edit Schedule" : "New Schedule")
+            @(ScheduleId.HasValue ? OperationsText.ScheduleEditorEditTitle : OperationsText.ScheduleEditorNewTitle)
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -27,59 +28,59 @@
         else if (_schedule != null)
         {
             <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-4" @bind-ActivePanelIndex="_activeTab">
-                <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Settings">
+                <MudTabPanel Text="@OperationsText.ScheduleEditorDetailsTab" Icon="@Icons.Material.Filled.Settings">
                     <MudStack Spacing="3">
                         @if (_schedule.BuiltIn)
                         {
                             <MudAlert Severity="Severity.Info" Dense="true">
-                                This is a built-in schedule. You can change when it runs and enable or disable it, but its name cannot be changed and it cannot be deleted.
+                                @OperationsText.ScheduleEditorBuiltInNotice
                             </MudAlert>
                         }
-                        <MudTextField @bind-Value="_schedule.Name" Immediate="true" Label="Name" Variant="Variant.Outlined"
-                                      Required="true" RequiredError="Name is required"
+                        <MudTextField @bind-Value="_schedule.Name" Immediate="true" Label="@CommonText.ColumnName" Variant="Variant.Outlined"
+                                      Required="true" RequiredError="@OperationsText.ScheduleEditorNameRequired"
                                       ReadOnly="@_schedule.BuiltIn"
-                                      HelperText="@(_schedule.BuiltIn ? "This is a built-in schedule; its name cannot be changed." : "A descriptive name for this schedule")" />
+                                      HelperText="@(_schedule.BuiltIn ? OperationsText.ScheduleEditorNameBuiltInHelp : OperationsText.ScheduleEditorNameHelp)" />
 
-                        <MudTextField @bind-Value="_schedule.Description" Label="Description" Variant="Variant.Outlined"
+                        <MudTextField @bind-Value="_schedule.Description" Label="@CommonText.ColumnDescription" Variant="Variant.Outlined"
                                       Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
-                                      HelperText="Optional description of what this schedule does" />
+                                      HelperText="@OperationsText.ScheduleEditorDescriptionHelp" />
 
                         <MudDivider Class="my-2" />
 
-                        <MudSwitch @bind-Value="_schedule.IsEnabled" Color="Color.Primary" Label="@(_schedule.IsEnabled ? "Schedule is Enabled" : "Schedule is Disabled")" />
+                        <MudSwitch @bind-Value="_schedule.IsEnabled" Color="Color.Primary" Label="@(_schedule.IsEnabled ? OperationsText.ScheduleEditorEnabledOn : OperationsText.ScheduleEditorEnabledOff)" />
                     </MudStack>
                 </MudTabPanel>
 
-                <MudTabPanel Text="Trigger" Icon="@Icons.Material.Filled.Bolt">
+                <MudTabPanel Text="@OperationsText.ScheduleEditorTriggerTab" Icon="@Icons.Material.Filled.Bolt">
                     <MudStack Spacing="3">
                         <MudRadioGroup @bind-Value="_schedule.TriggerType">
                             <MudRadio Value="ScheduleTriggerType.Cron" Color="Color.Primary">
-                                <MudText>Scheduled</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Run automatically on a schedule</MudText>
+                                <MudText>@OperationsText.ScheduleEditorScheduled</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.ScheduleEditorScheduledHelp</MudText>
                             </MudRadio>
                             <MudRadio Value="ScheduleTriggerType.Manual" Color="Color.Primary">
-                                <MudText>Manual Only</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Only run when triggered manually</MudText>
+                                <MudText>@OperationsText.ScheduleEditorManualOnly</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.ScheduleEditorManualOnlyHelp</MudText>
                             </MudRadio>
                         </MudRadioGroup>
 
                         @if (_schedule.TriggerType == ScheduleTriggerType.Cron)
                         {
                             <MudPaper Outlined="true" Class="pa-4 mt-2" Style="overflow: visible;">
-                                <MudText Typo="Typo.subtitle2" Class="mb-3">Schedule Configuration</MudText>
+                                <MudText Typo="Typo.subtitle2" Class="mb-3">@OperationsText.ScheduleEditorConfigurationTitle</MudText>
 
                                 <MudStack Spacing="3">
                                     @* Pattern Type Selection *@
-                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Run Pattern</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@OperationsText.ScheduleEditorRunPattern</MudText>
                                     <MudRadioGroup T="SchedulePatternType" Value="_patternType" ValueChanged="HandlePatternTypeChanged">
                                         <MudRadio Value="SchedulePatternType.SpecificTimes" Color="Color.Primary" Dense="true">
-                                            At specific times
+                                            @OperationsText.ScheduleEditorPatternSpecificTimes
                                         </MudRadio>
                                         <MudRadio Value="SchedulePatternType.Interval" Color="Color.Primary" Dense="true">
-                                            At regular intervals
+                                            @OperationsText.ScheduleEditorPatternInterval
                                         </MudRadio>
                                         <MudRadio Value="SchedulePatternType.Custom" Color="Color.Primary" Dense="true">
-                                            Custom (Cron Expression)
+                                            @OperationsText.ScheduleEditorPatternCustom
                                         </MudRadio>
                                     </MudRadioGroup>
 
@@ -88,7 +89,7 @@
                                         <MudDivider Class="my-1" />
 
                                         @* Days Selection *@
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Days</MudText>
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@OperationsText.ScheduleEditorDays</MudText>
                                         <MudStack Row="true" Spacing="1" Justify="Justify.SpaceBetween">
                                             @foreach (var day in _daysOfWeek)
                                             {
@@ -101,9 +102,9 @@
                                             }
                                         </MudStack>
                                         <MudStack Row="true" Spacing="2">
-                                            <MudButton Variant="Variant.Text" OnClick="SelectAllDays">Every Day</MudButton>
-                                            <MudButton Variant="Variant.Text" OnClick="SelectWeekdays">Weekdays</MudButton>
-                                            <MudButton Variant="Variant.Text" OnClick="SelectWeekends">Weekends</MudButton>
+                                            <MudButton Variant="Variant.Text" OnClick="SelectAllDays">@OperationsText.ScheduleEditorEveryDay</MudButton>
+                                            <MudButton Variant="Variant.Text" OnClick="SelectWeekdays">@OperationsText.ScheduleEditorWeekdays</MudButton>
+                                            <MudButton Variant="Variant.Text" OnClick="SelectWeekends">@OperationsText.ScheduleEditorWeekends</MudButton>
                                         </MudStack>
 
                                         <MudDivider Class="my-1" />
@@ -111,7 +112,7 @@
                                         @if (_patternType == SchedulePatternType.SpecificTimes)
                                         {
                                             @* Multiple Times Selection *@
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Times</MudText>
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@OperationsText.ScheduleEditorTimes</MudText>
                                             <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
                                                 @foreach (var time in _runTimes.ToList())
                                                 {
@@ -120,13 +121,13 @@
                                                         @ScheduleTriggerDisplay.FormatTime(time)
                                                     </MudChip>
                                                 }
-                                                <MudTimePicker @ref="_addTimePicker" Time="_newRunTime" Label="Add time"
+                                                <MudTimePicker @ref="_addTimePicker" Time="_newRunTime" Label="@OperationsText.ScheduleEditorAddTime"
                                                                AmPm="true" TimeChanged="HandleAddRunTime" />
                                             </MudStack>
                                             @if (_runTimes.Count == 0)
                                             {
                                                 <MudAlert Severity="Severity.Warning" Dense="true">
-                                                    Add at least one run time
+                                                    @OperationsText.ScheduleEditorAddTimeRequired
                                                 </MudAlert>
                                             }
                                             else if (GetRunTimesMinuteError() is { } minuteError)
@@ -139,20 +140,20 @@
                                         else if (_patternType == SchedulePatternType.Interval)
                                         {
                                             @* Interval Configuration *@
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Interval</MudText>
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@OperationsText.ScheduleEditorInterval</MudText>
                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Justify="Justify.FlexStart">
-                                                <MudText>Every</MudText>
+                                                <MudText>@OperationsText.ScheduleEditorEvery</MudText>
                                                 <MudNumericField T="int" @bind-Value="_intervalValue" Immediate="true" Variant="Variant.Outlined"
                                                                  Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
                                                                  Class="jim-interval-number" Margin="Margin.Dense" />
                                                 <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
                                                            Class="jim-interval-unit" Margin="Margin.Dense">
-                                                    <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
-                                                    <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Minutes">@OperationsText.ScheduleEditorUnitMinutes</MudSelectItem>
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Hours">@OperationsText.ScheduleEditorUnitHours</MudSelectItem>
                                                 </MudSelect>
                                                 <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true"
                                                              Class="jim-interval-checkbox">
-                                                    Restrict to time window
+                                                    @OperationsText.ScheduleEditorRestrictWindow
                                                 </MudCheckBox>
                                             </MudStack>
 
@@ -160,10 +161,10 @@
                                             {
                                                 <MudGrid Class="mt-2">
                                                     <MudItem xs="12" sm="6">
-                                                        <MudTimePicker @bind-Time="_intervalWindowStart" Label="Start time" AmPm="true" />
+                                                        <MudTimePicker @bind-Time="_intervalWindowStart" Label="@OperationsText.ScheduleEditorStartTime" AmPm="true" />
                                                     </MudItem>
                                                     <MudItem xs="12" sm="6">
-                                                        <MudTimePicker @bind-Time="_intervalWindowEnd" Label="End time" AmPm="true" />
+                                                        <MudTimePicker @bind-Time="_intervalWindowEnd" Label="@OperationsText.ScheduleEditorEndTime" AmPm="true" />
                                                     </MudItem>
                                                 </MudGrid>
                                             }
@@ -172,9 +173,9 @@
                                     else
                                     {
                                         @* Custom Cron Expression *@
-                                        <MudTextField @bind-Value="_customCronExpression" Immediate="true" Label="Cron Expression"
+                                        <MudTextField @bind-Value="_customCronExpression" Immediate="true" Label="@OperationsText.ScheduleEditorCronExpression"
                                                       Variant="Variant.Outlined"
-                                                      HelperText="Format: minute hour day-of-month month day-of-week (e.g., 0 9,12,15,18 * * 1-5)" />
+                                                      HelperText="@OperationsText.ScheduleEditorCronHelp" />
                                     }
 
                                     <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
@@ -184,10 +185,10 @@
                                     @if (_patternType != SchedulePatternType.Custom)
                                     {
                                         <MudExpansionPanels Elevation="0">
-                                            <MudExpansionPanel Text="Advanced: Cron Expression" Expanded="false">
-                                                <MudTextField Value="@BuildCronExpression()" Label="Cron Expression"
+                                            <MudExpansionPanel Text="@OperationsText.ScheduleEditorAdvancedCron" Expanded="false">
+                                                <MudTextField Value="@BuildCronExpression()" Label="@OperationsText.ScheduleEditorCronExpression"
                                                               Variant="Variant.Outlined" ReadOnly="true"
-                                                              HelperText="Generated from schedule configuration above" />
+                                                              HelperText="@OperationsText.ScheduleEditorCronGenerated" />
                                             </MudExpansionPanel>
                                         </MudExpansionPanels>
                                     }
@@ -197,7 +198,7 @@
                     </MudStack>
                 </MudTabPanel>
 
-                <MudTabPanel Text="Steps" Icon="@Icons.Material.Filled.List" BadgeData="@_schedule.Steps.Count" BadgeColor="Color.Primary">
+                <MudTabPanel Text="@OperationsText.ScheduleEditorStepsTab" Icon="@Icons.Material.Filled.List" BadgeData="@_schedule.Steps.Count" BadgeColor="Color.Primary">
                     @if (_editingStep != null)
                     {
                         @* Step Editor (inline). mb-4 (16px) + the dialog content's 8px bottom padding gives a 24px
@@ -205,31 +206,31 @@
                         <MudPaper Outlined="true" Class="pa-4 mb-4">
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                    <MudText Typo="Typo.h6">@(_isNewStep ? "Add Step" : "Edit Step")</MudText>
+                                    <MudText Typo="Typo.h6">@(_isNewStep ? OperationsText.ScheduleEditorAddStep : OperationsText.ScheduleEditorEditStepHeading)</MudText>
                                     <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelStepEditor" />
                                 </MudStack>
 
-                                <MudSelect T="ScheduleStepType" @bind-Value="_editingStep.StepType" Label="Step Type" Variant="Variant.Outlined">
-                                    <MudSelectItem Value="ScheduleStepType.RunProfile">Run Profile</MudSelectItem>
-                                    <MudSelectItem Value="ScheduleStepType.PowerShell" Disabled="true">PowerShell Script (Coming soon)</MudSelectItem>
-                                    <MudSelectItem Value="ScheduleStepType.Executable" Disabled="true">Executable (Coming soon)</MudSelectItem>
-                                    <MudSelectItem Value="ScheduleStepType.SqlScript" Disabled="true">SQL Script (Coming soon)</MudSelectItem>
+                                <MudSelect T="ScheduleStepType" @bind-Value="_editingStep.StepType" Label="@OperationsText.ScheduleEditorStepType" Variant="Variant.Outlined">
+                                    <MudSelectItem Value="ScheduleStepType.RunProfile">@OperationsText.ScheduleEditorRunProfile</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.PowerShell" Disabled="true">@OperationsText.ScheduleEditorStepTypePowerShellSoon</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.Executable" Disabled="true">@OperationsText.ScheduleEditorStepTypeExecutableSoon</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.SqlScript" Disabled="true">@OperationsText.ScheduleEditorStepTypeSqlSoon</MudSelectItem>
                                 </MudSelect>
 
                                 @if (_editingStep.StepType == ScheduleStepType.RunProfile)
                                 {
-                                    <MudSelect T="int" Value="_selectedConnectedSystemId" Label="Connected System" Variant="Variant.Outlined"
+                                    <MudSelect T="int" Value="_selectedConnectedSystemId" Label="@OperationsText.ScheduleEditorConnectedSystem" Variant="Variant.Outlined"
                                                ValueChanged="HandleConnectedSystemChangedAsync">
-                                        <MudSelectItem Value="0">-- Select Connected System --</MudSelectItem>
+                                        <MudSelectItem Value="0">@OperationsText.ScheduleEditorSelectConnectedSystem</MudSelectItem>
                                         @foreach (var (id, name) in _connectedSystemNames.OrderBy(n => n.Value))
                                         {
                                             <MudSelectItem Value="@id">@name</MudSelectItem>
                                         }
                                     </MudSelect>
 
-                                    <MudSelect T="int" @bind-Value="_selectedRunProfileId" Label="Run Profile" Variant="Variant.Outlined"
+                                    <MudSelect T="int" @bind-Value="_selectedRunProfileId" Label="@OperationsText.ScheduleEditorRunProfile" Variant="Variant.Outlined"
                                                Disabled="@(_runProfiles == null || _runProfiles.Count == 0)">
-                                        <MudSelectItem Value="0">-- Select Run Profile --</MudSelectItem>
+                                        <MudSelectItem Value="0">@OperationsText.ScheduleEditorSelectRunProfile</MudSelectItem>
                                         @if (_runProfiles != null)
                                         {
                                             @foreach (var rp in _runProfiles)
@@ -244,26 +245,26 @@
                                 else
                                 {
                                     @* Non-RunProfile steps require a user-specified name *@
-                                    <MudTextField @bind-Value="_editingStep.Name" Immediate="true" Label="Step Name" Variant="Variant.Outlined"
-                                                  Required="true" RequiredError="Name is required for this step type"
-                                                  HelperText="A descriptive name for this step" />
+                                    <MudTextField @bind-Value="_editingStep.Name" Immediate="true" Label="@OperationsText.ScheduleEditorStepName" Variant="Variant.Outlined"
+                                                  Required="true" RequiredError="@OperationsText.ScheduleEditorStepNameRequired"
+                                                  HelperText="@OperationsText.ScheduleEditorStepNameHelp" />
                                 }
 
                                 <MudDivider Class="my-2" />
 
                                 @* Following the Schedule is the default, so a Schedule set to continue also covers steps added
                                    later; the option states the Schedule's current setting so nobody has to leave the step to check. *@
-                                <MudSelect T="ScheduleStepFailureBehaviour" @bind-Value="_editingStep.OnFailure" Label="When this step fails"
+                                <MudSelect T="ScheduleStepFailureBehaviour" @bind-Value="_editingStep.OnFailure" Label="@OperationsText.ScheduleEditorOnFailure"
                                            Variant="Variant.Outlined" ToStringFunc="@DescribeStepFailureOption"
-                                           HelperText="Follow the Schedule unless this step needs to behave differently.">
+                                           HelperText="@OperationsText.ScheduleEditorOnFailureHelp">
                                     <MudSelectItem Value="ScheduleStepFailureBehaviour.FollowSchedule">@DescribeStepFailureOption(ScheduleStepFailureBehaviour.FollowSchedule)</MudSelectItem>
                                     <MudSelectItem Value="ScheduleStepFailureBehaviour.Stop">@DescribeStepFailureOption(ScheduleStepFailureBehaviour.Stop)</MudSelectItem>
                                     <MudSelectItem Value="ScheduleStepFailureBehaviour.Continue">@DescribeStepFailureOption(ScheduleStepFailureBehaviour.Continue)</MudSelectItem>
                                 </MudSelect>
 
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
-                                    <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
-                                    <MudButton Variant="Variant.Filled" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
+                                    <MudButton OnClick="CancelStepEditor">@CommonText.Cancel</MudButton>
+                                    <MudButton Variant="Variant.Filled" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">@OperationsText.ScheduleEditorSaveStep</MudButton>
                                 </MudStack>
                             </MudStack>
                         </MudPaper>
@@ -275,16 +276,16 @@
                             @if (_schedule.BuiltIn)
                             {
                                 <MudAlert Severity="Severity.Info">
-                                    This is a built-in schedule; its steps are managed by JIM and cannot be added, edited, reordered or removed.
+                                    @OperationsText.ScheduleEditorBuiltInSteps
                                 </MudAlert>
                             }
 
                             @* The Schedule's own failure setting, which every step follows unless it sets its own (#1787).
                                A built-in Schedule's is fixed, like its steps. *@
                             <MudSelect T="ScheduleFailureBehaviour" Value="_schedule.OnStepFailure" ValueChanged="HandleScheduleFailureBehaviourChanged"
-                                       Label="When a step fails" Variant="Variant.Outlined" Disabled="@_schedule.BuiltIn"
+                                       Label="@OperationsText.ScheduleEditorOnFailureLabel" Variant="Variant.Outlined" Disabled="@_schedule.BuiltIn"
                                        ToStringFunc="@ScheduleFailureBehaviourDisplay.ScheduleOption"
-                                       HelperText="@(_schedule.BuiltIn ? "This is a built-in Schedule; JIM manages what happens when one of its steps fails." : "Applies to every step, unless a step sets its own.")">
+                                       HelperText="@(_schedule.BuiltIn ? OperationsText.ScheduleEditorBuiltInFailure : OperationsText.ScheduleEditorFailureApplies)">
                                 <MudSelectItem Value="ScheduleFailureBehaviour.Stop">@ScheduleFailureBehaviourDisplay.ScheduleOption(ScheduleFailureBehaviour.Stop)</MudSelectItem>
                                 <MudSelectItem Value="ScheduleFailureBehaviour.Continue">@ScheduleFailureBehaviourDisplay.ScheduleOption(ScheduleFailureBehaviour.Continue)</MudSelectItem>
                             </MudSelect>
@@ -294,7 +295,7 @@
                                 <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudButton Variant="Variant.Filled" DropShadow="false"
                                                StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync">
-                                        Add Step
+                                        @OperationsText.ScheduleEditorAddStep
                                     </MudButton>
                                 </MudStack>
                             }
@@ -302,7 +303,7 @@
                             @if (_schedule.Steps.Count == 0)
                             {
                                 <MudAlert Severity="Severity.Info">
-                                    No steps have been added yet. Click "Add Step" to create the first step.
+                                    @OperationsText.ScheduleEditorNoSteps
                                 </MudAlert>
                             }
                             else
@@ -318,31 +319,31 @@
                                             <div class="jim-step-block-header">
                                                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                                        <MudText Typo="Typo.subtitle2">Step @(block.BlockIndex + 1)</MudText>
+                                                        <MudText Typo="Typo.subtitle2">@string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorStepNumber, block.BlockIndex + 1)</MudText>
                                                     </MudStack>
                                                     @if (!_schedule.BuiltIn)
                                                     {
                                                     <MudStack Row="true" Spacing="0">
-                                                        <MudTooltip Text="Run in parallel with this step" Arrow="true" Placement="Placement.Top">
+                                                        <MudTooltip Text="@OperationsText.ScheduleEditorRunInParallel" Arrow="true" Placement="Placement.Top">
                                                             <MudIconButton Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small"
                                                                            Style="transform: rotate(180deg);"
                                                                            OnClick="@(() => HandleAddParallelStepAsync(block.BlockIndex))" />
                                                         </MudTooltip>
-                                                        <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
+                                                        <MudTooltip Text="@OperationsText.ScheduleEditorMoveUp" Arrow="true" Placement="Placement.Top">
                                                             <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small"
                                                                            Disabled="@(block.BlockIndex == 0)"
                                                                            OnClick="@(() => MoveBlockUp(block.BlockIndex))" />
                                                         </MudTooltip>
-                                                        <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
+                                                        <MudTooltip Text="@OperationsText.ScheduleEditorMoveDown" Arrow="true" Placement="Placement.Top">
                                                             <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small"
                                                                            Disabled="@(block.BlockIndex == GetMaxBlockIndex())"
                                                                            OnClick="@(() => MoveBlockDown(block.BlockIndex))" />
                                                         </MudTooltip>
-                                                        <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
+                                                        <MudTooltip Text="@OperationsText.ScheduleEditorEditStep" Arrow="true" Placement="Placement.Top">
                                                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                                            OnClick="@(() => HandleEditStepAsync(step))" />
                                                         </MudTooltip>
-                                                        <MudTooltip Text="Delete step" Arrow="true" Placement="Placement.Top">
+                                                        <MudTooltip Text="@OperationsText.ScheduleEditorDeleteStep" Arrow="true" Placement="Placement.Top">
                                                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                                            OnClick="@(() => HandleRemoveStep(step))" />
                                                         </MudTooltip>
@@ -359,8 +360,8 @@
                                                             @if (GetStepRunProfile(step) is { Enabled: false } disabledStepRunProfile)
                                                             {
                                                                 <MudTooltip Arrow="true" Placement="Placement.Top">
-                                                                    <TooltipContent><TooltipText Text="@($"This Run Profile is disabled, so this step fails when the Schedule runs. {disabledStepRunProfile.DescribeWhyDisabled()}")" /></TooltipContent>
-                                                                    <ChildContent><MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Disabled</MudChip></ChildContent>
+                                                                    <TooltipContent><TooltipText Text="@string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorRunProfileDisabled, disabledStepRunProfile.DescribeWhyDisabled())" /></TooltipContent>
+                                                                    <ChildContent><MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">@CommonText.Disabled</MudChip></ChildContent>
                                                                 </MudTooltip>
                                                             }
                                                         </MudText>
@@ -381,30 +382,30 @@
                                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                             <MudText Typo="Typo.subtitle2">
                                                                 <MudIcon Icon="@Icons.Material.Filled.CallSplit" Class="mr-1" Style="vertical-align: middle; transform: rotate(180deg);" />
-                                                                Step @(block.BlockIndex + 1): Parallel
+                                                                @string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorStepNumberParallel, block.BlockIndex + 1)
                                                             </MudText>
                                                             <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                                                                @block.Steps.Count steps run together
+                                                                @string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorStepsRunTogether, block.Steps.Count)
                                                             </MudChip>
                                                         </MudStack>
                                                         @if (!_schedule.BuiltIn)
                                                         {
                                                         <MudStack Row="true" Spacing="0">
-                                                            <MudTooltip Text="Add parallel step" Arrow="true" Placement="Placement.Top">
+                                                            <MudTooltip Text="@OperationsText.ScheduleEditorAddParallelStep" Arrow="true" Placement="Placement.Top">
                                                                 <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
                                                                                OnClick="@(() => HandleAddParallelStepAsync(block.BlockIndex))" />
                                                             </MudTooltip>
-                                                            <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
+                                                            <MudTooltip Text="@OperationsText.ScheduleEditorMoveUp" Arrow="true" Placement="Placement.Top">
                                                                 <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small"
                                                                                Disabled="@(block.BlockIndex == 0)"
                                                                                OnClick="@(() => MoveBlockUp(block.BlockIndex))" />
                                                             </MudTooltip>
-                                                            <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
+                                                            <MudTooltip Text="@OperationsText.ScheduleEditorMoveDown" Arrow="true" Placement="Placement.Top">
                                                                 <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small"
                                                                                Disabled="@(block.BlockIndex == GetMaxBlockIndex())"
                                                                                OnClick="@(() => MoveBlockDown(block.BlockIndex))" />
                                                             </MudTooltip>
-                                                            <MudTooltip Text="Delete entire group" Arrow="true" Placement="Placement.Top">
+                                                            <MudTooltip Text="@OperationsText.ScheduleEditorDeleteGroup" Arrow="true" Placement="Placement.Top">
                                                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                                                OnClick="@(() => HandleRemoveBlock(block.BlockIndex))" />
                                                             </MudTooltip>
@@ -424,8 +425,8 @@
                                                                     @if (GetStepRunProfile(step) is { Enabled: false } disabledParallelStepRunProfile)
                                                                     {
                                                                         <MudTooltip Arrow="true" Placement="Placement.Top">
-                                                                            <TooltipContent><TooltipText Text="@($"This Run Profile is disabled, so this step fails when the Schedule runs. {disabledParallelStepRunProfile.DescribeWhyDisabled()}")" /></TooltipContent>
-                                                                            <ChildContent><MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Disabled</MudChip></ChildContent>
+                                                                            <TooltipContent><TooltipText Text="@string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorRunProfileDisabled, disabledParallelStepRunProfile.DescribeWhyDisabled())" /></TooltipContent>
+                                                                            <ChildContent><MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">@CommonText.Disabled</MudChip></ChildContent>
                                                                         </MudTooltip>
                                                                     }
                                                                 </MudText>
@@ -433,11 +434,11 @@
                                                                 @if (!_schedule.BuiltIn)
                                                                 {
                                                                 <MudStack Row="true" Spacing="0">
-                                                                    <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
+                                                                    <MudTooltip Text="@OperationsText.ScheduleEditorEditStep" Arrow="true" Placement="Placement.Top">
                                                                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                                                        OnClick="@(() => HandleEditStepAsync(step))" />
                                                                     </MudTooltip>
-                                                                    <MudTooltip Text="Remove from group" Arrow="true" Placement="Placement.Top">
+                                                                    <MudTooltip Text="@OperationsText.ScheduleEditorRemoveFromGroup" Arrow="true" Placement="Placement.Top">
                                                                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                                                        OnClick="@(() => HandleRemoveStep(step))" />
                                                                     </MudTooltip>
@@ -459,8 +460,8 @@
                 @* Changes is only meaningful for an existing Schedule; a new one has no recorded configuration changes. *@
                 @if (ScheduleId.HasValue)
                 {
-                    <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History">
-                        <ConfigurationChangesTab TargetType="ActivityTargetType.Schedule" ObjectGuidId="ScheduleId" ObjectTypeLabel="Schedule" />
+                    <MudTabPanel Text="@OperationsText.ScheduleEditorChanges" Icon="@Icons.Material.Filled.History">
+                        <ConfigurationChangesTab TargetType="ActivityTargetType.Schedule" ObjectGuidId="ScheduleId" ObjectTypeLabel="@OperationsText.ScheduleEditorObjectTypeLabel" />
                     </MudTabPanel>
                 }
             </MudTabs>
@@ -469,16 +470,16 @@
     <DialogActions>
         @if (_editingStep == null)
         {
-            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton OnClick="Cancel">@CommonText.Cancel</MudButton>
             <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(_saving || !CanSave())">
                 @if (_saving)
                 {
                     <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                    <span class="ms-2">Saving</span>
+                    <span class="ms-2">@OperationsText.ScheduleEditorSaving</span>
                 }
                 else
                 {
-                    <text>Save</text>
+                    <text>@CommonText.Save</text>
                 }
             </MudButton>
         }
@@ -693,49 +694,49 @@
         if (_patternType == SchedulePatternType.Custom)
         {
             return string.IsNullOrWhiteSpace(_customCronExpression)
-                ? "Enter a valid cron expression"
-                : $"Custom schedule: {_customCronExpression}";
+                ? OperationsText.ScheduleEditorEnterCron
+                : string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorCustomPreview, _customCronExpression);
         }
 
         if (_selectedDays.Count == 0)
-            return "Select at least one day";
+            return OperationsText.ScheduleEditorSelectDay;
 
         var daysText = GetSelectedDaysText();
 
         if (_patternType == SchedulePatternType.SpecificTimes)
         {
             if (_runTimes.Count == 0)
-                return "Add at least one run time";
+                return OperationsText.ScheduleEditorAddTimeRequired;
 
             var timesText = string.Join(", ", _runTimes.OrderBy(t => t).Select(ScheduleTriggerDisplay.FormatTime));
-            return $"Runs {daysText} at {timesText}";
+            return string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorPreviewRunsAt, daysText, timesText);
         }
 
         if (_patternType == SchedulePatternType.Interval)
         {
-            var unitText = _intervalUnit == ScheduleIntervalUnit.Hours ? "hour" : "minute";
-            if (_intervalValue > 1) unitText += "s";
-
-            var intervalText = $"every {_intervalValue} {unitText}";
+            var intervalTemplate = _intervalUnit == ScheduleIntervalUnit.Hours
+                ? PluralRules.Choose(_intervalValue, OperationsText.ScheduleEditorIntervalHoursOne, OperationsText.ScheduleEditorIntervalHoursOther)
+                : PluralRules.Choose(_intervalValue, OperationsText.ScheduleEditorIntervalMinutesOne, OperationsText.ScheduleEditorIntervalMinutesOther);
+            var intervalText = string.Format(CultureInfo.CurrentCulture, intervalTemplate, _intervalValue);
 
             if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
             {
-                return $"Runs {daysText}, {intervalText} between {ScheduleTriggerDisplay.FormatTime(_intervalWindowStart.Value)} and {ScheduleTriggerDisplay.FormatTime(_intervalWindowEnd.Value)}";
+                return string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorPreviewIntervalWindow, daysText, intervalText, ScheduleTriggerDisplay.FormatTime(_intervalWindowStart.Value), ScheduleTriggerDisplay.FormatTime(_intervalWindowEnd.Value));
             }
-            return $"Runs {daysText}, {intervalText}";
+            return string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorPreviewInterval, daysText, intervalText);
         }
 
-        return "Schedule not configured";
+        return OperationsText.ScheduleEditorNotConfigured;
     }
 
     private string GetSelectedDaysText()
     {
         if (_selectedDays.Count == 7)
-            return "every day";
+            return OperationsText.ScheduleEditorDaysEveryDay;
         if (_selectedDays.SetEquals(new[] { 1, 2, 3, 4, 5 }))
-            return "weekdays";
+            return OperationsText.ScheduleEditorDaysWeekdays;
         if (_selectedDays.SetEquals(new[] { 0, 6 }))
-            return "weekends";
+            return OperationsText.ScheduleEditorDaysWeekends;
 
         var dayNames = _selectedDays.OrderBy(d => d).Select(d => _daysOfWeek.First(x => x.Value == d).Label);
         return string.Join(", ", dayNames);
@@ -825,7 +826,7 @@
     {
         if (_schedule == null || string.IsNullOrWhiteSpace(_schedule.Name))
         {
-            Snackbar.Add("Please enter a name for the schedule.", Severity.Warning);
+            Snackbar.Add(OperationsText.ScheduleEditorNameMissing, Severity.Warning);
             return;
         }
 
@@ -834,12 +835,12 @@
             // Validate configuration
             if (_patternType != SchedulePatternType.Custom && _selectedDays.Count == 0)
             {
-                Snackbar.Add("Please select at least one day.", Severity.Warning);
+                Snackbar.Add(OperationsText.ScheduleEditorDayMissing, Severity.Warning);
                 return;
             }
             if (_patternType == SchedulePatternType.SpecificTimes && _runTimes.Count == 0)
             {
-                Snackbar.Add("Please add at least one run time.", Severity.Warning);
+                Snackbar.Add(OperationsText.ScheduleEditorTimeMissing, Severity.Warning);
                 return;
             }
             if (_patternType == SchedulePatternType.SpecificTimes && GetRunTimesMinuteError() is { } minuteError)
@@ -929,7 +930,7 @@
                 var dbSchedule = await jim.Scheduler.GetScheduleAsync(_schedule.Id);
                 if (dbSchedule == null)
                 {
-                    Snackbar.Add("Schedule not found.", Severity.Error);
+                    Snackbar.Add(OperationsText.ScheduleEditorNotFound, Severity.Error);
                     return;
                 }
 
@@ -1029,7 +1030,7 @@
 
                 await jim.Scheduler.UpdateScheduleAsync(dbSchedule, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
 
-                Snackbar.Add("Schedule updated successfully.", Severity.Success);
+                Snackbar.Add(OperationsText.ScheduleEditorUpdated, Severity.Success);
             }
             else
             {
@@ -1053,14 +1054,14 @@
                 // This will save the schedule and all its steps in one transaction
                 await jim.Scheduler.CreateScheduleAsync(_schedule, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
 
-                Snackbar.Add("Schedule created successfully.", Severity.Success);
+                Snackbar.Add(OperationsText.ScheduleEditorCreated, Severity.Success);
             }
 
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to save schedule: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorSaveFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -1356,7 +1357,7 @@
         {
             if (_selectedConnectedSystemId == 0 || _selectedRunProfileId == 0)
             {
-                Snackbar.Add("Please select a Connected System and Run Profile.", Severity.Warning);
+                Snackbar.Add(OperationsText.ScheduleEditorConnectedSystemRequired, Severity.Warning);
                 return Task.CompletedTask;
             }
 
@@ -1370,7 +1371,7 @@
             // Non-RunProfile steps require a name
             if (string.IsNullOrWhiteSpace(_editingStep.Name))
             {
-                Snackbar.Add("Please enter a name for this step.", Severity.Warning);
+                Snackbar.Add(OperationsText.ScheduleEditorStepNameMissing, Severity.Warning);
                 return Task.CompletedTask;
             }
         }
@@ -1414,10 +1415,10 @@
         if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue && step.RunProfileId.HasValue)
         {
             // Look up Connected System name
-            var connectedSystemName = _connectedSystemNames.GetValueOrDefault(step.ConnectedSystemId.Value, "Unknown System");
+            var connectedSystemName = _connectedSystemNames.GetValueOrDefault(step.ConnectedSystemId.Value, OperationsText.ScheduleEditorUnknownSystem);
 
             // Look up Run Profile name from cache
-            var runProfileName = "Unknown Profile";
+            var runProfileName = OperationsText.ScheduleEditorUnknownProfile;
             if (_runProfilesCache.TryGetValue(step.ConnectedSystemId.Value, out var profiles))
             {
                 var rp = profiles.FirstOrDefault(p => p.Id == step.RunProfileId.Value);
@@ -1468,13 +1469,13 @@
     {
         return stepType switch
         {
-            ScheduleStepType.RunProfile => "Run Profile",
-            ScheduleStepType.PowerShell => "PowerShell Script",
-            ScheduleStepType.Executable => "Executable",
-            ScheduleStepType.SqlScript => "SQL Script",
-            ScheduleStepType.TemporalScopeReconciliation => "Temporal Scope Reconciliation",
-            ScheduleStepType.HistoryRetentionCleanup => "History Retention Cleanup",
-            _ => "Unknown"
+            ScheduleStepType.RunProfile => OperationsText.ScheduleEditorRunProfile,
+            ScheduleStepType.PowerShell => OperationsText.ScheduleEditorStepTypePowerShell,
+            ScheduleStepType.Executable => OperationsText.ScheduleEditorStepTypeExecutable,
+            ScheduleStepType.SqlScript => OperationsText.ScheduleEditorStepTypeSql,
+            ScheduleStepType.TemporalScopeReconciliation => OperationsText.ScheduleEditorStepTypeTemporal,
+            ScheduleStepType.HistoryRetentionCleanup => OperationsText.ScheduleEditorStepTypeHistory,
+            _ => CommonText.Unknown
         };
     }
 }

@@ -1,0 +1,333 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SyncRuleObjectTypesCannotChange" xml:space="preserve">
+    <value>Bei der Synchronisierungsregel „{1}“ lässt sich nach dem Speichern Folgendes nicht mehr ändern: {0}. Ihre Geltungsbereichskriterien, Attributflüsse und Objektabgleichsregeln benennen Attribute ihrer Objekttypen. Erstellen Sie stattdessen eine neue Synchronisierungsregel für den anderen Objekttyp.</value>
+  </data>
+  <data name="ChangedObjectTypesBoth" xml:space="preserve">
+    <value>der Objekttyp des verbundenen Systems und der Metaverse-Objekttyp</value>
+  </data>
+  <data name="ChangedObjectTypeConnectedSystem" xml:space="preserve">
+    <value>der Objekttyp des verbundenen Systems</value>
+  </data>
+  <data name="ChangedObjectTypeMetaverse" xml:space="preserve">
+    <value>der Metaverse-Objekttyp</value>
+  </data>
+  <data name="SyncRuleEnabledOnDeselectedObjectType" xml:space="preserve">
+    <value>Die Synchronisierungsregel „{0}“ kann nicht aktiviert werden, da ihr Objekttyp „{1}“ im verbundenen System nicht ausgewählt ist. Wählen Sie zuerst den Objekttyp aus, oder speichern Sie die Synchronisierungsregel deaktiviert.</value>
+  </data>
+  <data name="SyncRuleDeprovisionDisableUnsupported" xml:space="preserve">
+    <value>Die Synchronisierungsregel „{0}“ kann mit „Deaktivieren“ nicht deprovisionieren: Der von „{2}“ verwendete {1} kann kein Konto deaktivieren. Wählen Sie „Löschen“ oder „Trennen“.</value>
+  </data>
+  <data name="ObjectTypeStillManagedOne" xml:space="preserve">
+    <value>Der Objekttyp „{0}“ kann nicht abgewählt werden, solange eine aktivierte Synchronisierungsregel ihn noch verwaltet: {2}. Deaktivieren Sie diese Synchronisierungsregel zuerst, oder lassen Sie den Objekttyp ausgewählt.</value>
+  </data>
+  <data name="ObjectTypeStillManagedOther" xml:space="preserve">
+    <value>Der Objekttyp „{0}“ kann nicht abgewählt werden, solange {1} aktivierte Synchronisierungsregeln ihn noch verwalten: {2}. Deaktivieren Sie diese Synchronisierungsregeln zuerst, oder lassen Sie den Objekttyp ausgewählt.</value>
+  </data>
+  <data name="AttributeDeselectionRefusal" xml:space="preserve">
+    <value>Ein Attribut, das ein Geltungsbereichskriterium liest, kann nicht abgewählt werden: Es würde nicht mehr importiert, sodass das Kriterium den Geltungsbereich anhand von Werten entschiede, die nie aktualisiert werden, und für danach importierte Objekte anhand gar keines Werts. Ändern Sie zuerst Folgendes:</value>
+  </data>
+  <data name="SchemaRefreshRemovalRefusal" xml:space="preserve">
+    <value>„Anwenden und entfernen“ wird abgelehnt: Die Konfiguration liest ein Attribut, das das verbundene System nicht mehr meldet. Ändern Sie zuerst Folgendes, oder wenden Sie ohne Entfernen an:</value>
+  </data>
+  <data name="AttributeReadersRefusal" xml:space="preserve">
+    <value>{0} {1}.</value>
+  </data>
+  <data name="ConnectorFallbackName" xml:space="preserve">
+    <value>der Connector</value>
+  </data>
+  <data name="ConnectorDefinedAttributeNameCollision" xml:space="preserve">
+    <value>{0} definiert ein Attribut namens „{1}“ für den Objekttyp „{2}“, aber „{3}“ hat bereits ein Attribut mit diesem Namen. Ein vom Connector definiertes Attribut muss einen Namen haben, den die eigenen Attribute des verbundenen Systems nicht haben können. Das Schema wurde nicht geändert.</value>
+  </data>
+  <data name="MappingSourceTypeNotSet" xml:space="preserve">
+    <value>Das Quellattribut „{0}“ hat den Typ NotSet. Attribute müssen einen definierten Typ haben, bevor sie in Zuordnungen verwendet werden können.</value>
+  </data>
+  <data name="MappingTargetTypeNotSet" xml:space="preserve">
+    <value>Das Zielattribut „{0}“ hat den Typ NotSet. Attribute müssen einen definierten Typ haben, bevor sie in Zuordnungen verwendet werden können.</value>
+  </data>
+  <data name="MappingTypeMismatch" xml:space="preserve">
+    <value>Typkonflikt: Das Quellattribut „{0}“ ({1}) ist mit dem Zielattribut „{2}“ ({3}) nicht kompatibel. Quell- und Zielattribut müssen denselben Typ haben.</value>
+  </data>
+  <data name="MappingTargetReadOnly" xml:space="preserve">
+    <value>Ein Export-Attributfluss auf das schreibgeschützte Attribut „{0}“ kann nicht erstellt werden. Dieses Attribut ist vom verbundenen System als schreibgeschützt gekennzeichnet und kann nicht beschrieben werden.</value>
+  </data>
+  <data name="DuplicateMappingTargetNamed" xml:space="preserve">
+    <value>Die Synchronisierungsregel „{0}“ hat bereits einen Attributfluss mit dem Ziel „{1}“; pro Zielattribut wird nur eine Zuordnung unterstützt, und eine deaktivierte Zuordnung zählt mit. Um innerhalb einer Regel zwischen Quellattributen zurückzufallen, verwenden Sie eine einzelne Ausdruckszuordnung (zum Beispiel attribute_1 ?? attribute_2). Um mit der Attributpriorität zwischen Quellen zu entscheiden, definieren Sie den zweiten Fluss in einer separaten Synchronisierungsregel mit anderem Geltungsbereich.</value>
+  </data>
+  <data name="DuplicateMappingTargetUnnamed" xml:space="preserve">
+    <value>Diese Synchronisierungsregel hat bereits einen Attributfluss mit dem Ziel „{0}“; pro Zielattribut wird nur eine Zuordnung unterstützt, und eine deaktivierte Zuordnung zählt mit. Um innerhalb einer Regel zwischen Quellattributen zurückzufallen, verwenden Sie eine einzelne Ausdruckszuordnung (zum Beispiel attribute_1 ?? attribute_2). Um mit der Attributpriorität zwischen Quellen zu entscheiden, definieren Sie den zweiten Fluss in einer separaten Synchronisierungsregel mit anderem Geltungsbereich.</value>
+  </data>
+  <data name="MappingSettingsNoChanges" xml:space="preserve">
+    <value>Es wurden keine zu ändernden Einstellungen angegeben.</value>
+  </data>
+  <data name="MappingNoExpressionSource" xml:space="preserve">
+    <value>Dieser Attributfluss hat keine Ausdrucksquelle, daher gelten Ausdruckseinstellungen nicht für ihn. Löschen Sie die Zuordnung, und erstellen Sie sie stattdessen mit einer Ausdrucksquelle.</value>
+  </data>
+  <data name="MappingSeveralExpressionSources" xml:space="preserve">
+    <value>Dieser Attributfluss hat mehr als eine Ausdrucksquelle, daher ist unklar, welcher Ausdruck ersetzt werden soll.</value>
+  </data>
+  <data name="MappingImportOnlySettings" xml:space="preserve">
+    <value>„Null ist ein Wert“, die Verarbeitung eingehender Werte und die Normalisierung der Groß-/Kleinschreibung gelten nur für Importzuordnungen.</value>
+  </data>
+  <data name="MappingExportOnlySettings" xml:space="preserve">
+    <value>„Nur Erstexport“ gilt nur für Exportzuordnungen.</value>
+  </data>
+  <data name="KeepUniqueNotApplicable" xml:space="preserve">
+    <value>„Eindeutig halten“ gilt nur für einen Attributfluss, der seinen Wert mit einem Ausdruck aufbaut (ein aus einem generierten Wert aufgebauter Wert), nicht für einen direkten Fluss oder für einen generierten Wert selbst.</value>
+  </data>
+  <data name="TargetPrefixed" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="MappingNotGenerated" xml:space="preserve">
+    <value>Dieser Attributfluss ist keine generierte Zuordnung, daher gelten Generierungseinstellungen nicht für ihn.</value>
+  </data>
+  <data name="RestartMappingNotFound" xml:space="preserve">
+    <value>Es wurde keine Attributfluss-Zuordnung mit der ID {0} gefunden.</value>
+  </data>
+  <data name="RestartNotGenerated" xml:space="preserve">
+    <value>Dieser Attributfluss ist keine generierte Zuordnung; „Neu starten“ gilt nur für generierte Zuordnungen.</value>
+  </data>
+  <data name="ExclusionNoMetaverseTarget" xml:space="preserve">
+    <value>Ein für {0} generierter Wert wird nur im eigenen verbundenen System geprüft und kann daher keine verbundenen Systeme ausschließen; entfernen Sie die Ausschlüsse.</value>
+  </data>
+  <data name="ExclusionThisAttribute" xml:space="preserve">
+    <value>dieses Attribut</value>
+  </data>
+  <data name="ExclusionTheGeneratedAttribute" xml:space="preserve">
+    <value>das generierte Attribut</value>
+  </data>
+  <data name="ExclusionNotExcludable" xml:space="preserve">
+    <value>Das verbundene System „{0}“ kann nicht von den Verfügbarkeitsprüfungen für {1} ausgeschlossen werden: Kein Export-Attributfluss sendet {1} unverändert dorthin.</value>
+  </data>
+  <data name="ExclusionMissingSystem" xml:space="preserve">
+    <value>Das verbundene System {0} kann nicht von den Verfügbarkeitsprüfungen für {1} ausgeschlossen werden: Es existiert nicht.</value>
+  </data>
+  <data name="PriorityNoContributions" xml:space="preserve">
+    <value>Für das Metaverse-Attribut {0} des Metaverse-Objekttyps {1} existieren keine Importattributbeiträge.</value>
+  </data>
+  <data name="PriorityDuplicateMappings" xml:space="preserve">
+    <value>Die Attributprioritätsreihenfolge enthält doppelte Zuordnungskennungen.</value>
+  </data>
+  <data name="PriorityMismatchBase" xml:space="preserve">
+    <value>Die Attributprioritätsreihenfolge muss jede beitragende Zuordnung für das Attribut genau einmal aufführen und keine weiteren.</value>
+  </data>
+  <data name="PriorityMissing" xml:space="preserve">
+    <value>Fehlend: {0}.</value>
+  </data>
+  <data name="PriorityNotContributors" xml:space="preserve">
+    <value>Keine Beitragenden zu diesem Attribut: {0}. Laden Sie die aktuelle Reihenfolge neu, und versuchen Sie es erneut.</value>
+  </data>
+  <data name="PriorityMappingOfRule" xml:space="preserve">
+    <value>Zuordnung {0} (Synchronisierungsregel „{1}“)</value>
+  </data>
+  <data name="PriorityMapping" xml:space="preserve">
+    <value>Zuordnung {0}</value>
+  </data>
+  <data name="PriorityNotAContributor" xml:space="preserve">
+    <value>Die Zuordnung {0} trägt nicht zum Metaverse-Attribut {1} des Metaverse-Objekttyps {2} bei.</value>
+  </data>
+  <data name="ListPair" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="MessagePair" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="ScopingCriterionCannotBeSaved" xml:space="preserve">
+    <value>Das Geltungsbereichskriterium für „{0}“ kann nicht gespeichert werden: {1}</value>
+  </data>
+  <data name="ScopingCriterionLeftAsWas" xml:space="preserve">
+    <value>Das Geltungsbereichskriterium für „{0}“ ist ungültig und wurde unverändert belassen: {1}</value>
+  </data>
+  <data name="MappingRemovalChoicesUpdatesOnly" xml:space="preserve">
+    <value>Entscheidungen zum Entfernen von Zuordnungen gelten nur für Aktualisierungen: Eine neu erstellte Synchronisierungsregel hat keine gespeicherten Attributfluss-Zuordnungen, die entfernt werden könnten.</value>
+  </data>
+  <data name="MappingRemovalChoicesDuplicate" xml:space="preserve">
+    <value>Die Entscheidungen zum Entfernen von Zuordnungen enthalten eine doppelte Zuordnungs-ID, wodurch die Absicht mehrdeutig ist.</value>
+  </data>
+  <data name="MappingRemovalChoiceStillPresent" xml:space="preserve">
+    <value>Die Entscheidung zum Entfernen der Zuordnung {0} benennt eine Zuordnung, die in der Synchronisierungsregel noch vorhanden ist; eine Entscheidung darf nur ein vorgemerktes Entfernen beschreiben.</value>
+  </data>
+  <data name="MappingRemovalChoiceMissing" xml:space="preserve">
+    <value>Die Entscheidung zum Entfernen der Zuordnung {0} benennt eine Zuordnung, die nicht existiert; möglicherweise wurde sie bereits gelöscht, dann wurde die Entscheidung damals getroffen.</value>
+  </data>
+  <data name="MappingRemovalChoiceWrongRule" xml:space="preserve">
+    <value>Die Entscheidung zum Entfernen der Zuordnung {0} benennt eine Zuordnung, die nicht zur Synchronisierungsregel {1} gehört.</value>
+  </data>
+  <data name="ConnectorNoSchemaImport" xml:space="preserve">
+    <value>Der Connector „{0}“ unterstützt den Schemaimport nicht.</value>
+  </data>
+  <data name="ConnectorNoPasswordChannel" xml:space="preserve">
+    <value>Der Connector „{0}“ unterstützt das Festlegen von Kennwörtern nicht, daher gibt es keinen Kennwortkanal zu prüfen.</value>
+  </data>
+  <data name="ConnectorNoDirectoryDiscovery" xml:space="preserve">
+    <value>Der Connector „{0}“ unterstützt die Ermittlung von Verzeichnisservern nicht.</value>
+  </data>
+  <data name="ConnectorNoDiscoveryForSetting" xml:space="preserve">
+    <value>Der Connector „{0}“ kann für die Einstellung „{1}“ keine Server ermitteln.</value>
+  </data>
+  <data name="ConnectorNoCatalogue" xml:space="preserve">
+    <value>Der Connector „{0}“ kann nicht beschreiben, was seine Quelle enthält.</value>
+  </data>
+  <data name="ConnectorNoHierarchyImport" xml:space="preserve">
+    <value>Der Connector „{0}“ unterstützt den Hierarchieimport nicht.</value>
+  </data>
+  <data name="ConnectedSystemNotFoundById" xml:space="preserve">
+    <value>Es wurde kein verbundenes System mit der ID {0} gefunden.</value>
+  </data>
+  <data name="RunProfileVerifyFullImportOnly" xml:space="preserve">
+    <value>VerifyImportContentHashes kann nur in einem Ausführungsprofil für einen vollständigen Import aktiviert werden.</value>
+  </data>
+  <data name="RunProfileNoConnectedSystem" xml:space="preserve">
+    <value>Dieses verbundene System wurde nicht gefunden!</value>
+  </data>
+  <data name="RunProfileNotValidForConnector" xml:space="preserve">
+    <value>Das Ausführungsprofil ist für den Connector nicht gültig!</value>
+  </data>
+  <data name="SaveWarningProjectionConflict" xml:space="preserve">
+    <value>Die Import-Synchronisierungsregel „{0}“ projiziert ebenfalls „{1}“-Objekte aus „{2}“, aber als „{3}“. Eine Synchronisierung projiziert nichts für ein Objekt, das in den Geltungsbereich beider Regeln fällt, und meldet es als „Projektionstypkonflikt“. Geben Sie den Regeln Geltungsbereiche, die sich nie überschneiden, oder lassen Sie sie in einen einzigen Metaverse-Objekttyp projizieren.</value>
+  </data>
+  <data name="SaveWarningExportRulesOverlap" xml:space="preserve">
+    <value>Die Export-Synchronisierungsregel „{0}“ verwaltet ebenfalls „{1}“-Objekte in „{2}“ für „{3}“. Nur eine Exportregel darf ein Objekt verwalten: Eine Synchronisierung exportiert nichts in dieses verbundene System für ein Objekt, das in den Geltungsbereich beider Regeln fällt, und meldet es als „Exportregeln überschneiden sich“. Geben Sie den Regeln Geltungsbereiche, die sich nie überschneiden, oder fassen Sie sie zu einer Regel zusammen.</value>
+  </data>
+  <data name="SaveWarningExportObjectTypesDiffer" xml:space="preserve">
+    <value>Die Export-Synchronisierungsregel „{0}“ provisioniert „{1}“-Objekte in „{2}“ als „{3}“, und diese Regel provisioniert sie als {4}. Jedes kann in „{2}“ nur ein Objekt haben; wo die Geltungsbereiche beider Regeln dasselbe abdecken, provisioniert es daher nur eine Regel, und die andere meldet bei jeder Synchronisierung „Synchronisierung fehlgeschlagen“ dafür. Stellen Sie sicher, dass sich die Geltungsbereiche nie überschneiden.</value>
+  </data>
+  <data name="SaveWarningThisObjectType" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="SaveWarningADifferentObjectType" xml:space="preserve">
+    <value>einen anderen Objekttyp</value>
+  </data>
+  <data name="SaveWarningConnectorDefinedOverlap" xml:space="preserve">
+    <value>„{0}“ wird vom {1} definiert und über „{2}“ in das verbundene System geschrieben, das diese Regel ebenfalls aus einer anderen Quelle überträgt. Jeder Export kann den Wert des anderen überschreiben. Übertragen Sie nur eines davon, oder geben Sie beiden dieselbe Quelle.</value>
+  </data>
+  <data name="PassThroughText" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="SemicolonPair" xml:space="preserve">
+    <value>{0}; {1}</value>
+  </data>
+  <data name="ReaderOwnerSyncRule" xml:space="preserve">
+    <value>Synchronisierungsregel „{0}“</value>
+  </data>
+  <data name="ReaderOwnerExampleDataTemplate" xml:space="preserve">
+    <value>Beispieldatenvorlage „{0}“</value>
+  </data>
+  <data name="ReaderOwnerObjectType" xml:space="preserve">
+    <value>Objekttyp des verbundenen Systems „{0}“</value>
+  </data>
+  <data name="ReaderScopingCriterionExpression" xml:space="preserve">
+    <value>Ausdruck {0} des Geltungsbereichskriteriums in {1}</value>
+  </data>
+  <data name="ReaderScopingCriterionAttribute" xml:space="preserve">
+    <value>Geltungsbereichskriterium für „{0}“ in {1}</value>
+  </data>
+  <data name="ReaderAttributeFlowExpression" xml:space="preserve">
+    <value>Ausdruck des Attributflusses nach „{0}“ in {1}</value>
+  </data>
+  <data name="ReaderObjectMatchingRuleExpression" xml:space="preserve">
+    <value>Ausdruck {0} der Objektabgleichsregel in {1}</value>
+  </data>
+  <data name="ReaderExampleDataExpression" xml:space="preserve">
+    <value>Ausdruck für „{0}“ in {1}</value>
+  </data>
+  <data name="ReaderOther" xml:space="preserve">
+    <value>{0} in {1}</value>
+  </data>
+  <data name="UrefAmbiguousFinding" xml:space="preserve">
+    <value>Dieser Wert stimmt mit Objekten mehrerer Objekttypen überein ({0}), und das Attribut „{1}“ gibt nicht an, auf welchen es verweist.</value>
+  </data>
+  <data name="UrefAmbiguousRemedy" xml:space="preserve">
+    <value>Legen Sie seinen Zielobjekttyp auf der Registerkarte „Schema“ fest, sofern der Connector dies unterstützt.</value>
+  </data>
+  <data name="UrefNotFoundFinding" xml:space="preserve">
+    <value>In {0} wurde nichts mit diesem Wert importiert.</value>
+  </data>
+  <data name="UrefNotFoundNoContainmentRemedy" xml:space="preserve">
+    <value>Führen Sie einen vollständigen Import aus, um eine verpasste Änderung auszuschließen. Bleibt der Verweis unaufgelöst, verweist die Quelle auf ein Objekt, das nicht darin enthalten ist, oder auf eines, dessen Objekttyp nicht importiert wird.</value>
+  </data>
+  <data name="UrefNotFoundRemedy" xml:space="preserve">
+    <value>Führen Sie einen vollständigen Import aus, um eine verpasste Änderung auszuschließen.</value>
+  </data>
+  <data name="UrefOutsideConnectedSystemFinding" xml:space="preserve">
+    <value>Dieser Wert liegt in keiner der Partitionen von {0}, daher kann JIM das benannte Objekt nicht importieren.</value>
+  </data>
+  <data name="UrefOutsideRemedyWarn" xml:space="preserve">
+    <value>Wenn solche Verweise erwartet werden, setzen Sie „Behandlung nicht aufgelöster Verweise“ auf „Ignorieren“, damit Läufe sie nicht mehr melden.</value>
+  </data>
+  <data name="UrefOutsideRemedyIgnore" xml:space="preserve">
+    <value>Läufe melden solche Verweise bereits nicht; in JIM muss nichts geändert werden, wenn sie erwartet werden.</value>
+  </data>
+  <data name="UrefOutsideRemedyDefault" xml:space="preserve">
+    <value>Wenn solche Verweise erwartet werden, setzen Sie „Behandlung nicht aufgelöster Verweise“ auf „Warnen“.</value>
+  </data>
+  <data name="UrefPartitionNotSelectedFinding" xml:space="preserve">
+    <value>Die Partition {0} ist nicht ausgewählt.</value>
+  </data>
+  <data name="UrefSelectOnScopeTabRemedy" xml:space="preserve">
+    <value>Wählen Sie sie auf der Registerkarte „Geltungsbereich“ aus, und führen Sie dann einen vollständigen Import aus.</value>
+  </data>
+  <data name="UrefNotFoundInScopeFinding" xml:space="preserve">
+    <value>{0} liegt im Containergeltungsbereich, aber es wurde nichts mit diesem Wert importiert.</value>
+  </data>
+  <data name="UrefNotFoundInScopeRemedy" xml:space="preserve">
+    <value>Führen Sie einen vollständigen Import aus, um eine verpasste Änderung auszuschließen. Bleibt der Verweis unaufgelöst, existiert das Objekt in {0} nicht mehr, oder sein Objekttyp wird nicht importiert.</value>
+  </data>
+  <data name="UrefContainerExcludedFinding" xml:space="preserve">
+    <value>{0} ist vom Containergeltungsbereich ausgeschlossen.</value>
+  </data>
+  <data name="UrefContainerExcludedRemedy" xml:space="preserve">
+    <value>Wenn seine Objekte in JIM gehören, heben Sie den Ausschluss auf der Registerkarte „Geltungsbereich“ auf, und führen Sie dann einen vollständigen Import aus.</value>
+  </data>
+  <data name="UrefContainerNotInScopeFinding" xml:space="preserve">
+    <value>{0} liegt nicht im Containergeltungsbereich.</value>
+  </data>
+  <data name="UrefOutsideEveryContainerFinding" xml:space="preserve">
+    <value>Das Objekt befindet sich in {0}, außerhalb jedes Containers, den JIM kennt.</value>
+  </data>
+  <data name="UrefOutsideEveryContainerRemedy" xml:space="preserve">
+    <value>Aktualisieren Sie die Hierarchie auf der Registerkarte „Geltungsbereich“, wählen Sie dann den Container aus, der es enthält, und führen Sie einen vollständigen Import aus.</value>
+  </data>
+  <data name="UrefGroupAmbiguousFinding" xml:space="preserve">
+    <value>Diese Werte stimmen mit Objekten mehrerer Objekttypen überein, bei Attributen, die nicht angeben, auf welchen sie verweisen.</value>
+  </data>
+  <data name="UrefGroupAmbiguousRemedy" xml:space="preserve">
+    <value>Legen Sie den Zielobjekttyp jedes Attributs auf der Registerkarte „Schema“ fest, sofern der Connector dies unterstützt.</value>
+  </data>
+  <data name="HeldUnderAnotherDataType" xml:space="preserve">
+    <value>{0} wird als {1}{2} geführt: Eine Schemaaktualisierung hat seinen Datentyp geändert, und seitdem hat kein Import es gelesen. Führen Sie einen vollständigen Import aus, um es als neuen Typ zu lesen; {3}.</value>
+  </data>
+  <data name="HeldNotAsCurrentType" xml:space="preserve">
+    <value>, nicht als sein Typ {0}</value>
+  </data>
+  <data name="HeldSubjectAttribute" xml:space="preserve">
+    <value>Das Attribut „{0}“ des verbundenen Systems</value>
+  </data>
+  <data name="HeldSubjectInput" xml:space="preserve">
+    <value>Die Eingabe {0}</value>
+  </data>
+  <data name="HeldSubjectInputs" xml:space="preserve">
+    <value>Die Eingaben {0}</value>
+  </data>
+  <data name="HeldAfterImportMatched" xml:space="preserve">
+    <value>das Objekt wird bei der nächsten Synchronisierung abgeglichen</value>
+  </data>
+  <data name="HeldAfterImportScope" xml:space="preserve">
+    <value>der Geltungsbereich des Objekts wird bei der nächsten Synchronisierung entschieden</value>
+  </data>
+  <data name="PriorityNotUsedUnderAccumulate" xml:space="preserve">
+    <value>Das Metaverse-Attribut „{0}“ verwendet den Beitragsmodus „Akkumulieren“: Jeder Beitragende fügt seine Werte hinzu, und die Prioritätsreihenfolge wird nicht verwendet. Stellen Sie den Beitragsmodus des Attributs auf „Priorität“, um seine Beitragenden zu ordnen.</value>
+  </data>
+</root>

@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Staging
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
@@ -13,27 +14,26 @@
 <MudDialog data-testid="jim-aux-dialog">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Extension" Class="me-3" /> Auxiliary classes for @ObjectType.Name
+            <MudIcon Icon="@Icons.Material.Filled.Extension" Class="me-3" /> @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxDialogTitle, ObjectType.Name)
         </MudText>
     </TitleContent>
     <DialogContent>
         @if (Offers.Count == 0)
         {
             <MudAlert Severity="Severity.Info">
-                @ConnectedSystem.Name defines no auxiliary classes, so there is nothing to merge into @ObjectType.Name.
+                @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxNoneDefined, ConnectedSystem.Name, ObjectType.Name)
             </MudAlert>
         }
         else
         {
         <div>
             <MudText Class="mud-text-secondary">
-                Only the classes you enable here shape the schema; suggestions never apply themselves. A merged
-                class's attributes join the Object Type at the next schema refresh.
+                @SchemaText.AuxIntro
             </MudText>
 
             <MudGrid Class="mt-2">
                 <MudItem xs="12" md="7">
-                    <SearchField @bind-Value="_search" Label="Search auxiliary classes" Margin="Margin.None" IconSize="Size.Small" />
+                    <SearchField @bind-Value="_search" Label="@SchemaText.AuxSearchLabel" Margin="Margin.None" IconSize="Size.Small" />
                 </MudItem>
                 <MudItem xs="12" md="5" Class="d-flex align-center justify-md-end">
                     <MudChipSet T="OfferFilter"
@@ -42,15 +42,15 @@
                                 SelectedValueChanged="@((OfferFilter value) => _filter = value)">
                         <MudChip Value="OfferFilter.Suggested" Color="Color.Primary" data-testid="jim-aux-filter-suggested"
                                  Variant="@(_filter == OfferFilter.Suggested ? Variant.Filled : Variant.Outlined)">
-                            Suggested (@SuggestedCount)
+                            @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxChipSuggested, SuggestedCount)
                         </MudChip>
                         <MudChip Value="OfferFilter.InUse" Color="Color.Primary" data-testid="jim-aux-filter-in-use"
                                  Variant="@(_filter == OfferFilter.InUse ? Variant.Filled : Variant.Outlined)">
-                            In use (@InUseCount)
+                            @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxChipInUse, InUseCount)
                         </MudChip>
                         <MudChip Value="OfferFilter.All" Color="Color.Default" data-testid="jim-aux-filter-all"
                                  Variant="@(_filter == OfferFilter.All ? Variant.Filled : Variant.Outlined)">
-                            All (@Offers.Count)
+                            @string.Format(CultureInfo.CurrentCulture, SchemaText.ChipAll, Offers.Count)
                         </MudChip>
                     </MudChipSet>
                 </MudItem>
@@ -63,8 +63,8 @@
             {
                 <MudText Class="mud-text-secondary mt-4" data-testid="jim-aux-none">
                     @(string.IsNullOrWhiteSpace(_search)
-                        ? "Nothing is suggested. Run discovery below, or show every class in the schema."
-                        : "No auxiliary class matches that name.")
+                        ? SchemaText.AuxNothingSuggested
+                        : SchemaText.AuxNoMatch)
                 </MudText>
             }
             else
@@ -86,10 +86,10 @@
                                 {
                                     <MudTooltip Arrow="true" Placement="Placement.Top">
                                         <TooltipContent>
-                                            <TooltipText Text="@($"{ConnectedSystem.Name} publishes a DIT Content Rule saying this class may attach to {ObjectType.Name} entries. It is a statement of what is permitted, not of what is in use.")" />
+                                            <TooltipText Text="@string.Format(CultureInfo.CurrentCulture, SchemaText.AuxDitContentRuleTooltip, ConnectedSystem.Name, ObjectType.Name)" />
                                         </TooltipContent>
                                         <ChildContent>
-                                            <MudChip T="string" Variant="Variant.Outlined">suggested: DIT Content Rule</MudChip>
+                                            <MudChip T="string" Variant="Variant.Outlined">@SchemaText.AuxSuggestedDit</MudChip>
                                         </ChildContent>
                                     </MudTooltip>
                                 }
@@ -101,7 +101,7 @@
                                             <TooltipText Text="@ObservationTooltip(entriesObservedOn)" />
                                         </TooltipContent>
                                         <ChildContent>
-                                            <MudChip T="string" Variant="Variant.Outlined">@($"suggested: in use on {entriesObservedOn:N0} entries")</MudChip>
+                                            <MudChip T="string" Variant="Variant.Outlined">@string.Format(CultureInfo.CurrentCulture, SchemaText.AuxSuggestedInUse, string.Format(CultureInfo.CurrentCulture, "{0:N0}", entriesObservedOn))</MudChip>
                                         </ChildContent>
                                     </MudTooltip>
                                 }
@@ -117,7 +117,7 @@
                                 <div class="jim-aux-attrs" data-testid="jim-aux-attrs">
                                     @if (offer.ContributedAttributeCount == 0)
                                     {
-                                        <span class="mud-text-secondary">This class defines no attributes of its own.</span>
+                                        <span class="mud-text-secondary">@SchemaText.AuxNoOwnAttributes</span>
                                     }
                                     @* Not named "attribute": Razor reads "@attribute" as its directive. *@
                                     @foreach (var contributed in offer.ContributedAttributes)
@@ -127,11 +127,11 @@
                                             <code>@contributed.Name</code>
                                             @if (contributed.Required)
                                             {
-                                                <span class="mud-text-secondary">required</span>
+                                                <span class="mud-text-secondary">@SchemaText.AuxRequired</span>
                                             }
                                             @if (isCredential)
                                             {
-                                                <span class="mud-text-secondary">credential, never selectable</span>
+                                                <span class="mud-text-secondary">@SchemaText.AuxCredentialNotSelectable</span>
                                             }
                                         </span>
                                     }
@@ -151,8 +151,8 @@
                 @if (LatestDiscoveryRun == null)
                 {
                     <MudText Class="mud-text-secondary" data-testid="jim-aux-discovery-status">
-                        These classes come from the schema. JIM has not yet read @ConnectedSystem.Name's entries to find
-                        which of them are in use.
+                        @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxNotYetRead, ConnectedSystem.Name)
+                        
                     </MudText>
                 }
                 else
@@ -167,7 +167,7 @@
                            EndIcon="@(_discoveryOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                            OnClick="@(() => _discoveryOpen = !_discoveryOpen)"
                            data-testid="jim-aux-discovery-toggle">
-                    @(LatestDiscoveryRun == null ? "Discover classes in use" : "Discover again")
+                    @(LatestDiscoveryRun == null ? SchemaText.AuxDiscoverInUse : SchemaText.AuxDiscoverAgain)
                 </MudButton>
             </div>
 
@@ -175,33 +175,28 @@
             {
                 <div class="mt-2" data-testid="jim-aux-discovery">
                     <MudText Class="mb-2">
-                        Discovery reads @ConnectedSystem.Name's entries to find which auxiliary classes they actually carry.
-                        It only adds suggestions to the list above; every auxiliary class in the schema is listed for
-                        enabling either way.
-                    </MudText>
+                        @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxDiscoveryIntro, ConnectedSystem.Name)
+                                                                    </MudText>
                     <MudRadioGroup T="AuxiliaryClassDiscoveryScope" @bind-Value="_scope">
                         <MudRadio T="AuxiliaryClassDiscoveryScope" Value="AuxiliaryClassDiscoveryScope.QuickSample" Color="Color.Primary">
-                            Quick sample
+                            @SchemaText.AuxQuickSample
                         </MudRadio>
                         <MudText Typo="Typo.caption" Class="d-block ml-8 mb-2 mud-text-secondary">
-                            Reads the first entries of each Object Type. Fast. A directory returns entries in its own order,
-                            so a rarely used class can be missed; the results are ranked suggestions, never limits.
-                        </MudText>
+                            @SchemaText.AuxQuickSampleHelp
+                                                    </MudText>
                         <MudRadio T="AuxiliaryClassDiscoveryScope" Value="AuxiliaryClassDiscoveryScope.FullScan" Color="Color.Primary">
-                            Full scan
+                            @SchemaText.AuxFullScan
                         </MudRadio>
                         <MudText Typo="Typo.caption" Class="d-block ml-8 mud-text-secondary">
-                            Reads every entry in scope, asking for its class membership and nothing else. Complete, and the
-                            only scope whose answer of "this class is not in use" means anything. It can take a long time on
-                            a large directory, and runs as an Activity you can watch and cancel.
-                        </MudText>
+                            @SchemaText.AuxFullScanHelp
+                                                                                </MudText>
                     </MudRadioGroup>
 
                     @if (_scope == AuxiliaryClassDiscoveryScope.QuickSample)
                     {
                         <MudNumericField T="int"
                                          @bind-Value="_sampleSizePerObjectType"
-                                         Label="Entries to read per Object Type"
+                                         Label="@SchemaText.AuxEntriesPerType"
                                          Variant="Variant.Outlined"
                                          Min="1"
                                          Max="1000000"
@@ -214,7 +209,7 @@
                                Disabled="@(_startingDiscovery || !CanStartDiscovery())"
                                OnClick="HandleRunDiscoveryAsync"
                                data-testid="jim-aux-discovery-run">
-                        Discover classes in use
+                        @SchemaText.AuxDiscoverInUse
                     </MudButton>
                 </div>
             }
@@ -222,12 +217,12 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton Variant="Variant.Text" OnClick="Cancel" Class="ma-4" DropShadow="false">Cancel</MudButton>
+        <MudButton Variant="Variant.Text" OnClick="Cancel" Class="ma-4" DropShadow="false">@CommonText.Cancel</MudButton>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ma-4" DropShadow="false"
                    Disabled="@(_saving || !HasChanges)"
                    OnClick="ApplyAsync"
                    data-testid="jim-aux-apply">
-            @(_saving ? "Applying" : "Apply")
+            @(_saving ? SchemaText.AuxApplying : CommonText.Apply)
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -305,7 +300,7 @@
     }
 
     private static string AttributeCountLabel(AuxiliaryClassOffer offer) =>
-        $"+{offer.ContributedAttributeCount} attribute{(offer.ContributedAttributeCount == 1 ? "" : "s")}";
+        string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(offer.ContributedAttributeCount, SchemaText.AuxAttributeCountOne, SchemaText.AuxAttributeCountOther), offer.ContributedAttributeCount);
 
     private void SetMerged(AuxiliaryClassOffer offer, bool merged)
     {
@@ -337,7 +332,7 @@
 
             if (!result.Success)
             {
-                Snackbar.Add(result.ErrorMessage ?? $"The auxiliary classes of '{ObjectType.Name}' could not be changed.", Severity.Error);
+                Snackbar.Add(result.ErrorMessage ?? string.Format(CultureInfo.CurrentCulture, SchemaText.AuxChangeFailed, ObjectType.Name), Severity.Error);
                 return;
             }
 
@@ -345,8 +340,8 @@
             var removed = _mergedAsOpened.Except(_merged).Count();
             Snackbar.Add(
                 added > 0
-                    ? $"'{ObjectType.Name}' now carries {_merged.Count} auxiliary class{(_merged.Count == 1 ? "" : "es")}. Refresh the schema to bring in the attributes."
-                    : $"{removed} auxiliary class{(removed == 1 ? " is" : "es are")} no longer merged into '{ObjectType.Name}'.",
+                    ? string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(_merged.Count, SchemaText.AuxCarriesOne, SchemaText.AuxCarriesOther), ObjectType.Name, _merged.Count)
+                    : string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(removed, SchemaText.AuxRemovedOne, SchemaText.AuxRemovedOther), removed, ObjectType.Name),
                 Severity.Success);
 
             MudDialog.Close(DialogResult.Ok(true));
@@ -372,11 +367,11 @@
 
             if (!result.Success)
             {
-                Snackbar.Add(result.ErrorMessage ?? "Discovery could not be started.", Severity.Error);
+                Snackbar.Add(result.ErrorMessage ?? SchemaText.AuxDiscoveryNotStarted, Severity.Error);
                 return;
             }
 
-            Snackbar.Add("Discovery queued. Its progress and results are on its Activity.", Severity.Success);
+            Snackbar.Add(SchemaText.AuxDiscoveryQueued, Severity.Success);
 
             // Closed rather than left open: the run's progress is the host's to show, and the suggestions here
             // are a snapshot from before it started.
@@ -390,8 +385,7 @@
 
     private static string ObservationTooltip(int entriesObservedOn)
     {
-        return $"The last discovery run saw this class on {entriesObservedOn:N0} of the entries it read. " +
-               "A quick sample counts within the sample, not within the whole population.";
+        return string.Format(CultureInfo.CurrentCulture, SchemaText.AuxObservationTooltip, string.Format(CultureInfo.CurrentCulture, "{0:N0}", entriesObservedOn));
     }
 
     private static Color StatusColour(AuxiliaryClassDiscoveryStatus status) => status switch
@@ -405,23 +399,23 @@
 
     private static string StatusText(AuxiliaryClassDiscoveryStatus status) => status switch
     {
-        AuxiliaryClassDiscoveryStatus.InProgress => "Running",
-        AuxiliaryClassDiscoveryStatus.Complete => "Last completed",
-        AuxiliaryClassDiscoveryStatus.Cancelled => "Cancelled, partial",
-        AuxiliaryClassDiscoveryStatus.Failed => "Failed",
-        _ => "Not run"
+        AuxiliaryClassDiscoveryStatus.InProgress => SchemaText.AuxStatusRunning,
+        AuxiliaryClassDiscoveryStatus.Complete => SchemaText.AuxStatusComplete,
+        AuxiliaryClassDiscoveryStatus.Cancelled => SchemaText.AuxStatusCancelled,
+        AuxiliaryClassDiscoveryStatus.Failed => SchemaText.AuxStatusFailed,
+        _ => SchemaText.AuxStatusNotRun
     };
 
     private static string DescribeRun(AuxiliaryClassDiscoveryRun run)
     {
         var scope = run.Scope == AuxiliaryClassDiscoveryScope.QuickSample
-            ? $"Quick sample ({run.SampleSizePerObjectType:N0} per Object Type)"
-            : "Full scan";
+            ? string.Format(CultureInfo.CurrentCulture, SchemaText.AuxRunQuickSample, string.Format(CultureInfo.CurrentCulture, "{0:N0}", run.SampleSizePerObjectType))
+            : SchemaText.AuxFullScan;
 
         var when = run.Completed.HasValue
             ? run.Completed.Value.ToLocalTime().ToFriendlyDate()
-            : $"started {run.Started.ToLocalTime().ToRelativeTime()}";
+            : string.Format(CultureInfo.CurrentCulture, SchemaText.AuxRunStarted, run.Started.ToLocalTime().ToRelativeTime());
 
-        return $"{scope}, {when}, {run.EntriesRead:N0} entries read";
+        return string.Format(CultureInfo.CurrentCulture, SchemaText.AuxRunSummary, scope, when, string.Format(CultureInfo.CurrentCulture, "{0:N0}", run.EntriesRead));
     }
 }

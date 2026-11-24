@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Staging
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
@@ -15,18 +16,18 @@
        which are all mt-5, and one panel out of rhythm reads as a mistake. *@
     <MudPaper Outlined="true" Class="pa-4 mt-5">
         <div class="d-flex align-center">
-            <MudText Typo="Typo.h6">Auxiliary Classes</MudText>
-            <InfoPopover Title="Auxiliary Classes">
-                The classes this Object Type is made of: its own structural class, plus the auxiliary classes merged
-                into it, whose attributes join the Object Type at the next schema refresh. Only the classes you
-                enable shape the schema; suggestions never apply themselves.
+            <MudText Typo="Typo.h6">@SchemaText.AuxHeading</MudText>
+            <InfoPopover Title="@SchemaText.AuxHeading">
+                @SchemaText.AuxPanelInfo
+                
+                
             </InfoPopover>
         </div>
 
         @if (_offers.Count == 0)
         {
             <MudAlert Severity="Severity.Info" Class="mt-3">
-                @ConnectedSystem.Name defines no auxiliary classes, so there is nothing to merge into this Object Type.
+                @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxPanelNoneDefined, ConnectedSystem.Name)
             </MudAlert>
         }
         else
@@ -35,7 +36,7 @@
                The schema's other auxiliary classes are in the dialog, not listed here; on a real directory that
                list runs to eighty rows and buried Attribute Selection beneath it. *@
             <div class="d-flex align-center flex-wrap gap-2 mt-3" data-testid="jim-aux-composition">
-                <span class="mud-text-secondary">Made of</span>
+                <span class="mud-text-secondary">@SchemaText.AuxMadeOf</span>
                 <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled">@ObjectType.Name</MudChip>
                 @foreach (var offer in _offers.Where(offer => offer.Merged))
                 {
@@ -49,10 +50,10 @@
                 }
                 <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
                            Disabled="_saving" OnClick="OpenDialogAsync" data-testid="jim-aux-add">
-                    Add auxiliary class
+                    @SchemaText.AuxAddClass
                 </MudButton>
                 <span class="mud-text-secondary ms-auto">
-                    @($"{_offers.Count(offer => offer.Merged):N0} of {_offers.Count:N0} auxiliary classes merged")
+                    @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxMergedCount, string.Format(CultureInfo.CurrentCulture, "{0:N0}", _offers.Count(offer => offer.Merged)), string.Format(CultureInfo.CurrentCulture, "{0:N0}", _offers.Count))
                 </span>
             </div>
 
@@ -60,7 +61,7 @@
             <div class="d-flex align-center flex-wrap gap-2 mt-3">
                 @if (LatestDiscoveryRun == null)
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">JIM has not yet read @ConnectedSystem.Name's entries to find which auxiliary classes are in use; Add auxiliary class offers to discover them.</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@string.Format(CultureInfo.CurrentCulture, SchemaText.AuxPanelNotYetRead, ConnectedSystem.Name)</MudText>
                 }
                 else
                 {
@@ -72,13 +73,13 @@
                     @if (latestRun.ActivityId.HasValue)
                     {
                         var activityId = latestRun.ActivityId.Value;
-                        <MudLink Href="@($"/activity/{activityId}")" Typo="Typo.body2">View Activity</MudLink>
+                        <MudLink Href="@($"/activity/{activityId}")" Typo="Typo.body2">@SchemaText.AuxViewActivity</MudLink>
                     }
                     @if (DiscoveryInProgress)
                     {
                         <MudButton Variant="Variant.Text" Disabled="_cancellingDiscovery"
                                    OnClick="HandleCancelDiscoveryAsync">
-                            Cancel
+                            @CommonText.Cancel
                         </MudButton>
                     }
                 }
@@ -86,8 +87,8 @@
             @if (LatestDiscoveryRun?.Status == AuxiliaryClassDiscoveryStatus.Cancelled)
             {
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    A cancelled run keeps what it found. Those classes are genuinely in use; the ones it never
-                    reached are simply unknown.
+                    @SchemaText.AuxCancelledRunNote
+                    
                 </MudText>
             }
             @if (LatestDiscoveryRun is { Status: AuxiliaryClassDiscoveryStatus.Failed } failedRun && !string.IsNullOrEmpty(failedRun.ErrorMessage))
@@ -103,14 +104,14 @@
 @if (ObjectType.ManagesClassMembership() && ObjectType.IsAuxiliary())
 {
     <MudPaper Outlined="true" Class="pa-4 mt-5">
-        <MudText Typo="Typo.h6" Class="mb-3">Provisioning</MudText>
+        <MudText Typo="Typo.h6" Class="mb-3">@SchemaText.AuxProvisioning</MudText>
         <MudText>
-            Every entry in @ConnectedSystem.Name carries exactly one structural class. Name the one JIM should write
-            alongside @ObjectType.Name when it creates an entry of this Object Type.
+            @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxCarrierIntro, ConnectedSystem.Name, ObjectType.Name)
+            
         </MudText>
         <MudSelect
             T="int?"
-            Label="Structural Carrier Class"
+            Label="@SchemaText.AuxCarrierLabel"
             Variant="Variant.Outlined"
             Class="mt-4"
             Style="max-width: 30rem;"
@@ -126,14 +127,14 @@
         @if (ObjectType.StructuralCarrierObjectTypeId == null)
         {
             <MudAlert Severity="Severity.Warning" Class="mt-4">
-                Until a carrier is chosen, JIM can import @ObjectType.Name objects but cannot create them.
+                @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxCarrierUnset, ObjectType.Name)
             </MudAlert>
         }
         else
         {
             var carrierName = _carrierCandidates.FirstOrDefault(c => c.Id == ObjectType.StructuralCarrierObjectTypeId)?.Name;
             <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                On create, JIM writes both @carrierName and @ObjectType.Name.
+                @string.Format(CultureInfo.CurrentCulture, SchemaText.AuxCarrierCreate, carrierName, ObjectType.Name)
             </MudText>
         }
     </MudPaper>
@@ -195,7 +196,7 @@
             { x => x.LatestDiscoveryRun, LatestDiscoveryRun }
         };
 
-        var dialog = await DialogService.ShowAsync<AuxiliaryClassesDialog>($"Auxiliary classes for {ObjectType.Name}", parameters, DialogOptions);
+        var dialog = await DialogService.ShowAsync<AuxiliaryClassesDialog>(string.Format(CultureInfo.CurrentCulture, SchemaText.AuxDialogTitle, ObjectType.Name), parameters, DialogOptions);
         var result = await dialog.Result;
         if (result is { Canceled: false })
             await OnSchemaChanged.InvokeAsync();
@@ -217,14 +218,14 @@
 
             if (!result.Success)
             {
-                Snackbar.Add(result.ErrorMessage ?? $"'{offer.ObjectType.Name}' could not be changed.", Severity.Error);
+                Snackbar.Add(result.ErrorMessage ?? string.Format(CultureInfo.CurrentCulture, SchemaText.AuxOfferChangeFailed, offer.ObjectType.Name), Severity.Error);
                 return;
             }
 
             Snackbar.Add(
                 merged
-                    ? $"'{offer.ObjectType.Name}' merged into '{ObjectType.Name}'. Refresh the schema to bring in its attributes."
-                    : $"'{offer.ObjectType.Name}' is no longer merged into '{ObjectType.Name}'.",
+                    ? string.Format(CultureInfo.CurrentCulture, SchemaText.AuxMergedMessage, offer.ObjectType.Name, ObjectType.Name)
+                    : string.Format(CultureInfo.CurrentCulture, SchemaText.AuxUnmergedMessage, offer.ObjectType.Name, ObjectType.Name),
                 Severity.Success);
 
             await OnSchemaChanged.InvokeAsync();
@@ -245,7 +246,7 @@
 
             if (!result.Success)
             {
-                Snackbar.Add(result.ErrorMessage ?? $"The Structural Carrier Class for '{ObjectType.Name}' could not be changed.", Severity.Error);
+                Snackbar.Add(result.ErrorMessage ?? string.Format(CultureInfo.CurrentCulture, SchemaText.AuxCarrierChangeFailed, ObjectType.Name), Severity.Error);
                 return;
             }
 
@@ -255,8 +256,8 @@
 
             Snackbar.Add(
                 carrierObjectTypeId == null
-                    ? $"'{ObjectType.Name}' no longer has a Structural Carrier Class, so JIM cannot create its objects."
-                    : $"'{ObjectType.Name}' objects will be created as '{ObjectType.StructuralCarrierObjectType?.Name}'.",
+                    ? string.Format(CultureInfo.CurrentCulture, SchemaText.AuxCarrierRemoved, ObjectType.Name)
+                    : string.Format(CultureInfo.CurrentCulture, SchemaText.AuxCarrierSet, ObjectType.Name, ObjectType.StructuralCarrierObjectType?.Name),
                 Severity.Success);
 
             await OnSchemaChanged.InvokeAsync();
@@ -281,12 +282,12 @@
                 var workerTask = await jim.Tasking.GetWorkerTaskByActivityIdAsync(activityId.Value);
                 if (workerTask == null)
                 {
-                    Snackbar.Add("The discovery run has already finished.", Severity.Info);
+                    Snackbar.Add(SchemaText.AuxRunFinished, Severity.Info);
                 }
                 else
                 {
                     await jim.Tasking.RequestWorkerTaskCancellationAsync(workerTask.Id);
-                    Snackbar.Add("Cancellation requested. What the run has already found is kept.", Severity.Success);
+                    Snackbar.Add(SchemaText.AuxCancelRequested, Severity.Success);
                 }
             }
 
@@ -309,25 +310,25 @@
 
     private static string StatusText(AuxiliaryClassDiscoveryStatus status) => status switch
     {
-        AuxiliaryClassDiscoveryStatus.InProgress => "Running",
-        AuxiliaryClassDiscoveryStatus.Complete => "Last completed",
-        AuxiliaryClassDiscoveryStatus.Cancelled => "Cancelled, partial",
-        AuxiliaryClassDiscoveryStatus.Failed => "Failed",
-        _ => "Not run"
+        AuxiliaryClassDiscoveryStatus.InProgress => SchemaText.AuxStatusRunning,
+        AuxiliaryClassDiscoveryStatus.Complete => SchemaText.AuxStatusComplete,
+        AuxiliaryClassDiscoveryStatus.Cancelled => SchemaText.AuxStatusCancelled,
+        AuxiliaryClassDiscoveryStatus.Failed => SchemaText.AuxStatusFailed,
+        _ => SchemaText.AuxStatusNotRun
     };
 
     private static string DescribeRun(AuxiliaryClassDiscoveryRun run)
     {
         var scope = run.Scope == AuxiliaryClassDiscoveryScope.QuickSample
-            ? $"Quick sample ({run.SampleSizePerObjectType:N0} per Object Type)"
-            : "Full scan";
+            ? string.Format(CultureInfo.CurrentCulture, SchemaText.AuxRunQuickSample, string.Format(CultureInfo.CurrentCulture, "{0:N0}", run.SampleSizePerObjectType))
+            : SchemaText.AuxFullScan;
 
         var when = run.Completed.HasValue
             ? run.Completed.Value.ToLocalTime().ToFriendlyDate()
-            : $"started {run.Started.ToLocalTime().ToRelativeTime()}";
+            : string.Format(CultureInfo.CurrentCulture, SchemaText.AuxRunStarted, run.Started.ToLocalTime().ToRelativeTime());
 
-        var who = string.IsNullOrEmpty(run.InitiatedByName) ? "" : $" by {run.InitiatedByName}";
+        var who = string.IsNullOrEmpty(run.InitiatedByName) ? "" : string.Format(CultureInfo.CurrentCulture, SchemaText.AuxRunBy, run.InitiatedByName);
 
-        return $"{scope}, {when}{who}, {run.EntriesRead:N0} entries read";
+        return string.Format(CultureInfo.CurrentCulture, SchemaText.AuxRunSummaryBy, scope, when, who, string.Format(CultureInfo.CurrentCulture, "{0:N0}", run.EntriesRead));
     }
 }

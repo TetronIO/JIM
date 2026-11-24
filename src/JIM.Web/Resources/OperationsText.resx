@@ -1,0 +1,1883 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScheduleEditorEditTitle" xml:space="preserve">
+    <value>Edit Schedule</value>
+  </data>
+  <data name="ScheduleEditorNewTitle" xml:space="preserve">
+    <value>New Schedule</value>
+  </data>
+  <data name="ScheduleEditorBuiltInNotice" xml:space="preserve">
+    <value>This is a built-in schedule. You can change when it runs and enable or disable it, but its name cannot be changed and it cannot be deleted.</value>
+    <comment>Shown at the top of a built-in Schedule's editor.</comment>
+  </data>
+  <data name="ScheduleEditorDetailsTab" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="ScheduleEditorNameRequired" xml:space="preserve">
+    <value>Name is required</value>
+    <comment>Validation message for the Schedule name.</comment>
+  </data>
+  <data name="ScheduleEditorNameBuiltInHelp" xml:space="preserve">
+    <value>This is a built-in schedule; its name cannot be changed.</value>
+    <comment>Helper text under the name of a built-in Schedule.</comment>
+  </data>
+  <data name="ScheduleEditorNameHelp" xml:space="preserve">
+    <value>A descriptive name for this schedule</value>
+    <comment>Helper text under the Schedule name field.</comment>
+  </data>
+  <data name="ScheduleEditorDescriptionHelp" xml:space="preserve">
+    <value>Optional description of what this schedule does</value>
+    <comment>Helper text under the description field.</comment>
+  </data>
+  <data name="ScheduleEditorEnabledOn" xml:space="preserve">
+    <value>Schedule is Enabled</value>
+    <comment>Switch label when the Schedule is on.</comment>
+  </data>
+  <data name="ScheduleEditorEnabledOff" xml:space="preserve">
+    <value>Schedule is Disabled</value>
+    <comment>Switch label when the Schedule is off.</comment>
+  </data>
+  <data name="ScheduleEditorTriggerTab" xml:space="preserve">
+    <value>Trigger</value>
+    <comment>Tab heading for how the Schedule starts.</comment>
+  </data>
+  <data name="ScheduleEditorScheduled" xml:space="preserve">
+    <value>Scheduled</value>
+    <comment>Radio option: the Schedule runs on a timetable.</comment>
+  </data>
+  <data name="ScheduleEditorScheduledHelp" xml:space="preserve">
+    <value>Run automatically on a schedule</value>
+    <comment>Description under the Scheduled option.</comment>
+  </data>
+  <data name="ScheduleEditorManualOnly" xml:space="preserve">
+    <value>Manual Only</value>
+    <comment>Radio option: the Schedule runs only when started by hand.</comment>
+  </data>
+  <data name="ScheduleEditorManualOnlyHelp" xml:space="preserve">
+    <value>Only run when triggered manually</value>
+    <comment>Description under the Manual Only option. 'elle' is the planification.</comment>
+  </data>
+  <data name="ScheduleEditorConfigurationTitle" xml:space="preserve">
+    <value>Schedule Configuration</value>
+    <comment>Heading of the trigger configuration panel.</comment>
+  </data>
+  <data name="ScheduleEditorRunPattern" xml:space="preserve">
+    <value>Run Pattern</value>
+    <comment>Label above the run pattern choices.</comment>
+  </data>
+  <data name="ScheduleEditorPatternSpecificTimes" xml:space="preserve">
+    <value>At specific times</value>
+    <comment>Run pattern option.</comment>
+  </data>
+  <data name="ScheduleEditorPatternInterval" xml:space="preserve">
+    <value>At regular intervals</value>
+    <comment>Run pattern option.</comment>
+  </data>
+  <data name="ScheduleEditorPatternCustom" xml:space="preserve">
+    <value>Custom (Cron Expression)</value>
+    <comment>Run pattern option.</comment>
+  </data>
+  <data name="ScheduleEditorDays" xml:space="preserve">
+    <value>Days</value>
+    <comment>Label above the day chips.</comment>
+  </data>
+  <data name="ScheduleEditorEveryDay" xml:space="preserve">
+    <value>Every Day</value>
+    <comment>Button: select all seven days.</comment>
+  </data>
+  <data name="ScheduleEditorWeekdays" xml:space="preserve">
+    <value>Weekdays</value>
+    <comment>Button: select Monday to Friday.</comment>
+  </data>
+  <data name="ScheduleEditorWeekends" xml:space="preserve">
+    <value>Weekends</value>
+    <comment>Button: select Saturday and Sunday.</comment>
+  </data>
+  <data name="ScheduleEditorTimes" xml:space="preserve">
+    <value>Times</value>
+    <comment>Label above the run times.</comment>
+  </data>
+  <data name="ScheduleEditorAddTime" xml:space="preserve">
+    <value>Add time</value>
+    <comment>Label of the time picker that adds a run time.</comment>
+  </data>
+  <data name="ScheduleEditorAddTimeRequired" xml:space="preserve">
+    <value>Add at least one run time</value>
+    <comment>Shown when no run time is set; also the schedule preview.</comment>
+  </data>
+  <data name="ScheduleEditorInterval" xml:space="preserve">
+    <value>Interval</value>
+    <comment>Label above the interval controls.</comment>
+  </data>
+  <data name="ScheduleEditorEvery" xml:space="preserve">
+    <value>Every</value>
+    <comment>Words before the interval number.</comment>
+  </data>
+  <data name="ScheduleEditorUnitMinutes" xml:space="preserve">
+    <value>minutes</value>
+    <comment>Interval unit option.</comment>
+  </data>
+  <data name="ScheduleEditorUnitHours" xml:space="preserve">
+    <value>hours</value>
+    <comment>Interval unit option.</comment>
+  </data>
+  <data name="ScheduleEditorRestrictWindow" xml:space="preserve">
+    <value>Restrict to time window</value>
+    <comment>Checkbox: run only between two times.</comment>
+  </data>
+  <data name="ScheduleEditorStartTime" xml:space="preserve">
+    <value>Start time</value>
+    <comment>Time window start.</comment>
+  </data>
+  <data name="ScheduleEditorEndTime" xml:space="preserve">
+    <value>End time</value>
+    <comment>Time window end.</comment>
+  </data>
+  <data name="ScheduleEditorCronExpression" xml:space="preserve">
+    <value>Cron Expression</value>
+    <comment>Field label for a cron expression.</comment>
+  </data>
+  <data name="ScheduleEditorCronHelp" xml:space="preserve">
+    <value>Format: minute hour day-of-month month day-of-week (e.g., 0 9,12,15,18 * * 1-5)</value>
+    <comment>Helper text showing the cron field order. Keep the field order and the example as they are.</comment>
+  </data>
+  <data name="ScheduleEditorAdvancedCron" xml:space="preserve">
+    <value>Advanced: Cron Expression</value>
+    <comment>Expansion panel heading showing the generated cron expression.</comment>
+  </data>
+  <data name="ScheduleEditorCronGenerated" xml:space="preserve">
+    <value>Generated from schedule configuration above</value>
+    <comment>Helper text: the cron expression is read-only and generated.</comment>
+  </data>
+  <data name="ScheduleEditorStepsTab" xml:space="preserve">
+    <value>Steps</value>
+    <comment>Tab heading for the Schedule's steps.</comment>
+  </data>
+  <data name="ScheduleEditorAddStep" xml:space="preserve">
+    <value>Add Step</value>
+    <comment>Button and heading for adding a step.</comment>
+  </data>
+  <data name="ScheduleEditorEditStepHeading" xml:space="preserve">
+    <value>Edit Step</value>
+    <comment>Heading of the step editor when editing an existing step.</comment>
+  </data>
+  <data name="ScheduleEditorEditStep" xml:space="preserve">
+    <value>Edit step</value>
+    <comment>Tooltip on the edit button of a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepType" xml:space="preserve">
+    <value>Step Type</value>
+    <comment>Label of the step type select.</comment>
+  </data>
+  <data name="ScheduleEditorRunProfile" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Step type option, the Run Profile field label, and the step type name.</comment>
+  </data>
+  <data name="ScheduleEditorSelectConnectedSystem" xml:space="preserve">
+    <value>-- Select Connected System --</value>
+    <comment>Placeholder option of the Connected System select.</comment>
+  </data>
+  <data name="ScheduleEditorConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Label of the Connected System select.</comment>
+  </data>
+  <data name="ScheduleEditorSelectRunProfile" xml:space="preserve">
+    <value>-- Select Run Profile --</value>
+    <comment>Placeholder option of the Run Profile select.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShellSoon" xml:space="preserve">
+    <value>PowerShell Script (Coming soon)</value>
+    <comment>Step type option that is not yet available.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShell" xml:space="preserve">
+    <value>PowerShell Script</value>
+    <comment>Step type name shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutableSoon" xml:space="preserve">
+    <value>Executable (Coming soon)</value>
+    <comment>Step type option that is not yet available.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutable" xml:space="preserve">
+    <value>Executable</value>
+    <comment>Step type name shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeSqlSoon" xml:space="preserve">
+    <value>SQL Script (Coming soon)</value>
+    <comment>Step type option that is not yet available.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeSql" xml:space="preserve">
+    <value>SQL Script</value>
+    <comment>Step type name shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeTemporal" xml:space="preserve">
+    <value>Temporal Scope Reconciliation</value>
+    <comment>Name of a built-in step type shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeHistory" xml:space="preserve">
+    <value>History Retention Cleanup</value>
+    <comment>Name of a built-in step type shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepName" xml:space="preserve">
+    <value>Step Name</value>
+    <comment>Label of the name field for a non-Run Profile step.</comment>
+  </data>
+  <data name="ScheduleEditorStepNameHelp" xml:space="preserve">
+    <value>A descriptive name for this step</value>
+    <comment>Helper text under the step name field.</comment>
+  </data>
+  <data name="ScheduleEditorStepNameRequired" xml:space="preserve">
+    <value>Name is required for this step type</value>
+    <comment>Validation message for the step name.</comment>
+  </data>
+  <data name="ScheduleEditorOnFailure" xml:space="preserve">
+    <value>When this step fails</value>
+    <comment>Label of the step's failure behaviour select.</comment>
+  </data>
+  <data name="ScheduleEditorOnFailureHelp" xml:space="preserve">
+    <value>Follow the Schedule unless this step needs to behave differently.</value>
+    <comment>Helper text: the step follows the Schedule's setting by default.</comment>
+  </data>
+  <data name="ScheduleEditorSaveStep" xml:space="preserve">
+    <value>Save Step</value>
+    <comment>Button that saves the step being edited.</comment>
+  </data>
+  <data name="ScheduleEditorBuiltInSteps" xml:space="preserve">
+    <value>This is a built-in schedule; its steps are managed by JIM and cannot be added, edited, reordered or removed.</value>
+    <comment>Notice on a built-in Schedule's steps tab.</comment>
+  </data>
+  <data name="ScheduleEditorOnFailureLabel" xml:space="preserve">
+    <value>When a step fails</value>
+    <comment>Label of the Schedule's failure behaviour select.</comment>
+  </data>
+  <data name="ScheduleEditorBuiltInFailure" xml:space="preserve">
+    <value>This is a built-in Schedule; JIM manages what happens when one of its steps fails.</value>
+    <comment>Helper text on a built-in Schedule's failure select.</comment>
+  </data>
+  <data name="ScheduleEditorFailureApplies" xml:space="preserve">
+    <value>Applies to every step, unless a step sets its own.</value>
+    <comment>Helper text on the Schedule's failure select.</comment>
+  </data>
+  <data name="ScheduleEditorNoSteps" xml:space="preserve">
+    <value>No steps have been added yet. Click "Add Step" to create the first step.</value>
+    <comment>Shown when a Schedule has no steps.</comment>
+  </data>
+  <data name="ScheduleEditorStepNumber" xml:space="preserve">
+    <value>Step {0}</value>
+    <comment>{0} is the 1-based step number.</comment>
+  </data>
+  <data name="ScheduleEditorStepNumberParallel" xml:space="preserve">
+    <value>Step {0}: Parallel</value>
+    <comment>{0} is the 1-based step number of a parallel group.</comment>
+  </data>
+  <data name="ScheduleEditorStepsRunTogether" xml:space="preserve">
+    <value>{0} steps run together</value>
+    <comment>{0} is the number of steps in a parallel group; always two or more, so one form is enough.</comment>
+  </data>
+  <data name="ScheduleEditorRunInParallel" xml:space="preserve">
+    <value>Run in parallel with this step</value>
+    <comment>Tooltip on the button that adds a parallel step.</comment>
+  </data>
+  <data name="ScheduleEditorMoveUp" xml:space="preserve">
+    <value>Move up</value>
+    <comment>Tooltip on the move up button.</comment>
+  </data>
+  <data name="ScheduleEditorMoveDown" xml:space="preserve">
+    <value>Move down</value>
+    <comment>Tooltip on the move down button.</comment>
+  </data>
+  <data name="ScheduleEditorDeleteStep" xml:space="preserve">
+    <value>Delete step</value>
+    <comment>Tooltip on the delete button of a step.</comment>
+  </data>
+  <data name="ScheduleEditorDeleteGroup" xml:space="preserve">
+    <value>Delete entire group</value>
+    <comment>Tooltip on the delete button of a parallel group.</comment>
+  </data>
+  <data name="ScheduleEditorAddParallelStep" xml:space="preserve">
+    <value>Add parallel step</value>
+    <comment>Tooltip on the add parallel step button.</comment>
+  </data>
+  <data name="ScheduleEditorRemoveFromGroup" xml:space="preserve">
+    <value>Remove from group</value>
+    <comment>Tooltip on the button that removes a step from its parallel group.</comment>
+  </data>
+  <data name="ScheduleEditorRunProfileDisabled" xml:space="preserve">
+    <value>This Run Profile is disabled, so this step fails when the Schedule runs. {0}</value>
+    <comment>{0} is the explanation of why the Run Profile is disabled.</comment>
+  </data>
+  <data name="ScheduleEditorChanges" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab heading for the configuration change history.</comment>
+  </data>
+  <data name="ScheduleEditorObjectTypeLabel" xml:space="preserve">
+    <value>Schedule</value>
+    <comment>Object type name used in the configuration change history.</comment>
+  </data>
+  <data name="ScheduleEditorSaving" xml:space="preserve">
+    <value>Saving</value>
+    <comment>Text beside the spinner while the Schedule saves.</comment>
+  </data>
+  <data name="ScheduleEditorEnterCron" xml:space="preserve">
+    <value>Enter a valid cron expression</value>
+    <comment>Schedule preview for an empty custom expression.</comment>
+  </data>
+  <data name="ScheduleEditorCustomPreview" xml:space="preserve">
+    <value>Custom schedule: {0}</value>
+    <comment>Schedule preview. {0} is the cron expression.</comment>
+  </data>
+  <data name="ScheduleEditorSelectDay" xml:space="preserve">
+    <value>Select at least one day</value>
+    <comment>Schedule preview when no day is chosen.</comment>
+  </data>
+  <data name="ScheduleEditorDaysEveryDay" xml:space="preserve">
+    <value>every day</value>
+    <comment>Used inside the schedule preview sentence.</comment>
+  </data>
+  <data name="ScheduleEditorDaysWeekdays" xml:space="preserve">
+    <value>weekdays</value>
+    <comment>Used inside the schedule preview sentence.</comment>
+  </data>
+  <data name="ScheduleEditorDaysWeekends" xml:space="preserve">
+    <value>weekends</value>
+    <comment>Used inside the schedule preview sentence.</comment>
+  </data>
+  <data name="ScheduleEditorPreviewRunsAt" xml:space="preserve">
+    <value>Runs {0} at {1}</value>
+    <comment>Schedule preview. {0} is the days, {1} the times.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOne" xml:space="preserve">
+    <value>every {0} minute</value>
+    <comment>Interval phrase for one minute. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOther" xml:space="preserve">
+    <value>every {0} minutes</value>
+    <comment>Interval phrase for several minutes. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOne" xml:space="preserve">
+    <value>every {0} hour</value>
+    <comment>Interval phrase for one hour. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOther" xml:space="preserve">
+    <value>every {0} hours</value>
+    <comment>Interval phrase for several hours. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorPreviewInterval" xml:space="preserve">
+    <value>Runs {0}, {1}</value>
+    <comment>Schedule preview. {0} is the days, {1} the interval phrase.</comment>
+  </data>
+  <data name="ScheduleEditorPreviewIntervalWindow" xml:space="preserve">
+    <value>Runs {0}, {1} between {2} and {3}</value>
+    <comment>Schedule preview with a time window. {0} days, {1} interval phrase, {2} and {3} times.</comment>
+  </data>
+  <data name="ScheduleEditorNotConfigured" xml:space="preserve">
+    <value>Schedule not configured</value>
+    <comment>Schedule preview for an unknown pattern.</comment>
+  </data>
+  <data name="ScheduleEditorNameMissing" xml:space="preserve">
+    <value>Please enter a name for the schedule.</value>
+    <comment>Snackbar when the name is empty.</comment>
+  </data>
+  <data name="ScheduleEditorDayMissing" xml:space="preserve">
+    <value>Please select at least one day.</value>
+    <comment>Snackbar when no day is chosen.</comment>
+  </data>
+  <data name="ScheduleEditorTimeMissing" xml:space="preserve">
+    <value>Please add at least one run time.</value>
+    <comment>Snackbar when no run time is set.</comment>
+  </data>
+  <data name="ScheduleEditorNotFound" xml:space="preserve">
+    <value>Schedule not found.</value>
+    <comment>Snackbar when the Schedule cannot be loaded.</comment>
+  </data>
+  <data name="ScheduleEditorUpdated" xml:space="preserve">
+    <value>Schedule updated successfully.</value>
+    <comment>Snackbar on a successful update.</comment>
+  </data>
+  <data name="ScheduleEditorCreated" xml:space="preserve">
+    <value>Schedule created successfully.</value>
+    <comment>Snackbar on a successful create.</comment>
+  </data>
+  <data name="ScheduleEditorSaveFailed" xml:space="preserve">
+    <value>Failed to save schedule: {0}</value>
+    <comment>Snackbar on a failed save. {0} is the error message.</comment>
+  </data>
+  <data name="ScheduleEditorConnectedSystemRequired" xml:space="preserve">
+    <value>Please select a Connected System and Run Profile.</value>
+    <comment>Snackbar when a step has no Connected System or Run Profile.</comment>
+  </data>
+  <data name="ScheduleEditorStepNameMissing" xml:space="preserve">
+    <value>Please enter a name for this step.</value>
+    <comment>Snackbar when a non-Run Profile step has no name.</comment>
+  </data>
+  <data name="ScheduleEditorUnknownSystem" xml:space="preserve">
+    <value>Unknown System</value>
+    <comment>Shown for a step whose Connected System is not found.</comment>
+  </data>
+  <data name="ScheduleEditorUnknownProfile" xml:space="preserve">
+    <value>Unknown Profile</value>
+    <comment>Shown for a step whose Run Profile is not found.</comment>
+  </data>
+  <data name="CompletedHeading" xml:space="preserve">
+    <value>Completed</value>
+    <comment>Heading of the Completed section of the Activity tab.</comment>
+  </data>
+  <data name="CompletedCollapse" xml:space="preserve">
+    <value>Collapse Completed</value>
+    <comment>Tooltip and label of the button that folds the Completed section.</comment>
+  </data>
+  <data name="CompletedExpand" xml:space="preserve">
+    <value>Expand Completed</value>
+    <comment>Tooltip and label of the button that unfolds the Completed section.</comment>
+  </data>
+  <data name="CompletedSearchPlaceholder" xml:space="preserve">
+    <value>Search target or initiator</value>
+    <comment>Placeholder of the search box above the Completed list.</comment>
+  </data>
+  <data name="CompletedResumeRefresh" xml:space="preserve">
+    <value>Resume auto-refresh</value>
+    <comment>Tooltip and label of the button that restarts automatic refresh.</comment>
+  </data>
+  <data name="CompletedPauseRefresh" xml:space="preserve">
+    <value>Pause auto-refresh</value>
+    <comment>Tooltip and label of the button that pauses automatic refresh.</comment>
+  </data>
+  <data name="CompletedColResult" xml:space="preserve">
+    <value>Result</value>
+    <comment>Column heading: how the execution finished.</comment>
+  </data>
+  <data name="CompletedColConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Column heading and field label.</comment>
+  </data>
+  <data name="CompletedColRunProfile" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Column heading and field label.</comment>
+  </data>
+  <data name="CompletedColOutcomes" xml:space="preserve">
+    <value>Outcomes</value>
+    <comment>Column heading: the counts of what the execution changed.</comment>
+  </data>
+  <data name="CompletedColInitiatedBy" xml:space="preserve">
+    <value>Initiated By</value>
+    <comment>Column heading and field heading: who started the execution.</comment>
+  </data>
+  <data name="CompletedColExecuted" xml:space="preserve">
+    <value>Executed</value>
+    <comment>Column heading and field label: when the execution ran.</comment>
+  </data>
+  <data name="CompletedColDuration" xml:space="preserve">
+    <value>Duration</value>
+    <comment>Column heading and field label: how long the execution took.</comment>
+  </data>
+  <data name="CompletedNoChanges" xml:space="preserve">
+    <value>No changes</value>
+    <comment>Shown in the Outcomes column when an execution changed nothing.</comment>
+  </data>
+  <data name="CompletedStatusNotSet" xml:space="preserve">
+    <value>Not Set</value>
+    <comment>Activity status: not set.</comment>
+  </data>
+  <data name="CompletedStatusInProgress" xml:space="preserve">
+    <value>In Progress</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusComplete" xml:space="preserve">
+    <value>Complete</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusCompleteWithWarning" xml:space="preserve">
+    <value>Complete With Warning</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusCompleteWithError" xml:space="preserve">
+    <value>Complete With Error</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusFailedWithError" xml:space="preserve">
+    <value>Failed With Error</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedOpExecute" xml:space="preserve">
+    <value>Execute</value>
+    <comment>Operation performed on a Run Profile: execute it.</comment>
+  </data>
+  <data name="CompletedOpClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Operation performed on a Connected System: clear its objects.</comment>
+  </data>
+  <data name="CompletedStatAdded" xml:space="preserve">
+    <value>Connected System Objects added</value>
+    <comment>Outcome chip: count of objects added. Count shown beside it.</comment>
+  </data>
+  <data name="CompletedStatUpdated" xml:space="preserve">
+    <value>Connected System Objects updated</value>
+    <comment>Outcome chip: count of objects updated.</comment>
+  </data>
+  <data name="CompletedStatDeletionsDetected" xml:space="preserve">
+    <value>Connected System Object deletions detected</value>
+    <comment>Outcome chip: deletions found in the source system.</comment>
+  </data>
+  <data name="CompletedStatProjected" xml:space="preserve">
+    <value>Metaverse Objects projected</value>
+    <comment>Outcome chip: Metaverse Objects projected.</comment>
+  </data>
+  <data name="CompletedStatJoined" xml:space="preserve">
+    <value>Connected System Objects joined</value>
+    <comment>Outcome chip: objects joined to a Metaverse Object.</comment>
+  </data>
+  <data name="CompletedStatAttributeFlow" xml:space="preserve">
+    <value>Metaverse Objects with Attribute Flow</value>
+    <comment>Outcome chip and statistic: Metaverse Objects with an Attribute Flow applied.</comment>
+  </data>
+  <data name="CompletedStatDisconnected" xml:space="preserve">
+    <value>Connected System Objects disconnected</value>
+    <comment>Outcome chip: objects disconnected.</comment>
+  </data>
+  <data name="CompletedStatDisconnectedOutOfScope" xml:space="preserve">
+    <value>Connected System Objects disconnected (out of scope)</value>
+    <comment>Outcome chip: objects disconnected because they left the scope.</comment>
+  </data>
+  <data name="CompletedStatOutOfScopeRetainJoin" xml:space="preserve">
+    <value>Connected System Objects out of scope (join retained)</value>
+    <comment>Outcome chip: objects out of scope whose join was kept.</comment>
+  </data>
+  <data name="CompletedStatDeleted" xml:space="preserve">
+    <value>Connected System Objects deleted</value>
+    <comment>Outcome chip: objects deleted.</comment>
+  </data>
+  <data name="CompletedStatDriftCorrected" xml:space="preserve">
+    <value>Connected System Objects drift corrected</value>
+    <comment>Outcome chip: attribute drift corrected.</comment>
+  </data>
+  <data name="CompletedStatProvisioned" xml:space="preserve">
+    <value>Connected System Objects provisioned</value>
+    <comment>Outcome chip: objects provisioned.</comment>
+  </data>
+  <data name="CompletedStatPendingExports" xml:space="preserve">
+    <value>Connected System Object Pending Exports</value>
+    <comment>Outcome chip and statistic: Pending Exports created.</comment>
+  </data>
+  <data name="CompletedStatExported" xml:space="preserve">
+    <value>Connected System Objects exported</value>
+    <comment>Outcome chip: objects exported.</comment>
+  </data>
+  <data name="CompletedStatDeprovisioned" xml:space="preserve">
+    <value>Connected System Objects deprovisioned</value>
+    <comment>Outcome chip: objects deprovisioned.</comment>
+  </data>
+  <data name="CompletedStatErrors" xml:space="preserve">
+    <value>Errors</value>
+    <comment>Outcome chip and statistic: errors.</comment>
+  </data>
+  <data name="CompletedSideAdded" xml:space="preserve">
+    <value>Connected System Objects Added</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideUpdated" xml:space="preserve">
+    <value>Connected System Objects Updated</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDeletionsDetected" xml:space="preserve">
+    <value>Connected System Object Deletions Detected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideJoined" xml:space="preserve">
+    <value>Connected System Objects Joined</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideProjected" xml:space="preserve">
+    <value>Metaverse Objects Projected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideProvisioned" xml:space="preserve">
+    <value>Connected System Objects Provisioned</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDisconnected" xml:space="preserve">
+    <value>Connected System Objects Disconnected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDeleted" xml:space="preserve">
+    <value>Connected System Objects Deleted</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDriftCorrected" xml:space="preserve">
+    <value>Connected System Objects Drift Corrected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideExported" xml:space="preserve">
+    <value>Connected System Objects Exported</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDeprovisioned" xml:space="preserve">
+    <value>Connected System Objects Deprovisioned</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedNoSearchMatch" xml:space="preserve">
+    <value>No executions match "{0}"</value>
+    <comment>{0} is the search text typed by the reader.</comment>
+  </data>
+  <data name="CompletedSearchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+    <comment>Empty state when a search matched nothing.</comment>
+  </data>
+  <data name="CompletedNoFilterMatch" xml:space="preserve">
+    <value>No completed executions match the current filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="CompletedFilterHint" xml:space="preserve">
+    <value>Adjust or clear the filters above to see more executions.</value>
+    <comment>Empty state hint for the filters.</comment>
+  </data>
+  <data name="CompletedClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+    <comment>Button in the empty state that clears the filters.</comment>
+  </data>
+  <data name="CompletedNothingFinished" xml:space="preserve">
+    <value>Nothing has finished yet</value>
+    <comment>Empty state when no execution has finished.</comment>
+  </data>
+  <data name="CompletedNothingFinishedHint" xml:space="preserve">
+    <value>Run Profile executions appear here once one has finished, whether queued from this tab, by a Schedule, or through the API.</value>
+    <comment>Empty state hint. Run Profile is the glossary term.</comment>
+  </data>
+  <data name="CompletedExecutionDetails" xml:space="preserve">
+    <value>Execution Details</value>
+    <comment>Heading of the execution details panel.</comment>
+  </data>
+  <data name="CompletedTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Heading of the target section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedSyncRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedDataGeneration" xml:space="preserve">
+    <value>Data Generation</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedTrustedCertificate" xml:space="preserve">
+    <value>Trusted Certificate</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedObjectMatchingRule" xml:space="preserve">
+    <value>Object Matching Rule</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSystemTask" xml:space="preserve">
+    <value>System Task</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedServiceSetting" xml:space="preserve">
+    <value>Service Setting</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedOperation" xml:space="preserve">
+    <value>Operation</value>
+    <comment>Heading of the operation section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedStatistics" xml:space="preserve">
+    <value>Statistics</value>
+    <comment>Heading of the statistics section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedTiming" xml:space="preserve">
+    <value>Timing</value>
+    <comment>Heading of the timing section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedErrorDetails" xml:space="preserve">
+    <value>Error Details</value>
+    <comment>Heading of the error section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedViewDetails" xml:space="preserve">
+    <value>View Full Details</value>
+    <comment>Button that opens the full Activity page.</comment>
+  </data>
+  <data name="SchedulesSingularName" xml:space="preserve">
+    <value>Schedule</value>
+    <comment>Noun in the toolbar count (one Schedule). Also the default title of the executions dialog.</comment>
+  </data>
+  <data name="SchedulesPluralName" xml:space="preserve">
+    <value>Schedules</value>
+    <comment>Noun in the toolbar count (several Schedules).</comment>
+  </data>
+  <data name="SchedulesSearchPlaceholder" xml:space="preserve">
+    <value>Search by name or description</value>
+    <comment>Placeholder of the search box above the Schedules list.</comment>
+  </data>
+  <data name="SchedulesManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>Trigger chip: the Schedule runs only when started by hand.</comment>
+  </data>
+  <data name="SchedulesManualTooltip" xml:space="preserve">
+    <value>Manual: runs only when started</value>
+    <comment>Tooltip on the Manual trigger chip. 'elle' is the planification.</comment>
+  </data>
+  <data name="SchedulesColNextRun" xml:space="preserve">
+    <value>Next Run</value>
+    <comment>Column heading: when the Schedule runs next.</comment>
+  </data>
+  <data name="SchedulesColLastRun" xml:space="preserve">
+    <value>Last Run</value>
+    <comment>Column heading: when the Schedule last ran.</comment>
+  </data>
+  <data name="SchedulesColOutcome" xml:space="preserve">
+    <value>Outcome</value>
+    <comment>Column heading: how the last run ended.</comment>
+  </data>
+  <data name="SchedulesStepOne" xml:space="preserve">
+    <value>{0} step</value>
+    <comment>Step count chip for one step. {0} is the count.</comment>
+  </data>
+  <data name="SchedulesStepOther" xml:space="preserve">
+    <value>{0} steps</value>
+    <comment>Step count chip for several steps. {0} is the count.</comment>
+  </data>
+  <data name="SchedulesShowExecutions" xml:space="preserve">
+    <value>Show this Schedule's executions</value>
+    <comment>Tooltip on the button that opens the Schedule's executions.</comment>
+  </data>
+  <data name="SchedulesDisable" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Tooltip on the button that disables an enabled Schedule.</comment>
+  </data>
+  <data name="SchedulesEnable" xml:space="preserve">
+    <value>Enable</value>
+    <comment>Tooltip on the button that enables a disabled Schedule.</comment>
+  </data>
+  <data name="SchedulesRunNow" xml:space="preserve">
+    <value>Run Now</value>
+    <comment>Tooltip and confirmation button: start the Schedule now.</comment>
+  </data>
+  <data name="SchedulesBuiltInLocked" xml:space="preserve">
+    <value>Built-in schedule; cannot be deleted</value>
+    <comment>Tooltip on the locked delete button of a built-in Schedule.</comment>
+  </data>
+  <data name="SchedulesNoSearchMatch" xml:space="preserve">
+    <value>No Schedules match "{0}"</value>
+    <comment>Empty state. {0} is the search text typed by the reader.</comment>
+  </data>
+  <data name="SchedulesNoneYet" xml:space="preserve">
+    <value>No Schedules have been created yet</value>
+    <comment>Empty state when there are no Schedules.</comment>
+  </data>
+  <data name="SchedulesNoneYetHint" xml:space="preserve">
+    <value>A Schedule runs a sequence of Run Profiles on a trigger you choose, or on demand.</value>
+    <comment>Empty state hint. Run Profiles is the glossary term.</comment>
+  </data>
+  <data name="SchedulesCreateFirst" xml:space="preserve">
+    <value>Create Your First Schedule</value>
+    <comment>Button in the empty state that creates a Schedule.</comment>
+  </data>
+  <data name="SchedulesExecStarted" xml:space="preserve">
+    <value>Started</value>
+    <comment>Column heading of a Schedule's executions: when the run started.</comment>
+  </data>
+  <data name="SchedulesViewExecution" xml:space="preserve">
+    <value>View Schedule Execution</value>
+    <comment>Link to one Schedule Execution.</comment>
+  </data>
+  <data name="SchedulesExecSingularName" xml:space="preserve">
+    <value>Schedule Execution</value>
+    <comment>Noun in the executions toolbar count (one).</comment>
+  </data>
+  <data name="SchedulesExecPluralName" xml:space="preserve">
+    <value>Schedule Executions</value>
+    <comment>Noun in the executions toolbar count (several).</comment>
+  </data>
+  <data name="SchedulesExecSearchPlaceholder" xml:space="preserve">
+    <value>Search by initiator</value>
+    <comment>Placeholder of the search box in the executions dialog.</comment>
+  </data>
+  <data name="SchedulesExecNoSearchMatch" xml:space="preserve">
+    <value>No Schedule Executions match "{0}"</value>
+    <comment>Empty state in the executions dialog. {0} is the search text.</comment>
+  </data>
+  <data name="SchedulesExecNone" xml:space="preserve">
+    <value>This Schedule has not run yet</value>
+    <comment>Empty state in the executions dialog.</comment>
+  </data>
+  <data name="SchedulesExecNoneHint" xml:space="preserve">
+    <value>Executions appear here once the Schedule's trigger fires, or once it is run with the Run Now action.</value>
+    <comment>Empty state hint in the executions dialog.</comment>
+  </data>
+  <data name="SchedulesDemoRefused" xml:space="preserve">
+    <value>Not available in demo mode: these Schedules are sample data.</value>
+    <comment>Notice shown when an action would change a sample Schedule.</comment>
+  </data>
+  <data name="SchedulesNoLongerExists" xml:space="preserve">
+    <value>Schedule '{0}' no longer exists.</value>
+    <comment>Warning. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesEnabledNotice" xml:space="preserve">
+    <value>Schedule '{0}' has been enabled.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesDisabledNotice" xml:space="preserve">
+    <value>Schedule '{0}' has been disabled.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesNoStepsToRun" xml:space="preserve">
+    <value>Cannot run a schedule with no steps.</value>
+    <comment>Warning when a Schedule without steps is run now.</comment>
+  </data>
+  <data name="SchedulesRunConfirmTitle" xml:space="preserve">
+    <value>Run Schedule Now</value>
+    <comment>Title of the run confirmation.</comment>
+  </data>
+  <data name="SchedulesRunConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to run '{0}' now? This will queue all steps for execution.</value>
+    <comment>Run confirmation. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesQueued" xml:space="preserve">
+    <value>Schedule '{0}' has been queued for execution.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesCouldNotStart" xml:space="preserve">
+    <value>Schedule '{0}' could not start. Open its latest execution for the reason.</value>
+    <comment>Error notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesFailedToStart" xml:space="preserve">
+    <value>Failed to start schedule '{0}'. It may have no steps.</value>
+    <comment>Warning notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesBuiltInDelete" xml:space="preserve">
+    <value>The built-in schedule '{0}' cannot be deleted.</value>
+    <comment>Warning notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Schedule</value>
+    <comment>Title of the delete confirmation.</comment>
+  </data>
+  <data name="SchedulesDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to delete '{0}'? This action cannot be undone.</value>
+    <comment>Delete confirmation. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesDeleted" xml:space="preserve">
+    <value>Schedule '{0}' has been deleted.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="ScheduleExecQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>Schedule Execution status: waiting to run.</comment>
+  </data>
+  <data name="ScheduleExecFailed" xml:space="preserve">
+    <value>Failed</value>
+    <comment>Schedule Execution status and outcome: the run failed.</comment>
+  </data>
+  <data name="ScheduleExecPaused" xml:space="preserve">
+    <value>Paused</value>
+    <comment>Schedule Execution status: paused.</comment>
+  </data>
+  <data name="ScheduleExecFailedOnStep" xml:space="preserve">
+    <value>Failed on step {0}</value>
+    <comment>Outcome chip. {0} is the 1-based step the run stopped on.</comment>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnStep" xml:space="preserve">
+    <value>Complete With Error on step {0}</value>
+    <comment>Outcome chip. {0} is the 1-based failed step.</comment>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnSteps" xml:space="preserve">
+    <value>Complete With Error on steps {0} and {1}</value>
+    <comment>Outcome chip. {0} is the list of failed steps except the last, {1} is the last failed step.</comment>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorFallback" xml:space="preserve">
+    <value>The Schedule finished, but one or more steps failed. They are set to let the Schedule continue; the step statuses below show which.</value>
+    <comment>Shown on a Complete With Error execution that recorded no message of its own.</comment>
+  </data>
+  <data name="PasswordsQueueHeading" xml:space="preserve">
+    <value>Password Synchronisation queue</value>
+    <comment>Heading of the password queue on the Operations page.</comment>
+  </data>
+  <data name="PasswordsQueueIntro" xml:space="preserve">
+    <value>Password changes waiting to reach a Connected System. A change leaves this queue once it is delivered; anything listed here is still owed, or has stopped being attempted.</value>
+    <comment>Intro under the heading.</comment>
+  </data>
+  <data name="PasswordsStatusWaiting" xml:space="preserve">
+    <value>Waiting</value>
+    <comment>Status of a change waiting to be delivered: card title and filter option.</comment>
+  </data>
+  <data name="PasswordsDueNow" xml:space="preserve">
+    <value>{0} due now</value>
+    <comment>Card line. {0} is the count of changes a delivery pass would attempt now.</comment>
+  </data>
+  <data name="PasswordsWaitingTooltip" xml:space="preserve">
+    <value>How many of the waiting changes a delivery pass would attempt right now. The rest are waiting out a retry backoff. A large waiting count with nothing due is a queue working through its backoffs; a large due count is a queue that is not being drained.</value>
+    <comment>Tooltip on the Waiting card.</comment>
+  </data>
+  <data name="PasswordsStatusParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>Status: the target refused the change or it ran out of attempts. Feminine, agreeing with 'modification'.</comment>
+  </data>
+  <data name="PasswordsParkedTooltip" xml:space="preserve">
+    <value>The target refused these, or they ran out of attempts. JIM has stopped trying, so they wait on a person. Deal with the reason, then retry them.</value>
+    <comment>Tooltip on the Parked card.</comment>
+  </data>
+  <data name="PasswordsStatusExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Status: the change outlived its Connected System's time to live. Feminine, agreeing with 'modification'.</comment>
+  </data>
+  <data name="PasswordsExpiredTooltip" xml:space="preserve">
+    <value>These outlived their Connected System's time to live. The password each carried is gone, so nothing can deliver them now. They need a password set by other means.</value>
+    <comment>Tooltip on the Expired card.</comment>
+  </data>
+  <data name="PasswordsCancelledTooltip" xml:space="preserve">
+    <value>An administrator stopped these being delivered. Counted rather than hidden, because the Metaverse Object's password is still divergent on that system and this count is the only thing that says so.</value>
+    <comment>Tooltip on the Cancelled card.</comment>
+  </data>
+  <data name="PasswordsShowingNarrowed" xml:space="preserve">
+    <value>Showing one Metaverse Object's queued password changes. The counts above are for the whole queue.</value>
+    <comment>Notice when the page is narrowed to one Metaverse Object.</comment>
+  </data>
+  <data name="PasswordsShowWhole" xml:space="preserve">
+    <value>Show the whole queue</value>
+    <comment>Button that clears the narrowing to one Metaverse Object.</comment>
+  </data>
+  <data name="PasswordsFailureReasonLabel" xml:space="preserve">
+    <value>Failure reason</value>
+    <comment>Filter label: why the delivery attempt failed.</comment>
+  </data>
+  <data name="PasswordsSingularName" xml:space="preserve">
+    <value>queued password change</value>
+    <comment>Noun in the toolbar count (one).</comment>
+  </data>
+  <data name="PasswordsPluralName" xml:space="preserve">
+    <value>queued password changes</value>
+    <comment>Noun in the toolbar count (several).</comment>
+  </data>
+  <data name="PasswordsSearchPlaceholder" xml:space="preserve">
+    <value>Search Metaverse Objects and Connected Systems...</value>
+    <comment>Placeholder of the search box.</comment>
+  </data>
+  <data name="PasswordsRetryShown" xml:space="preserve">
+    <value>Retry shown</value>
+    <comment>Bulk action: retry every change the grid shows.</comment>
+  </data>
+  <data name="PasswordsCancelShown" xml:space="preserve">
+    <value>Cancel shown</value>
+    <comment>Bulk action: cancel every change the grid shows.</comment>
+  </data>
+  <data name="PasswordsIdentityTooltip" xml:space="preserve">
+    <value>The queue holds one change per Metaverse Object per Connected System. The Metaverse Object is what you scan for; the row opens it, where the same change is visible against every one of its Connected System Objects.</value>
+    <comment>Tooltip on the Metaverse Object column heading.</comment>
+  </data>
+  <data name="PasswordsColAttempts" xml:space="preserve">
+    <value>Attempts</value>
+    <comment>Column heading: how many delivery attempts were made.</comment>
+  </data>
+  <data name="PasswordsColNextAttempt" xml:space="preserve">
+    <value>Next attempt</value>
+    <comment>Column heading: when the next delivery attempt falls due.</comment>
+  </data>
+  <data name="PasswordsNextAttemptTooltip" xml:space="preserve">
+    <value>When the next delivery attempt falls due. Read it alongside the attempt count: two attempts with a retry booked is a system having a bad morning, and six with none is a system that has given up.</value>
+    <comment>Tooltip on the Next attempt heading.</comment>
+  </data>
+  <data name="PasswordsHeldTooltip" xml:space="preserve">
+    <value>Password Synchronisation is switched off on this Connected System, so the change is being kept rather than attempted. Switching it on delivers everything that accumulated, unless it expires first.</value>
+    <comment>Tooltip on Held: the Connected System has password synchronisation switched off.</comment>
+  </data>
+  <data name="PasswordsHeld" xml:space="preserve">
+    <value>Held</value>
+    <comment>Next attempt cell: the Connected System holds the change.</comment>
+  </data>
+  <data name="PasswordsDeliveringNow" xml:space="preserve">
+    <value>Delivering now</value>
+    <comment>Next attempt cell: a delivery attempt is happening.</comment>
+  </data>
+  <data name="PasswordsDueNowLabel" xml:space="preserve">
+    <value>Due now</value>
+    <comment>Next attempt cell: the change is due at once.</comment>
+  </data>
+  <data name="PasswordsRetryOneAria" xml:space="preserve">
+    <value>Retry this password change</value>
+    <comment>Accessible name of the retry button on a row.</comment>
+  </data>
+  <data name="PasswordsCancelOneAria" xml:space="preserve">
+    <value>Cancel this password change</value>
+    <comment>Accessible name of the cancel button on a row.</comment>
+  </data>
+  <data name="PasswordsCancelOneTooltip" xml:space="preserve">
+    <value>Stop delivering this change. It stays, marked Cancelled, because the Metaverse Object's password is still divergent on that system.</value>
+    <comment>Tooltip on the cancel button of a row.</comment>
+  </data>
+  <data name="PasswordsNoSearchMatch" xml:space="preserve">
+    <value>No queued password changes match "{0}"</value>
+    <comment>Empty state. {0} is the search text.</comment>
+  </data>
+  <data name="PasswordsNoFilterMatch" xml:space="preserve">
+    <value>No queued password changes match these filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="PasswordsNoFilterHint" xml:space="preserve">
+    <value>Clear the filters to see the whole queue.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="PasswordsEmptyTitle" xml:space="preserve">
+    <value>Nothing is waiting to be delivered</value>
+    <comment>Empty state when the queue is empty: the healthy state.</comment>
+  </data>
+  <data name="PasswordsEmptyHint" xml:space="preserve">
+    <value>Password changes appear here while they are on their way to a Connected System, and leave once they arrive.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="PasswordsDescribeOne" xml:space="preserve">
+    <value>1 password change</value>
+    <comment>A count of one change, used inside a sentence.</comment>
+  </data>
+  <data name="PasswordsDescribeOther" xml:space="preserve">
+    <value>{0} password changes</value>
+    <comment>A count of several changes, used inside a sentence. {0} is the count.</comment>
+  </data>
+  <data name="PasswordsRetryShownConfirm" xml:space="preserve">
+    <value>Attempt delivery again for the {0} shown?</value>
+    <comment>Confirmation before retrying. {0} is the count with its noun, such as '3 password changes'.</comment>
+  </data>
+  <data name="PasswordsCancelShownConfirm" xml:space="preserve">
+    <value>Stop delivering the {0} shown? Each of those people keeps their old password on the target system until a new change is synchronised. Any that is the first password of a Connected System Object JIM provisioned leaves that Connected System Object without a password from JIM.</value>
+    <comment>Confirmation before cancelling. {0} is the count with its noun. Long consequence text: keep each sentence whole.</comment>
+  </data>
+  <data name="PasswordsRetryTitle" xml:space="preserve">
+    <value>Retry password changes</value>
+    <comment>Title of the retry confirmation.</comment>
+  </data>
+  <data name="PasswordsCancelTitle" xml:space="preserve">
+    <value>Cancel password changes</value>
+    <comment>Title of the cancel confirmation.</comment>
+  </data>
+  <data name="PasswordsRetryYes" xml:space="preserve">
+    <value>Retry</value>
+    <comment>Confirm button of the retry confirmation.</comment>
+  </data>
+  <data name="PasswordsCancelDeliveryYes" xml:space="preserve">
+    <value>Cancel delivery</value>
+    <comment>Confirm button of the cancel confirmation.</comment>
+  </data>
+  <data name="PasswordsNothingRetried" xml:space="preserve">
+    <value>Nothing was retried; no queued password change matched.</value>
+    <comment>Notice when a retry matched nothing.</comment>
+  </data>
+  <data name="PasswordsNothingCancelled" xml:space="preserve">
+    <value>Nothing was cancelled; no queued password change matched.</value>
+    <comment>Notice when a cancel matched nothing.</comment>
+  </data>
+  <data name="PasswordsAttemptedAgain" xml:space="preserve">
+    <value>{0} will be attempted again.</value>
+    <comment>Success notice after a retry. {0} is the count with its noun.</comment>
+  </data>
+  <data name="PasswordsNotDelivered" xml:space="preserve">
+    <value>{0} will not be delivered.</value>
+    <comment>Success notice after a cancel. {0} is the count with its noun.</comment>
+  </data>
+  <data name="PasswordsRetryPending" xml:space="preserve">
+    <value>Attempt delivery now rather than waiting for the next scheduled attempt.</value>
+    <comment>Tooltip on retry for a waiting change.</comment>
+  </data>
+  <data name="PasswordsRetryCancelled" xml:space="preserve">
+    <value>Put this change back on the queue and attempt delivery. It is delivered only if it has not expired in the meantime.</value>
+    <comment>Tooltip on retry for a cancelled change.</comment>
+  </data>
+  <data name="PasswordsRetryDefault" xml:space="preserve">
+    <value>Attempt delivery again. Deal with the reason the target refused it first, or it will simply park again.</value>
+    <comment>Tooltip on retry for a parked change.</comment>
+  </data>
+  <data name="ExchangeQueueHeading" xml:space="preserve">
+    <value>Exchange queue</value>
+    <comment>Heading of the Exchange queue on the Operations page.</comment>
+  </data>
+  <data name="ExchangeQueueIntro" xml:space="preserve">
+    <value>Recipient changes JIM has queued for Exchange. A change leaves this queue once Exchange has made it, or once it is no longer wanted; anything listed here is still owed, or waits on a person.</value>
+    <comment>Intro under the heading.</comment>
+  </data>
+  <data name="ExchangeQueuedTooltip" xml:space="preserve">
+    <value>Changes waiting for their first attempt, or being applied by Exchange now. Nothing is needed from anyone.</value>
+    <comment>Tooltip on the Queued card.</comment>
+  </data>
+  <data name="ExchangeBeingApplied" xml:space="preserve">
+    <value>{0} being applied now</value>
+    <comment>Queued card line. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeHeldOne" xml:space="preserve">
+    <value>1 more held</value>
+    <comment>Queued card line for one change held. Held means its Connected System does not manage Exchange recipients.</comment>
+  </data>
+  <data name="ExchangeHeldOther" xml:space="preserve">
+    <value>{0} more held</value>
+    <comment>Queued card line for several changes held. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeHeldTooltip" xml:space="preserve">
+    <value>These Connected Systems do not manage Exchange recipients now, so their changes wait unattempted. They are delivered once each manages Exchange recipients again.</value>
+    <comment>Tooltip on the held count.</comment>
+  </data>
+  <data name="ExchangeRetrying" xml:space="preserve">
+    <value>Retrying</value>
+    <comment>Card title: a change that may clear by itself and is being tried again.</comment>
+  </data>
+  <data name="ExchangeRetryingTooltip" xml:space="preserve">
+    <value>An attempt failed in a way that may clear by itself, such as replication or a server that did not answer. JIM tries again with a growing interval, and parks the change if it is still failing after 24 hours.</value>
+    <comment>Tooltip on the Retrying card.</comment>
+  </data>
+  <data name="ExchangeParkedTooltip" xml:space="preserve">
+    <value>Exchange refused these, JIM lacks the permission to make them, or they kept failing for 24 hours. JIM has stopped trying, so they wait on a person. Deal with the reason Exchange gave, then retry them.</value>
+    <comment>Tooltip on the Parked card.</comment>
+  </data>
+  <data name="ExchangeRefused" xml:space="preserve">
+    <value>Refused</value>
+    <comment>Card title: a change JIM did not ask Exchange to make. Feminine, agreeing with 'modification'.</comment>
+  </data>
+  <data name="ExchangeRefusedTooltip" xml:space="preserve">
+    <value>JIM did not ask Exchange to make these, because what is declared cannot be made, such as a mailbox on a contact, or is a change of recipient type JIM does not make. Retrying cannot help. Correct what is declared for the account, and the next synchronisation replaces the change.</value>
+    <comment>Tooltip on the Refused card.</comment>
+  </data>
+  <data name="ExchangeNotMadeOne" xml:space="preserve">
+    <value>1 is a recipient type change not made</value>
+    <comment>Refused card line for one change not made.</comment>
+  </data>
+  <data name="ExchangeNotMadeOther" xml:space="preserve">
+    <value>{0} are recipient type changes not made</value>
+    <comment>Refused card line for several changes not made. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeShowingNarrowed" xml:space="preserve">
+    <value>Showing one Metaverse Object's queued Exchange changes. The counts above are for the whole queue.</value>
+    <comment>Notice when the page is narrowed to one Metaverse Object.</comment>
+  </data>
+  <data name="ExchangeSingularName" xml:space="preserve">
+    <value>queued Exchange change</value>
+    <comment>Noun in the toolbar count (one).</comment>
+  </data>
+  <data name="ExchangePluralName" xml:space="preserve">
+    <value>queued Exchange changes</value>
+    <comment>Noun in the toolbar count (several).</comment>
+  </data>
+  <data name="ExchangeColChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Column heading: what the change does.</comment>
+  </data>
+  <data name="ExchangeStatusTooltip" xml:space="preserve">
+    <value>Where the change stands, and what it is waiting for. Sorted by the next attempt, so the changes about to be tried come first.</value>
+    <comment>Tooltip on the Status column heading.</comment>
+  </data>
+  <data name="ExchangeColReason" xml:space="preserve">
+    <value>Reason</value>
+    <comment>Column heading: why the change has not been made.</comment>
+  </data>
+  <data name="ExchangeReasonTooltip" xml:space="preserve">
+    <value>Why the change has not been made, in Exchange's own words where Exchange gave any. The remedy is usually outside JIM: a permission, a policy, or a value already in use.</value>
+    <comment>Tooltip on the Reason column heading.</comment>
+  </data>
+  <data name="ExchangeRetryOneAria" xml:space="preserve">
+    <value>Retry this Exchange change</value>
+    <comment>Accessible name of the retry button on a row.</comment>
+  </data>
+  <data name="ExchangeNoSearchMatch" xml:space="preserve">
+    <value>No queued Exchange changes match "{0}"</value>
+    <comment>Empty state. {0} is the search text.</comment>
+  </data>
+  <data name="ExchangeNoFilterMatch" xml:space="preserve">
+    <value>No queued Exchange changes match these filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="ExchangeEmptyTitle" xml:space="preserve">
+    <value>Nothing is waiting for Exchange</value>
+    <comment>Empty state when the queue is empty: the healthy state.</comment>
+  </data>
+  <data name="ExchangeEmptyHint" xml:space="preserve">
+    <value>Recipient changes appear here while they are on their way to Exchange, and leave once Exchange has made them.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="ExchangeDescribeOne" xml:space="preserve">
+    <value>1 Exchange change</value>
+    <comment>A count of one change, used inside a sentence.</comment>
+  </data>
+  <data name="ExchangeDescribeOther" xml:space="preserve">
+    <value>{0} Exchange changes</value>
+    <comment>A count of several changes, used inside a sentence. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeRetryShownConfirm" xml:space="preserve">
+    <value>Attempt the {0} shown again? Parked and retrying changes are retried; any others are already due, being applied, or waiting on a change to what is declared.</value>
+    <comment>Confirmation before retrying. {0} is the count with its noun.</comment>
+  </data>
+  <data name="ExchangeRetryTitle" xml:space="preserve">
+    <value>Retry Exchange changes</value>
+    <comment>Title of the retry confirmation.</comment>
+  </data>
+  <data name="ExchangeNothingRetried" xml:space="preserve">
+    <value>Nothing was retried: no matching change is parked or retrying.</value>
+    <comment>Notice when a retry matched nothing.</comment>
+  </data>
+  <data name="ExchangeAttemptedAgain" xml:space="preserve">
+    <value>{0} will be attempted again within seconds.</value>
+    <comment>Success notice after a retry. {0} is the count with its noun.</comment>
+  </data>
+  <data name="ExchangeRetryNow" xml:space="preserve">
+    <value>Attempt it now rather than waiting for the next scheduled attempt.</value>
+    <comment>Tooltip on retry for a change being retried.</comment>
+  </data>
+  <data name="ExchangeRetryDefault" xml:space="preserve">
+    <value>Attempt it again, with its attempts and 24-hour clock reset. Deal with the reason Exchange gave first, or it will park again.</value>
+    <comment>Tooltip on retry for a parked change.</comment>
+  </data>
+  <data name="QueueNothingMatches" xml:space="preserve">
+    <value>Nothing queued matches the filters.</value>
+    <comment>Empty Queued section while filters are applied.</comment>
+  </data>
+  <data name="QueueNothingQueued" xml:space="preserve">
+    <value>Nothing is queued.</value>
+    <comment>Empty Queued section.</comment>
+  </data>
+  <data name="QueueNextAtBottom" xml:space="preserve">
+    <value>Next run at the bottom, nearest In Progress</value>
+    <comment>Note beside the Queued heading: the order of the list.</comment>
+  </data>
+  <data name="QueueNothingRunningMatches" xml:space="preserve">
+    <value>Nothing running matches the filters.</value>
+    <comment>Empty In Progress section while filters are applied.</comment>
+  </data>
+  <data name="QueueNothingRunning" xml:space="preserve">
+    <value>Nothing is running.</value>
+    <comment>Empty In Progress section.</comment>
+  </data>
+  <data name="QueueColRuns" xml:space="preserve">
+    <value>Runs</value>
+    <comment>Column heading: the order in which queued tasks run.</comment>
+  </data>
+  <data name="QueueColEstStart" xml:space="preserve">
+    <value>Est. Start</value>
+    <comment>Column heading: when a queued task is expected to start.</comment>
+  </data>
+  <data name="QueueColEstFinish" xml:space="preserve">
+    <value>Est. Finish</value>
+    <comment>Column heading: when a running task is expected to finish.</comment>
+  </data>
+  <data name="QueueColProgress" xml:space="preserve">
+    <value>Progress</value>
+    <comment>Column heading: how far a running task has got.</comment>
+  </data>
+  <data name="QueueEstStartTooltip" xml:space="preserve">
+    <value>When each task is expected to start. Estimated from the median of the last five successful runs of each Run Profile ahead of it. Left blank where there is nothing to estimate from.</value>
+    <comment>Tooltip on the Est. Start heading.</comment>
+  </data>
+  <data name="QueueEstFinishTooltip" xml:space="preserve">
+    <value>When each run is expected to finish. Estimated from the median of the Run Profile's last five successful runs, and never sooner than its current step needs. Left blank where there is nothing to estimate from.</value>
+    <comment>Tooltip on the Est. Finish heading.</comment>
+  </data>
+  <data name="QueueSameTimeQueued" xml:space="preserve">
+    <value>Starts at the same time as the other tasks of its Schedule step</value>
+    <comment>Tooltip on the parallel icon of a queued task.</comment>
+  </data>
+  <data name="QueueSameTimeRunning" xml:space="preserve">
+    <value>Running at the same time as the other tasks of its Schedule step</value>
+    <comment>Tooltip on the parallel icon of a running task.</comment>
+  </data>
+  <data name="QueueWaitingPrevious" xml:space="preserve">
+    <value>Waiting for previous step</value>
+    <comment>Status chip of a queued task that waits for an earlier step.</comment>
+  </data>
+  <data name="QueueProcessing" xml:space="preserve">
+    <value>Processing</value>
+    <comment>Status chip of a running task.</comment>
+  </data>
+  <data name="QueueCancelling" xml:space="preserve">
+    <value>Cancelling</value>
+    <comment>Status chip of a running task whose cancellation was requested.</comment>
+  </data>
+  <data name="QueueShowFewer" xml:space="preserve">
+    <value>Show fewer</value>
+    <comment>Button that folds the queued rows back to the budget.</comment>
+  </data>
+  <data name="QueueShowMore" xml:space="preserve">
+    <value>Show {0} more</value>
+    <comment>Button that unfolds the queued rows. {0} is the hidden count.</comment>
+  </data>
+  <data name="QueueCollapseSection" xml:space="preserve">
+    <value>Collapse {0}</value>
+    <comment>Chevron tooltip and label. {0} is the section name.</comment>
+  </data>
+  <data name="QueueExpandSection" xml:space="preserve">
+    <value>Expand {0}</value>
+    <comment>Chevron tooltip and label. {0} is the section name.</comment>
+  </data>
+  <data name="QueueCancelTask" xml:space="preserve">
+    <value>Cancel Task</value>
+    <comment>Tooltip and label of the cancel button, and the confirmation's yes button.</comment>
+  </data>
+  <data name="QueueKeepIt" xml:space="preserve">
+    <value>Keep It</value>
+    <comment>Cancel button of the cancel task confirmation.</comment>
+  </data>
+  <data name="QueueCancelTaskConfirm" xml:space="preserve">
+    <value>Are you sure you want to cancel the task '{0}'?</value>
+    <comment>Confirmation. {0} is the task's name.</comment>
+  </data>
+  <data name="QueueCancelRequested" xml:space="preserve">
+    <value>Worker task cancellation requested.</value>
+    <comment>Success notice.</comment>
+  </data>
+  <data name="QueueCancelExecTitle" xml:space="preserve">
+    <value>Cancel Schedule Execution</value>
+    <comment>Title of the cancel confirmation for a Schedule Execution.</comment>
+  </data>
+  <data name="QueueThisExecution" xml:space="preserve">
+    <value>this schedule execution</value>
+    <comment>Used when the Schedule Execution's name is unknown.</comment>
+  </data>
+  <data name="QueueCancelExecConfirm" xml:space="preserve">
+    <value>Are you sure you want to cancel '{0}'? All tasks will be cancelled immediately, including any that are currently processing.</value>
+    <comment>Confirmation. {0} is the Schedule Execution's name.</comment>
+  </data>
+  <data name="QueueCancelExec" xml:space="preserve">
+    <value>Cancel Execution</value>
+    <comment>Confirm button of the Schedule Execution cancel confirmation.</comment>
+  </data>
+  <data name="QueueKeepRunning" xml:space="preserve">
+    <value>Keep Running</value>
+    <comment>Cancel button of the Schedule Execution cancel confirmation.</comment>
+  </data>
+  <data name="QueueExecCancelled" xml:space="preserve">
+    <value>Schedule execution cancelled.</value>
+    <comment>Success notice.</comment>
+  </data>
+  <data name="QueueExecCancelFailed" xml:space="preserve">
+    <value>Could not cancel execution; it may have already completed.</value>
+    <comment>Warning notice.</comment>
+  </data>
+  <data name="QueueTasksCount" xml:space="preserve">
+    <value>{0} tasks</value>
+    <comment>Header of a Schedule Execution in the queue. {0} is the count.</comment>
+  </data>
+  <data name="QueueStepOf" xml:space="preserve">
+    <value>Step {0} of {1}</value>
+    <comment>Header of a Schedule Execution. {0} is the step, {1} the total.</comment>
+  </data>
+  <data name="QueueTasksAcross" xml:space="preserve">
+    <value>{0} tasks across {1} steps</value>
+    <comment>Header of a Schedule Execution with no step shown. {0} tasks, {1} steps.</comment>
+  </data>
+  <data name="ScheduleExecTitle" xml:space="preserve">
+    <value>Schedule Execution</value>
+    <comment>Page title, its info title, and the breadcrumb while loading.</comment>
+  </data>
+  <data name="ScheduleExecTitleNamed" xml:space="preserve">
+    <value>Schedule Execution: {0}</value>
+    <comment>Page title once loaded. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="ScheduleExecLabel" xml:space="preserve">
+    <value>Schedule Execution:</value>
+    <comment>Heading label before the Schedule's name.</comment>
+  </data>
+  <data name="ScheduleExecNotFoundName" xml:space="preserve">
+    <value>Not Found</value>
+    <comment>Shown in place of the Schedule's name when the execution does not exist.</comment>
+  </data>
+  <data name="ScheduleExecInfo" xml:space="preserve">
+    <value>One run of a Schedule: each of its steps, the Activity each step started, and how the run ended.</value>
+    <comment>Info popover on the page title. 'Activity' is the glossary term.</comment>
+  </data>
+  <data name="ScheduleExecSchedule" xml:space="preserve">
+    <value>Schedule:</value>
+    <comment>Field label: the Schedule that ran.</comment>
+  </data>
+  <data name="ScheduleExecQueuedLabel" xml:space="preserve">
+    <value>Queued:</value>
+    <comment>Field label: when the execution was queued.</comment>
+  </data>
+  <data name="ScheduleExecStartedLabel" xml:space="preserve">
+    <value>Started:</value>
+    <comment>Field label: when the execution started.</comment>
+  </data>
+  <data name="ScheduleExecCompletedLabel" xml:space="preserve">
+    <value>Completed:</value>
+    <comment>Field label: when the execution completed.</comment>
+  </data>
+  <data name="ScheduleExecDurationLabel" xml:space="preserve">
+    <value>Duration:</value>
+    <comment>Field label: how long the execution took.</comment>
+  </data>
+  <data name="ScheduleExecInitiatedLabel" xml:space="preserve">
+    <value>Initiated By:</value>
+    <comment>Field label: who started the execution.</comment>
+  </data>
+  <data name="ScheduleExecFailedNoMessage" xml:space="preserve">
+    <value>The execution failed. No error message was recorded; the step statuses below show where it stopped.</value>
+    <comment>Shown on a failed execution that recorded no message.</comment>
+  </data>
+  <data name="ScheduleExecCancelFailed" xml:space="preserve">
+    <value>Could not cancel the execution; it may have already completed.</value>
+    <comment>Warning notice when the cancel was refused.</comment>
+  </data>
+  <data name="ScheduleExecStepSingular" xml:space="preserve">
+    <value>Step</value>
+    <comment>Column heading and the noun in the toolbar count: one step.</comment>
+  </data>
+  <data name="ScheduleExecSearchSteps" xml:space="preserve">
+    <value>Search steps</value>
+    <comment>Placeholder of the search box above the steps.</comment>
+  </data>
+  <data name="ScheduleExecParallel" xml:space="preserve">
+    <value>Parallel</value>
+    <comment>Caption under a step that runs in parallel.</comment>
+  </data>
+  <data name="ScheduleExecParallelTooltip" xml:space="preserve">
+    <value>Parallel step; runs concurrently with the other steps at this position</value>
+    <comment>Tooltip on a parallel step's number.</comment>
+  </data>
+  <data name="ScheduleExecColActivity" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Column heading: the Activity each step started.</comment>
+  </data>
+  <data name="ScheduleExecViewActivity" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Link to the Activity a step started.</comment>
+  </data>
+  <data name="ScheduleExecNoStepMatch" xml:space="preserve">
+    <value>No steps match "{0}"</value>
+    <comment>Empty state. {0} is the search text.</comment>
+  </data>
+  <data name="ScheduleExecNoSteps" xml:space="preserve">
+    <value>This execution has no steps to show</value>
+    <comment>Empty state when the execution has no steps.</comment>
+  </data>
+  <data name="ScheduleExecNoStepsHint" xml:space="preserve">
+    <value>Its Schedule has been deleted, so the step definitions are no longer available.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="ScheduleExecNotFound" xml:space="preserve">
+    <value>Schedule Execution not found.</value>
+    <comment>Warning shown when the execution does not exist.</comment>
+  </data>
+  <data name="ScheduleExecBackToOps" xml:space="preserve">
+    <value>Back to Operations</value>
+    <comment>Button back to the Operations page.</comment>
+  </data>
+  <data name="HealthStripTitle" xml:space="preserve">
+    <value>Service Health</value>
+    <comment>Heading of the service health strip on the Operations page.</comment>
+  </data>
+  <data name="HealthStripLive" xml:space="preserve">
+    <value>Updated live</value>
+    <comment>Header indicator: the page receives updates as they happen.</comment>
+  </data>
+  <data name="HealthStripReconnecting" xml:space="preserve">
+    <value>Reconnecting live updates</value>
+    <comment>Header indicator: live updates are reconnecting.</comment>
+  </data>
+  <data name="HealthStripLiveOn" xml:space="preserve">
+    <value>Database notifications reach open pages directly.</value>
+    <comment>Tooltip when live updates are connected.</comment>
+  </data>
+  <data name="HealthStripLiveOff" xml:space="preserve">
+    <value>The database notification listener is not connected; pages refresh on a timer meanwhile.</value>
+    <comment>Tooltip when live updates are not connected.</comment>
+  </data>
+  <data name="HealthStripShow" xml:space="preserve">
+    <value>Show services</value>
+    <comment>Tooltip and label of the button that unfolds the service cards.</comment>
+  </data>
+  <data name="HealthStripHide" xml:space="preserve">
+    <value>Hide services</value>
+    <comment>Tooltip and label of the button that folds the service cards.</comment>
+  </data>
+  <data name="HealthStripNext" xml:space="preserve">
+    <value>Next:</value>
+    <comment>Label before the next Schedule to run. A space follows it in the markup.</comment>
+  </data>
+  <data name="HealthStripNoSchedules" xml:space="preserve">
+    <value>No Schedules due</value>
+    <comment>Shown when no enabled Schedule is due to run.</comment>
+  </data>
+  <data name="HealthStripActivityNext" xml:space="preserve">
+    <value>{0} · Next: {1} {2}</value>
+    <comment>Tooltip on the activity line. {0} the activity, {1} the Schedule's name, {2} when it runs.</comment>
+  </data>
+  <data name="HealthStripActivityNone" xml:space="preserve">
+    <value>{0} · No Schedules due</value>
+    <comment>Tooltip on the activity line when no Schedule is due. {0} is the activity.</comment>
+  </data>
+  <data name="HealthStripDetails" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tooltip and label of the button that opens a card's details.</comment>
+  </data>
+  <data name="HealthStripNeverReported" xml:space="preserve">
+    <value>This service has never reported, so there is no instance to identify.</value>
+    <comment>Shown in the details of a service that has never reported.</comment>
+  </data>
+  <data name="HealthStripHost" xml:space="preserve">
+    <value>Host</value>
+    <comment>Details label: the machine the service runs on.</comment>
+  </data>
+  <data name="HealthStripVersion" xml:space="preserve">
+    <value>Version</value>
+    <comment>Details label: the service's version.</comment>
+  </data>
+  <data name="HealthStripMemory" xml:space="preserve">
+    <value>Memory</value>
+    <comment>Details label: memory in use.</comment>
+  </data>
+  <data name="HealthStripInstance" xml:space="preserve">
+    <value>Instance</value>
+    <comment>Details label: the process's instance identifier.</comment>
+  </data>
+  <data name="HealthStripSkew" xml:space="preserve">
+    <value>differs from portal</value>
+    <comment>Chip: this service runs a different version from the web portal.</comment>
+  </data>
+  <data name="HealthStripSkewTooltip" xml:space="preserve">
+    <value>This service is running a different version from the web portal; upgrade them together.</value>
+    <comment>Tooltip on the version-skew chip.</comment>
+  </data>
+  <data name="HealthStripWhatHost" xml:space="preserve">
+    <value>host</value>
+    <comment>Lower-case noun used in a sentence: the host.</comment>
+  </data>
+  <data name="HealthStripWhatVersion" xml:space="preserve">
+    <value>version</value>
+    <comment>Lower-case noun used in a sentence: the version.</comment>
+  </data>
+  <data name="HealthStripWhatInstance" xml:space="preserve">
+    <value>instance</value>
+    <comment>Lower-case noun used in a sentence: the instance.</comment>
+  </data>
+  <data name="HealthStripCopyTooltip" xml:space="preserve">
+    <value>Copy the {0}</value>
+    <comment>Tooltip on a copy button. {0} is the lower-case noun.</comment>
+  </data>
+  <data name="HealthStripCopyAria" xml:space="preserve">
+    <value>Copy {0}</value>
+    <comment>Accessible name of a copy button. {0} is the lower-case noun.</comment>
+  </data>
+  <data name="HealthStripNoClipboard" xml:space="preserve">
+    <value>Clipboard access needs an HTTPS connection</value>
+    <comment>Tooltip on a copy button where the browser has no clipboard access.</comment>
+  </data>
+  <data name="HealthStripCopied" xml:space="preserve">
+    <value>{0} copied to the clipboard.</value>
+    <comment>Success notice. {0} is the capitalised noun.</comment>
+  </data>
+  <data name="HealthStripCopyFailed" xml:space="preserve">
+    <value>The {0} could not be copied. Select it and copy it by hand.</value>
+    <comment>Warning notice. {0} is the lower-case noun.</comment>
+  </data>
+  <data name="HealthStripStarted" xml:space="preserve">
+    <value>Started {0}</value>
+    <comment>Tooltip on the condition line: when the instance started. {0} is the date.</comment>
+  </data>
+  <data name="HealthStripConditionTitle" xml:space="preserve">
+    <value>{0}. {1}</value>
+    <comment>Tooltip on the condition line. {0} the condition, {1} when it started.</comment>
+  </data>
+  <data name="GenValTitle" xml:space="preserve">
+    <value>Generated values held for a decision</value>
+    <comment>Heading of the Generated Values tab.</comment>
+  </data>
+  <data name="GenValIntro" xml:space="preserve">
+    <value>A target rejected these generated values as already in use, and JIM could not safely correct them. Their exports are held until you allow the rename or try the same value again.</value>
+    <comment>Intro under the heading.</comment>
+  </data>
+  <data name="GenValNeedsDecision" xml:space="preserve">
+    <value>Needs a decision</value>
+    <comment>Tile title and filter option: a held value that needs a person.</comment>
+  </data>
+  <data name="GenValExportsHeld" xml:space="preserve">
+    <value>Exports held until you act</value>
+    <comment>Tile line under the Needs a decision count.</comment>
+  </data>
+  <data name="GenValRenameAllowed" xml:space="preserve">
+    <value>Rename allowed</value>
+    <comment>Tile title and filter option: a rename was allowed.</comment>
+  </data>
+  <data name="GenValRenamedNext" xml:space="preserve">
+    <value>Renamed at the next export</value>
+    <comment>Tile line under the Rename allowed count.</comment>
+  </data>
+  <data name="GenValCorrectedTitle" xml:space="preserve">
+    <value>Corrected, last 7 days</value>
+    <comment>Tile title: values JIM corrected on its own in the last seven days.</comment>
+  </data>
+  <data name="GenValCorrectedTooltip" xml:space="preserve">
+    <value>Values a target rejected as already in use that JIM corrected on its own since {0}. Each one's history is on its Metaverse Object.</value>
+    <comment>Tooltip on the Corrected count. {0} is the date the count starts from.</comment>
+  </data>
+  <data name="GenValNoAction" xml:space="preserve">
+    <value>No action needed</value>
+    <comment>Tile line under the Corrected count.</comment>
+  </data>
+  <data name="GenValAll" xml:space="preserve">
+    <value>All</value>
+    <comment>Placeholder of a filter: no filter applied.</comment>
+  </data>
+  <data name="GenValColAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading: the attribute that holds the value.</comment>
+  </data>
+  <data name="GenValColValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column heading: the generated value.</comment>
+  </data>
+  <data name="GenValColWhy" xml:space="preserve">
+    <value>Why it is held</value>
+    <comment>Column heading: why the value is held.</comment>
+  </data>
+  <data name="GenValColSince" xml:space="preserve">
+    <value>Since</value>
+    <comment>Column heading: when the value was held.</comment>
+  </data>
+  <data name="GenValSingular" xml:space="preserve">
+    <value>held value</value>
+    <comment>Noun in the toolbar count (one).</comment>
+  </data>
+  <data name="GenValPlural" xml:space="preserve">
+    <value>held values</value>
+    <comment>Noun in the toolbar count (several).</comment>
+  </data>
+  <data name="GenValTryAllCount" xml:space="preserve">
+    <value>Try again for all {0}</value>
+    <comment>Bulk action label. {0} is the count of values needing a decision.</comment>
+  </data>
+  <data name="GenValAllowRename" xml:space="preserve">
+    <value>Allow the rename…</value>
+    <comment>Row action: allow JIM to rename the value.</comment>
+  </data>
+  <data name="GenValTryAgain" xml:space="preserve">
+    <value>Try again</value>
+    <comment>Row action: try the same value again.</comment>
+  </data>
+  <data name="GenValNoFilterMatch" xml:space="preserve">
+    <value>No held values match these filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="GenValNoFilterHint" xml:space="preserve">
+    <value>Clear the filters to see every held value.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="GenValEmptyTitle" xml:space="preserve">
+    <value>Nothing needs a decision</value>
+    <comment>Empty state: the healthy state.</comment>
+  </data>
+  <data name="GenValEmptyHint" xml:space="preserve">
+    <value>A generated value appears here when a target rejects it as already in use and JIM cannot safely correct it.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="OpsFilters" xml:space="preserve">
+    <value>Filters</value>
+    <comment>Button that opens the filter row on the Activity tab.</comment>
+  </data>
+  <data name="OpsClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Button that clears every filter on the Activity tab.</comment>
+  </data>
+  <data name="OpsQueueRunProfile" xml:space="preserve">
+    <value>Queue a Run Profile</value>
+    <comment>Button that queues a Run Profile for execution.</comment>
+  </data>
+  <data name="OpsHasChildren" xml:space="preserve">
+    <value>Has child activities</value>
+    <comment>Filter checkbox: only Activities that have child Activities.</comment>
+  </data>
+  <data name="OpsScheduledOnly" xml:space="preserve">
+    <value>Scheduled only</value>
+    <comment>Filter checkbox: only work a Schedule started.</comment>
+  </data>
+  <data name="OpsSelectedCount" xml:space="preserve">
+    <value>{0} selected</value>
+    <comment>Multi-select text when several values are chosen. {0} is the count.</comment>
+  </data>
+  <data name="QueueDialogNoSystemBefore" xml:space="preserve">
+    <value>Please create a</value>
+    <comment>Warning alert when no Connected System exists. The link follows, then 'first.'</comment>
+  </data>
+  <data name="QueueDialogNoSystemAfter" xml:space="preserve">
+    <value>first.</value>
+    <comment>Ends the warning alert after the Connected System link.</comment>
+  </data>
+  <data name="QueueDialogIntro" xml:space="preserve">
+    <value>The run joins the end of the queue. If nothing else is queued or running, it starts straight away.</value>
+    <comment>Intro of the Queue a Run Profile dialog.</comment>
+  </data>
+  <data name="QueueDialogSelectSystem" xml:space="preserve">
+    <value>Please select a Connected System</value>
+    <comment>Validation message for the Connected System select.</comment>
+  </data>
+  <data name="QueueDialogProfileRequired" xml:space="preserve">
+    <value>A Run Profile is required</value>
+    <comment>Validation message for the Run Profile select.</comment>
+  </data>
+  <data name="QueueDialogDisabled" xml:space="preserve">
+    <value>{0} (disabled)</value>
+    <comment>A disabled Run Profile in the list. {0} is its name.</comment>
+  </data>
+  <data name="QueueDialogQueue" xml:space="preserve">
+    <value>Queue</value>
+    <comment>Button that queues the run.</comment>
+  </data>
+  <data name="QueueDialogFailed" xml:space="preserve">
+    <value>Failed to create task.</value>
+    <comment>Error shown when a task could not be created, when the server gave no reason.</comment>
+  </data>
+  <data name="QueueDialogAdded" xml:space="preserve">
+    <value>Synchronisation task added.</value>
+    <comment>Success notice after queueing a run.</comment>
+  </data>
+  <data name="OpsPageInfo" xml:space="preserve">
+    <value>What JIM is doing now, what it did, and what is scheduled. Synchronisation and password delivery both report here.</value>
+    <comment>Info popover on the Operations page title.</comment>
+  </data>
+  <data name="OpsDemoMode" xml:space="preserve">
+    <value>Demo mode: every section below shows sample data, and actions that would change anything are switched off.</value>
+    <comment>Notice shown in demo mode (Development only).</comment>
+  </data>
+  <data name="OpsTabPasswords" xml:space="preserve">
+    <value>Passwords</value>
+    <comment>Tab heading: the password synchronisation queue.</comment>
+  </data>
+  <data name="OpsTabExchange" xml:space="preserve">
+    <value>Exchange</value>
+    <comment>Tab heading: the Exchange queue. Exchange is a product name.</comment>
+  </data>
+  <data name="OpsTabGenerated" xml:space="preserve">
+    <value>Generated Values</value>
+    <comment>Tab heading: generated values held for a decision.</comment>
+  </data>
+  <data name="ExStopTitle" xml:space="preserve">
+    <value>Stop provisioning Exchange recipients?</value>
+    <comment>Title of the confirmation before stopping Exchange recipients on a Synchronisation Rule.</comment>
+  </data>
+  <data name="ExStopIntroOne" xml:space="preserve">
+    <value>This removes the {0} Attribute Flow that set Exchange attributes on</value>
+    <comment>Confirmation text, one flow. {0} is the count. The Synchronisation Rule's name follows in bold.</comment>
+  </data>
+  <data name="ExStopIntroOther" xml:space="preserve">
+    <value>This removes the {0} Attribute Flows that set Exchange attributes on</value>
+    <comment>Confirmation text, several flows. {0} is the count.</comment>
+  </data>
+  <data name="ExStopThisRule" xml:space="preserve">
+    <value>this Synchronisation Rule</value>
+    <comment>Stands in for the rule's name when it is not known.</comment>
+  </data>
+  <data name="ExStopIntroTail" xml:space="preserve">
+    <value>, when the rule is saved.</value>
+    <comment>Ends the confirmation text, after the rule's name.</comment>
+  </data>
+  <data name="ExStopAlertHead" xml:space="preserve">
+    <value>Existing recipients are left as they are.</value>
+    <comment>Bold opening of the notice about recipients already made.</comment>
+  </data>
+  <data name="ExStopAlertBody" xml:space="preserve">
+    <value>Objects already provisioned keep their recipients: their declared recipient type becomes None, which is reported against each object and not made in Exchange. Objects provisioned from now on get no recipient.</value>
+    <comment>Rest of the notice about recipients.</comment>
+  </data>
+  <data name="ExStopConfirmOne" xml:space="preserve">
+    <value>Remove {0} Attribute Flow</value>
+    <comment>Confirm button, one flow. {0} is the count.</comment>
+  </data>
+  <data name="ExStopConfirmOther" xml:space="preserve">
+    <value>Remove {0} Attribute Flows</value>
+    <comment>Confirm button, several flows. {0} is the count.</comment>
+  </data>
+  <data name="QueueHeaderOpenTooltip" xml:space="preserve">
+    <value>Open this Schedule Execution: per-step durations, errors and the Activity each step produced</value>
+    <comment>Tooltip on the button that opens a Schedule Execution.</comment>
+  </data>
+  <data name="QueueHeaderViewExecution" xml:space="preserve">
+    <value>View execution</value>
+    <comment>Button that opens a Schedule Execution.</comment>
+  </data>
+  <data name="QueueHeaderCancelSchedule" xml:space="preserve">
+    <value>Cancel Schedule</value>
+    <comment>Tooltip and label of the button that cancels a Schedule Execution.</comment>
+  </data>
+  <data name="OpsChipConnectedSystem" xml:space="preserve">
+    <value>Connected System: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the names chosen.</comment>
+  </data>
+  <data name="OpsChipRunProfile" xml:space="preserve">
+    <value>Run Profile: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the names chosen.</comment>
+  </data>
+  <data name="OpsChipSchedule" xml:space="preserve">
+    <value>Schedule: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the names chosen.</comment>
+  </data>
+  <data name="OpsChipUnknownSchedule" xml:space="preserve">
+    <value>Unknown Schedule</value>
+    <comment>Shown for a chosen Schedule that no longer exists.</comment>
+  </data>
+  <data name="OpsChipResult" xml:space="preserve">
+    <value>Result: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the results chosen.</comment>
+  </data>
+  <data name="FailContinueSchedule" xml:space="preserve">
+    <value>Continue the Schedule</value>
+    <comment>Option of the Schedule's 'When a step fails' setting.</comment>
+  </data>
+  <data name="FailStopSchedule" xml:space="preserve">
+    <value>Stop the Schedule</value>
+    <comment>Option of the Schedule's 'When a step fails' setting.</comment>
+  </data>
+  <data name="FailFollowSchedule" xml:space="preserve">
+    <value>Follow the Schedule (currently: {0})</value>
+    <comment>Option of a step's failure setting. {0} is what the Schedule is set to: continue or stop.</comment>
+  </data>
+  <data name="FailWordContinue" xml:space="preserve">
+    <value>continue</value>
+    <comment>The word for continue, inside 'Follow the Schedule (currently: ...)'.</comment>
+  </data>
+  <data name="FailWordStop" xml:space="preserve">
+    <value>stop</value>
+    <comment>The word for stop, inside 'Follow the Schedule (currently: ...)'.</comment>
+  </data>
+  <data name="FailEffectiveContinues" xml:space="preserve">
+    <value>Continues on failure</value>
+    <comment>Chip: the step lets its Schedule continue when it fails.</comment>
+  </data>
+  <data name="FailEffectiveStops" xml:space="preserve">
+    <value>Stops on failure</value>
+    <comment>Chip: the step stops its Schedule when it fails.</comment>
+  </data>
+  <data name="FailFromSchedule" xml:space="preserve">
+    <value>From the Schedule</value>
+    <comment>Where a step's failure behaviour comes from: the Schedule.</comment>
+  </data>
+  <data name="FailSetOnStep" xml:space="preserve">
+    <value>Set on this step</value>
+    <comment>Where a step's failure behaviour comes from: the step itself.</comment>
+  </data>
+  <data name="FailContinuedFromSchedule" xml:space="preserve">
+    <value>This step follows the Schedule, which is set to continue when a step fails.</value>
+    <comment>Marker on a failed step that the run continued past: the Schedule's setting.</comment>
+  </data>
+  <data name="FailContinuedOnStep" xml:space="preserve">
+    <value>This step is set to let the Schedule continue when it fails.</value>
+    <comment>Marker on a failed step that the run continued past: the step's own setting.</comment>
+  </data>
+  <data name="ScheduleExecOfTotal" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>Position of a Schedule Execution step. {0} is the step, {1} the total.</comment>
+  </data>
+</root>

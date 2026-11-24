@@ -1,0 +1,707 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LdapConnectivityMissingValues" xml:space="preserve">
+    <value>Unable to test connectivity due to missing directory server, port, username and/or password values</value>
+    <comment>Shown when the LDAP Connector's settings are saved without what it needs to connect.</comment>
+  </data>
+  <data name="LdapConnectivityFailed" xml:space="preserve">
+    <value>Unable to connect. Message: {0}</value>
+    <comment>{0} is the error the directory or the network gave, in its own words (usually English).</comment>
+  </data>
+  <data name="LdapExchangeDirectoryTypeRefusal" xml:space="preserve">
+    <value>Exchange recipients can be managed only on Active Directory, and this directory is {0}. Turn off {1}, or connect to an Active Directory domain controller.</value>
+    <comment>{0} is a directory kind (Samba AD, OpenLDAP, 389 Directory Server, or the phrase for one JIM does not recognise); {1} is the name of the Manage Exchange recipients setting, shown as that setting's label.</comment>
+  </data>
+  <data name="LdapDirectoryKindSambaAD" xml:space="preserve">
+    <value>Samba AD</value>
+    <comment>A product name.</comment>
+  </data>
+  <data name="LdapDirectoryKindOpenLDAP" xml:space="preserve">
+    <value>OpenLDAP</value>
+    <comment>A product name.</comment>
+  </data>
+  <data name="LdapDirectoryKindDirectoryServer389" xml:space="preserve">
+    <value>389 Directory Server</value>
+    <comment>A product name.</comment>
+  </data>
+  <data name="LdapDirectoryKindUnrecognised" xml:space="preserve">
+    <value>not one JIM recognises</value>
+    <comment>Completes: this directory is ...</comment>
+  </data>
+  <data name="LdapExchangeRefusedRemotePowerShell" xml:space="preserve">
+    <value>Exchange refused {0}: {1} The account signed in to the domain, but Exchange does not let it use remote PowerShell. Add it to Exchange's Recipient Management role group, and check its remote PowerShell access is not turned off.</value>
+    <comment>{0} is the account; {1} is what Exchange said, in its own words, ended as a sentence.</comment>
+  </data>
+  <data name="LdapExchangeUnreachable" xml:space="preserve">
+    <value>JIM could not reach Exchange at {0}: {1} Check the Exchange server's name, and that this server can reach it on port {2}.</value>
+    <comment>{0} is the address; {1} is the network error in its own words, ended as a sentence; {2} is a port number.</comment>
+  </data>
+  <data name="LdapExchangeTimedOut" xml:space="preserve">
+    <value>Exchange at {0} did not answer: {1} Check the server is running, and that nothing between this server and it is holding the connection.</value>
+    <comment>{0} is the address; {1} is the network error in its own words, ended as a sentence.</comment>
+  </data>
+  <data name="LdapExchangeCertificateUntrusted" xml:space="preserve">
+    <value>JIM does not trust Exchange's certificate at {0}: {1} Add the certificate authority that issued it in Certificates, and use the server's name as its certificate gives it.</value>
+    <comment>{0} is the address; {1} is the error in its own words, ended as a sentence.</comment>
+  </data>
+  <data name="LdapExchangeSessionRefused" xml:space="preserve">
+    <value>Exchange at {0} refused the session: {1}</value>
+    <comment>{1} is what Exchange said, in its own words.</comment>
+  </data>
+  <data name="LdapKerberosClockSkew" xml:space="preserve">
+    <value>This server's clock differs from the domain's by more than five minutes, so Kerberos refused the sign-in. Correct the time on this server, or on the domain controller {0}, then save again.</value>
+    <comment>{0} is a domain controller's name.</comment>
+  </data>
+  <data name="LdapKerberosPasswordRefused" xml:space="preserve">
+    <value>The domain refused the password for {0}. Check the Password above: JIM signs in to Exchange with the directory account.</value>
+    <comment>{0} is the account. "the Password above" refers to the Password setting.</comment>
+  </data>
+  <data name="LdapKerberosAccountUnknown" xml:space="preserve">
+    <value>The domain controller {0} does not know the account {1}, so it cannot sign in to Exchange.</value>
+    <comment>{0} is a domain controller; {1} is the account.</comment>
+  </data>
+  <data name="LdapKerberosServiceUnknown" xml:space="preserve">
+    <value>The domain has no service principal HTTP/{0}, so Kerberos cannot sign in to it. Use the Exchange server's own DNS name, not an alias or an IP address, as the Exchange server.</value>
+    <comment>{0} is a host name. "the Exchange server" refers to the Exchange server setting.</comment>
+  </data>
+  <data name="LdapKerberosAccountDisabled" xml:space="preserve">
+    <value>The account {0} is disabled or locked out, so the domain refused the sign-in.</value>
+    <comment>{0} is the account.</comment>
+  </data>
+  <data name="LdapKerberosPasswordExpired" xml:space="preserve">
+    <value>The account {0} cannot sign in because its password has expired. Set a new one, and enter it as the Password above.</value>
+    <comment>{0} is the account. "the Password above" refers to the Password setting.</comment>
+  </data>
+  <data name="LdapKerberosDomainControllerUnreachable" xml:space="preserve">
+    <value>JIM could not reach the domain controller {0} on port 88 to sign in to Exchange with Kerberos. Check this server can reach it.</value>
+    <comment>{0} is a domain controller.</comment>
+  </data>
+  <data name="LdapKerberosRefused" xml:space="preserve">
+    <value>Kerberos refused the sign-in for {0} through {1}: {2}</value>
+    <comment>{2} is the Kerberos library's own words.</comment>
+  </data>
+  <data name="LdapExchangeCommandsMissing" xml:space="preserve">
+    <value>The account {0} cannot run {1} in Exchange, so JIM cannot manage these recipient types: {2}. Their changes will fail for insufficient permissions until it can. Add the account to Exchange's Recipient Management role group, or give it a role that includes those commands.</value>
+    <comment>{0} is the account; {1} is a list of Exchange command names; {2} is a comma-separated list of recipient types.</comment>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value>{0} or {1}</value>
+    <comment>Joins the last two items of a list of command names; {0} is the earlier items already separated by commas.</comment>
+  </data>
+  <data name="LdapExchangeGetCommandFailed" xml:space="preserve">
+    <value>JIM signed in to Exchange as {0}, but could not tell which commands the account may run, because Get-Command failed: {1}</value>
+    <comment>{0} is the account; {1} is the error in its own words.</comment>
+  </data>
+  <data name="GraphTenantAlias" xml:space="preserve">
+    <value>'{0}' is a multi-tenant sign-in alias, not a tenant. Supply the tenant's ID (a GUID) or one of its verified domain names, shown as Directory (tenant) ID on the app registration's Overview page.</value>
+    <comment>{0} is what the administrator typed.</comment>
+  </data>
+  <data name="GraphTenantInvalid" xml:space="preserve">
+    <value>The {0} must be the tenant's ID (a GUID) or one of its verified domain names, i.e. contoso.onmicrosoft.com. Supply the value on its own, not a sign-in URL.</value>
+    <comment>{0} is the Tenant ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphClientIdInvalid" xml:space="preserve">
+    <value>The {0} must be the app registration's Application (client) ID, a GUID such as 00000000-0000-0000-0000-000000000000, shown on its Overview page.</value>
+    <comment>{0} is the Client ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphCloudUnknown" xml:space="preserve">
+    <value>'{0}' is not a cloud this Connector knows. Choose one of: {1}.</value>
+    <comment>{0} is the value given; {1} is a comma-separated list of the clouds the Connector offers.</comment>
+  </data>
+  <data name="GraphNumberOutOfRange" xml:space="preserve">
+    <value>{0} must be from {1} to {2}.</value>
+    <comment>{0} is a setting name; {1} and {2} are whole numbers. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphManagedIdentityIdInvalid" xml:space="preserve">
+    <value>The {0} must be the managed identity's client id, a GUID shown on its Overview page in the Azure portal.</value>
+    <comment>{0} is the setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphSettingNotDecrypted" xml:space="preserve">
+    <value>The {0} setting could not be decrypted.</value>
+    <comment>{0} is the setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphTestRequestRefused" xml:space="preserve">
+    <value>Authenticated, but Microsoft Graph refused the test request: {0}</value>
+    <comment>{0} is Microsoft Graph's own explanation.</comment>
+  </data>
+  <data name="GraphCouldNotConnect" xml:space="preserve">
+    <value>Could not connect to Microsoft Entra ID or Microsoft Graph. Check that JIM can reach them on HTTPS (port 443). Where a proxy inspects TLS traffic, add its CA certificate to JIM's certificate store under Admin &gt; Certificates.</value>
+    <comment>Admin &gt; Certificates is the portal's Certificates page.</comment>
+  </data>
+  <data name="EntraRefusedKnown" xml:space="preserve">
+    <value>Microsoft Entra ID refused the token request (AADSTS{0}). {1}</value>
+    <comment>{0} is Entra ID's error number; {1} says what to do about it.</comment>
+  </data>
+  <data name="EntraRefusedWithDetail" xml:space="preserve">
+    <value>Microsoft Entra ID refused the token request with HTTP {0} ({1}). Check the {2}, {3} and credential settings.</value>
+    <comment>{0} is an HTTP status number; {1} is Entra ID's error keyword and codes; {2} and {3} are setting names.</comment>
+  </data>
+  <data name="EntraRefusedWithStatus" xml:space="preserve">
+    <value>Microsoft Entra ID refused the token request with HTTP {0}. Check the {1}, {2} and credential settings.</value>
+    <comment>{0} is an HTTP status number; {1} and {2} are setting names.</comment>
+  </data>
+  <data name="EntraSecretInvalid" xml:space="preserve">
+    <value>The {0} is not valid. Supply the secret's Value from Certificates &amp; secrets on the app registration, not its Secret ID.</value>
+    <comment>{0} is the Client Secret setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraSecretExpired" xml:space="preserve">
+    <value>The {0} has expired. Create a new client secret on the app registration and supply it here.</value>
+    <comment>{0} is the Client Secret setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraApplicationNotFound" xml:space="preserve">
+    <value>No application with this {0} was found in the tenant. Check the {0}, and that the app registration belongs to the tenant named in {1}.</value>
+    <comment>{0} is the Client ID setting's name; {1} is the Tenant ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraTenantNotFound" xml:space="preserve">
+    <value>The tenant named in {0} was not found. Check it, and check the {1} setting: a tenant in a national cloud is not found on the global endpoints, nor the other way round.</value>
+    <comment>{0} is the Tenant ID setting's name; {1} is the Cloud setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraTenantIdInvalid" xml:space="preserve">
+    <value>The {0} is not a valid tenant identifier. Supply the tenant's ID (a GUID) or one of its verified domain names.</value>
+    <comment>{0} is the Tenant ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraAssertionNotVerified" xml:space="preserve">
+    <value>Microsoft Entra ID could not verify the assertion signed with the {0}. Check that the same certificate is uploaded under Certificates &amp; secrets on the app registration. One uploaded in the last few minutes can still be refused while Entra ID applies it; if so, try again shortly.</value>
+    <comment>{0} is the Certificate setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraAssertionOutOfTime" xml:space="preserve">
+    <value>The client assertion was outside its valid time range. Check that the clock on the JIM server is correct.</value>
+  </data>
+  <data name="EntraApplicationDisabled" xml:space="preserve">
+    <value>The application is disabled in the tenant. Enable its enterprise application (service principal) and try again.</value>
+  </data>
+  <data name="EntraFederatedMismatch" xml:space="preserve">
+    <value>The workload identity's token matches no federated credential on the app registration. Under Certificates &amp; secrets &gt; Federated credentials, add one for the managed identity named in {0}, for this cloud.</value>
+    <comment>{0} is the Managed Identity Client ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraGraphNotFound" xml:space="preserve">
+    <value>Microsoft Graph was not found in the tenant. Check that the {0} setting matches the cloud the tenant is in.</value>
+    <comment>{0} is the Cloud setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimUrlInvalid" xml:space="preserve">
+    <value>The '{0}' setting is not a valid absolute URL.</value>
+    <comment>{0} is a setting's name. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimUrlInvalidWithExample" xml:space="preserve">
+    <value>The '{0}' setting is not a valid absolute URL. Supply the full address, i.e. {1}.</value>
+    <comment>{0} is a setting's name; {1} is an example address. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimUrlNotHttps" xml:space="preserve">
+    <value>The '{0}' setting must use HTTPS. HTTP is only permitted for loopback addresses when testing locally, because {1} is sent to this address.</value>
+    <comment>{0} is a setting's name; {1} says what is sent there (a nested message). A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimPayloadIdentityData" xml:space="preserve">
+    <value>identity data</value>
+    <comment>What is sent to the SCIM service provider; completes: because ... is sent to this address.</comment>
+  </data>
+  <data name="ScimPayloadClientSecret" xml:space="preserve">
+    <value>the Client Secret</value>
+    <comment>What is sent to the token endpoint; completes: because ... is sent to this address.</comment>
+  </data>
+  <data name="ScimNoDiscoveryAnswer" xml:space="preserve">
+    <value>Connected to '{0}', but it did not answer on any SCIM discovery endpoint ({1}, {2} or {3}). Check the Base URL points at the root of the SCIM service, not at a resource endpoint such as /Users.</value>
+    <comment>{0} is the address; {1}, {2} and {3} are SCIM endpoint paths.</comment>
+  </data>
+  <data name="ScimCouldNotAuthenticate" xml:space="preserve">
+    <value>Could not authenticate with the SCIM service provider: {0}</value>
+    <comment>{0} says why, as a message or the error's own words.</comment>
+  </data>
+  <data name="ScimCouldNotConnect" xml:space="preserve">
+    <value>Could not connect to the SCIM service provider: {0}</value>
+    <comment>{0} is the network error in its own words.</comment>
+  </data>
+  <data name="SqlTimeZoneUnknown" xml:space="preserve">
+    <value>{0} '{1}' is not a time zone this deployment recognises. Enter UTC, or an IANA time zone name such as Europe/London or America/New_York.</value>
+    <comment>{0} is the Database Time Zone setting's name; {1} is the value given. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="SqlChooseDatabaseType" xml:space="preserve">
+    <value>Choose a {0} before testing connectivity.</value>
+    <comment>{0} is the Database Type setting's name. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="SqlMissingConnectionValues" xml:space="preserve">
+    <value>Unable to test connectivity until {0}, {1} and {2} have been supplied.</value>
+    <comment>{0}, {1} and {2} are setting names (Host, Username, Password). A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="SqlConnectFailed" xml:space="preserve">
+    <value>Unable to connect. Message: {0}</value>
+    <comment>{0} is the database driver's own account of the failure.</comment>
+  </data>
+  <data name="FileNotFound" xml:space="preserve">
+    <value>File not found: '{0}'. For {1} mode, the file must exist. Check the path and ensure it maps to a Docker Volume.</value>
+    <comment>{0} is the path; {1} is the mode, as the Mode setting stores it (Import Only, Bidirectional).</comment>
+  </data>
+  <data name="FileExportDirectoryNotCreated" xml:space="preserve">
+    <value>Export directory could not be created: '{0}'. Error: {1}</value>
+    <comment>{0} is the directory; {1} is the system's own error.</comment>
+  </data>
+  <data name="CertServerScimServiceProvider" xml:space="preserve">
+    <value>SCIM service provider</value>
+    <comment>A noun completing sentences about a certificate, e.g. 'Renew it on the ...'. French: masculine, no article; the sentence supplies it.</comment>
+  </data>
+  <data name="CertServerDirectoryServer" xml:space="preserve">
+    <value>directory server</value>
+    <comment>A noun completing sentences about a certificate. French: masculine, no article.</comment>
+  </data>
+  <data name="CertServerDatabaseServer" xml:space="preserve">
+    <value>database server</value>
+    <comment>A noun completing sentences about a certificate. French: masculine, no article.</comment>
+  </data>
+  <data name="CertNoCertificate" xml:space="preserve">
+    <value>The {0} offered no certificate. Check that it is configured for {1} on this port.</value>
+    <comment>{0} is a server noun (a nested message); {1} is HTTPS, LDAPS, TCPS or TLS.</comment>
+  </data>
+  <data name="CertExpired" xml:space="preserve">
+    <value>The certificate expired. Renew it on the {0}; trusting its issuer does not waive the expiry date.</value>
+    <comment>{0} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertNotYetValid" xml:space="preserve">
+    <value>The certificate is not valid yet, which usually means the clocks on JIM and the {0} disagree.</value>
+    <comment>{0} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertNameMismatch" xml:space="preserve">
+    <value>The certificate was not issued for '{0}'. Adding it to the JIM certificate store will not help; connect using a name the certificate carries, giving the JIM containers a host entry for it if that name cannot be resolved.</value>
+    <comment>{0} is the host name connected to.</comment>
+  </data>
+  <data name="CertChainProblem" xml:space="preserve">
+    <value>{0} Trusting a certificate in JIM does not get past this; the certificate chain has to be fixed on the {1}.</value>
+    <comment>{0} is what is wrong with the chain (a nested message); {1} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertSelfSigned" xml:space="preserve">
+    <value>The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin &gt; Certificates) to trust this {0}.</value>
+    <comment>{0} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertNothingTrustedWithRoot" xml:space="preserve">
+    <value>Nothing in the certificate chain is trusted. Add '{0}', the root of the chain, to the JIM certificate store (Admin &gt; Certificates) so that renewals of everything beneath it are trusted too. Any other certificate in the chain also works, until it is renewed.</value>
+    <comment>{0} is the root certificate's common name.</comment>
+  </data>
+  <data name="CertNothingTrustedIssuerMissing" xml:space="preserve">
+    <value>Nothing in the certificate chain is trusted, and JIM could not find '{0}', the certificate authority that issued '{1}'. Trust a certificate JIM did find, or add '{0}' to the JIM certificate store (Admin &gt; Certificates) so that renewals are trusted too.</value>
+    <comment>{0} and {1} are certificate common names.</comment>
+  </data>
+  <data name="CertRootNotTrusted" xml:space="preserve">
+    <value>The root of the chain is not trusted. Add '{0}' to the JIM certificate store (Admin &gt; Certificates). This connection accepts only the root: an intermediate or the {1}'s own certificate in the store does not make it work.</value>
+    <comment>{0} is the root certificate's common name; {1} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertRootNotTrustedIssuerMissing" xml:space="preserve">
+    <value>The root of the chain is not trusted, and JIM could not find '{0}', the certificate authority above '{1}'. Get the root certificate from whoever runs your PKI and add it to the JIM certificate store (Admin &gt; Certificates). This connection accepts only the root.</value>
+    <comment>{0} and {1} are certificate common names.</comment>
+  </data>
+  <data name="CertChainExpired" xml:space="preserve">
+    <value>{0} expired on {1}. A chain through an expired certificate authority is never valid; it needs renewing.</value>
+    <comment>{0} is a certificate's name; {1} is a date.</comment>
+  </data>
+  <data name="CertChainNotYetValid" xml:space="preserve">
+    <value>{0} is not valid until {1}.</value>
+    <comment>{0} is a certificate's name; {1} is a date.</comment>
+  </data>
+  <data name="CertChainNotAuthority" xml:space="preserve">
+    <value>{0} is not marked as a certificate authority, so it cannot vouch for the certificate below it.</value>
+    <comment>{0} is a certificate's name.</comment>
+  </data>
+  <data name="CertChainBadSignature" xml:space="preserve">
+    <value>The signature {0} made on the certificate below it does not verify.</value>
+    <comment>{0} is a certificate's name.</comment>
+  </data>
+  <data name="CertRejected" xml:space="preserve">
+    <value>The {0}'s certificate was rejected: {1}</value>
+    <comment>{0} is a server noun (a nested message); {1} says why.</comment>
+  </data>
+  <data name="SqlDocObjectTypeNamed" xml:space="preserve">
+    <value>Object Type '{0}'</value>
+    <comment>Mid-sentence reference to an Object Type of the SQL Connector's Object Types document. {0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocObjectTypeNamedCapital" xml:space="preserve">
+    <value>Object Type '{0}'</value>
+    <comment>The same, at the start of a sentence. {0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocObjectTypeByPosition" xml:space="preserve">
+    <value>the object type in position {0}</value>
+    <comment>Mid-sentence reference to an Object Type that has no name; {0} is its one-based position in the document.</comment>
+  </data>
+  <data name="SqlDocObjectTypeByPositionCapital" xml:space="preserve">
+    <value>The object type in position {0}</value>
+    <comment>The same, at the start of a sentence.</comment>
+  </data>
+  <data name="SqlDocLevelColumn" xml:space="preserve">
+    <value>A configured column of {0}</value>
+    <comment>{0} is an Object Type reference (a nested message).</comment>
+  </data>
+  <data name="SqlDocLevelRelatedTable" xml:space="preserve">
+    <value>A related table of {0}</value>
+    <comment>{0} is an Object Type reference (a nested message).</comment>
+  </data>
+  <data name="SqlDocLevelChangeLog" xml:space="preserve">
+    <value>The change log of {0}</value>
+    <comment>{0} is an Object Type reference (a nested message).</comment>
+  </data>
+  <data name="SqlDocLevelDocument" xml:space="preserve">
+    <value>The {0} document</value>
+    <comment>{0} is the name of the Object Types setting; it is shown as that setting's label.</comment>
+  </data>
+  <data name="SqlDocUnrecognisedField" xml:space="preserve">
+    <value>{0} has an unrecognised field '{1}'.{2} Fields that are not recognised are refused rather than ignored, because ignoring one would leave the Connected System configured differently from how the document reads.</value>
+    <comment>{0} says where the field is (a nested message); {1} is the field as written; {2} is empty or the suggestion (a nested message that starts with a space).</comment>
+  </data>
+  <data name="SqlDocDidYouMean" xml:space="preserve">
+    <value> Did you mean '{0}'?</value>
+    <comment>Starts with a space: it follows a sentence. {0} is the field the administrator probably meant.</comment>
+  </data>
+  <data name="SqlDocJsonUnreadable" xml:space="preserve">
+    <value>{0} could not be read as JSON: {1}</value>
+    <comment>{0} is the name of the Object Types setting; {1} is the JSON parser's own message.</comment>
+  </data>
+  <data name="SqlDocEmpty" xml:space="preserve">
+    <value>{0} is empty. A Connected System needs at least one object type before JIM can discover its schema; see the setting's description for an example to start from.</value>
+    <comment>{0} is the name of the Object Types setting.</comment>
+  </data>
+  <data name="SqlDocNoObjectTypes" xml:space="preserve">
+    <value>{0} must declare at least one object type in its 'objectTypes' list.</value>
+    <comment>{0} is the name of the Object Types setting. 'objectTypes' is a field of the JSON document and stays as written.</comment>
+  </data>
+  <data name="SqlDocDuplicateName" xml:space="preserve">
+    <value>Object Type '{0}' is declared more than once. Object type names identify them to JIM, so each must be unique.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocPositionEmpty" xml:space="preserve">
+    <value>The object type in position {0} of 'objectTypes' is empty.</value>
+    <comment>{0} is a one-based position.</comment>
+  </data>
+  <data name="SqlDocPositionNoName" xml:space="preserve">
+    <value>The object type in position {0} of 'objectTypes' has no 'name'. Every object type needs one, because it is what JIM calls it.</value>
+    <comment>{0} is a one-based position.</comment>
+  </data>
+  <data name="SqlDocOneSource" xml:space="preserve">
+    <value>Object Type '{0}' must name exactly one source: either a 'table' (a table or a view) or a 'select' statement, and not both.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocSchemaWithSelect" xml:space="preserve">
+    <value>Object Type '{0}' supplies both a 'schema' and a 'select' statement. A schema qualifies a table name; a statement qualifies its own tables, so remove the 'schema'.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocChangeLogAnchorCount" xml:space="preserve">
+    <value>Object Type '{0}' identifies its change-log rows by {1} column(s), but the object type's anchor has {2}. A change attributed by part of an anchor belongs to some other object, so 'changeLog.anchorColumns' must name one column per anchor column, in the same order.</value>
+    <comment>{0} is an Object Type's name as written in the document. {1} and {2} are counts.</comment>
+  </data>
+  <data name="SqlDocChangeLogAnchorDuplicate" xml:space="preserve">
+    <value>Object Type '{0}' lists change-log anchor column '{1}' more than once.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocChangeLogNoDelete" xml:space="preserve">
+    <value>Object Type '{0}' has a change log with no 'deleteValues'. Observing deletions is what a change-log table is for; if this database cannot record them, use Watermark Column mode instead.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocChangeLogNoCreateOrUpdate" xml:space="preserve">
+    <value>Object Type '{0}' has a change log with neither 'createValues' nor 'updateValues', so nothing but deletions could ever be imported from it.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocChangeLogEmptyValue" xml:space="preserve">
+    <value>Object Type '{0}' has an empty value in 'changeLog.{1}'. A change-log row's change type is matched against these exactly, so a blank one could never match.</value>
+    <comment>{0} is an Object Type's name as written in the document. {1} is a field name.</comment>
+  </data>
+  <data name="SqlDocChangeLogValueAmbiguous" xml:space="preserve">
+    <value>Object Type '{0}' has change-log value '{1}' meaning both {2} and {3}. Each value can only mean one kind of change.</value>
+    <comment>{0} is an Object Type's name as written in the document. {2} and {3} are kinds of change as the document names them.</comment>
+  </data>
+  <data name="SqlDocDeltaNeedsChangeLog" xml:space="preserve">
+    <value>{0} is '{1}', but Object Type '{2}' is selected for synchronisation and has no 'changeLog'. A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. Give it a 'changeLog', or deselect it if JIM never imports from it.</value>
+    <comment>{0} is the Delta Import Mode setting's name; {1} is its value.</comment>
+  </data>
+  <data name="SqlDocDeltaNeedsWatermark" xml:space="preserve">
+    <value>{0} is '{1}', but Object Type '{2}' is selected for synchronisation and has no 'watermarkColumn'. A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. Give it a 'watermarkColumn', or deselect it if JIM never imports from it.</value>
+    <comment>{0} is the Delta Import Mode setting's name; {1} is its value.</comment>
+  </data>
+  <data name="SqlDocRelatedNeedsWatermark" xml:space="preserve">
+    <value>{0} is '{1}', but Object Type '{2}' has related table attribute '{3}' with no 'watermarkColumn'. A row added to or removed from '{4}' changes the object without touching its own row, so without a watermark column on the related table that change could never be detected.</value>
+    <comment>{0} is the Delta Import Mode setting's name; {1} is its value; {4} is a table name.</comment>
+  </data>
+  <data name="SqlDocNoAnchorColumns" xml:space="preserve">
+    <value>Object Type '{0}' has no 'anchorColumns'. JIM identifies an object by its anchor, so at least one column must be named.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocAnchorDuplicate" xml:space="preserve">
+    <value>Object Type '{0}' lists anchor column '{1}' more than once.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocColumnNoReference" xml:space="preserve">
+    <value>Object Type '{0}' configures column '{1}' without a 'referencesObjectType'. A column is only configured to say what its type cannot, which today means naming the object type it points at.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocColumnDuplicate" xml:space="preserve">
+    <value>Object Type '{0}' configures column '{1}' more than once.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocRelatedNoAttributeName" xml:space="preserve">
+    <value>Object Type '{0}' has a related table with no 'attributeName'. The attribute name is what the multi-valued attribute is called on the object type.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocRelatedDuplicate" xml:space="preserve">
+    <value>Object Type '{0}' declares related table attribute '{1}' more than once.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocJoinColumnCount" xml:space="preserve">
+    <value>Object Type '{0}' joins related table attribute '{1}' on {2} column(s), but the object type's anchor has {3}. Joining on part of an anchor gathers another object's values onto this one, so 'joinColumns' must name one column per anchor column, in the same order.</value>
+    <comment>{0} is an Object Type's name as written in the document. {2} and {3} are counts.</comment>
+  </data>
+  <data name="SqlDocColumnReferenceUnknown" xml:space="preserve">
+    <value>Object Type '{0}' says column '{1}' references object type '{2}', which this document does not declare. A reference can only point at an object type JIM also synchronises.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocRelatedReferenceUnknown" xml:space="preserve">
+    <value>Object Type '{0}' says related table attribute '{1}' references object type '{2}', which this document does not declare.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocNoValueForField" xml:space="preserve">
+    <value>Object Type '{0}' has no value for '{1}'.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocIdentifierWhitespace" xml:space="preserve">
+    <value>Object Type '{0}' has '{1}' set to '{2}', which starts or ends with whitespace. Database identifiers are used exactly as written, so the spaces would name a different object.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocIdentifierInvalid" xml:space="preserve">
+    <value>Object Type '{0}' has '{1}' set to a value that cannot name a database object: {2}</value>
+    <comment>{0} is an Object Type's name as written in the document. {2} is the reason, in its own words.</comment>
+  </data>
+  <data name="SqlDocSelectNotQuery" xml:space="preserve">
+    <value>Object Type '{0}' has a 'select' that does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="SqlDocSelectSemicolon" xml:space="preserve">
+    <value>Object Type '{0}' has a 'select' containing a semicolon. It must be a single statement, with no terminator.</value>
+    <comment>{0} is an Object Type's name as written in the document.</comment>
+  </data>
+  <data name="PfEncrypted" xml:space="preserve">
+    <value>The connection is encrypted, so passwords are protected in transit.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfEnableSecureConnection" xml:space="preserve">
+    <value>Enable the 'Use Secure Connection' setting on this Connected System, and set the port to the one the directory serves LDAPS on.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. 'Use Secure Connection' is the LDAP Connector's setting.</comment>
+  </data>
+  <data name="PfAdRefusesUnencrypted" xml:space="preserve">
+    <value>Active Directory refuses to accept a password over a connection that is neither encrypted nor signed and sealed, so a password set is likely to be rejected until this is addressed.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfNotEncrypted" xml:space="preserve">
+    <value>The connection is not encrypted. Passwords would be sent where anyone on the network path can read them.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMechanismAd" xml:space="preserve">
+    <value>JIM would set passwords by writing the '{0}' attribute, which is how Active Directory accepts them.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is an LDAP attribute name.</comment>
+  </data>
+  <data name="PfMechanismPasswordModify" xml:space="preserve">
+    <value>JIM would set passwords using the LDAP Password Modify extended operation, which this directory advertises support for.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMechanismUnsupported" xml:space="preserve">
+    <value>This directory does not advertise the LDAP Password Modify extended operation, which is the only mechanism JIM will use to set a password on a directory that is not Active Directory.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMechanismLooksFor" xml:space="preserve">
+    <value>JIM looks for the extended operation '{0}' on the directory's rootDSE.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is an object identifier.</comment>
+  </data>
+  <data name="PfMechanismNoDirectWrite" xml:space="preserve">
+    <value>JIM will not write a password attribute directly instead, because a directory stores a directly written value exactly as given rather than hashing it, which would leave cleartext passwords in the directory.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsNotCheckable" xml:space="preserve">
+    <value>JIM cannot check whether the account it connects as is allowed to reset passwords on this directory.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsNotCheckableDetail" xml:space="preserve">
+    <value>This directory publishes no way for a client to ask what it is allowed to do, so the account's rights have to be confirmed at the directory itself.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsNoContainers" xml:space="preserve">
+    <value>JIM cannot check whether the account it connects as is allowed to reset passwords, because it does not yet know where it would be provisioning.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsSelectContainers" xml:space="preserve">
+    <value>Select the containers to manage on the Scope tab, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. The Scope tab is the Connected System's tab of that name.</comment>
+  </data>
+  <data name="PfRightsFinding" xml:space="preserve">
+    <value>{0} {1}: {2}</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is an outcome (a nested message); {1} is a container's distinguished name; {2} is the finding's detail, in its own words.</comment>
+  </data>
+  <data name="PfOutcomeAllowed" xml:space="preserve">
+    <value>Allowed in</value>
+    <comment>Completes a line naming a container; the container follows.</comment>
+  </data>
+  <data name="PfOutcomeDenied" xml:space="preserve">
+    <value>Not allowed in</value>
+    <comment>Completes a line naming a container; the container follows.</comment>
+  </data>
+  <data name="PfOutcomeUnknown" xml:space="preserve">
+    <value>Could not tell for</value>
+    <comment>Completes a line naming a container; the container follows.</comment>
+  </data>
+  <data name="PfRightsCheckedFirst" xml:space="preserve">
+    <value>JIM checked the first {0} of this Connected System's {1} managed containers.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} and {1} are counts.</comment>
+  </data>
+  <data name="PfRightsDenied" xml:space="preserve">
+    <value>The account JIM connects as cannot reset passwords everywhere it would be provisioning.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsUnconfirmed" xml:space="preserve">
+    <value>JIM could not confirm everywhere that the account it connects as is allowed to reset passwords.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsAllowed" xml:space="preserve">
+    <value>The account JIM connects as can reset passwords everywhere it would be provisioning.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyNounDomain" xml:space="preserve">
+    <value>the domain password policy</value>
+    <comment>Completes: JIM could not read ... Feminine in French.</comment>
+  </data>
+  <data name="PfPolicyNounDirectory" xml:space="preserve">
+    <value>the directory's password policy</value>
+    <comment>Completes: JIM could not read ... Feminine in French.</comment>
+  </data>
+  <data name="PfPolicyUnreadable" xml:space="preserve">
+    <value>JIM could not read {0}, so it cannot pre-fill the password generator from it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a policy noun (a nested message), feminine in French.</comment>
+  </data>
+  <data name="PfPolicyRead" xml:space="preserve">
+    <value>JIM read {0} and can pre-fill the password generator from it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a policy noun (a nested message), feminine in French.</comment>
+  </data>
+  <data name="PfPolicyRemedyActiveDirectory" xml:space="preserve">
+    <value>Check that the account JIM connects as can read the domain root object.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyRemedyOpenLdap" xml:space="preserve">
+    <value>Check that the account JIM connects as can read the policy entry the ppolicy overlay applies by default.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyRemedyDirectoryServer389" xml:space="preserve">
+    <value>Check that the account JIM connects as can read the password attributes on cn=config.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyRemedyOther" xml:space="preserve">
+    <value>Check that the account JIM connects as can read where this directory holds its password policy.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyNotPublished" xml:space="preserve">
+    <value>This directory does not publish a password policy that a client can read, so JIM cannot pre-fill the password generator from it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyConfigNotReadable" xml:space="preserve">
+    <value>JIM could not read the directory's password policy: the account it connects as cannot read the server configuration that holds it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfConfigRemedyOpenLdap" xml:space="preserve">
+    <value>Grant the account JIM connects as read access to the ppolicy overlay configuration under cn=config and to the policy entry it names, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfConfigRemedyDirectoryServer389" xml:space="preserve">
+    <value>Grant the account JIM connects as read access to the password attributes on cn=config, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfConfigRemedyOther" xml:space="preserve">
+    <value>Grant the account JIM connects as read access to the server configuration that holds the password policy, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyNoneConfigured" xml:space="preserve">
+    <value>JIM read the directory's password policy configuration: no policy is configured, so no rules apply to a generated password.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMinimumLength" xml:space="preserve">
+    <value>Minimum length: {0}.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a number of characters.</comment>
+  </data>
+  <data name="PfComplexityRequired" xml:space="preserve">
+    <value>Complexity is required: a password must use at least {0} of the 5 character categories.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a number.</comment>
+  </data>
+  <data name="PfComplexityNotRequired" xml:space="preserve">
+    <value>Complexity is not required.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPpolicyNotLoaded" xml:space="preserve">
+    <value>The directory does not advertise the password policy control, so the ppolicy overlay is not loaded.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfSetByHand" xml:space="preserve">
+    <value>Set the password requirements on the Synchronisation Rule to match the target's policy by hand, and expect a rejection to be how a mismatch shows up.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfFgppPresent" xml:space="preserve">
+    <value>This domain has Fine-Grained Password Policies, which apply stricter rules to some accounts. What JIM read is a floor, not the whole story.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfOverridePresent" xml:space="preserve">
+    <value>Some objects in this directory are governed by a password policy other than the one JIM read, which may be stricter. What JIM read is a floor, not the whole story.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfFgppUnknown" xml:space="preserve">
+    <value>JIM could not establish whether this domain has Fine-Grained Password Policies, which would apply stricter rules to some accounts. Treat what it read as a floor.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfOverrideUnknown" xml:space="preserve">
+    <value>JIM could not establish whether some objects in this directory are governed by a password policy other than the one it read, which could be stricter. Treat what it read as a floor.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfFurtherChecks" xml:space="preserve">
+    <value>The directory applies further checks JIM cannot see, so a password satisfying everything above can still be refused.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphNoToken" xml:space="preserve">
+    <value>No access token could be acquired from Microsoft Entra ID: {0}</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is the error in its own words.</comment>
+  </data>
+  <data name="PfGraphHttps" xml:space="preserve">
+    <value>Microsoft Graph is reached over HTTPS, with TLS 1.2 or later.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfNotChecked" xml:space="preserve">
+    <value>Not checked: no connection.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphPolicySame" xml:space="preserve">
+    <value>Microsoft Entra ID's password rules are the same in every tenant.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphToken" xml:space="preserve">
+    <value>An access token was acquired from Microsoft Entra ID.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphMechanism" xml:space="preserve">
+    <value>Passwords are set through Microsoft Graph, on the user's passwordProfile.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphPolicySameBanned" xml:space="preserve">
+    <value>Microsoft Entra ID's password rules are the same in every tenant; its banned password list cannot be read.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphLacksPermission" xml:space="preserve">
+    <value>The app registration lacks the {0} application permission. Grant it with admin consent.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a Microsoft Graph permission name.</comment>
+  </data>
+  <data name="PfGraphHoldsRole" xml:space="preserve">
+    <value>The app holds the permission and the {0} directory role across the tenant.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a Microsoft Entra directory role name.</comment>
+  </data>
+  <data name="PfGraphNoRole" xml:space="preserve">
+    <value>The app holds the permission, but its token shows no directory role that resets passwords. Graph also needs the app to hold User Administrator across the tenant: run Register-JIMEntraIdConnector -PasswordManagement, or assign it in the Entra admin centre. A role assigned in the last hour can be missing from the token until it is renewed.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+</root>

@@ -4,6 +4,8 @@
 using JIM.Models.Activities;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 using MudBlazor;
 
 namespace JIM.Web.Models;
@@ -76,14 +78,14 @@ public static class UnresolvedReferenceDisplay
     /// <summary>The likely cause's label, for chips and table cells.</summary>
     public static string CauseLabel(UnresolvedReferenceCause cause) => cause switch
     {
-        UnresolvedReferenceCause.NotFound => "Not found",
-        UnresolvedReferenceCause.NotFoundInScope => "Not found in scope",
-        UnresolvedReferenceCause.ContainerNotInScope => "Container not in scope",
-        UnresolvedReferenceCause.ContainerExcluded => "Container excluded",
-        UnresolvedReferenceCause.PartitionNotSelected => "Partition not selected",
-        UnresolvedReferenceCause.OutsideConnectedSystem => "Outside this Connected System",
-        UnresolvedReferenceCause.AmbiguousObjectType => "Ambiguous Object Type",
-        _ => cause.ToString()
+        UnresolvedReferenceCause.NotFound => ConnectorSpaceText.UrefCauseNotFound,
+        UnresolvedReferenceCause.NotFoundInScope => ConnectorSpaceText.UrefCauseNotFoundInScope,
+        UnresolvedReferenceCause.ContainerNotInScope => ConnectorSpaceText.UrefCauseContainerNotInScope,
+        UnresolvedReferenceCause.ContainerExcluded => ConnectorSpaceText.UrefCauseContainerExcluded,
+        UnresolvedReferenceCause.PartitionNotSelected => ConnectorSpaceText.UrefCausePartitionNotSelected,
+        UnresolvedReferenceCause.OutsideConnectedSystem => ConnectorSpaceText.UrefCauseOutsideSystem,
+        UnresolvedReferenceCause.AmbiguousObjectType => ConnectorSpaceText.UrefCauseAmbiguousObjectType,
+        _ => cause.ForDisplay()
     };
 
     /// <summary>
@@ -95,7 +97,7 @@ public static class UnresolvedReferenceDisplay
 
     /// <summary>Where the fix lies, as a chip label.</summary>
     public static string FixLocationLabel(UnresolvedReferenceFixLocation fixLocation) =>
-        fixLocation == UnresolvedReferenceFixLocation.Jim ? "JIM" : "Source system";
+        fixLocation == UnresolvedReferenceFixLocation.Jim ? "JIM" : ConnectorSpaceText.UrefFixSource;
 
     /// <summary>Where the fix lies, as a chip colour.</summary>
     public static Color FixLocationColour(UnresolvedReferenceFixLocation fixLocation) =>
@@ -117,12 +119,12 @@ public static class UnresolvedReferenceDisplay
         {
             UnresolvedReferenceCause.ContainerNotInScope
                 or UnresolvedReferenceCause.ContainerExcluded
-                or UnresolvedReferenceCause.PartitionNotSelected => new("Review Container Scope", $"{connectedSystemHref}?t=scope"),
-            UnresolvedReferenceCause.AmbiguousObjectType => new("View Schema", string.IsNullOrEmpty(objectTypeName)
+                or UnresolvedReferenceCause.PartitionNotSelected => new(ConnectorSpaceText.UrefActionReviewScope, $"{connectedSystemHref}?t=scope"),
+            UnresolvedReferenceCause.AmbiguousObjectType => new(ConnectorSpaceText.UrefActionViewSchema, string.IsNullOrEmpty(objectTypeName)
                 ? $"{connectedSystemHref}?t=schema"
                 : $"{connectedSystemHref}?t=schema&ot={Uri.EscapeDataString(objectTypeName)}"),
-            UnresolvedReferenceCause.OutsideConnectedSystem => new("View Settings", $"{connectedSystemHref}?t=settings"),
-            _ => new("View Run Profiles", $"{connectedSystemHref}?t=run-profiles")
+            UnresolvedReferenceCause.OutsideConnectedSystem => new(ConnectorSpaceText.UrefActionViewSettings, $"{connectedSystemHref}?t=settings"),
+            _ => new(ConnectorSpaceText.UrefActionViewRunProfiles, $"{connectedSystemHref}?t=run-profiles")
         };
     }
 
@@ -143,16 +145,19 @@ public static class UnresolvedReferenceDisplay
         ArgumentNullException.ThrowIfNull(totals);
 
         var handlingSentence = handling == UnresolvedReferenceHandling.Ignore
-            ? "Unresolved Reference Handling is set to Ignore, so runs do not report them."
-            : $"Unresolved Reference Handling is set to {handling}.";
+            ? ConnectorSpaceText.UrefHandlingIgnore
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefHandlingSetTo, handling);
 
-        return $"{ReferencesOnObjectsText(totals.ReferenceCount, totals.ObjectCount)} could not be resolved. {handlingSentence}";
+        var references = ReferencesOnObjectsText(totals.ReferenceCount, totals.ObjectCount);
+        var sentence = string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(totals.ReferenceCount, ConnectorSpaceText.UrefNotResolvedOne, ConnectorSpaceText.UrefNotResolvedOther), references);
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefSignpostTooltip, sentence, handlingSentence);
     }
 
     /// <summary>How many references on how many objects, as the signpost and "Where they point" both put it.</summary>
     public static string ReferencesOnObjectsText(int referenceCount, int objectCount) =>
-        $"{referenceCount:N0} {(referenceCount == 1 ? "reference" : "references")} on " +
-        $"{objectCount:N0} {(objectCount == 1 ? "Connected System Object" : "Connected System Objects")}";
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefOnObjects,
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(referenceCount, ConnectorSpaceText.UrefReferenceOne, ConnectorSpaceText.UrefReferenceOther), referenceCount.ToString("N0")),
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(objectCount, ConnectorSpaceText.UrefObjectOne, ConnectorSpaceText.UrefObjectOther), objectCount.ToString("N0")));
 
     /// <summary>The Connected System's Connector Space, filtered to the objects holding unresolved references.</summary>
     public static string ConnectorSpaceHref(int connectedSystemId) =>
@@ -167,5 +172,5 @@ public static class UnresolvedReferenceDisplay
 
     /// <summary>How many objects a step's values sit on, as "Where they point" puts it beside the step.</summary>
     public static string ObjectCountText(int count) =>
-        $"on {count:N0} {(count == 1 ? "object" : "objects")}";
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(count, ConnectorSpaceText.UrefOnObjectOne, ConnectorSpaceText.UrefOnObjectOther), count.ToString("N0"));
 }

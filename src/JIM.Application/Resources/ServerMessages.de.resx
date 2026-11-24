@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ObjectTypeNameRequired" xml:space="preserve">
+    <value>Ein Name für den Metaverse-Objekttyp ist erforderlich.</value>
+  </data>
+  <data name="ObjectTypePluralNameRequired" xml:space="preserve">
+    <value>Ein Pluralname für den Metaverse-Objekttyp ist erforderlich.</value>
+  </data>
+  <data name="ObjectTypeNotFound" xml:space="preserve">
+    <value>Metaverse-Objekttyp {0} wurde nicht gefunden.</value>
+  </data>
+  <data name="ObjectTypeBuiltInCannotRename" xml:space="preserve">
+    <value>Der integrierte Metaverse-Objekttyp „{0}“ kann nicht umbenannt werden und sein Symbol kann nicht geändert werden.</value>
+  </data>
+  <data name="ObjectTypeNameExists" xml:space="preserve">
+    <value>Ein Metaverse-Objekttyp mit dem Namen „{0}“ existiert bereits.</value>
+  </data>
+  <data name="ObjectTypePluralNameExists" xml:space="preserve">
+    <value>Ein Metaverse-Objekttyp mit dem Pluralnamen „{0}“ existiert bereits.</value>
+  </data>
+  <data name="ObjectTypeBuiltInCannotDelete" xml:space="preserve">
+    <value>Der integrierte Metaverse-Objekttyp „{0}“ kann nicht gelöscht werden.</value>
+  </data>
+  <data name="AttributeNameRequired" xml:space="preserve">
+    <value>Ein Name für das Metaverse-Attribut ist erforderlich.</value>
+  </data>
+  <data name="AttributeNotFound" xml:space="preserve">
+    <value>Metaverse-Attribut {0} wurde nicht gefunden.</value>
+  </data>
+  <data name="AttributeBuiltInCannotRename" xml:space="preserve">
+    <value>Das integrierte Metaverse-Attribut „{0}“ kann nicht umbenannt werden.</value>
+  </data>
+  <data name="AttributeNameExists" xml:space="preserve">
+    <value>Ein Metaverse-Attribut mit dem Namen „{0}“ existiert bereits (bei Namen wird die Groß-/Kleinschreibung nicht unterschieden).</value>
+  </data>
+  <data name="AttributeRenameReadByExpressions" xml:space="preserve">
+    <value>Das Metaverse-Attribut „{0}“ kann nicht umbenannt werden, solange Ausdrücke es über den Namen lesen. Ändern Sie zuerst Folgendes:</value>
+  </data>
+  <data name="StandardMappingNeedsStandard" xml:space="preserve">
+    <value>Jede Standardzuordnung erfordert einen Standard.</value>
+  </data>
+  <data name="StandardMappingNeedsCounterpart" xml:space="preserve">
+    <value>Jede Standardzuordnung erfordert den Namen eines Gegenstückattributs.</value>
+  </data>
+  <data name="StandardMappingDuplicate" xml:space="preserve">
+    <value>Doppelte Standardzuordnung: {0} „{1}“.</value>
+  </data>
+  <data name="StandardMappingsBuiltInCannotModify" xml:space="preserve">
+    <value>Die Standardzuordnungen des integrierten Metaverse-Attributs „{0}“ können nicht geändert werden; sie werden von JIM gepflegt.</value>
+  </data>
+  <data name="BindingsBuiltInCannotModify" xml:space="preserve">
+    <value>Die Bindungen des integrierten Metaverse-Attributs „{0}“ können nicht geändert werden.</value>
+  </data>
+  <data name="AttributeBuiltInCannotDelete" xml:space="preserve">
+    <value>Das integrierte Metaverse-Attribut „{0}“ kann nicht gelöscht werden.</value>
+  </data>
+  <data name="AttributeBuiltInCannotUnassign" xml:space="preserve">
+    <value>Die Zuweisung des integrierten Metaverse-Attributs „{0}“ kann nicht aufgehoben werden.</value>
+  </data>
+  <data name="AttributeBuiltInCannotChangeType" xml:space="preserve">
+    <value>Typ oder Wertigkeit des integrierten Metaverse-Attributs „{0}“ können nicht geändert werden.</value>
+  </data>
+  <data name="AttributePluralityUnsupported" xml:space="preserve">
+    <value>Ein Attribut vom Typ {0} kann nicht {1} sein.</value>
+  </data>
+  <data name="MultiValuedBooleanRule" xml:space="preserve">
+    <value>Ein Boolean-Attribut enthält einen Wert, true oder false, und kann daher nicht mehrwertig sein.</value>
+  </data>
+  <data name="ChangeSearchTimeRangeInverted" xml:space="preserve">
+    <value>Der Zeitraum endet, bevor er beginnt.</value>
+  </data>
+  <data name="ChangeSearchTooManyConditions" xml:space="preserve">
+    <value>Eine Suche kann höchstens {0} Attributbedingungen kombinieren.</value>
+  </data>
+  <data name="ChangeSearchOperatorUnknown" xml:space="preserve">
+    <value>„{0}“ ist kein bekannter Operator für Attributänderungen.</value>
+  </data>
+  <data name="ChangeSearchAttributeUnknown" xml:space="preserve">
+    <value>Es gibt kein Metaverse-Attribut mit der ID {0}.</value>
+  </data>
+  <data name="ChangeSearchConditionInvalid" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="ChangeSearchMatchModeUnknown" xml:space="preserve">
+    <value>„{0}“ ist kein bekannter Abgleichsmodus für Bedingungen.</value>
+  </data>
+  <data name="FeatureDisabled" xml:space="preserve">
+    <value>Das Feature „{0}“ ist derzeit deaktiviert.</value>
+  </data>
+  <data name="FeatureFlagNotFound" xml:space="preserve">
+    <value>Es existiert kein Feature-Flag mit dem Schlüssel „{0}“.</value>
+  </data>
+  <data name="FeatureInDevelopment" xml:space="preserve">
+    <value>„{0}“ ist ein Feature in Entwicklung (zur Entfernung in Issue #{1} vorgemerkt). Es kann außerhalb von Development nur durch Übergabe von allowInDevelopment aktiviert werden.</value>
+  </data>
+  <data name="CertificateThumbprintExists" xml:space="preserve">
+    <value>Im Speicher existiert bereits ein Zertifikat mit dem Fingerabdruck {0}.</value>
+  </data>
+  <data name="CertificateFileNotFound" xml:space="preserve">
+    <value>Zertifikatsdatei nicht gefunden: {0}</value>
+  </data>
+  <data name="CertificateNotFound" xml:space="preserve">
+    <value>Zertifikat mit der ID {0} wurde nicht gefunden.</value>
+  </data>
+  <data name="CertificateTrustPurposeRequired" xml:space="preserve">
+    <value>Ein Zertifikat muss für Connectors, die Anmeldung oder beides als vertrauenswürdig festgelegt werden.</value>
+  </data>
+  <data name="SecureEndpointSystemNotFound" xml:space="preserve">
+    <value>Das verbundene System {0} wurde nicht gefunden.</value>
+  </data>
+  <data name="SecureEndpointNoConnectorDefinition" xml:space="preserve">
+    <value>Das verbundene System „{0}“ hat keine Connector-Definition, daher kann JIM nicht feststellen, wohin es sich verbindet.</value>
+  </data>
+  <data name="SecureEndpointConnectorUnavailable" xml:space="preserve">
+    <value>Der Connector „{0}“ ist nicht verfügbar, daher kann JIM nicht feststellen, wohin sich dieses verbundene System verbindet.</value>
+  </data>
+  <data name="SecureEndpointConnectorNotEncrypted" xml:space="preserve">
+    <value>Der Connector „{0}“ stellt keine verschlüsselten Verbindungen her, daher gibt es kein Serverzertifikat, das angezeigt werden könnte.</value>
+  </data>
+  <data name="SecureEndpointNotConfigured" xml:space="preserve">
+    <value>Das verbundene System „{0}“ ist nicht für eine verschlüsselte Verbindung konfiguriert, daher gibt es kein Serverzertifikat, das angezeigt werden könnte.</value>
+  </data>
+  <data name="ServerCertificateUnreachable" xml:space="preserve">
+    <value>{0}:{1} war nicht erreichbar, daher konnte JIM sein Zertifikat nicht lesen. Dies ist ein Konnektivitäts-, kein Zertifikatsproblem.</value>
+  </data>
+  <data name="SettingNotFound" xml:space="preserve">
+    <value>Einstellung mit dem Schlüssel „{0}“ wurde nicht gefunden.</value>
+  </data>
+  <data name="SettingReadOnly" xml:space="preserve">
+    <value>Die Einstellung „{0}“ ist schreibgeschützt und kann nicht geändert werden.</value>
+  </data>
+  <data name="IdpThumbprintRequired" xml:space="preserve">
+    <value>Ein Fingerabdruck ist erforderlich. JIM vertraut nicht einfach jedem Zertifikat, das der Identitätsanbieter gerade vorlegt.</value>
+  </data>
+  <data name="IdpNotConfigured" xml:space="preserve">
+    <value>Es ist kein Identitätsanbieter konfiguriert (JIM_SSO_AUTHORITY).</value>
+  </data>
+  <data name="IdpNoAnswer" xml:space="preserve">
+    <value>keine Antwort</value>
+  </data>
+  <data name="IdpUnreachable" xml:space="preserve">
+    <value>JIM konnte den Identitätsanbieter unter {0} nicht erreichen: {1}.</value>
+  </data>
+  <data name="IdpPlainHttp" xml:space="preserve">
+    <value>Der Identitätsanbieter unter {0} wird über unverschlüsseltes HTTP erreicht, daher gibt es kein Zertifikat zu prüfen. Verwenden Sie außerhalb der lokalen Entwicklung HTTPS.</value>
+  </data>
+  <data name="IdpConfigurationUnreadable" xml:space="preserve">
+    <value>JIM hat {0} erreicht, konnte aber dessen OpenID-Connect-Konfiguration nicht lesen: {1}.</value>
+  </data>
+  <data name="IdpNameMismatch" xml:space="preserve">
+    <value>Das Zertifikat von {0} wurde nicht für {0} ausgestellt. Dies lässt sich nicht beheben, indem man einem Zertifikat vertraut: Der Identitätsanbieter benötigt ein Zertifikat, das {0} benennt, oder JIM_SSO_AUTHORITY muss einen Namen verwenden, den sein Zertifikat trägt.</value>
+  </data>
+  <data name="IdpUntrusted" xml:space="preserve">
+    <value>JIM vertraut dem Zertifikat von {0} nicht: Seine Kette endet bei „{1}“, und nichts, dem für die Anmeldung vertraut wird, bürgt dafür. Legen Sie diese Zertifizierungsstelle für die Anmeldung als vertrauenswürdig fest, um die Anmeldung zu aktivieren.</value>
+  </data>
+  <data name="IdpUntrustedIssuedBy" xml:space="preserve">
+    <value>JIM vertraut dem Zertifikat von {0} nicht: Seine Kette endet bei „{1}“ (ausgestellt von „{2}“), und nichts, dem für die Anmeldung vertraut wird, bürgt dafür. Legen Sie diese Zertifizierungsstelle für die Anmeldung als vertrauenswürdig fest, um die Anmeldung zu aktivieren.</value>
+  </data>
+  <data name="IdpNoTlsCertificate" xml:space="preserve">
+    <value>JIM hat {0} erreicht, aber es hat kein TLS-Zertifikat vorgelegt: {1}.</value>
+  </data>
+  <data name="IdpTrustedConfigurationUnreadable" xml:space="preserve">
+    <value>JIM vertraut dem Zertifikat von {0}, konnte aber dessen OpenID-Connect-Konfiguration nicht lesen: {1}. Prüfen Sie JIM_SSO_AUTHORITY.</value>
+  </data>
+  <data name="IdpTrustedByOperatingSystem" xml:space="preserve">
+    <value>Dem Zertifikat von {0} wird vom Betriebssystem vertraut.</value>
+  </data>
+  <data name="IdpTrustedByStore" xml:space="preserve">
+    <value>Dem Zertifikat von {0} wird über den JIM-Zertifikatspeicher vertraut ({1}).</value>
+  </data>
+  <data name="IdpNothingTrusted" xml:space="preserve">
+    <value>Es wurde nichts als vertrauenswürdig festgelegt. {0}</value>
+  </data>
+  <data name="IdpNotPresenting" xml:space="preserve">
+    <value>{0} legt derzeit kein Zertifikat mit diesem Fingerabdruck vor, daher wurde nichts als vertrauenswürdig festgelegt. Das ist zu erwarten, wenn sein Zertifikat seit Ihrer Ansicht erneuert wurde; prüfen Sie seinen Status erneut.</value>
+  </data>
+  <data name="IdpAlreadyTrusted" xml:space="preserve">
+    <value>„{0}“ ist für die Anmeldung bereits als vertrauenswürdig festgelegt.</value>
+  </data>
+  <data name="IdpWouldNotVouch" xml:space="preserve">
+    <value>Wenn „{0}“ als vertrauenswürdig festgelegt würde, würde dies {1} nicht vertrauenswürdig machen: Ein Zertifikat in seiner Kette ist abgelaufen oder ungültig. Es wurde nichts als vertrauenswürdig festgelegt; das Zertifikat des Identitätsanbieters muss erneuert werden.</value>
+  </data>
+  <data name="IdpWidenedToSignIn" xml:space="preserve">
+    <value>„{0}“ war bereits für Connectors als vertrauenswürdig festgelegt und ist nun auch für die Anmeldung vertrauenswürdig.</value>
+  </data>
+  <data name="IdpNowTrusted" xml:space="preserve">
+    <value>„{0}“ ist nun für die Anmeldung als vertrauenswürdig festgelegt.</value>
+  </data>
+  <data name="SchedBuiltInCannotDelete" xml:space="preserve">
+    <value>Der integrierte Zeitplan „{0}“ kann nicht gelöscht werden.</value>
+  </data>
+  <data name="SchedStepsCannotBeAdded" xml:space="preserve">
+    <value>Dem integrierten Zeitplan „{0}“ können keine Schritte hinzugefügt werden.</value>
+  </data>
+  <data name="SchedStepsCannotBeChanged" xml:space="preserve">
+    <value>Die Schritte des integrierten Zeitplans „{0}“ können nicht geändert werden.</value>
+  </data>
+  <data name="SchedStepsCannotBeRemoved" xml:space="preserve">
+    <value>Aus dem integrierten Zeitplan „{0}“ können keine Schritte entfernt werden.</value>
+  </data>
+  <data name="SchedStartFailedStep" xml:space="preserve">
+    <value>Der Zeitplan konnte nicht gestartet werden. Schritt {0} konnte nicht in die Warteschlange gestellt werden: {1}. Es wurden keine Schritte ausgeführt.</value>
+  </data>
+  <data name="SchedStartFailedStepNamed" xml:space="preserve">
+    <value>Der Zeitplan konnte nicht gestartet werden. Schritt {0}, {1}, konnte nicht in die Warteschlange gestellt werden: {2}. Es wurden keine Schritte ausgeführt.</value>
+  </data>
+  <data name="ExampleBuiltInTemplateCannotBeChanged" xml:space="preserve">
+    <value>Integrierte Datengenerierungsvorlagen können nicht geändert werden. Duplizieren Sie die Vorlage, um eine änderbare Version zu erhalten.</value>
+  </data>
+  <data name="ExampleBuiltInTemplateCannotBeDeleted" xml:space="preserve">
+    <value>Integrierte Datengenerierungsvorlagen können nicht gelöscht werden.</value>
+  </data>
+  <data name="ExampleTemplateNameExists" xml:space="preserve">
+    <value>Eine Datengenerierungsvorlage mit dem Namen „{0}“ existiert bereits.</value>
+  </data>
+  <data name="ExampleAttributeOnType" xml:space="preserve">
+    <value>„{0}“ in „{1}“</value>
+  </data>
+  <data name="ExampleExpressionDoesNotParse" xml:space="preserve">
+    <value>Der Ausdruck für {0} lässt sich nicht analysieren: {1}</value>
+  </data>
+  <data name="ExampleExpressionReadsConnectedSystem" xml:space="preserve">
+    <value>Der Ausdruck für {0} liest {1}, aber Beispieldaten erzeugen Metaverse-Objekte und haben kein Objekt im verbundenen System zum Lesen, daher hat er nie einen Wert. Lesen Sie stattdessen mv["..."].</value>
+  </data>
+  <data name="ExampleExpressionReadsUngenerated" xml:space="preserve">
+    <value>Der Ausdruck für {0} liest mv["{1}"], das diese Vorlage für „{2}“ nicht generiert, daher hat er nie einen Wert.</value>
+  </data>
+  <data name="ExampleRefusalsJoined" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="PwdRequired" xml:space="preserve">
+    <value>Ein Kennwort ist erforderlich.</value>
+  </data>
+  <data name="PwdNeverDisable" xml:space="preserve">
+    <value>enableAccount akzeptiert true, um das Konto beim Festlegen des Kennworts zu aktivieren, oder kann weggelassen werden, um den Aktivierungsstatus des Kontos unverändert zu lassen. Das Festlegen eines Kennworts deaktiviert nie ein Konto.</value>
+  </data>
+  <data name="PwdNeverExpiresNeedsAccounts" xml:space="preserve">
+    <value>expiryBehavior NeverExpires erfordert, dass die Konten benannt werden. Ein Kennwort, das in jedem für die Kennwortsynchronisierung konfigurierten verbundenen System festgelegt wird, lässt „Kennwort läuft nie ab“ so, wie jedes Konto es hat; benennen Sie die Objekte im verbundenen System, um dafür „Läuft nie ab“ zu wählen.</value>
+  </data>
+  <data name="PwdNoAccounts" xml:space="preserve">
+    <value>Mindestens ein Konto ist erforderlich. Um das Kennwort in jedem für die Kennwortsynchronisierung konfigurierten verbundenen System festzulegen, benennen Sie gar keine Konten.</value>
+  </data>
+  <data name="PwdNotThisPersonsAccount" xml:space="preserve">
+    <value>Das Objekt im verbundenen System {0} gehört nicht zu den Konten dieses Metaverse-Objekts.</value>
+  </data>
+  <data name="PwdSystemMissing" xml:space="preserve">
+    <value>Das verbundene System {0}, das das Objekt im verbundenen System {1} enthält, existiert nicht.</value>
+  </data>
+  <data name="PwdConnectorCannotSet" xml:space="preserve">
+    <value>Das Objekt im verbundenen System {0} befindet sich in {1}, dessen Connector keine Kennwörter festlegen kann.</value>
+  </data>
+  <data name="PwdTwoAccountsOneSystem" xml:space="preserve">
+    <value>Die Objekte im verbundenen System {0} und {1} befinden sich beide in {2}; pro verbundenem System kann jeweils nur für ein Konto ein Kennwort festgelegt werden.</value>
+  </data>
+  <data name="MatchNoSource" xml:space="preserve">
+    <value>Eine Objektabgleichsregel muss eine Quelle haben, ein Attribut des verbundenen Systems oder einen Ausdruck, sonst hat sie nichts zum Abgleichen.</value>
+  </data>
+  <data name="MatchSeveralSources" xml:space="preserve">
+    <value>Eine Objektabgleichsregel nimmt genau eine Quelle, ein Attribut des verbundenen Systems oder einen Ausdruck; diese hat {0}. Um anhand einer Kombination von Attributen abzugleichen, schreiben Sie einen Ausdruck, der sie kombiniert.</value>
+  </data>
+  <data name="MatchAttributeAndExpression" xml:space="preserve">
+    <value>Die Quelle einer Objektabgleichsregel ist entweder ein Attribut des verbundenen Systems oder ein Ausdruck, nicht beides.</value>
+  </data>
+  <data name="MatchNeitherAttributeNorExpression" xml:space="preserve">
+    <value>Die Quelle einer Objektabgleichsregel benennt weder ein Attribut des verbundenen Systems noch einen Ausdruck, daher hat die Regel nichts zum Abgleichen.</value>
+  </data>
+  <data name="MatchNoTarget" xml:space="preserve">
+    <value>Eine Objektabgleichsregel muss das Metaverse-Attribut benennen, mit dem ihre Quellwerte verglichen werden.</value>
+  </data>
+  <data name="MatchTargetTypeNotMatchable" xml:space="preserve">
+    <value>Das Metaverse-Attribut „{0}“ ist {1}, was eine Objektabgleichsregel nicht vergleichen kann. Gleichen Sie anhand eines Attributs vom Typ {2} ab.</value>
+  </data>
+  <data name="MatchAttributeNamedNotOnType" xml:space="preserve">
+    <value>Das Attribut „{0}“ des verbundenen Systems ist kein Attribut von „{1}“, dem Objekttyp, den diese Regel liest.</value>
+  </data>
+  <data name="MatchAttributeIdNotOnType" xml:space="preserve">
+    <value>Das Attribut des verbundenen Systems mit der ID {0} ist kein Attribut von „{1}“, dem Objekttyp, den diese Regel liest.</value>
+  </data>
+  <data name="MatchAttributeTypeMismatch" xml:space="preserve">
+    <value>Das Attribut „{0}“ des verbundenen Systems ist {1}, das Metaverse-Attribut „{2}“ aber {3}; eine Objektabgleichsregel vergleicht Attribute desselben Typs. Um sie trotzdem zu vergleichen, gleichen Sie anhand eines Ausdrucks ab, der den Wert konvertiert.</value>
+  </data>
+  <data name="MatchExpressionTooLong" xml:space="preserve">
+    <value>Der Ausdruck ist {0} Zeichen lang; ein Ausdruck darf höchstens {1} lang sein.</value>
+  </data>
+  <data name="MatchExpressionDoesNotParse" xml:space="preserve">
+    <value>Der Ausdruck lässt sich nicht analysieren: {0}</value>
+  </data>
+  <data name="MatchExpressionReadsMetaverse" xml:space="preserve">
+    <value>Ein Abgleichsausdruck liest nur das Objekt im verbundenen System und kann daher {0} nicht lesen: Das Metaverse-Objekt ist das, wonach die Regel sucht. Um mit einem normalisierten Metaverse-Wert zu vergleichen, leiten Sie ein Metaverse-Attribut ab, das ihn enthält, und gleichen Sie anhand dessen ab.</value>
+  </data>
+  <data name="MatchExpressionReadsNothing" xml:space="preserve">
+    <value>Der Ausdruck liest kein Attribut des verbundenen Systems, würde also für jedes Objekt denselben Wert berechnen und alle mit derselben Identität abgleichen. Lesen Sie mindestens ein Attribut, als cs["attributeName"].</value>
+  </data>
+  <data name="MatchExpressionUnknownAttribute" xml:space="preserve">
+    <value>Der Ausdruck liest {0}, aber „{1}“ hat kein Attribut mit diesem Namen.</value>
+  </data>
+  <data name="MatchExpressionNonRepeatable" xml:space="preserve">
+    <value>Der Ausdruck ruft {0} auf, was bei jeder Ausführung einen anderen Wert liefert, sodass dasselbe Objekt bei jeder Synchronisierung mit einer anderen oder gar keiner Identität übereinstimmen würde.</value>
+  </data>
+  <data name="LookupNoMatch" xml:space="preserve">
+    <value>Kein Metaverse-Objekt enthält diese Werte, daher würde eine Synchronisierung die nächste Objektabgleichsregel versuchen und das Objekt projizieren (Projektion), wenn keine Regel passt und seine Synchronisierungsregel projiziert.</value>
+  </data>
+  <data name="LookupAlreadyJoined" xml:space="preserve">
+    <value>Dieses Objekt ist bereits mit {0} verknüpft, dem Metaverse-Objekt, mit dem es auf {1} übereinstimmt.</value>
+  </data>
+  <data name="LookupJoinedToAnother" xml:space="preserve">
+    <value>Die Werte stimmen auf {1} mit {0} überein, aber ein anderes Objekt im verbundenen System aus diesem verbundenen System ist bereits damit verknüpft, daher würde eine Synchronisierung festhalten, dass dieses Objekt nicht verknüpft werden konnte.</value>
+  </data>
+  <data name="LookupWouldJoin" xml:space="preserve">
+    <value>Eine Synchronisierung würde dieses Objekt mit {0} verknüpfen, abgeglichen auf {1}.</value>
+  </data>
+  <data name="ProvSyncRuleUnavailable" xml:space="preserve">
+    <value>Synchronisierungsregel nicht verfügbar.</value>
+  </data>
+  <data name="ProvAdvancedNotEvaluated" xml:space="preserve">
+    <value>Erweiterte Zuordnung, hier nicht ausgewertet</value>
+  </data>
+  <data name="ProvNoSource" xml:space="preserve">
+    <value>Keine Quelle konfiguriert</value>
+  </data>
+  <data name="ProvHeldUnderAnotherType" xml:space="preserve">
+    <value>Bis zum nächsten Import als {0} geführt: Eine Schemaaktualisierung hat dieses Attribut auf {1} geändert, daher belässt die Synchronisierung den Wert des Metaverse-Objekts unverändert, bis ein Import das Attribut erneut liest.</value>
+  </data>
+  <data name="ProvInputsHeld" xml:space="preserve">
+    <value>Nicht ausgewertet: {0} bis zum nächsten Import, da eine Schemaaktualisierung seinen Datentyp geändert hat. Die Synchronisierung belässt den Wert des Metaverse-Objekts unverändert, bis ein Import ihn erneut liest.</value>
+  </data>
+  <data name="ProvExpressionFailed" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="ProvValueNotConvertible" xml:space="preserve">
+    <value>Der Ausdruck hat „{0}“ zurückgegeben, was dieses Attribut vom Typ {1} nicht aufnehmen kann, daher würde diese Quelle keinen Wert liefern, und die Synchronisierung meldet einen Ausdrucksfehler.</value>
+  </data>
+  <data name="ProvSeveralValues" xml:space="preserve">
+    <value>Der Ausdruck hat {0} Werte zurückgegeben, dieses Attribut ist aber einwertig, daher würde diese Quelle keinen Wert liefern, und die Synchronisierung meldet einen Fehler.</value>
+  </data>
+  <data name="ContributionModeNeedsMultiValued" xml:space="preserve">
+    <value>Der Beitragsmodus {0} gilt nur für mehrwertige Attribute. Stellen Sie den Modus auf „Priorität“, bevor Sie das Attribut einwertig machen.</value>
+  </data>
+  <data name="ContributionModeNotForReference" xml:space="preserve">
+    <value>Der Beitragsmodus {0} ist für Referenzattribute nicht verfügbar, da eine Referenz entfernt wird, wenn das Metaverse-Objekt gelöscht wird, auf das sie verweist. Um einen Verlauf der Referenzen zu behalten, erfassen Sie die Kennung des referenzierten Objekts als Text in einem separaten mehrwertigen Textattribut.</value>
+  </data>
+  <data name="ContributionModeUnsupported" xml:space="preserve">
+    <value>Der Beitragsmodus {0} ist für ein Attribut vom Typ {1} nicht verfügbar.</value>
+  </data>
+</root>

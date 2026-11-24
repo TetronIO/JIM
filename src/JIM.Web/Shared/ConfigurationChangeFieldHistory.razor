@@ -14,16 +14,16 @@
 
     @if (Diff.Root.ChangeType == ConfigurationDiffChangeType.Added)
     {
-        <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">This object was created at this version.</MudAlert>
+        <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">@ActivityText.ActivityHistoryCreatedAtVersion</MudAlert>
     }
     else if (Diff.Root.ChangeType == ConfigurationDiffChangeType.Removed)
     {
-        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">This object was deleted at this version.</MudAlert>
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@ActivityText.ActivityHistoryDeletedAtVersion</MudAlert>
     }
 
     @if (!Diff.HasChanges)
     {
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">No differences between these versions.</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@ActivityText.ActivityHistoryNoDifferences</MudText>
     }
     else
     {

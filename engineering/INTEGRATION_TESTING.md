@@ -105,6 +105,8 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-035-EntraIdSignIn" -DirectoryType ActiveDirectory  # Signing people in to JIM through Microsoft Entra ID, posted as jim-sso-entra (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-036-EntraIdTarget" -DirectoryType ActiveDirectory  # Provisioning to Microsoft Entra ID through the Entra ID Connector, posted as jim-entra-connector (needs the test tenant's credentials)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-037-EntraIdSource" -DirectoryType ActiveDirectory  # Importing from Microsoft Entra ID through the Entra ID Connector, posted with 036 as jim-entra-connector (needs the test tenant's credentials)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-039-EntraIdScale" -Template Large -DirectoryType OpenLDAP  # The Entra ID Connector at scale against the test tenant (#3053); on request only, and hours at the largest sizes
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-040-EntraIdScaleStandIn" -Template Scale1m80Groups -DirectoryType OpenLDAP  # The Entra ID Connector reading up to a million objects from the stand-in Graph service (#3053); on request only
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-032-IntraTypeReferences" -DirectoryType OpenLDAP -Template Medium  # Managers and nested groups through the cross-page reference step (#2492, OpenLDAP only)
 
 # Short forms resolve to the full name: the number, Scenario-NNN, or the descriptive part
@@ -228,6 +230,8 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario-035-EntraIdSignIn` | Microsoft Entra ID sign-in end to end ([#2367](https://github.com/TetronIO/JIM/issues/2367)), against the JIM test tenant, with JIM registered by `Register-JIMIdentityProvider -Provider EntraId` and matched on `oid`: portal sign-in, the initial administrator, `Connect-JIM` by PKCE with its version 2 access token on `/api`, one Metaverse Object across both, a person with no JIM identity refused every Administrator API, the API reference's Try It, and the registration found right on a second run. Posted as its own commit status, `jim-sso-entra` | Active Directory lab only (the tenant's credentials are the lab runner's) |
 | `Scenario-036-EntraIdTarget` | The Microsoft Entra ID Connector with Entra ID as a target ([#361](https://github.com/TetronIO/JIM/issues/361)), against the JIM test tenant: provision 24 users and four groups (one over Graph's 20 members on a create, one nested), deliver each Initial Password, update attributes, a user principal name and a manager, change a membership, disable then delete a leaver, synchronise again with nothing to export, and leave the tenant's own accounts untouched, each result read back through Graph by the harness. Posted as its own commit status, `jim-entra-connector` | Any directory type (it uses none), given the tenant's credentials: the lab runner's, or `JIM_SSO_ENTRA_GRAPH_TOKEN` |
 | `Scenario-037-EntraIdSource` | The Microsoft Entra ID Connector with Entra ID as a source ([#361](https://github.com/TetronIO/JIM/issues/361)): the harness seeds members, a guest, nested, mixed-scope and hidden-membership groups in the JIM test tenant, and JIM's Full and Delta Imports project them, follow a change, a membership change and two deletions, and read nothing when nothing changed. Posted with Scenario 036 as `jim-entra-connector` | Any directory type (it uses none), given the tenant's credentials, as Scenario 036 |
+| `Scenario-039-EntraIdScale` | The Microsoft Entra ID Connector at scale ([#3053](https://github.com/TetronIO/JIM/issues/3053)), against the JIM test tenant at the run's template: provision, changes confirmed by Delta Import, leavers deleted, a Full Import of everything, each timed; on request only, never in `All` |
+| `Scenario-040-EntraIdScaleStandIn` | The Microsoft Entra ID Connector reading a tenant of up to a million objects ([#3053](https://github.com/TetronIO/JIM/issues/3053)), from the stand-in Graph service: Full Import, Delta Import of changes and deletions, an idle Delta Import and a Full Import of everything, each timed; on request only, never in `All` |
 | `Scenario-032-IntraTypeReferences` | The Full Synchronisation's cross-page reference step end to end ([#2492](https://github.com/TetronIO/JIM/issues/2492)): users with managers and groups nesting groups, references within one Object Type that no type order can resolve in the page loop, exported to an empty target and asserted manager by manager and member by member; also the step's measurement scenario (duration and reference-value count) | openldap-primary |
 
 **Available Templates (`-Template` parameter):**
@@ -1147,7 +1151,7 @@ The dedicated scoping evaluation matrix scenario is Scenario 011 (below).
 - File connector with column-based object-type discovery (one CSO type per matrix cell).
 - No LDAP step; the matrix is template-independent and DirectoryConfig-agnostic.
 
-**Three coverage tiers** (PRD: [engineering/prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)):
+**Three coverage tiers** (PRD: [engineering/prd/done/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](prd/done/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)):
 
 | Tier | Selector | Cells (approx) | Target | Purpose |
 |------|----------|----------------|--------|---------|
@@ -1465,7 +1469,7 @@ PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4'
 
 #### Scenario 024: Active Directory Password Policy
 
-**Status**: written for [PRD functional requirement 17](prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md) and checked everywhere but on a domain controller (it parses, every helper and cmdlet it calls exists with the parameters it passes, ScriptAnalyzer is clean, and a mocked dry run of every step passes). **Not yet run against the lab**, which needs `-DirectoryType ActiveDirectory`. Active Directory lab only.
+**Status**: written for [PRD functional requirement 17](prd/done/PRD_ACTIVE_DIRECTORY_LAB.md); runs in every Active Directory lab run (`ad-lab.yml`) and passes. Active Directory lab only.
 
 **Purpose**: Scenario 022 for a real domain controller. Prove that JIM reads the domain password policy a Windows domain controller enforces, reports what it can about a Fine-Grained Password Policy, and provisions accounts with generated Initial Passwords the domain accepts; and that a password only a domain controller can refuse parks the account with the directory's own words and is released when the rule is corrected. The unit tests in `LdapConnectorPasswordPolicyTests` and `LdapConnectorPasswordTests` assert against a mocked LDAP executor, so they prove how JIM maps what a directory says and nothing about what Active Directory says or enforces.
 
@@ -1606,6 +1610,54 @@ PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4'
 **Checks** (only `-Step All` is meaningful): Full Import (every seeded user and group projected with its attributes and members, the nested group, the hidden-membership group's members, the out-of-scope member left out, and `sourceOfAuthority` `cloud`, or `externalEntraDirectory` for the guest); Scoping (the tenant's own users imported, none projected); Delta Import (a job title, a member added and one removed, a user and a group deleted, each reaching the Metaverse, the two deletions under deletion rules with no grace period); Delta integrity (a Delta Import with nothing changed reads nothing, and does not fall back to reading everything). Imports repeat a few times while the Metaverse still differs, since Graph's lists and delta rounds lag its writes.
 
 **Safety and running it**: as Scenario 036, whose certificate it also replaces, so the two never run at once; the lab runs them one after the other in one step.
+
+#### Scenario 039: Entra ID at Scale
+
+**Status**: implemented for [#3053](https://github.com/TetronIO/JIM/issues/3053). On request only: never part of `-Scenario All`, never nightly.
+
+**Purpose**: how the Connector performs against a real tenant at a template's size: how long provisioning, changes, deletions and a Full Import take, and how many objects a second each moves, with Graph's own limits and eventual consistency in the way.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-039-EntraIdScale.ps1` and `test/integration/utils/Scenario-039-Data.ps1`, with Scenario 036's configuration (`Setup-Scenario-036.ps1 -InitialPassword $false`: a password is another write per user, and Scenario 036 proves it) and harness.
+
+**Population**: the template's users and groups (`Get-TemplateScale`). Person *i* reports to person *i*/10; the first group, All Staff, holds everyone, so one group's membership goes far beyond Graph's 20 members a request; each person joins the other groups in turn up to the template's average memberships.
+
+**Checks** (only `-Step All` is meaningful):
+- **Provision:** every user and group exported, confirmed by Full Import, counted in Graph, and a sample of 20 people read back attribute by attribute.
+- **Changes:** a tenth of the people get a new job title and a tenth move between groups, confirmed by Delta Import.
+- **Leavers:** a hundredth leave scope and are deleted (Deprovisioning Action Delete), and their reports move to the leavers' own managers, as an HR system moves them; all confirmed by Delta Import. A report left naming a deleted leaver would name someone Entra ID no longer holds, which JIM holds as an unwritable reference by design (#1398).
+- **Full Import:** a Full Import and Full Synchronisation of everything find nothing to export.
+
+The Connected System writes at 20 a second, Graph's limit for an application in a tenant.
+
+**Timings**: every Run Profile's duration, and its objects a second, are printed and written to `results/scenario-039-<template>-<time>.json`, with the tenant's object count before and after. The worker's own timings are captured as for any scenario.
+
+**The tenant's limit**: before writing anything, the run reads the tenant's `directorySizeQuota` (the CI app holds `Organization.Read.All`) and stops, naming the room left, unless its users and groups fit with a tenth of the limit free. The test tenant's limit is 300,000, after `tetronjim.tetron.io` was verified. A deleted user counts in full while it is in deleted items. Purged, it counts for a quarter for 30 days, measured on the test tenant: 455 objects, 555 after creating 100 users, 480 after purging them. So back-to-back runs of the largest sizes can run out of room within a month.
+
+**Cleanup**: everything the run made is deleted in `$batch` requests of 20 (`Remove-EntraIdConnectorLabObject`, batched since this scenario, so a failed scale run's leftovers never hold up 036 and 037). The CI app then purges the run's users from deleted items (`Remove-EntraIdConnectorLabDeletedUser`; it holds `User.DeleteRestore.All`). Graph lets no application purge a group, so the template's groups stay in deleted items for their 30 days.
+
+**Running it**: from `entra-connector.yml`, with scenario 39 and a template; the job allows almost the six hours a GitHub-hosted job may take. Locally, `JIM_SSO_ENTRA_GRAPH_TOKEN` expires within the hour, so a long local run's purge fails; purge with a fresh token. Like 036 and 037 it replaces the Connector app's certificate, so it never runs while they do.
+
+#### Scenario 040: Entra ID at Scale, Stand-in
+
+**Status**: implemented for [#3053](https://github.com/TetronIO/JIM/issues/3053). On request only: never part of `-Scenario All`, never nightly.
+
+**Purpose**: how JIM performs reading a large tenant, at every template up to `Scale1m80Groups`: how long a Full Import, a Delta Import and their synchronisations take, and how many objects a second each moves. It measures reading only. The Connector writes no faster than Graph's 20 writes a second per application whatever answers it, so a million users would take days to provision whatever the tenant; writing at scale is Scenario 039's, against the real tenant.
+
+**The stand-in**: `test/JIM.TestGraphService`, which serves `MockGraphTenant`, the simulated tenant the unit suite drives in process (as the SCIM test service provider serves `MockScimProvider`), indexed so a million objects cost no scans. The runner builds it and starts it (compose profile `graph`) for Scenario 040 only. On `jim-network` it answers for `login.microsoftonline.com` and `graph.microsoft.com`, from a certificate it makes at start for those names, which the scenario adds to JIM's Trusted Certificates, so JIM runs unchanged. While it runs nothing on the network reaches the real Microsoft Graph, which is why it never starts alongside Scenarios 036 to 039. It records its own writes for delta rounds, and a deleted object leaves its groups and its reports' manager, as in Graph. Its harness controls (`/_stand-in/seed`, `/_stand-in/changes`, `/_stand-in/summary`) are published on the host's loopback only.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-040-EntraIdScaleStandIn.ps1`, with Scenario 037's configuration (`Setup-Scenario-037.ps1`). The Connected System signs in with a client secret, which the stand-in accepts from anyone; the sign-ins are 036 and 037's.
+
+**Population**: Scenario 039's, made in process by the stand-in (`MockGraphTenant.Seed`), since a million users cannot be created through Graph requests in any time worth waiting.
+
+**Checks** (only `-Step All` is meaningful):
+- **Full Import:** a Full Import and Full Synchronisation project every user and group, counted in the Metaverse, and a sample of 20 people read back.
+- **Delta Import:** the stand-in retitles a tenth of the people, moves a tenth between teams and deletes a hundredth (`MockGraphTenant.ApplyChanges`); a Delta Import and Delta Synchronisation bring the Metaverse in line, checked by count and by sample.
+- **Delta integrity:** a Delta Import with nothing changed reads nothing.
+- **Full Import again:** a Full Import and Full Synchronisation of the whole tenant change nothing.
+
+**Timings**: printed and written to `results/scenario-040-<template>-<time>.json`.
+
+**Running it**: `./Run-IntegrationTests.ps1 -Scenario 40 -Template Scale1m80Groups -DirectoryType OpenLDAP`. It needs no credentials and no directory.
 
 #### Scenario 032: Intra-type References
 

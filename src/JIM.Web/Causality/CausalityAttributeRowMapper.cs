@@ -5,6 +5,9 @@ using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging.DTOs;
+using System.Globalization;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
 
@@ -39,19 +42,20 @@ public static class CausalityAttributeRowMapper
     {
         var typeName = attributeType switch
         {
-            AttributeDataType.NotSet => "Unknown",
-            AttributeDataType.Text => "Text",
-            AttributeDataType.Number => "Number",
-            AttributeDataType.DateTime => "Date and Time",
-            AttributeDataType.Binary => "Binary",
-            AttributeDataType.Reference => "Reference",
-            AttributeDataType.Guid => "GUID",
-            AttributeDataType.Boolean => "Boolean",
-            AttributeDataType.LongNumber => "Long Number",
-            _ => attributeType.ToString()
+            AttributeDataType.NotSet => CausalityText.AttributeTypeUnknown,
+            AttributeDataType.Text => CausalityText.AttributeTypeText,
+            AttributeDataType.Number => CausalityText.AttributeTypeNumber,
+            AttributeDataType.DateTime => CausalityText.AttributeTypeDateTime,
+            AttributeDataType.Binary => CausalityText.AttributeTypeBinary,
+            AttributeDataType.Reference => CausalityText.AttributeTypeReference,
+            AttributeDataType.Guid => CausalityText.AttributeTypeGuid,
+            AttributeDataType.Boolean => CausalityText.AttributeTypeBoolean,
+            AttributeDataType.LongNumber => CausalityText.AttributeTypeLongNumber,
+            _ => attributeType.ForDisplay()
         };
 
-        return $"{typeName} · {(isMultiValued ? "Multi-valued" : "Single-valued")}";
+        return string.Format(CultureInfo.CurrentCulture, CausalityText.AttributeTypeAndPlurality, typeName,
+            isMultiValued ? CausalityText.AttributePluralityMulti : CausalityText.AttributePluralitySingle);
     }
 
     public static CausalityAttributeOperation ToOperation(ChangeValueOperation operation) => operation switch

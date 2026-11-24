@@ -250,13 +250,16 @@ public interface ISyncEngine
     /// whether a connector-defined change Exchange still owes (#2021) is held or judged as any other. Null when the
     /// caller did not look, in which case such a change is held: the safe answer, since judging it would report and
     /// re-send a change Exchange may simply not have made yet. Read only for a flagged change.</param>
+    /// <param name="deletedObjectIds">The Connected System Objects the import learned the target deleted, or null: an
+    /// exported removal of a reference to one is confirmed by the deletion, whatever the object still holds (#3053).</param>
     void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
         PendingExportReconciliationResult result,
         IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null,
         IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null,
-        IReadOnlyDictionary<int, ProbedAttributeValues>? probedValuesByAttributeId = null);
+        IReadOnlyDictionary<int, ProbedAttributeValues>? probedValuesByAttributeId = null,
+        IReadOnlySet<Guid>? deletedObjectIds = null);
 
     /// <summary>
     /// Judges the connector-defined changes a Pending Export holds while Exchange may still owe them (#2021) when the

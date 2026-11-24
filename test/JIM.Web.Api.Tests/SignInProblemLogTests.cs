@@ -3,6 +3,8 @@
 
 using System;
 using System.Linq;
+using System.Security.Claims;
+using JIM.Models.Localisation;
 using JIM.Web.Authentication;
 using NUnit.Framework;
 
@@ -164,6 +166,21 @@ public class SignInProblemLogTests
         {
             Assert.That(problem.Received, Has.Length.EqualTo(SignInProblemLog.MaxValueLength));
             Assert.That(problem.Received, Does.EndWith("..."));
+        }
+    }
+
+    [Test]
+    public void Record_OverlongValueWithMessages_ShowsWhatTheLogKeptInEveryLanguage()
+    {
+        var claims = new[] { new Claim(new string('c', SignInProblemLog.MaxValueLength * 2), "value") };
+
+        var problem = _log.Record(SignInProblemDiagnosis.MissingClaim(SignInProblemSource.Portal, "sub", claims));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(problem.Text, Is.Not.Null);
+            Assert.That(problem.Text!.Received.ToEnglish(), Is.EqualTo(problem.Received));
+            Assert.That(problem.Text!.Expected.ToEnglish(), Is.EqualTo("sub"));
         }
     }
 

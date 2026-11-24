@@ -3,6 +3,9 @@
 
 using JIM.Application.Services;
 using JIM.Models.Core;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Operations;
 using JIM.Utilities;
 
@@ -143,14 +146,14 @@ public class SystemHealthServer
                 Service = service,
                 Status = ServiceHealthStatus.Unhealthy,
                 Condition = ServiceHealthCondition.NeverStarted,
-                Reason = "Never started"
+                ReasonDetail = Health(nameof(HealthMessages.NeverStarted))
             };
         }
 
         var age = asOf - heartbeat.LastSeenAt;
         var noHeartbeatAfter = NoHeartbeatAfter(service);
         ServiceHealthCondition condition;
-        string reason;
+        JimMessage reason;
 
         // Precedence, most to least serious. A dead process's last words about its work are not a wedged task, so
         // no heartbeat is judged before stalled; and a wedged task matters more than a few late heartbeats, so
@@ -161,30 +164,30 @@ public class SystemHealthServer
         if (age >= noHeartbeatAfter)
         {
             condition = ServiceHealthCondition.NoHeartbeat;
-            reason = $"No heartbeat for {Describe(age)}";
+            reason = Health(nameof(HealthMessages.NoHeartbeat), Describe(age));
         }
         else if (heartbeat.CurrentWork != null
                  && heartbeat.LastProgressAt is { } lastProgressAt
                  && asOf - lastProgressAt > StalledAfter)
         {
             condition = ServiceHealthCondition.Stalled;
-            reason = $"Stalled: no progress on {heartbeat.CurrentWork} for {Describe(asOf - lastProgressAt)}";
+            reason = Health(nameof(HealthMessages.Stalled), heartbeat.CurrentWork, Describe(asOf - lastProgressAt));
         }
         else if (memory != null && MemoryPressure.IsLow(memory))
         {
             condition = ServiceHealthCondition.MemoryLow;
             // Short enough for a status card three across; the figures are on the heartbeat for whoever wants them.
-            reason = $"Memory low: {MemoryPressure.Percent(memory.UsedFraction!.Value)} of {MemoryPressure.Bytes(memory.TotalBytes!.Value)} in use";
+            reason = Health(nameof(HealthMessages.MemoryLow), MemoryPressure.Percent(memory.UsedFraction!.Value), MemoryPressure.Bytes(memory.TotalBytes!.Value));
         }
         else if (age > HeartbeatOverdueAfter)
         {
             condition = ServiceHealthCondition.HeartbeatOverdue;
-            reason = $"Heartbeat overdue: last seen {Describe(age)} ago, expected every {HeartbeatIntervalSeconds} seconds";
+            reason = Health(nameof(HealthMessages.HeartbeatOverdue), Describe(age), HeartbeatIntervalSeconds.ToString());
         }
         else
         {
             condition = ServiceHealthCondition.Heartbeating;
-            reason = $"Heartbeat {Describe(age)} ago";
+            reason = Health(nameof(HealthMessages.Heartbeating), Describe(age));
         }
 
         return new ServiceHealth
@@ -192,7 +195,7 @@ public class SystemHealthServer
             Service = service,
             Status = StatusOf(condition),
             Condition = condition,
-            Reason = reason,
+            ReasonDetail = reason,
             InstanceId = heartbeat.InstanceId,
             HostName = heartbeat.HostName,
             Version = heartbeat.Version,
@@ -233,19 +236,24 @@ public class SystemHealthServer
     /// An age in its single most useful unit ("16 seconds", "4 minutes", "3 hours", "2 days"), rounded down. One
     /// unit is right for a reason sentence: "1 minute 4 seconds ago" is precision nobody acts on.
     /// </summary>
-    private static string Describe(TimeSpan age)
+    private static JimMessage Describe(TimeSpan age)
     {
         if (age < TimeSpan.Zero)
             age = TimeSpan.Zero;
 
         return age switch
         {
-            { TotalMinutes: < 1 } => Unit((int)age.TotalSeconds, "second"),
-            { TotalHours: < 1 } => Unit((int)age.TotalMinutes, "minute"),
-            { TotalDays: < 1 } => Unit((int)age.TotalHours, "hour"),
-            _ => Unit((int)age.TotalDays, "day")
+            { TotalMinutes: < 1 } => Unit((int)age.TotalSeconds, nameof(HealthMessages.DurationSecondsOne)),
+            { TotalHours: < 1 } => Unit((int)age.TotalMinutes, nameof(HealthMessages.DurationMinutesOne)),
+            { TotalDays: < 1 } => Unit((int)age.TotalHours, nameof(HealthMessages.DurationHoursOne)),
+            _ => Unit((int)age.TotalDays, nameof(HealthMessages.DurationDaysOne))
         };
 
-        static string Unit(int value, string singular) => value == 1 ? $"1 {singular}" : $"{value} {singular}s";
+        // The figure goes in as text, not a number, so a large count of days has no digit grouping, as before.
+        static JimMessage Unit(int value, string oneKey) =>
+            JimMessage.Counted(ApplicationMessageCatalogues.Health, oneKey, value, value.ToString());
     }
+
+    private static JimMessage Health(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ApplicationMessageCatalogues.Health, key, arguments);
 }

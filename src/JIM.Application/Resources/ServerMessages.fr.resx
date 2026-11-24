@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ObjectTypeNameRequired" xml:space="preserve">
+    <value>Le nom du type d’objet Metaverse est obligatoire.</value>
+  </data>
+  <data name="ObjectTypePluralNameRequired" xml:space="preserve">
+    <value>Le nom au pluriel du type d’objet Metaverse est obligatoire.</value>
+  </data>
+  <data name="ObjectTypeNotFound" xml:space="preserve">
+    <value>Le type d’objet Metaverse {0} est introuvable.</value>
+  </data>
+  <data name="ObjectTypeBuiltInCannotRename" xml:space="preserve">
+    <value>Impossible de renommer le type d’objet Metaverse intégré « {0} » ou d’en changer l’icône.</value>
+  </data>
+  <data name="ObjectTypeNameExists" xml:space="preserve">
+    <value>Un type d’objet Metaverse nommé « {0} » existe déjà.</value>
+  </data>
+  <data name="ObjectTypePluralNameExists" xml:space="preserve">
+    <value>Un type d’objet Metaverse dont le nom au pluriel est « {0} » existe déjà.</value>
+  </data>
+  <data name="ObjectTypeBuiltInCannotDelete" xml:space="preserve">
+    <value>Impossible de supprimer le type d’objet Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeNameRequired" xml:space="preserve">
+    <value>Le nom de l’attribut Metaverse est obligatoire.</value>
+  </data>
+  <data name="AttributeNotFound" xml:space="preserve">
+    <value>L’attribut Metaverse {0} est introuvable.</value>
+  </data>
+  <data name="AttributeBuiltInCannotRename" xml:space="preserve">
+    <value>Impossible de renommer l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeNameExists" xml:space="preserve">
+    <value>Un attribut Metaverse nommé « {0} » existe déjà (les noms sont comparés sans tenir compte de la casse).</value>
+  </data>
+  <data name="AttributeRenameReadByExpressions" xml:space="preserve">
+    <value>L’attribut Metaverse « {0} » ne peut pas être renommé tant que des expressions le lisent par son nom. Modifiez d’abord celles-ci :</value>
+  </data>
+  <data name="StandardMappingNeedsStandard" xml:space="preserve">
+    <value>Chaque mappage standard exige une norme.</value>
+  </data>
+  <data name="StandardMappingNeedsCounterpart" xml:space="preserve">
+    <value>Chaque mappage standard exige le nom d’un attribut équivalent.</value>
+  </data>
+  <data name="StandardMappingDuplicate" xml:space="preserve">
+    <value>Mappage standard en double : {0} « {1} ».</value>
+  </data>
+  <data name="StandardMappingsBuiltInCannotModify" xml:space="preserve">
+    <value>Impossible de modifier les mappages standard de l’attribut Metaverse intégré « {0} » ; ils sont gérés par JIM.</value>
+  </data>
+  <data name="BindingsBuiltInCannotModify" xml:space="preserve">
+    <value>Impossible de modifier les liaisons de l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeBuiltInCannotDelete" xml:space="preserve">
+    <value>Impossible de supprimer l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeBuiltInCannotUnassign" xml:space="preserve">
+    <value>Impossible de désaffecter l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeBuiltInCannotChangeType" xml:space="preserve">
+    <value>Impossible de modifier le type ou la pluralité de l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributePluralityUnsupported" xml:space="preserve">
+    <value>Un attribut de type {0} ne peut pas être {1}.</value>
+  </data>
+  <data name="MultiValuedBooleanRule" xml:space="preserve">
+    <value>Un attribut booléen contient une seule valeur, vrai ou faux ; il ne peut donc pas être multivalué.</value>
+  </data>
+  <data name="ChangeSearchTimeRangeInverted" xml:space="preserve">
+    <value>La plage de temps se termine avant de commencer.</value>
+  </data>
+  <data name="ChangeSearchTooManyConditions" xml:space="preserve">
+    <value>Une recherche peut combiner au plus {0} conditions d’attribut.</value>
+  </data>
+  <data name="ChangeSearchOperatorUnknown" xml:space="preserve">
+    <value>« {0} » n’est pas un opérateur de changement d’attribut reconnu.</value>
+  </data>
+  <data name="ChangeSearchAttributeUnknown" xml:space="preserve">
+    <value>Il n’existe aucun attribut Metaverse portant l’identifiant {0}.</value>
+  </data>
+  <data name="ChangeSearchConditionInvalid" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="ChangeSearchMatchModeUnknown" xml:space="preserve">
+    <value>« {0} » n’est pas un mode de correspondance des conditions reconnu.</value>
+  </data>
+  <data name="FeatureDisabled" xml:space="preserve">
+    <value>La fonctionnalité « {0} » est actuellement désactivée.</value>
+  </data>
+  <data name="FeatureFlagNotFound" xml:space="preserve">
+    <value>Aucun indicateur de fonctionnalité n’a la clé « {0} ».</value>
+  </data>
+  <data name="FeatureInDevelopment" xml:space="preserve">
+    <value>La fonctionnalité « {0} » est en cours de développement (sa suppression est suivie dans le ticket n° {1}). Elle ne peut être activée en dehors du développement qu’en transmettant allowInDevelopment.</value>
+  </data>
+  <data name="CertificateThumbprintExists" xml:space="preserve">
+    <value>Un certificat portant l’empreinte {0} existe déjà dans le magasin.</value>
+  </data>
+  <data name="CertificateFileNotFound" xml:space="preserve">
+    <value>Fichier de certificat introuvable : {0}</value>
+  </data>
+  <data name="CertificateNotFound" xml:space="preserve">
+    <value>Le certificat portant l’identifiant {0} est introuvable.</value>
+  </data>
+  <data name="CertificateTrustPurposeRequired" xml:space="preserve">
+    <value>Un certificat doit être approuvé pour les connecteurs, pour la connexion, ou pour les deux.</value>
+  </data>
+  <data name="SecureEndpointSystemNotFound" xml:space="preserve">
+    <value>Le système connecté {0} est introuvable.</value>
+  </data>
+  <data name="SecureEndpointNoConnectorDefinition" xml:space="preserve">
+    <value>Le système connecté « {0} » n’a pas de définition de connecteur ; JIM ne peut donc pas savoir où il se connecte.</value>
+  </data>
+  <data name="SecureEndpointConnectorUnavailable" xml:space="preserve">
+    <value>Le connecteur « {0} » n’est pas disponible ; JIM ne peut donc pas savoir où ce système connecté se connecte.</value>
+  </data>
+  <data name="SecureEndpointConnectorNotEncrypted" xml:space="preserve">
+    <value>Le connecteur « {0} » n’établit pas de connexions chiffrées ; il n’y a donc aucun certificat de serveur à examiner.</value>
+  </data>
+  <data name="SecureEndpointNotConfigured" xml:space="preserve">
+    <value>Le système connecté « {0} » n’est pas configuré pour établir une connexion chiffrée ; il n’y a donc aucun certificat de serveur à examiner.</value>
+  </data>
+  <data name="ServerCertificateUnreachable" xml:space="preserve">
+    <value>{0}:{1} est injoignable ; JIM n’a donc pas pu lire son certificat. Il s’agit d’un problème de connectivité, et non d’un problème de certificat.</value>
+  </data>
+  <data name="SettingNotFound" xml:space="preserve">
+    <value>Le paramètre dont la clé est « {0} » est introuvable.</value>
+  </data>
+  <data name="SettingReadOnly" xml:space="preserve">
+    <value>Le paramètre « {0} » est en lecture seule et ne peut pas être modifié.</value>
+  </data>
+  <data name="IdpThumbprintRequired" xml:space="preserve">
+    <value>Une empreinte est requise. JIM n’approuvera pas n’importe quel certificat que présente le fournisseur d’identité.</value>
+  </data>
+  <data name="IdpNotConfigured" xml:space="preserve">
+    <value>Aucun fournisseur d’identité n’est configuré (JIM_SSO_AUTHORITY).</value>
+  </data>
+  <data name="IdpNoAnswer" xml:space="preserve">
+    <value>aucune réponse</value>
+  </data>
+  <data name="IdpUnreachable" xml:space="preserve">
+    <value>JIM n’a pas pu joindre le fournisseur d’identité à l’adresse {0} : {1}.</value>
+  </data>
+  <data name="IdpPlainHttp" xml:space="preserve">
+    <value>Le fournisseur d’identité à l’adresse {0} est joint en HTTP simple ; il n’y a donc aucun certificat à vérifier. Utilisez HTTPS en dehors du développement local.</value>
+  </data>
+  <data name="IdpConfigurationUnreadable" xml:space="preserve">
+    <value>JIM a joint {0} mais n’a pas pu lire sa configuration OpenID Connect : {1}.</value>
+  </data>
+  <data name="IdpNameMismatch" xml:space="preserve">
+    <value>Le certificat de {0} n’a pas été émis pour {0}. Approuver un certificat ne peut pas y remédier : le fournisseur d’identité a besoin d’un certificat qui nomme {0}, ou JIM_SSO_AUTHORITY doit utiliser un nom que son certificat porte.</value>
+  </data>
+  <data name="IdpUntrusted" xml:space="preserve">
+    <value>JIM n’approuve pas le certificat de {0} : sa chaîne se termine à « {1} », et aucun certificat approuvé pour la connexion ne s’en porte garant. Approuvez cette autorité de certification pour la connexion afin d’activer la connexion.</value>
+  </data>
+  <data name="IdpUntrustedIssuedBy" xml:space="preserve">
+    <value>JIM n’approuve pas le certificat de {0} : sa chaîne se termine à « {1} » (émis par « {2} »), et aucun certificat approuvé pour la connexion ne s’en porte garant. Approuvez cette autorité de certification pour la connexion afin d’activer la connexion.</value>
+  </data>
+  <data name="IdpNoTlsCertificate" xml:space="preserve">
+    <value>JIM a joint {0} mais celui-ci n’a présenté aucun certificat TLS : {1}.</value>
+  </data>
+  <data name="IdpTrustedConfigurationUnreadable" xml:space="preserve">
+    <value>JIM approuve le certificat de {0} mais n’a pas pu lire sa configuration OpenID Connect : {1}. Vérifiez JIM_SSO_AUTHORITY.</value>
+  </data>
+  <data name="IdpTrustedByOperatingSystem" xml:space="preserve">
+    <value>Le certificat de {0} est approuvé par le système d’exploitation.</value>
+  </data>
+  <data name="IdpTrustedByStore" xml:space="preserve">
+    <value>Le certificat de {0} est approuvé via le magasin de certificats de JIM ({1}).</value>
+  </data>
+  <data name="IdpNothingTrusted" xml:space="preserve">
+    <value>Rien n’a été approuvé. {0}</value>
+  </data>
+  <data name="IdpNotPresenting" xml:space="preserve">
+    <value>{0} ne présente pas actuellement de certificat portant cette empreinte ; rien n’a donc été approuvé. C’est normal si son certificat a été renouvelé depuis votre consultation ; vérifiez de nouveau son état.</value>
+  </data>
+  <data name="IdpAlreadyTrusted" xml:space="preserve">
+    <value>« {0} » est déjà approuvé pour la connexion.</value>
+  </data>
+  <data name="IdpWouldNotVouch" xml:space="preserve">
+    <value>Approuver « {0} » ne rendrait pas {1} approuvé : un certificat de sa chaîne a expiré ou n’est pas valide. Rien n’a été approuvé ; le certificat du fournisseur d’identité doit être renouvelé.</value>
+  </data>
+  <data name="IdpWidenedToSignIn" xml:space="preserve">
+    <value>« {0} » était déjà approuvé pour les connecteurs et l’est désormais aussi pour la connexion.</value>
+  </data>
+  <data name="IdpNowTrusted" xml:space="preserve">
+    <value>« {0} » est désormais approuvé pour la connexion.</value>
+  </data>
+  <data name="SchedBuiltInCannotDelete" xml:space="preserve">
+    <value>La planification intégrée « {0} » ne peut pas être supprimée.</value>
+  </data>
+  <data name="SchedStepsCannotBeAdded" xml:space="preserve">
+    <value>Il n’est pas possible d’ajouter des étapes à la planification intégrée « {0} ».</value>
+  </data>
+  <data name="SchedStepsCannotBeChanged" xml:space="preserve">
+    <value>Il n’est pas possible de modifier les étapes de la planification intégrée « {0} ».</value>
+  </data>
+  <data name="SchedStepsCannotBeRemoved" xml:space="preserve">
+    <value>Il n’est pas possible de retirer des étapes de la planification intégrée « {0} ».</value>
+  </data>
+  <data name="SchedStartFailedStep" xml:space="preserve">
+    <value>La planification n’a pas pu démarrer. L’étape {0} n’a pas pu être mise en file d’attente : {1}. Aucune étape n’a été exécutée.</value>
+  </data>
+  <data name="SchedStartFailedStepNamed" xml:space="preserve">
+    <value>La planification n’a pas pu démarrer. L’étape {0}, {1}, n’a pas pu être mise en file d’attente : {2}. Aucune étape n’a été exécutée.</value>
+  </data>
+  <data name="ExampleBuiltInTemplateCannotBeChanged" xml:space="preserve">
+    <value>Les modèles de génération de données intégrés ne peuvent pas être modifiés. Dupliquez-en un pour créer une version que vous pouvez modifier.</value>
+  </data>
+  <data name="ExampleBuiltInTemplateCannotBeDeleted" xml:space="preserve">
+    <value>Les modèles de génération de données intégrés ne peuvent pas être supprimés.</value>
+  </data>
+  <data name="ExampleTemplateNameExists" xml:space="preserve">
+    <value>Un modèle de génération de données nommé « {0} » existe déjà.</value>
+  </data>
+  <data name="ExampleAttributeOnType" xml:space="preserve">
+    <value>« {0} » sur « {1} »</value>
+  </data>
+  <data name="ExampleExpressionDoesNotParse" xml:space="preserve">
+    <value>L’expression de {0} n’est pas analysable : {1}</value>
+  </data>
+  <data name="ExampleExpressionReadsConnectedSystem" xml:space="preserve">
+    <value>L’expression de {0} lit {1}, mais les données d’exemple créent des objets Metaverse et n’ont aucun objet de système connecté à lire ; elle n’a donc jamais de valeur. Lisez plutôt mv["..."].</value>
+  </data>
+  <data name="ExampleExpressionReadsUngenerated" xml:space="preserve">
+    <value>L’expression de {0} lit mv["{1}"], que ce modèle ne génère pas sur « {2} » ; elle n’a donc jamais de valeur.</value>
+  </data>
+  <data name="ExampleRefusalsJoined" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="PwdRequired" xml:space="preserve">
+    <value>Un mot de passe est obligatoire.</value>
+  </data>
+  <data name="PwdNeverDisable" xml:space="preserve">
+    <value>enableAccount accepte true, pour activer le compte lorsque son mot de passe est défini, ou peut être omis pour laisser le compte dans son état actuel. Définir un mot de passe ne désactive jamais un compte.</value>
+  </data>
+  <data name="PwdNeverExpiresNeedsAccounts" xml:space="preserve">
+    <value>expiryBehaviour NeverExpires exige que les comptes soient nommés. Un mot de passe défini sur chaque système connecté configuré pour la synchronisation des mots de passe laisse « Le mot de passe n’expire jamais » tel que chaque compte l’a ; nommez les objets de système connecté pour choisir « N’expire jamais » pour eux.</value>
+  </data>
+  <data name="PwdNoAccounts" xml:space="preserve">
+    <value>Au moins un compte est requis. Pour définir le mot de passe sur chaque système connecté configuré pour la synchronisation des mots de passe, ne nommez aucun compte.</value>
+  </data>
+  <data name="PwdNotThisPersonsAccount" xml:space="preserve">
+    <value>L’objet de système connecté {0} ne fait pas partie des comptes de cet objet Metaverse.</value>
+  </data>
+  <data name="PwdSystemMissing" xml:space="preserve">
+    <value>Le système connecté {0}, qui contient l’objet de système connecté {1}, n’existe pas.</value>
+  </data>
+  <data name="PwdConnectorCannotSet" xml:space="preserve">
+    <value>L’objet de système connecté {0} se trouve dans {1}, dont le connecteur ne peut pas définir de mots de passe.</value>
+  </data>
+  <data name="PwdTwoAccountsOneSystem" xml:space="preserve">
+    <value>Les objets de système connecté {0} et {1} se trouvent tous deux dans {2} ; un mot de passe ne peut être défini que sur un compte par système connecté à la fois.</value>
+  </data>
+  <data name="MatchNoSource" xml:space="preserve">
+    <value>Une règle de correspondance d’objets doit avoir une source, un attribut de système connecté ou une expression, faute de quoi elle n’a rien sur quoi s’appuyer.</value>
+  </data>
+  <data name="MatchSeveralSources" xml:space="preserve">
+    <value>Une règle de correspondance d’objets prend exactement une source, un attribut de système connecté ou une expression ; celle-ci en compte {0}. Pour établir une correspondance sur une combinaison d’attributs, écrivez une expression qui les combine.</value>
+  </data>
+  <data name="MatchAttributeAndExpression" xml:space="preserve">
+    <value>La source d’une règle de correspondance d’objets est soit un attribut de système connecté, soit une expression, mais pas les deux.</value>
+  </data>
+  <data name="MatchNeitherAttributeNorExpression" xml:space="preserve">
+    <value>La source d’une règle de correspondance d’objets ne désigne ni un attribut de système connecté ni une expression ; la règle n’a donc rien sur quoi s’appuyer.</value>
+  </data>
+  <data name="MatchNoTarget" xml:space="preserve">
+    <value>Une règle de correspondance d’objets doit désigner l’attribut Metaverse auquel les valeurs de sa source sont comparées.</value>
+  </data>
+  <data name="MatchTargetTypeNotMatchable" xml:space="preserve">
+    <value>L’attribut Metaverse « {0} » est de type {1}, qu’une règle de correspondance d’objets ne peut pas comparer. Établissez la correspondance sur un attribut de type {2}.</value>
+  </data>
+  <data name="MatchAttributeNamedNotOnType" xml:space="preserve">
+    <value>L’attribut de système connecté « {0} » n’est pas un attribut de « {1} », le type d’objet que lit cette règle.</value>
+  </data>
+  <data name="MatchAttributeIdNotOnType" xml:space="preserve">
+    <value>L’attribut de système connecté portant l’identifiant {0} n’est pas un attribut de « {1} », le type d’objet que lit cette règle.</value>
+  </data>
+  <data name="MatchAttributeTypeMismatch" xml:space="preserve">
+    <value>L’attribut de système connecté « {0} » est de type {1} mais l’attribut Metaverse « {2} » est de type {3} ; une règle de correspondance d’objets compare des attributs de même type. Pour les comparer malgré tout, établissez la correspondance sur une expression qui convertit la valeur.</value>
+  </data>
+  <data name="MatchExpressionTooLong" xml:space="preserve">
+    <value>L’expression compte {0} caractères ; une expression peut en compter au plus {1}.</value>
+  </data>
+  <data name="MatchExpressionDoesNotParse" xml:space="preserve">
+    <value>L’expression n’est pas analysable : {0}</value>
+  </data>
+  <data name="MatchExpressionReadsMetaverse" xml:space="preserve">
+    <value>Une expression de correspondance ne lit que l’objet de système connecté ; elle ne peut donc pas lire {0} : l’objet Metaverse est ce que la règle recherche. Pour comparer avec une valeur Metaverse normalisée, dérivez un attribut Metaverse qui la contient et établissez la correspondance sur celui-ci.</value>
+  </data>
+  <data name="MatchExpressionReadsNothing" xml:space="preserve">
+    <value>L’expression ne lit aucun attribut de système connecté ; elle calculerait donc la même valeur pour chaque objet et les ferait tous correspondre à la même identité. Lisez au moins un attribut, sous la forme cs["attributeName"].</value>
+  </data>
+  <data name="MatchExpressionUnknownAttribute" xml:space="preserve">
+    <value>L’expression lit {0}, mais « {1} » n’a aucun attribut de ce nom.</value>
+  </data>
+  <data name="MatchExpressionNonRepeatable" xml:space="preserve">
+    <value>L’expression appelle {0}, qui renvoie une valeur différente à chaque exécution ; le même objet correspondrait donc à une identité différente, ou à aucune, à chaque synchronisation.</value>
+  </data>
+  <data name="LookupNoMatch" xml:space="preserve">
+    <value>Aucun objet Metaverse ne contient ces valeurs ; une synchronisation essaierait donc la règle de correspondance d’objets suivante, et projetterait l’objet si aucune règle ne correspond et que sa règle de synchronisation projette.</value>
+  </data>
+  <data name="LookupAlreadyJoined" xml:space="preserve">
+    <value>Cet objet est déjà joint à {0}, l’objet Metaverse auquel il correspond sur {1}.</value>
+  </data>
+  <data name="LookupJoinedToAnother" xml:space="preserve">
+    <value>Les valeurs correspondent à {0} sur {1}, mais un autre objet de système connecté de ce système connecté lui est déjà joint ; une synchronisation consignerait donc que cet objet n’a pas pu être joint.</value>
+  </data>
+  <data name="LookupWouldJoin" xml:space="preserve">
+    <value>Une synchronisation joindrait cet objet à {0}, avec une correspondance sur {1}.</value>
+  </data>
+  <data name="ProvSyncRuleUnavailable" xml:space="preserve">
+    <value>Règle de synchronisation indisponible.</value>
+  </data>
+  <data name="ProvAdvancedNotEvaluated" xml:space="preserve">
+    <value>Mappage avancé, non évalué ici</value>
+  </data>
+  <data name="ProvNoSource" xml:space="preserve">
+    <value>Aucune source configurée</value>
+  </data>
+  <data name="ProvHeldUnderAnotherType" xml:space="preserve">
+    <value>Conservé en tant que {0} jusqu’à la prochaine importation : une actualisation du schéma a changé cet attribut en {1} ; la synchronisation laisse donc la valeur de l’objet Metaverse en l’état jusqu’à ce qu’une importation relise l’attribut.</value>
+  </data>
+  <data name="ProvInputsHeld" xml:space="preserve">
+    <value>Non évalué : {0} jusqu’à la prochaine importation, car une actualisation du schéma a changé son type de données. La synchronisation laisse la valeur de l’objet Metaverse en l’état jusqu’à ce qu’une importation la relise.</value>
+  </data>
+  <data name="ProvExpressionFailed" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="ProvValueNotConvertible" xml:space="preserve">
+    <value>L’expression a renvoyé « {0} », qu’un attribut de type {1} ne peut pas contenir ; cette source ne fournirait donc aucune valeur et la synchronisation signale une erreur d’expression.</value>
+  </data>
+  <data name="ProvSeveralValues" xml:space="preserve">
+    <value>L’expression a renvoyé {0} valeurs, mais cet attribut est monovalué ; cette source ne fournirait donc aucune valeur et la synchronisation signale une erreur.</value>
+  </data>
+  <data name="ContributionModeNeedsMultiValued" xml:space="preserve">
+    <value>Le mode de contribution {0} ne s’applique qu’aux attributs multivalués. Choisissez le mode Priorité avant de rendre l’attribut monovalué.</value>
+  </data>
+  <data name="ContributionModeNotForReference" xml:space="preserve">
+    <value>Le mode de contribution {0} n’est pas disponible pour les attributs de référence, car une référence est supprimée lorsque l’objet Metaverse vers lequel elle pointe est supprimé. Pour conserver un historique des références, enregistrez l’identifiant de l’objet référencé sous forme de texte dans un attribut texte multivalué distinct.</value>
+  </data>
+  <data name="ContributionModeUnsupported" xml:space="preserve">
+    <value>Le mode de contribution {0} n’est pas disponible pour un attribut {1}.</value>
+  </data>
+</root>

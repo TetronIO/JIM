@@ -9,6 +9,7 @@
 @if (Kind == AttributeChipKind.Expression)
 {
     <MudTooltip Text="@Expression" Arrow="true" Placement="Placement.Top">
+        @* i18n: exempt - CSS class names, not text *@
         <MudChip T="string" Size="Size.Medium" Class="@($"jim-expr-chip {Class}")">
             <AvatarContent>
                 <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
@@ -73,5 +74,5 @@ else
     public string? Class { get; set; }
 
     private string EffectiveTooltip => Tooltip ??
-        (Kind == AttributeChipKind.Metaverse ? "Metaverse Attribute" : "Connected System attribute");
+        (Kind == AttributeChipKind.Metaverse ? MetaverseText.AcMetaverseAttribute : MetaverseText.AcConnectedSystemAttribute);
 }

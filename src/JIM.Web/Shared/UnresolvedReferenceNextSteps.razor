@@ -18,16 +18,15 @@
         var expanded = _expandedFixGroups.Contains(group.FixLocation);
         <div class="jim-unresolved-fix-group">
             <MudIcon Icon="@(inJim ? Icons.Material.Outlined.Settings : Icons.Material.Outlined.Storage)" Class="mud-text-secondary" />
-            <MudText Typo="Typo.subtitle2">@(inJim ? "Fix in JIM" : $"Fix in {ConnectedSystemName}")</MudText>
+            <MudText Typo="Typo.subtitle2">@(inJim ? ConnectorSpaceText.UrefFixInJim : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefFixInSystem, ConnectedSystemName))</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                @groupReferenceCount.ToString("N0") @(groupReferenceCount == 1 ? "reference" : "references"),
-                @group.Fixes.Count.ToString("N0") @(group.Fixes.Count == 1 ? "step" : "steps")
+                @GroupSummaryText(groupReferenceCount, group.Fixes.Count)
             </MudText>
         </div>
         @foreach (var fix in expanded ? group.Fixes : group.Fixes.Take(CollapsedFixCount))
         {
             var action = UnresolvedReferenceDisplay.ActionFor(fix.Cause, ConnectedSystemId, ObjectTypeName);
-            var (before, identifier, after) = UnresolvedReferenceDisplay.SplitFinding(fix.Finding, fix.ContainerExternalId ?? fix.PartitionExternalId);
+            var (before, identifier, after) = UnresolvedReferenceDisplay.SplitFinding(fix.ShowFinding(), fix.ContainerExternalId ?? fix.PartitionExternalId);
             <div class="jim-unresolved-fix-cell jim-unresolved-fix-count-cell">
                 <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.FixLocationColour(fix.FixLocation)"
                          Class="ma-0 jim-unresolved-fix-count">@fix.Count.ToString("N0")</MudChip>
@@ -41,7 +40,7 @@
                 {
                     @before<span class="jim-text-code">@identifier</span>@after
                 }
-                <div class="jim-unresolved-fix-remedy">@fix.Remedy</div>
+                <div class="jim-unresolved-fix-remedy">@fix.ShowRemedy()</div>
             </div>
             @if (ShowObjectCounts)
             {
@@ -61,7 +60,7 @@
             var location = group.FixLocation;
             <div class="jim-unresolved-fix-more">
                 <MudLink Typo="Typo.body2" OnClick="@(() => ToggleFixGroup(location))">
-                    @(expanded ? "Show fewer steps" : $"Show all {group.Fixes.Count:N0} steps")
+                    @(expanded ? ConnectorSpaceText.UrefShowFewer : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefShowAll, group.Fixes.Count.ToString("N0")))
                 </MudLink>
             </div>
         }
@@ -109,6 +108,11 @@
             _expandedFixGroups.Clear();
         }
     }
+
+    private static string GroupSummaryText(int referenceCount, int stepCount) =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefGroupCounts,
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(referenceCount, ConnectorSpaceText.UrefReferenceOne, ConnectorSpaceText.UrefReferenceOther), referenceCount.ToString("N0")),
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(stepCount, ConnectorSpaceText.UrefStepOne, ConnectorSpaceText.UrefStepOther), stepCount.ToString("N0")));
 
     private void ToggleFixGroup(UnresolvedReferenceFixLocation location)
     {

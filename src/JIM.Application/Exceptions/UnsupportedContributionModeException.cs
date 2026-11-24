@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 
 namespace JIM.Application.Exceptions;
 
@@ -11,7 +12,7 @@ namespace JIM.Application.Exceptions;
 /// Nothing is created or changed. The REST API maps it to 400 Bad Request carrying <see cref="System.Exception.Message"/>,
 /// which names the rule.
 /// </summary>
-public class UnsupportedContributionModeException : InvalidOperationException
+public class UnsupportedContributionModeException : InvalidOperationException, IJimMessageCarrier
 {
     /// <summary>
     /// The contribution mode that was requested.
@@ -28,11 +29,17 @@ public class UnsupportedContributionModeException : InvalidOperationException
     /// </summary>
     public AttributePlurality Plurality { get; }
 
-    public UnsupportedContributionModeException(AttributeContributionMode contributionMode, AttributeDataType dataType, AttributePlurality plurality, string message)
-        : base(message)
+    /// <summary>
+    /// The refusal, for rendering in the reader's language.
+    /// </summary>
+    public JimMessage Detail { get; }
+
+    public UnsupportedContributionModeException(AttributeContributionMode contributionMode, AttributeDataType dataType, AttributePlurality plurality, JimMessage detail)
+        : base(detail.ToEnglish())
     {
         ContributionMode = contributionMode;
         DataType = dataType;
         Plurality = plurality;
+        Detail = detail;
     }
 }

@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Graph_user_id" xml:space="preserve">
+    <value>L’identifiant de l’objet, attribué par Entra ID et jamais modifié. L’ID externe.</value>
+  </data>
+  <data name="Graph_user_userPrincipalName" xml:space="preserve">
+    <value>Le nom de connexion de l’utilisateur, par exemple ada@contoso.com. Requis pour créer un utilisateur.</value>
+  </data>
+  <data name="Graph_user_displayName" xml:space="preserve">
+    <value>Le nom affiché dans les listes d’adresses. Requis pour créer un utilisateur.</value>
+  </data>
+  <data name="Graph_user_mailNickname" xml:space="preserve">
+    <value>L’alias de messagerie. Requis pour créer un utilisateur.</value>
+  </data>
+  <data name="Graph_user_accountEnabled" xml:space="preserve">
+    <value>Indique si le compte peut se connecter. Requis pour créer un utilisateur.</value>
+  </data>
+  <data name="Graph_user_givenName" xml:space="preserve">
+    <value>Le prénom de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_surname" xml:space="preserve">
+    <value>Le nom de famille de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_mail" xml:space="preserve">
+    <value>L’adresse SMTP principale de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_otherMails" xml:space="preserve">
+    <value>Adresses de messagerie supplémentaires.</value>
+  </data>
+  <data name="Graph_user_proxyAddresses" xml:space="preserve">
+    <value>Toutes les adresses sous lesquelles le système de messagerie connaît l’utilisateur. En lecture seule dans Graph ; Exchange Online la tient à jour.</value>
+  </data>
+  <data name="Graph_user_jobTitle" xml:space="preserve">
+    <value>Le titre du poste de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_department" xml:space="preserve">
+    <value>Le service de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_companyName" xml:space="preserve">
+    <value>L’entreprise de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_employeeId" xml:space="preserve">
+    <value>L’identifiant de l’employé dans l’organisation.</value>
+  </data>
+  <data name="Graph_user_employeeType" xml:space="preserve">
+    <value>Le type de collaborateur, par exemple Employee ou Contractor.</value>
+  </data>
+  <data name="Graph_user_employeeHireDate" xml:space="preserve">
+    <value>La date d’embauche de l’utilisateur, ou de son entrée en fonction.</value>
+  </data>
+  <data name="Graph_user_officeLocation" xml:space="preserve">
+    <value>Le bureau de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_businessPhones" xml:space="preserve">
+    <value>Le numéro de téléphone professionnel de l’utilisateur. Graph n’en conserve qu’un.</value>
+  </data>
+  <data name="Graph_user_mobilePhone" xml:space="preserve">
+    <value>Le numéro de téléphone mobile de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_streetAddress" xml:space="preserve">
+    <value>L’adresse postale du lieu de travail de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_city" xml:space="preserve">
+    <value>La ville du lieu de travail de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_state" xml:space="preserve">
+    <value>L’État ou la province du lieu de travail de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_postalCode" xml:space="preserve">
+    <value>Le code postal du lieu de travail de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_country" xml:space="preserve">
+    <value>Le pays du lieu de travail de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_usageLocation" xml:space="preserve">
+    <value>Un code de pays à deux lettres, requis avant de pouvoir attribuer des licences Microsoft 365.</value>
+  </data>
+  <data name="Graph_user_preferredLanguage" xml:space="preserve">
+    <value>La langue préférée de l’utilisateur, sous la forme d’un code ISO 639-1 tel que en-GB.</value>
+  </data>
+  <data name="Graph_user_userType" xml:space="preserve">
+    <value>Member, ou Guest pour un compte invité depuis l’extérieur de l’organisation.</value>
+  </data>
+  <data name="Graph_user_onPremisesImmutableId" xml:space="preserve">
+    <value>Relie un utilisateur du cloud à un compte local, pour un utilisateur dont le domaine est fédéré.</value>
+  </data>
+  <data name="Graph_user_manager" xml:space="preserve">
+    <value>Le responsable de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_creationType" xml:space="preserve">
+    <value>Comment le compte a été créé, par exemple Invitation pour un invité ; null pour un compte ordinaire.</value>
+  </data>
+  <data name="Graph_user_externalUserState" xml:space="preserve">
+    <value>Pour un invité, indique si l’invitation a été acceptée.</value>
+  </data>
+  <data name="Graph_user_createdDateTime" xml:space="preserve">
+    <value>La date de création de l’utilisateur.</value>
+  </data>
+  <data name="Graph_user_onPremisesSyncEnabled" xml:space="preserve">
+    <value>Vrai tant que l’objet est synchronisé depuis Active Directory en local.</value>
+  </data>
+  <data name="Graph_user_onPremisesLastSyncDateTime" xml:space="preserve">
+    <value>La date de la dernière synchronisation de l’objet depuis Active Directory en local.</value>
+  </data>
+  <data name="Graph_user_onPremisesSecurityIdentifier" xml:space="preserve">
+    <value>L’identifiant de sécurité de l’objet dans Active Directory en local.</value>
+  </data>
+  <data name="Graph_user_onPremisesSamAccountName" xml:space="preserve">
+    <value>Le sAMAccountName de l’objet dans Active Directory en local.</value>
+  </data>
+  <data name="Graph_user_onPremisesDomainName" xml:space="preserve">
+    <value>Le domaine Active Directory local dont provient l’objet.</value>
+  </data>
+  <data name="Graph_user_onPremisesDistinguishedName" xml:space="preserve">
+    <value>Le nom unique (distinguished name) de l’utilisateur dans Active Directory en local.</value>
+  </data>
+  <data name="Graph_user_onPremisesUserPrincipalName" xml:space="preserve">
+    <value>Le userPrincipalName de l’utilisateur dans Active Directory en local.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute1" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 1. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute2" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 2. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute3" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 3. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute4" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 4. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute5" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 5. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute6" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 6. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute7" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 7. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute8" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 8. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute9" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 9. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute10" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 10. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute11" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 11. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute12" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 12. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute13" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 13. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute14" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 14. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute15" xml:space="preserve">
+    <value>Attribut personnalisé Exchange 15. Pour un utilisateur synchronisé, il est écrit dans Active Directory en local à la place.</value>
+  </data>
+  <data name="Graph_user_sourceOfAuthority" xml:space="preserve">
+    <value>Où l’utilisateur est géré, déterminé par JIM : cloud (dans Entra ID, JIM peut donc y écrire via Microsoft Graph), onPremisesDirectory (synchronisé depuis Active Directory, la plupart des attributs étant donc écrits à cet endroit) ou externalEntraDirectory (un invité d’un autre locataire). Un objet dont la source faisant autorité a été basculée vers Entra ID n’est lu comme cloud que si l’option Suivre les changements de source faisant autorité est activée. Faites-le alimenter un attribut Metaverse pour délimiter par son biais le périmètre des règles de synchronisation d’exportation.</value>
+  </data>
+  <data name="Graph_group_id" xml:space="preserve">
+    <value>L’identifiant de l’objet, attribué par Entra ID et jamais modifié. L’ID externe.</value>
+  </data>
+  <data name="Graph_group_displayName" xml:space="preserve">
+    <value>Le nom du groupe. Requis pour créer un groupe.</value>
+  </data>
+  <data name="Graph_group_mailNickname" xml:space="preserve">
+    <value>L’alias de messagerie. Requis pour créer un groupe.</value>
+  </data>
+  <data name="Graph_group_mailEnabled" xml:space="preserve">
+    <value>Indique si le groupe dispose d’une boîte aux lettres ou reçoit du courrier. Requis pour créer un groupe.</value>
+  </data>
+  <data name="Graph_group_securityEnabled" xml:space="preserve">
+    <value>Indique si le groupe peut servir à accorder des accès. Requis pour créer un groupe.</value>
+  </data>
+  <data name="Graph_group_groupTypes" xml:space="preserve">
+    <value>Unified pour un groupe Microsoft 365, et DynamicMembership pour un groupe dont les membres suivent sa règle d’appartenance. Vide pour un groupe de sécurité.</value>
+  </data>
+  <data name="Graph_group_description" xml:space="preserve">
+    <value>La description du groupe.</value>
+  </data>
+  <data name="Graph_group_visibility" xml:space="preserve">
+    <value>Public, Private ou HiddenMembership, pour un groupe Microsoft 365.</value>
+  </data>
+  <data name="Graph_group_membershipRule" xml:space="preserve">
+    <value>La règle qui détermine les membres d’un groupe dynamique.</value>
+  </data>
+  <data name="Graph_group_membershipRuleProcessingState" xml:space="preserve">
+    <value>On ou Paused : indique si la règle d’un groupe dynamique est appliquée.</value>
+  </data>
+  <data name="Graph_group_mail" xml:space="preserve">
+    <value>L’adresse SMTP du groupe. En lecture seule dans Graph.</value>
+  </data>
+  <data name="Graph_group_proxyAddresses" xml:space="preserve">
+    <value>Toutes les adresses sous lesquelles le système de messagerie connaît le groupe. En lecture seule dans Graph.</value>
+  </data>
+  <data name="Graph_group_securityIdentifier" xml:space="preserve">
+    <value>L’identifiant de sécurité du groupe dans Entra ID.</value>
+  </data>
+  <data name="Graph_group_members" xml:space="preserve">
+    <value>Les membres du groupe : utilisateurs et groupes.</value>
+  </data>
+  <data name="Graph_group_owners" xml:space="preserve">
+    <value>Les propriétaires du groupe.</value>
+  </data>
+  <data name="Graph_group_createdDateTime" xml:space="preserve">
+    <value>La date de création du groupe.</value>
+  </data>
+  <data name="Graph_group_onPremisesSyncEnabled" xml:space="preserve">
+    <value>Vrai tant que l’objet est synchronisé depuis Active Directory en local.</value>
+  </data>
+  <data name="Graph_group_onPremisesLastSyncDateTime" xml:space="preserve">
+    <value>La date de la dernière synchronisation de l’objet depuis Active Directory en local.</value>
+  </data>
+  <data name="Graph_group_onPremisesSecurityIdentifier" xml:space="preserve">
+    <value>L’identifiant de sécurité de l’objet dans Active Directory en local.</value>
+  </data>
+  <data name="Graph_group_onPremisesSamAccountName" xml:space="preserve">
+    <value>Le sAMAccountName de l’objet dans Active Directory en local.</value>
+  </data>
+  <data name="Graph_group_onPremisesDomainName" xml:space="preserve">
+    <value>Le domaine Active Directory local dont provient l’objet.</value>
+  </data>
+  <data name="Graph_group_sourceOfAuthority" xml:space="preserve">
+    <value>Où le groupe est géré, déterminé par JIM : cloud (dans Entra ID, JIM peut donc y écrire via Microsoft Graph), onPremisesDirectory (synchronisé depuis Active Directory, la plupart des attributs étant donc écrits à cet endroit) ou externalEntraDirectory (un invité d’un autre locataire). Un objet dont la source faisant autorité a été basculée vers Entra ID n’est lu comme cloud que si l’option Suivre les changements de source faisant autorité est activée. Faites-le alimenter un attribut Metaverse pour délimiter par son biais le périmètre des règles de synchronisation d’exportation.</value>
+  </data>
+</root>

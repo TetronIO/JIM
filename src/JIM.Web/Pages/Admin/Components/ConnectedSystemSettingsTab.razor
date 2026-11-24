@@ -12,8 +12,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudText Class="mud-text-secondary">
-    Each connector requires specific settings to connect to your environment.
-    Complete the required fields below, then save your changes before importing the schema.
+    @ConnectedSystemText.SettingsTabIntro
 </MudText>
 
 <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
@@ -28,7 +27,7 @@
                 <MudExpansionPanel Expanded="@GetCategoryExpanded(categoryKey)"
                                    ExpandedChanged="@(expanded => OnCategoryExpandedChanged(categoryKey, expanded))">
                     <TitleContent>
-                        <MudText Typo="Typo.h5">@categoryKey</MudText>
+                        <MudText Typo="Typo.h5">@settingCategory.ForDisplay()</MudText>
                     </TitleContent>
                     <ChildContent>
                         @{
@@ -68,10 +67,10 @@
                                 var groupCardinality = ConnectorSettingValidator.GetGroupCardinality(
                                     ConnectorSettingValidator.GetApplicableGroupMembers(ConnectedSystem.SettingValues, requiredGroup));
                                 var groupCaption = groupCardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne
-                                    ? "Provide a value for exactly one of the following settings:"
-                                    : "Provide a value for at least one of the following settings:";
+                                    ? ConnectedSystemText.SettingsTabGroupExactly
+                                    : ConnectedSystemText.SettingsTabGroupAtLeast;
                                 <MudPaper Outlined="true" Class="@groupSpacingClass">
-                                    <MudText Typo="Typo.h6">@requiredGroup</MudText>
+                                    <MudText Typo="Typo.h6">@ConnectorSettingDisplay.Group(ConnectedSystem.ConnectorDefinition?.Name, requiredGroup)</MudText>
                                     @if (groupSatisfied)
                                     {
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@groupCaption</MudText>
@@ -93,7 +92,8 @@
                                                                      DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                                      DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
                                                                      DirectoryServerTerm="@DirectoryServerTermFor(groupMembers[k])"
-                                                                     ConnectedSystemId="@ConnectedSystem.Id" />
+                                                                     ConnectedSystemId="@ConnectedSystem.Id"
+                                                                     ConnectorDefinitionName="@ConnectedSystem.ConnectorDefinition?.Name" />
                                     }
                                 </MudPaper>
                             }
@@ -118,6 +118,7 @@
                                                           SettingValue="@settingValue"
                                                           SettingValues="@ConnectedSystem.SettingValues"
                                                           SelectedObjectTypeNames="@SelectedObjectTypeNames"
+                                                          ConnectorDefinitionName="@ConnectedSystem.ConnectorDefinition?.Name"
                                                           Catalogue="@_catalogueSource"
                                                           ValueChanged="OnSettingValueChanged"
                                                           HasProblemsChanged="OnCatalogueDocumentProblemsChangedAsync"
@@ -138,7 +139,8 @@
                                                              DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                              DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
                                                              DirectoryServerTerm="@DirectoryServerTermFor(settingValue)"
-                                                             ConnectedSystemId="@ConnectedSystem.Id" />
+                                                             ConnectedSystemId="@ConnectedSystem.Id"
+                                                                     ConnectorDefinitionName="@ConnectedSystem.ConnectorDefinition?.Name" />
                                 j++;
                             }
                         }
@@ -157,23 +159,23 @@
         @* Only show the Import Behaviour panel if the connector supports full or delta import *@
         @if (ConnectedSystem.ConnectorDefinition is { } connectorDefinition && (connectorDefinition.SupportsFullImport || connectorDefinition.SupportsDeltaImport))
         {
-            <MudExpansionPanel Expanded="@GetCategoryExpanded("Import Behaviour")"
-                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Import Behaviour", expanded))">
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("import-behaviour")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("import-behaviour", expanded))">
                 <TitleContent>
-                    <MudText Typo="Typo.h5">Import Behaviour</MudText>
+                    <MudText Typo="Typo.h5">@ConnectedSystemText.SettingsTabImportBehaviour</MudText>
                 </TitleContent>
                 <ChildContent>
                     <MudText Class="mud-text-secondary mb-5">
-                        These settings control how JIM processes imports, independently of connector-specific settings above.
+                        @ConnectedSystemText.SettingsTabImportBehaviourIntro
                     </MudText>
                     <MudSelect T="UnresolvedReferenceHandling"
-                               Label="Unresolved Reference Handling"
+                               Label="@ConnectedSystemText.SettingsTabUnresolvedReferenceHandling"
                                @bind-Value="ConnectedSystem.UnresolvedReferenceHandling"
-                               HelperText="Controls what happens when an imported reference value (for example a group member) cannot be resolved to a Connected System Object, commonly because the referenced object sits outside the configured Container Scope, or inside a Container it excludes."
+                               HelperText="@ConnectedSystemText.SettingsTabUnresolvedReferenceHelp"
                                Variant="Variant.Outlined">
-                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Error">Error (default): record an error on each affected object</MudSelectItem>
-                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Warn">Warn: complete with a warning summary</MudSelectItem>
-                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Ignore">Ignore: no error or warning</MudSelectItem>
+                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Error">@ConnectedSystemText.SettingsTabUnresolvedError</MudSelectItem>
+                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Warn">@ConnectedSystemText.SettingsTabUnresolvedWarn</MudSelectItem>
+                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Ignore">@ConnectedSystemText.SettingsTabUnresolvedIgnore</MudSelectItem>
                     </MudSelect>
                 </ChildContent>
             </MudExpansionPanel>
@@ -181,19 +183,19 @@
 
         @if (ConnectedSystem.ConnectorDefinition is { SupportsExport: true, SupportsParallelExport: true })
         {
-            <MudExpansionPanel Expanded="@GetCategoryExpanded("Export Performance")"
-                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Export Performance", expanded))">
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("export-performance")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("export-performance", expanded))">
                 <TitleContent>
-                    <MudText Typo="Typo.h5">Export Performance</MudText>
+                    <MudText Typo="Typo.h5">@ConnectedSystemText.SettingsTabExportPerformance</MudText>
                 </TitleContent>
                 <ChildContent>
                     <MudText Class="mud-text-secondary mb-5">
-                        Controls how quickly JIM sends changes to this Connected System during an export.
+                        @ConnectedSystemText.SettingsTabExportPerformanceIntro
                     </MudText>
                     <MudTextField T="int?"
-                                  Label="Max Export Parallelism"
+                                  Label="@ConnectedSystemText.SettingsTabMaxExportParallelism"
                                   @bind-Value="ConnectedSystem.MaxExportParallelism"
-                                  HelperText="How many batches of changes JIM sends to this system at once. Leave empty to use the Connector's recommended value, or set 1 to send one batch at a time. Higher values finish large exports faster but put more load on the target system."
+                                  HelperText="@ConnectedSystemText.SettingsTabMaxExportParallelismHelp"
                                   InputType="InputType.Number"
                                   Variant="Variant.Outlined" />
                 </ChildContent>
@@ -206,7 +208,7 @@
             <MudExpansionPanel Expanded="@GetCategoryExpanded("Passwords")"
                                ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Passwords", expanded))">
                 <TitleContent>
-                    <MudText Typo="Typo.h5">Passwords</MudText>
+                    <MudText Typo="Typo.h5">@ConnectedSystemText.SettingsTabPasswords</MudText>
                 </TitleContent>
                 <ChildContent>
                     @* Both settings here govern every password JIM sends to this system: the initial password on
@@ -214,32 +216,26 @@
                        change. That is why they live on the Connected System rather than on any one feature's
                        configuration, and why this panel is not named after one of them. *@
                     <MudText Class="mud-text-secondary mb-5">
-                        These apply to every password JIM sends to this Connected System, whether it is the first
-                        password on a Connected System Object JIM creates, one you set by hand, or a password change synchronised
-                        from elsewhere.
+                        @ConnectedSystemText.SettingsTabPasswordsIntro
                     </MudText>
 
                     <MudSwitch T="bool" @bind-Value="ConnectedSystem.RequireSecureTransport" Color="Color.Primary"
-                               Label="Only send passwords over an encrypted connection" />
+                               Label="@ConnectedSystemText.SettingsTabRequireSecureTransport" />
 
                     <MudText Typo="Typo.body2" Class="mud-text-secondary ml-12 mb-6" Style="margin-top: -8px;">
-                        JIM cannot always tell an encrypted connection from an unencrypted one; a signed and sealed
-                        bind is encrypted but does not look it from this system's settings, which is why JIM warns
-                        rather than refusing by default. Turn this on, once you know this system's connection is
-                        encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued
-                        password changes wait, and Connected System Objects stay owed their first password.
+                        @ConnectedSystemText.SettingsTabSecureTransportHelp
                     </MudText>
 
                     <MudNumericField T="int?"
-                                     Label="Give up after"
+                                     Label="@ConnectedSystemText.SettingsTabGiveUpAfter"
                                      Value="@InitialPasswordTimeToLiveDays"
                                      ValueChanged="@OnInitialPasswordTimeToLiveDaysChanged"
                                      Immediate="true"
                                      Min="1"
                                      Max="365"
                                      Adornment="Adornment.End"
-                                     AdornmentText="days"
-                                     HelperText="How long JIM keeps trying to deliver a password to this system before it gives up on it: the first password owed to a Connected System Object it provisions, and a queued password change alike. Leave empty to use JIM's default of 7 days. Raise it before taking this system out of service for longer than the current window, or work waiting meanwhile expires undelivered."
+                                     AdornmentText="@ConnectedSystemText.SettingsTabDays"
+                                     HelperText="@ConnectedSystemText.SettingsTabGiveUpHelp"
                                      Variant="Variant.Outlined" />
                 </ChildContent>
             </MudExpansionPanel>
@@ -249,11 +245,11 @@
     @if (SettingsFormCustomErrors.Count > 0)
     {
         <MudAlert Severity="Severity.Error" Class="mt-5">
-            <MudText>There are issues with the settings:</MudText>
+            <MudText>@ConnectedSystemText.SettingsTabIssues</MudText>
             <ul class="mt-5">
                 @foreach (var error in SettingsFormCustomErrors)
                 {
-                    <li>@error.Key: @error.Value</li>
+                    <li>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabErrorLine, error.Key, error.Value)</li>
                 }
             </ul>
         </MudAlert>
@@ -279,11 +275,11 @@
     @if (_settingWarnings.Count > 0)
     {
         <MudAlert Severity="Severity.Warning" Class="mt-5" data-testid="jim-settings-warnings">
-            <MudText>Your settings were saved, but some of this will not work as it stands:</MudText>
+            <MudText>@ConnectedSystemText.SettingsTabSavedWithWarnings</MudText>
             <ul class="mt-3">
                 @foreach (var warning in _settingWarnings)
                 {
-                    <li>@(warning.SettingValue?.Setting?.Name is { } settingName ? $"{settingName}: {warning.ErrorMessage}" : warning.ErrorMessage)</li>
+                    <li>@(warning.SettingValue?.Setting?.Name is { } settingName ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabErrorLine, SettingLabelFor(settingName), warning.Describe(ConnectedSystem.ConnectorDefinition?.Name)) : warning.Describe(ConnectedSystem.ConnectorDefinition?.Name))</li>
                 }
             </ul>
         </MudAlert>
@@ -294,18 +290,18 @@
     @if (_settingsBeingSaved)
     {
         <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-        <span class="ms-2">Processing</span>
+        <span class="ms-2">@ConnectedSystemText.SettingsTabProcessing</span>
     }
     else
     {
-        <text>Save Settings</text>
+        <text>@ConnectedSystemText.SettingsTabSave</text>
     }
 </MudButton>
 @if (_catalogueDocumentHasProblems)
 {
     @* Saving would be refused with the same problems, which the editor lists beside the document. *@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2" data-testid="jim-settings-save-blocked">
-        Fix the problems shown with @_catalogueDeclaration?.DocumentSettingName before saving.
+        @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabFixBeforeSave, _catalogueDeclaration?.DocumentSettingName)
     </MudText>
 }
 
@@ -323,10 +319,9 @@
     {
         <div data-testid="jim-certificate-fetch">
             <MudDivider Class="my-4" />
-            <MudText Typo="Typo.h6">Server Certificate</MudText>
+            <MudText Typo="Typo.h6">@ConnectedSystemText.SettingsTabServerCertificate</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                Read the certificate the endpoint above presents, to check JIM trusts it before saving. Nothing is
-                stored until you choose to trust it.
+                @ConnectedSystemText.SettingsTabCertificateIntro
             </MudText>
             <MudButton Variant="Variant.Filled" Size="Size.Small" DropShadow="false"
                        StartIcon="@(_fetchingCertificate ? null : Icons.Material.Filled.Search)"
@@ -335,11 +330,11 @@
                 @if (_fetchingCertificate)
                 {
                     <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                    <span class="ms-2">Fetching certificate</span>
+                    <span class="ms-2">@ConnectedSystemText.SettingsTabFetchingCertificate</span>
                 }
                 else
                 {
-                    <text>Fetch certificate</text>
+                    <text>@ConnectedSystemText.SettingsTabFetchCertificate</text>
                 }
             </MudButton>
 
@@ -357,11 +352,11 @@
                 <MudAlert Severity="Severity.Info" Class="mt-3">
                     @if (_fetchedCertificate.FailureReason == ServerCertificateFailureReason.None)
                     {
-                        <text>JIM already trusts this certificate. Nothing needs adding.</text>
+                        <text>@ConnectedSystemText.SettingsTabCertificateTrusted</text>
                     }
                     else
                     {
-                        <text>JIM does not yet trust this certificate. Nothing has been saved; trusting it is a separate step.</text>
+                        <text>@ConnectedSystemText.SettingsTabCertificateNotTrusted</text>
                     }
                 </MudAlert>
 
@@ -385,6 +380,10 @@
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>The setting's label in the viewer's language, for the lists of problems that name a setting.</summary>
+    private string SettingLabelFor(string settingName) =>
+        ConnectorSettingDisplay.Label(ConnectedSystem.ConnectorDefinition?.Name, settingName);
 
     private bool IsSettingsFormValid { get; set; }
     private string[] SettingsFormErrors { get; set; } = [];
@@ -592,10 +591,10 @@
             switch (result.SettingValue)
             {
                 case { Setting.Name: not null } when !string.IsNullOrEmpty(result.ErrorMessage):
-                    SettingsFormCustomErrors[result.SettingValue.Setting.Name] = result.ErrorMessage;
+                    SettingsFormCustomErrors[SettingLabelFor(result.SettingValue.Setting.Name)] = result.Describe(ConnectedSystem.ConnectorDefinition?.Name);
                     break;
                 case null when !string.IsNullOrEmpty(result.ErrorMessage):
-                    SettingsFormCustomErrors[$"General issue {i + 1}"] = result.ErrorMessage;
+                    SettingsFormCustomErrors[string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabGeneralIssue, i + 1)] = result.Describe(ConnectedSystem.ConnectorDefinition?.Name);
                     break;
             }
         }
@@ -618,7 +617,7 @@
         // so a change here is always sync-affecting; cancelling aborts the save.
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                "Connected System", ConnectedSystem.Name))
+                ConnectedSystemText.ConnectedSystemTerm, ConnectedSystem.Name))
         {
             _settingsBeingSaved = false;
             return;
@@ -637,7 +636,7 @@
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
         _managesExchangeAsStored = ConnectedSystem.ManagesExchangeRecipients;
         _settingWarnings = results.Where(result => result.IsWarning).ToList();
-        Snackbar.Add(_settingWarnings.Count == 0 ? "Your setting changes have been saved." : "Your setting changes have been saved, with warnings.",
+        Snackbar.Add(_settingWarnings.Count == 0 ? ConnectedSystemText.SettingsTabSavedSnackbar : ConnectedSystemText.SettingsTabSavedWithWarningsSnackbar,
             _settingWarnings.Count == 0 ? Severity.Success : Severity.Warning);
         _settingsBeingSaved = false;
 
@@ -683,7 +682,7 @@
             if (result.Outcome == ServerCertificateReadOutcome.Read)
                 _fetchedCertificate = result.Diagnostic;
             else
-                _certificateFetchMessage = result.Message ?? "JIM could not read a certificate from this endpoint.";
+                _certificateFetchMessage = MessageDisplay.Show(result.Detail, result.Message) ?? ConnectedSystemText.SettingsTabCertificateUnreadable;
         }
         finally
         {

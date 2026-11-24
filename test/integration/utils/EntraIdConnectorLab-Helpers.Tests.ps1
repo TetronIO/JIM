@@ -341,10 +341,65 @@ Describe 'Test-EntraIdConnectorLabRunObject' {
     }
 }
 
+Describe 'Invoke-EntraIdConnectorLabGraphBatch' {
+
+    BeforeEach {
+        Mock Start-Sleep {}
+        $script:Batches = [System.Collections.Generic.List[object]]::new()
+    }
+
+    It 'sends twenty requests a batch, and answers each request in the order given' {
+        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Path -eq '/$batch' } {
+            $script:Batches.Add($Body)
+            [PSCustomObject]@{ responses = @($Body.requests | ForEach-Object { [PSCustomObject]@{ id = $_.id; status = 204 } }) }
+        }
+        $requests = @(1..45 | ForEach-Object { @{ method = 'DELETE'; url = "/users/u$_" } })
+
+        $responses = Invoke-EntraIdConnectorLabGraphBatch -Token $script:Token -Requests $requests
+
+        $script:Batches.Count | Should -Be 3
+        @($script:Batches | ForEach-Object { @($_.requests).Count }) | Should -Be @(20, 20, 5)
+        $responses.Count | Should -Be 45
+        @($responses | ForEach-Object { $_.Status } | Select-Object -Unique) | Should -Be @(204)
+        $script:Batches[2].requests[4].url | Should -Be '/users/u45'
+    }
+
+    It 'sends a request Graph throttled again after the wait it asks for, and answers it with the later result' {
+        $script:Calls = 0
+        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Path -eq '/$batch' } {
+            $script:Calls++
+            [PSCustomObject]@{ responses = @($Body.requests | ForEach-Object {
+                if ($script:Calls -eq 1 -and $_.url -eq '/users/b') { [PSCustomObject]@{ id = $_.id; status = 429; headers = [PSCustomObject]@{ 'Retry-After' = '7' } } }
+                else { [PSCustomObject]@{ id = $_.id; status = 204 } }
+            }) }
+        }
+
+        $responses = Invoke-EntraIdConnectorLabGraphBatch -Token $script:Token -Requests @(@{ method = 'DELETE'; url = '/users/a' }, @{ method = 'DELETE'; url = '/users/b' })
+
+        $script:Calls | Should -Be 2
+        @($responses | ForEach-Object { $_.Status }) | Should -Be @(204, 204)
+        Should -Invoke Start-Sleep -ParameterFilter { $Seconds -eq 7 } -Times 1 -Exactly
+    }
+
+    It 'sends a request''s body as JSON' {
+        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Path -eq '/$batch' } {
+            $script:Batches.Add($Body)
+            [PSCustomObject]@{ responses = @($Body.requests | ForEach-Object { [PSCustomObject]@{ id = $_.id; status = 204 } }) }
+        }
+
+        $null = Invoke-EntraIdConnectorLabGraphBatch -Token $script:Token -Requests @(@{ method = 'PATCH'; url = '/users/a'; body = @{ jobTitle = 'Analyst' } })
+
+        $sent = $script:Batches[0].requests[0]
+        $sent.body.jobTitle | Should -Be 'Analyst'
+        $sent.headers.'Content-Type' | Should -Be 'application/json'
+    }
+}
+
 Describe 'Remove-EntraIdConnectorLabObject' {
 
     BeforeEach {
         $script:Deleted = [System.Collections.Generic.List[string]]::new()
+        $script:Refusals = @{}
         $old = [DateTime]::UtcNow.AddHours(-30).ToString('o'); $recent = [DateTime]::UtcNow.AddHours(-1).ToString('o')
         $script:Found = @{
             users = @(
@@ -360,10 +415,14 @@ Describe 'Remove-EntraIdConnectorLabObject' {
             $prefix = [regex]::Match($Path, "startswith\(displayName,'([^']*)'\)").Groups[1].Value
             @($script:Found[$kind] | Where-Object { $_.displayName.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })
         }
-        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Method -eq 'Delete' } {
-            $script:Deleted.Add($Path)
-            $kind, $id = ($Path -split '/')[1, 2]
-            $script:Found[$kind] = @($script:Found[$kind] | Where-Object { $_.id -ne $id })
+        Mock Invoke-EntraIdConnectorLabGraphBatch {
+            @($Requests | ForEach-Object {
+                if ($script:Refusals.ContainsKey($_.url)) { return [PSCustomObject]@{ Status = $script:Refusals[$_.url]; Body = [PSCustomObject]@{ error = [PSCustomObject]@{ code = 'Refused'; message = 'refused' } } } }
+                $script:Deleted.Add($_.url)
+                $kind, $id = ($_.url -split '/')[1, 2]
+                $script:Found[$kind] = @($script:Found[$kind] | Where-Object { $_.id -ne $id })
+                [PSCustomObject]@{ Status = 204; Body = $null }
+            })
         }
         Mock Start-Sleep {}
     }
@@ -378,6 +437,14 @@ Describe 'Remove-EntraIdConnectorLabObject' {
         Remove-EntraIdConnectorLabObject -OlderThanHours 24 -Token $script:Token | Should -Be 1
 
         @($script:Deleted) | Should -Be @('/users/other-run-old')
+    }
+
+    It 'deletes what one listing finds in batches, since a scale run leaves tens of thousands' {
+        $script:Found.users = @(1..45 | ForEach-Object { [PSCustomObject]@{ id = "u$_"; displayName = "jimit-abc-user$_"; createdDateTime = [DateTime]::UtcNow.ToString('o') } })
+
+        Remove-EntraIdConnectorLabObject -Prefix 'jimit-abc-' -Token $script:Token | Should -Be 46
+
+        Should -Invoke Invoke-EntraIdConnectorLabGraphBatch -ParameterFilter { @($Requests).Count -eq 45 } -Times 1 -Exactly
     }
 
     It 'keeps listing until Graph has listed everything the run made, since a list lags the writes before it' {
@@ -401,10 +468,41 @@ Describe 'Remove-EntraIdConnectorLabObject' {
     }
 
     It 'counts an object already gone as done, and fails on any other refusal' {
-        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Method -eq 'Delete' -and $Path -eq '/users/mine' } { throw 'Microsoft Graph refused DELETE /users/mine (404): Request_ResourceNotFound' }
+        $script:Refusals['/users/mine'] = 404
         { Remove-EntraIdConnectorLabObject -Prefix 'jimit-abc-' -Token $script:Token } | Should -Not -Throw
 
-        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Method -eq 'Delete' -and $Path -eq '/users/mine' } { throw 'Microsoft Graph refused DELETE /users/mine (403): Authorization_RequestDenied' }
+        $script:Refusals['/users/mine'] = 403
+        $script:Found.users = @([PSCustomObject]@{ id = 'mine'; displayName = 'jimit-abc-alice'; createdDateTime = [DateTime]::UtcNow.ToString('o') })
         { Remove-EntraIdConnectorLabObject -Prefix 'jimit-abc-' -Token $script:Token } | Should -Throw '*(403)*'
+    }
+}
+
+Describe 'Remove-EntraIdConnectorLabDeletedUser' {
+
+    BeforeEach {
+        $script:Purged = [System.Collections.Generic.List[string]]::new()
+        $script:Refusals = @{}
+        Mock Invoke-EntraIdConnectorLabGraphBatch {
+            @($Requests | ForEach-Object {
+                if ($script:Refusals.ContainsKey($_.url)) { return [PSCustomObject]@{ Status = $script:Refusals[$_.url]; Body = $null } }
+                $script:Purged.Add("$($_.method) $($_.url)")
+                [PSCustomObject]@{ Status = 204; Body = $null }
+            })
+        }
+    }
+
+    # Purged objects stop counting against the tenant's object limit at once, but for a quarter, for 30 days.
+    It 'purges each user from deleted items, and counts the ones purged' {
+        Remove-EntraIdConnectorLabDeletedUser -Token $script:Token -Id 'a', 'b' | Should -Be 2
+
+        @($script:Purged) | Should -Be @('DELETE /directory/deletedItems/a', 'DELETE /directory/deletedItems/b')
+    }
+
+    It 'counts one already purged, or never deleted, as nothing to do, and fails on any other refusal' {
+        $script:Refusals['/directory/deletedItems/a'] = 404
+        Remove-EntraIdConnectorLabDeletedUser -Token $script:Token -Id 'a', 'b' | Should -Be 1
+
+        $script:Refusals['/directory/deletedItems/a'] = 403
+        { Remove-EntraIdConnectorLabDeletedUser -Token $script:Token -Id 'a' } | Should -Throw '*(403)*'
     }
 }

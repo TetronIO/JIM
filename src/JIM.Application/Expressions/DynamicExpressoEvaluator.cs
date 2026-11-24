@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -115,8 +117,7 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
 
         if (expression.Length > MaxExpressionLength)
         {
-            throw new ExpressionEvaluationException(
-                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.ExpressionTooLong), MaxExpressionLength, expression.Length));
         }
 
         var hostCulture = CultureInfo.CurrentCulture;
@@ -167,7 +168,7 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
     /// reads what went wrong exactly as before.
     /// </summary>
     private static ExpressionEvaluationException ToExpressionError(Exception exception) =>
-        new(exception.Message, exception);
+        LocalisedExceptions.DetailOf(exception) is { } detail ? new(detail, exception) : new(exception.Message, exception);
 
     /// <summary>
     /// Gets the current expression cache metrics.
@@ -180,13 +181,12 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
     {
         if (string.IsNullOrWhiteSpace(expression))
         {
-            return ExpressionValidationResult.Failure("Expression cannot be empty.");
+            return ExpressionValidationResult.Failure(ExpressionMessage.Of(nameof(ExpressionMessages.ExpressionEmpty)));
         }
 
         if (expression.Length > MaxExpressionLength)
         {
-            return ExpressionValidationResult.Failure(
-                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).");
+            return ExpressionValidationResult.Failure(ExpressionMessage.Of(nameof(ExpressionMessages.ExpressionTooLong), MaxExpressionLength, expression.Length));
         }
 
         try
@@ -216,13 +216,12 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
     {
         if (string.IsNullOrWhiteSpace(expression))
         {
-            return ExpressionTestResult.Failure("Expression cannot be empty.");
+            return ExpressionTestResult.Failure(ExpressionMessage.Of(nameof(ExpressionMessages.ExpressionEmpty)));
         }
 
         if (expression.Length > MaxExpressionLength)
         {
-            return ExpressionTestResult.Failure(
-                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).");
+            return ExpressionTestResult.Failure(ExpressionMessage.Of(nameof(ExpressionMessages.ExpressionTooLong), MaxExpressionLength, expression.Length));
         }
 
         try
@@ -232,7 +231,7 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
         }
         catch (ExpressionEvaluationException ex)
         {
-            return ExpressionTestResult.Failure(ex.Message);
+            return ExpressionTestResult.Failure(ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -409,7 +408,7 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
             return text;
 
         if (value is byte[])
-            throw new ExpressionEvaluationException("A Binary value has no text form, so it cannot be used as text.");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.BinaryHasNoText)));
 
         return value!.ToString();
     }
@@ -711,9 +710,7 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
         // only in ISO 8601, an Unspecified date taken as UTC. Unreadable text is no date, so no FILETIME.
         if (!ExpressionDates.IsDate(value) && value is not string)
         {
-            throw new ArgumentException(
-                $"ToFileTime cannot convert value of type '{value.GetType().Name}'. " +
-                "Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.");
+            throw ExpressionMessage.Argument(ExpressionMessage.Of(nameof(ExpressionMessages.EvalToFileTimeType), value.GetType().Name));
         }
 
         if (!ExpressionDates.TryRead(value, out var utcDateTime))
@@ -757,9 +754,7 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
                     return null;
                 break;
             default:
-                throw new ArgumentException(
-                    $"FormatDate cannot format a value of type '{value.GetType().Name}'. " +
-                    "Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.");
+                throw ExpressionMessage.Argument(ExpressionMessage.Of(nameof(ExpressionMessages.EvalFormatDateType), value.GetType().Name));
         }
 
         return date.ToString(format, CultureInfo.InvariantCulture);
@@ -787,17 +782,16 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
                 return DateTimeAttributeValue.ToCanonical(dateWithOffset.UtcDateTime);
             case string text:
                 if (string.IsNullOrEmpty(format))
-                    throw new ArgumentException("ParseDate needs the format the text is in, such as \"dd/MM/yyyy\".");
+                    throw ExpressionMessage.Argument(ExpressionMessage.Of(nameof(ExpressionMessages.EvalParseDateNeedsFormat)));
 
                 // The message names the format, never the text: it reaches the worker's logs, which must not carry
                 // source data such as a date of birth; the Run Profile Execution Item identifies the object.
                 if (!DateTimeOffset.TryParseExact(text, format, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
-                    throw new FormatException($"ParseDate could not read the text as a date in the format '{format}'.");
+                    throw ExpressionMessage.Format(ExpressionMessage.Of(nameof(ExpressionMessages.EvalParseDateUnreadable), format));
 
                 return DateTimeAttributeValue.ToCanonical(parsed.UtcDateTime);
             default:
-                throw new ArgumentException(
-                    $"ParseDate cannot read a value of type '{value.GetType().Name}'. Expected text, or a date.");
+                throw ExpressionMessage.Argument(ExpressionMessage.Of(nameof(ExpressionMessages.EvalParseDateType), value.GetType().Name));
         }
     }
 
@@ -815,9 +809,7 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
             long l => l,
             int i => i,
             string s => ParseLongOrNull(s),  // Handle string values (may return null for invalid numbers)
-            _ => throw new ArgumentException(
-                $"FromFileTime cannot convert value of type '{value.GetType().Name}'. " +
-                "Expected long, int, or string.")
+            _ => throw ExpressionMessage.Argument(ExpressionMessage.Of(nameof(ExpressionMessages.EvalFromFileTimeType), value.GetType().Name))
         };
 
         if (fileTime == null || fileTime.Value <= 0)

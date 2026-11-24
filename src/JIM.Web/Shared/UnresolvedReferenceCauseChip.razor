@@ -12,7 +12,7 @@
 {
     <MudTooltip Arrow="true" Placement="Placement.Top">
         <TooltipContent>
-            <TooltipText Text="@($"{Diagnosis.Finding} {Diagnosis.Remedy}")" />
+            <TooltipText Text="@($"{Diagnosis.ShowFinding()} {Diagnosis.ShowRemedy()}")" />
         </TooltipContent>
         <ChildContent>
             <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.CauseColour(Diagnosis.FixLocation)" Class="@Class">

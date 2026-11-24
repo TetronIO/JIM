@@ -8,6 +8,8 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 namespace JIM.Models.Logic;
 
 /// <summary>
@@ -185,6 +187,41 @@ public class SyncRule : IAuditable, IValidated
     public List<string> RuleSaveWarnings { get; } = [];
 
     /// <summary>
+    /// The warnings in <see cref="RuleSaveWarnings"/> that carry a message the portal shows in the viewer's language
+    /// (#3030), keyed by their British English. Never serialised.
+    /// </summary>
+    [NotMapped]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<string, JIM.Models.Localisation.JimMessage> RuleSaveWarningDetails { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Raises a rule-level save warning: its English joins <see cref="RuleSaveWarnings"/> and its message is kept beside it.</summary>
+    public void AddRuleSaveWarning(JIM.Models.Localisation.JimMessage detail)
+    {
+        var english = JIM.Models.Localisation.MessageRenderer.ToEnglish(detail);
+        RuleSaveWarnings.Add(english);
+        RuleSaveWarningDetails[english] = detail;
+    }
+
+    /// <summary>
+    /// The message behind one of <see cref="SaveWarnings"/>, for the portal to show in the viewer's language (#3030), or
+    /// null where the warning is English only (text another part of JIM produced). Match is on the warning's English.
+    /// </summary>
+    public JIM.Models.Localisation.JimMessage? DescribeSaveWarning(string warning)
+    {
+        if (RuleSaveWarningDetails.TryGetValue(warning, out var ruleDetail))
+            return ruleDetail;
+
+        var mappingDetail = AttributeFlowRules.Select(mapping => mapping.SaveWarningDetails.GetValueOrDefault(warning)).FirstOrDefault(detail => detail != null);
+        if (mappingDetail != null)
+            return mappingDetail;
+
+        return ScopingDetailsOf(ObjectScopingCriteriaGroups).Select(details => details.GetValueOrDefault(warning)).FirstOrDefault(detail => detail != null);
+    }
+
+    private static IEnumerable<Dictionary<string, JIM.Models.Localisation.JimMessage>> ScopingDetailsOf(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
+        groups.SelectMany(group => group.Criteria.Select(criterion => criterion.SaveWarningDetails).Concat(ScopingDetailsOf(group.ChildGroups)));
+
+    /// <summary>
     /// Every warning the save that returned this instance raised: <see cref="RuleSaveWarnings"/>, then
     /// <see cref="AttributeFlowSaveWarnings"/>, then <see cref="ScopingSaveWarnings"/>, each once. The one list the portal
     /// and the REST API report, so neither says more or less than the other.
@@ -241,29 +278,29 @@ public class SyncRule : IAuditable, IValidated
         var response = new List<ValidityStatusItem>();
 
         if (string.IsNullOrEmpty(Name))
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Name must be set"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, Msg(nameof(SyncRuleMessages.NameMustBeSet))));
 
         if (ConnectedSystem == null)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System must be set"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, Msg(nameof(SyncRuleMessages.ConnectedSystemMustBeSet))));
 
         if (ConnectedSystemObjectType == null)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System Object Type must be set"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, Msg(nameof(SyncRuleMessages.ConnectedSystemObjectTypeMustBeSet))));
 
         if (MetaverseObjectType == null)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Metaverse Object Type must be set"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, Msg(nameof(SyncRuleMessages.MetaverseObjectTypeMustBeSet))));
 
         if (Direction == SyncRuleDirection.NotSet)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Direction must be set"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, Msg(nameof(SyncRuleMessages.DirectionMustBeSet))));
 
         // Only warn about missing matching rules if this Synchronisation Rule manages its own matching rules (Advanced Mode)
         // In Simple Mode (ObjectMatchingRuleMode.ConnectedSystem), matching rules are defined on the Connected System
         if (Direction == SyncRuleDirection.Import &&
             ObjectMatchingRules.Count == 0 &&
             ConnectedSystem?.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No Object Matching Rules have been defined. Whilst valid, this is not recommended. Object Matching Rules help minimise synchronisation errors in uncommon, but important scenarios"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, Msg(nameof(SyncRuleMessages.NoObjectMatchingRules))));
 
         if (AttributeFlowRules.Count == 0)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No Attribute Flow Rules have been defined. Whilst valid, this means no data will flow between the two systems"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, Msg(nameof(SyncRuleMessages.NoAttributeFlowRules))));
 
         AddCredentialAttributeErrors(response);
         AddCredentialLikeAttributeWarnings(response);
@@ -290,9 +327,7 @@ public class SyncRule : IAuditable, IValidated
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error,
-                $"The Attribute Flow using '{attributeName}' must be removed: it holds credentials, which JIM never imports " +
-                "or exports through an Attribute Flow. JIM delivers passwords only through Password Synchronisation, on Connected " +
-                "Systems whose Connector supports it."));
+                Msg(nameof(SyncRuleMessages.CredentialAttributeFlow), attributeName)));
         }
     }
 
@@ -327,11 +362,10 @@ public class SyncRule : IAuditable, IValidated
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning,
-                $"The Attribute Flow targeting '{attributeName}' looks like it may carry a password. If it does, " +
-                "use Password Synchronisation on the Connected System instead: a password flowed as an attribute " +
-                "is stored in Metaverse Object and Connected System Object attribute values, change history, " +
-                "Pending Exports, export previews, search results and database backups. If this attribute is not " +
-                "a password, no action is needed."));
+                Msg(nameof(SyncRuleMessages.CredentialLikeAttributeFlow), attributeName)));
         }
     }
+
+    private static JimMessage Msg(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(MessageCatalogues.SyncRule, key, arguments);
 }

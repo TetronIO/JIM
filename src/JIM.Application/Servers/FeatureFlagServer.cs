@@ -2,6 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Exceptions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Core;
 using JIM.Models.Security;
 
@@ -137,9 +140,8 @@ public class FeatureFlagServer
     {
         if (enabled && definition.Tier == FeatureFlagTier.InDevelopment && !allowInDevelopment)
         {
-            throw new InvalidOperationException(
-                $"'{definition.DisplayName}' is an in-development feature (tracked for removal in issue #{definition.TrackingIssueNumber}). " +
-                "It can only be enabled outside Development by passing allowInDevelopment.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.FeatureInDevelopment),
+                definition.DisplayName, definition.TrackingIssueNumber.ToString()));
         }
     }
 

@@ -1,4 +1,5 @@
 @using JIM.Models.Core.DTOs
+@using System.Globalization
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -12,7 +13,7 @@
 <span class="jim-value-origin-chip">
 @if (HasSeveralOrigins)
 {
-    <span class="mud-text-secondary">Several sources</span>
+    <span class="mud-text-secondary">@MetaverseText.McbSeveralSources</span>
 }
 else if (Origin.Kind == ValueOriginKind.SynchronisationRule)
 {
@@ -20,7 +21,7 @@ else if (Origin.Kind == ValueOriginKind.SynchronisationRule)
                     SyncRuleName="@Origin.SyncRuleName" SyncRuleHref="@SyncRuleHref" SyncRuleDeleted="@Origin.SyncRuleDeleted" />
     @if (Origin.AssertsNoValue)
     {
-        <span class="mud-text-secondary">asserts no value</span>
+        <span class="mud-text-secondary">@MetaverseText.VocAssertsNoValue</span>
     }
 }
 else if (Origin.Kind == ValueOriginKind.GeneratedValue)
@@ -37,12 +38,12 @@ else if (Origin.Kind == ValueOriginKind.GeneratedValue)
     }
     @if (Origin.Corrected)
     {
-        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">Corrected</MudChip>
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">@MetaverseText.MaiCorrected</MudChip>
     }
 }
 else if (Origin.Kind == ValueOriginKind.SetByPerson)
 {
-    <span>Set by @Origin.PersonName</span>
+    <span>@string.Format(CultureInfo.CurrentCulture, MetaverseText.VogSetBy, Origin.PersonName)</span>
 }
 else if (Origin.Kind == ValueOriginKind.SignInClaim)
 {
@@ -60,7 +61,7 @@ else if (Origin.Kind == ValueOriginKind.System)
 }
 else
 {
-    <span class="mud-text-disabled">Source not recorded</span>
+    <span class="mud-text-disabled">@MetaverseText.MaiSourceNotRecorded</span>
 }
 </span>
 

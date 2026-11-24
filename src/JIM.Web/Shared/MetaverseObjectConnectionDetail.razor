@@ -1,5 +1,6 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using System.Globalization
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -10,8 +11,8 @@
    the connection is still in scope rather than why it joined. Every sentence is the server's. *@
 <div class="jim-connection-detail" data-testid="jim-mvo-connection-detail">
     <section class="jim-connection-detail-section">
-        <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">How it joined</MudText>
-        <MudText data-testid="jim-join-description">@Connection.Join.Description</MudText>
+        <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@MetaverseText.McdHowJoined</MudText>
+        <MudText data-testid="jim-join-description">@MessageDisplay.Show(Connection.Join.DescriptionDetail, Connection.Join.Description)</MudText>
         <div class="jim-connection-detail-meta">
             @if (Connection.Join.DateJoined.HasValue)
             {
@@ -20,35 +21,35 @@
             }
             @if (Connection.Join.Source == JoinRecordSource.Derived)
             {
-                <span>Taken from Activity history</span>
+                <span>@MetaverseText.McdFromHistory</span>
             }
             @if (ActivityHref is { } activityHref)
             {
-                <MudLink Href="@activityHref" data-testid="jim-join-activity-link">View in Activity</MudLink>
+                <MudLink Href="@activityHref" data-testid="jim-join-activity-link">@MetaverseText.McdViewActivity</MudLink>
             }
             @if (Connection.Join.SyncRuleId.HasValue)
             {
                 var syncRuleId = Connection.Join.SyncRuleId.Value;
-                <MudLink Href="@($"/admin/sync-rules/{syncRuleId}")" data-testid="jim-join-rule-link">Open Synchronisation Rule</MudLink>
+                <MudLink Href="@($"/admin/sync-rules/{syncRuleId}")" data-testid="jim-join-rule-link">@MetaverseText.McdOpenRule</MudLink>
             }
         </div>
     </section>
 
     <section class="jim-connection-detail-section">
         <div class="jim-connection-detail-heading-row">
-            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">Scoping</MudText>
+            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@MetaverseText.MncScoping</MudText>
             @if (EvaluatedAt.HasValue)
             {
                 var evaluatedAt = EvaluatedAt.Value;
                 <MudText Typo="Typo.caption" Class="mud-text-secondary" data-testid="jim-connection-evaluated-at">
-                    Evaluated now, against current values, at @evaluatedAt.ToLocalTime().ToFriendlyDate()
+                    @string.Format(CultureInfo.CurrentCulture, MetaverseText.McdEvaluatedAt, evaluatedAt.ToLocalTime().ToFriendlyDate())
                 </MudText>
             }
         </div>
         @if (Connection.Scoping.Count == 0)
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-connection-no-scoping">
-                No enabled Synchronisation Rule applies to this connection, so there is no scoping to evaluate.
+                @MetaverseText.McdNoScoping
             </MudText>
         }
         else
@@ -65,11 +66,11 @@
     @if (Connection.Conflicts.Count > 0)
     {
         <section class="jim-connection-detail-section">
-            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">Object Type conflicts</MudText>
+            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@MetaverseText.McdConflicts</MudText>
             @foreach (var conflict in Connection.Conflicts)
             {
                 <div @key="conflict.SyncRuleId" class="jim-connection-conflict" data-testid="jim-connection-conflict">
-                    <MudText Typo="Typo.body2">@conflict.Description</MudText>
+                    <MudText Typo="Typo.body2">@MessageDisplay.Show(conflict.DescriptionDetail, conflict.Description)</MudText>
                     <ScopingExplanationView Explanation="conflict.Scoping" />
                 </div>
             }

@@ -142,6 +142,22 @@
         "resolved": "3.0.10",
         "contentHash": "yZIhtw8sYuvsONzQbZxWpR60tMWYHXoo0DL6nyOqSFiU5POjBTSEyWFpTQtJEZuy+oqiYTXKXY/Mjx7KnqIQFw=="
       },
+      "Humanizer.Core.de": {
+        "type": "Transitive",
+        "resolved": "3.0.10",
+        "contentHash": "UoJk/DmAOFZivuMulLoB52Pn5iFvSqurF7qQQAyUAz1/IUZjxkoeoiI5mMILEjVeGoQJqrylt6O+f8johCo0Bg==",
+        "dependencies": {
+          "Humanizer.Core": "[3.0.10]"
+        }
+      },
+      "Humanizer.Core.fr": {
+        "type": "Transitive",
+        "resolved": "3.0.10",
+        "contentHash": "k+STDkiJVeO/nA5s0/GeBdwZI17D9KgqyYA4XGxfGxtFACwbFyVKQLWLzlIR2BsrT53EkyKLAzuFJ9FCT2CyfQ==",
+        "dependencies": {
+          "Humanizer.Core": "[3.0.10]"
+        }
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -1082,6 +1098,8 @@
           "Asp.Versioning.Mvc": "[10.2.1, )",
           "Asp.Versioning.Mvc.ApiExplorer": "[10.2.1, )",
           "Humanizer.Core": "[3.0.10, )",
+          "Humanizer.Core.de": "[3.0.10, )",
+          "Humanizer.Core.fr": "[3.0.10, )",
           "JIM.Application": "[1.0.0, )",
           "JIM.Models": "[1.0.0, )",
           "JIM.PostgresData": "[1.0.0, )",

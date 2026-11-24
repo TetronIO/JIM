@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Utility;
@@ -126,7 +128,7 @@ public class SystemServer
         {
             TargetType = ActivityTargetType.System,
             TargetOperationType = ActivityTargetOperationType.Reset,
-            TargetName = "Factory reset",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetFactoryReset)),
             Message = result.BuildResetMessage(includeAdministrators)
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);

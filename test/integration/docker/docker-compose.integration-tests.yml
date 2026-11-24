@@ -356,6 +356,51 @@ services:
       retries: 6
       start_period: 15s
 
+  # Stand-in for Microsoft Entra ID's token service and Microsoft Graph, for Scenario 040 (#3053): the Entra ID
+  # Connector at up to a million objects, measuring JIM's side without Graph's rate limits or a tenant's object limit.
+  #
+  # Serves the same MockGraphTenant the unit suite drives in process. On jim-network it answers for
+  # login.microsoftonline.com and graph.microsoft.com, from a certificate issued for those names that the scenario adds
+  # to JIM's Trusted Certificates, so JIM runs unchanged. Only in the graph profile: while it runs, nothing on
+  # jim-network reaches the real Microsoft Graph, so it must never start alongside Scenarios 036 to 039.
+  graph-service:
+    image: ${GRAPH_SERVICE_IMAGE:-jim-graph-test-service:local}
+    build:
+      context: ../../..
+      dockerfile: test/integration/docker/graph/Dockerfile
+      network: ${JIM_BUILD_NETWORK:-default}
+      args:
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+        HTTP_PROXY: ${JIM_BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${JIM_BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${JIM_BUILD_NO_PROXY:-}
+    container_name: graph-service
+    environment:
+      - GRAPH_HOSTNAME=graph-service
+      - GRAPH_PORT=443
+      - GRAPH_CERTIFICATE_PATH=/certificates/graph-service.pem
+    # Port 443 as the unprivileged app user: JIM reaches Microsoft Graph on no other port.
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+    # Published on the host's loopback only, for the scenario's harness to read the tenant back.
+    ports:
+      - "127.0.0.1:${GRAPH_SERVICE_PORT:-5443}:443"
+    volumes:
+      - graph-service-certificates:/certificates
+    networks:
+      jim-network:
+        aliases:
+          - login.microsoftonline.com
+          - graph.microsoft.com
+    profiles:
+      - graph
+    healthcheck:
+      test: ["CMD", "test", "-f", "/certificates/graph-service.pem"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   # Keycloak with its built-in SCIM 2.0 API, for Scenario 028 (#2349): the SCIM Connector against a real Keycloak,
   # so a Keycloak release that changes the behaviours #2094 worked around fails a run rather than a customer.
   #
@@ -565,6 +610,8 @@ volumes:
     external: true
   scim-provider-certificates:
     name: jim-integration-scim-provider-certificates
+  graph-service-certificates:
+    name: jim-integration-graph-service-certificates
   openldap-primary-data:
     name: jim-integration-openldap-primary-data
   dirsrv-primary-data:

@@ -3,6 +3,8 @@
 
 using System.Globalization;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
@@ -101,6 +103,22 @@ public class SyncRuleScopingCriteria : ICriterionValues
     public List<string> SaveWarnings { get; } = [];
 
     /// <summary>
+    /// The warnings in <see cref="SaveWarnings"/> that carry a message the portal shows in the viewer's language (#3030),
+    /// keyed by their British English. Never serialised.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<string, JIM.Models.Localisation.JimMessage> SaveWarningDetails { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Raises a save warning: its English joins <see cref="SaveWarnings"/> and its message is kept beside it.</summary>
+    public void AddSaveWarning(JIM.Models.Localisation.JimMessage detail)
+    {
+        var english = JIM.Models.Localisation.MessageRenderer.ToEnglish(detail);
+        SaveWarnings.Add(english);
+        SaveWarningDetails[english] = detail;
+    }
+
+    /// <summary>
     /// Whether the criterion compares an expression's computed value rather than an attribute.
     /// </summary>
     public bool IsExpression => !string.IsNullOrWhiteSpace(Expression);
@@ -132,6 +150,13 @@ public class SyncRuleScopingCriteria : ICriterionValues
         "relative date to the objects whose date crossed it when the date is stored in an attribute, so for this rule " +
         "every reconciliation evaluates every object of its type, in batches. On a large object type, prefer flowing the " +
         "date into an attribute and comparing that.";
+
+    /// <summary>
+    /// <see cref="FullReconciliationPassNotice"/> as a message the portal shows in the viewer's language (#3030); the REST
+    /// API keeps the English constant.
+    /// </summary>
+    public static JimMessage FullReconciliationPassNoticeMessage =>
+        JimMessage.Create(MessageCatalogues.ScopingCriteria, nameof(ScopingCriteriaMessages.FullReconciliationPassNotice));
 
     /// <summary>
     /// Whether the criterion has exactly one left-hand side: an attribute (either side), an expression with a type to
@@ -193,39 +218,58 @@ public class SyncRuleScopingCriteria : ICriterionValues
             : connectedObjectType.Name;
     }
 
-    public override string ToString()
+    public override string ToString() => Describe().ToEnglish();
+
+    /// <summary>
+    /// What the criterion compares against, for the chip the portal shows, as a message it renders in the viewer's language
+    /// (#3030). <see cref="ToString"/> is its British English, which the REST API and logs keep reading.
+    /// </summary>
+    public JimMessage Describe()
     {
         if (IsConnection)
         {
-            var connection = ConnectedObjectType != null ? DescribeConnection(ConnectedObjectType) : $"Object Type {ConnectedObjectTypeId}";
-            return ComparisonType == SearchComparisonType.HasNoValue ? "Has no " + connection : "Has " + connection;
+            var connection = ConnectedObjectType != null
+                ? DescribeConnectionMessage(ConnectedObjectType)
+                : Message(nameof(ScopingCriteriaMessages.CriterionObjectTypeId), ConnectedObjectTypeId?.ToString(CultureInfo.CurrentCulture));
+            return Message(ComparisonType == SearchComparisonType.HasNoValue ? nameof(ScopingCriteriaMessages.CriterionHasNo) : nameof(ScopingCriteriaMessages.CriterionHas), connection);
         }
 
         var attributeType = GetAttributeDataType();
         if (attributeType == null)
-            return "No attribute set";
+            return Message(nameof(ScopingCriteriaMessages.CriterionNoAttribute));
 
         return attributeType switch
         {
-            AttributeDataType.Text => "Text: " + StringValue,
-            AttributeDataType.Number => "Number: " + IntValue,
-            AttributeDataType.LongNumber => "LongNumber: " + LongValue,
-            AttributeDataType.Decimal => "Decimal: " + (DecimalValue.HasValue ? DecimalValue.Value.ToString(CultureInfo.InvariantCulture) : null),
-            AttributeDataType.Boolean => "Boolean: " + (BoolValue is null ? "Null" : BoolValue.Value.ToString()),
+            AttributeDataType.Text => Message(nameof(ScopingCriteriaMessages.CriterionText), StringValue),
+            AttributeDataType.Number => Message(nameof(ScopingCriteriaMessages.CriterionNumber), IntValue?.ToString()),
+            AttributeDataType.LongNumber => Message(nameof(ScopingCriteriaMessages.CriterionLongNumber), LongValue?.ToString()),
+            AttributeDataType.Decimal => Message(nameof(ScopingCriteriaMessages.CriterionDecimal), DecimalValue.HasValue ? DecimalValue.Value.ToString(CultureInfo.InvariantCulture) : null),
+            AttributeDataType.Boolean => Message(nameof(ScopingCriteriaMessages.CriterionBoolean), BoolValue is null ? "Null" : BoolValue.Value.ToString()),
             AttributeDataType.DateTime => DescribeDateValue(),
-            AttributeDataType.Guid => "Guid: " + GuidValue,
-            _ => "Unsupported data type"
+            AttributeDataType.Guid => Message(nameof(ScopingCriteriaMessages.CriterionGuid), GuidValue?.ToString()),
+            _ => Message(nameof(ScopingCriteriaMessages.CriterionUnsupported))
         };
     }
 
     /// <summary>
     /// Renders the DateTime value for display: a relative phrase ("30 days ago") when Relative, otherwise the absolute date.
     /// </summary>
-    private string DescribeDateValue()
+    private JimMessage DescribeDateValue()
     {
         if (ValueMode == DateCriteriaValueMode.Relative && RelativeCount.HasValue && RelativeUnit.HasValue && RelativeDirection.HasValue)
-            return RelativeDateResolver.Describe(RelativeCount.Value, RelativeUnit.Value, RelativeDirection.Value);
+            return RelativeDateResolver.DescribeMessage(RelativeCount.Value, RelativeUnit.Value, RelativeDirection.Value);
 
-        return "Date: " + DateTimeValue;
+        return Message(nameof(ScopingCriteriaMessages.CriterionDate), DateTimeValue?.ToString());
+    }
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(MessageCatalogues.ScopingCriteria, key, arguments);
+
+    private static JimMessage DescribeConnectionMessage(ConnectedSystemObjectType connectedObjectType)
+    {
+        ArgumentNullException.ThrowIfNull(connectedObjectType);
+        return connectedObjectType.ConnectedSystem != null
+            ? Message(nameof(ScopingCriteriaMessages.CriterionConnection), connectedObjectType.Name, connectedObjectType.ConnectedSystem.Name)
+            : JimMessage.Create(MessageCatalogues.ScopingCriteria, nameof(ScopingCriteriaMessages.CriterionPlainText), connectedObjectType.Name);
     }
 }

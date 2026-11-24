@@ -12,24 +12,22 @@
 <div class="@(ShowHeading ? "mt-5" : null)" data-testid="collision-remediation">
     @if (ShowHeading)
     {
-        <MudText Typo="Typo.subtitle2" Class="mb-1">Collision Remediation</MudText>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">@GeneratedValueText.CollisionRemediationTitle</MudText>
     }
     <MudSwitch T="bool" Value="@(Available && Generation.CollisionRemediation)" ValueChanged="OnChangedAsync"
                Color="Color.Primary" Disabled="@(Disabled || !Available)">
-        <MudText Typo="Typo.body1">Let JIM correct a value a target rejects as already in use</MudText>
+        <MudText Typo="Typo.body1">@GeneratedValueText.CollisionSwitchLabel</MudText>
     </MudSwitch>
     @if (Participants != null && !Available)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="collision-remediation-unavailable">
-            Not available: none of the systems this value is exported to can report that a value is already in use, so a
-            collision is recorded as an export error.
+            @GeneratedValueText.CollisionUnavailable
         </MudText>
     }
     else
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            While no other system holds the value, JIM chooses the next free one and exports it again. Once another system
-            holds it, JIM holds the export for your decision instead of renaming that account.
+            @GeneratedValueText.CollisionHelp
         </MudText>
     }
 </div>

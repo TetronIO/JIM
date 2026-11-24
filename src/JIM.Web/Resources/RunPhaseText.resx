@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Import_Connect" xml:space="preserve">
+    <value>Connecting to Connected System</value>
+    <comment>Run Profile phase: opening the connection to the Connected System.</comment>
+  </data>
+  <data name="Import_Fetch" xml:space="preserve">
+    <value>Importing objects</value>
+    <comment>Run Profile phase: fetching objects from the Connected System.</comment>
+  </data>
+  <data name="Import_Process" xml:space="preserve">
+    <value>Processing imported objects</value>
+    <comment>Run Profile phase nested in Importing objects: matching objects that arrived.</comment>
+  </data>
+  <data name="Import_Deletions" xml:space="preserve">
+    <value>Processing deletions</value>
+    <comment>Run Profile phase: marking objects absent from the source as deleted.</comment>
+  </data>
+  <data name="Import_References" xml:space="preserve">
+    <value>Resolving references</value>
+    <comment>Run Profile phase: linking unresolved reference values.</comment>
+  </data>
+  <data name="Import_Save" xml:space="preserve">
+    <value>Saving changes</value>
+    <comment>Run Profile phase: persisting imported objects and their change records.</comment>
+  </data>
+  <data name="Import_Reconcile" xml:space="preserve">
+    <value>Reconciling Pending Exports</value>
+    <comment>Run Profile phase: confirming Pending Exports against the Connected System.</comment>
+  </data>
+  <data name="Import_Record" xml:space="preserve">
+    <value>Recording results</value>
+    <comment>Run Profile phase: recording the per-object results of the Activity.</comment>
+  </data>
+  <data name="Sync_Prepare" xml:space="preserve">
+    <value>Preparing</value>
+    <comment>Run Profile phase: loading Synchronisation Rules and counting the work.</comment>
+  </data>
+  <data name="Sync_Process" xml:space="preserve">
+    <value>Processing Connected System Objects</value>
+    <comment>Run Profile phase: evaluating each Connected System Object.</comment>
+  </data>
+  <data name="Sync_Crosspagereferences" xml:space="preserve">
+    <value>Resolving cross-page references</value>
+    <comment>Run Profile phase: resolving references whose target arrived on a later page.</comment>
+  </data>
+  <data name="Sync_Scopereview" xml:space="preserve">
+    <value>Reviewing exports</value>
+    <comment>Run Profile phase: re-evaluating export scope for objects whose scope changed with the clock.</comment>
+  </data>
+  <data name="Export_Prepare" xml:space="preserve">
+    <value>Preparing export</value>
+    <comment>Run Profile phase: loading Pending Exports and counting the work.</comment>
+  </data>
+  <data name="Export_Execute" xml:space="preserve">
+    <value>Exporting</value>
+    <comment>Run Profile phase: writing changes to the Connected System.</comment>
+  </data>
+  <data name="Export_Deferred" xml:space="preserve">
+    <value>Exporting deferred changes</value>
+    <comment>Run Profile phase: second pass for changes whose references did not yet exist.</comment>
+  </data>
+  <data name="Export_References" xml:space="preserve">
+    <value>Resolving change history references</value>
+    <comment>Run Profile phase: resolving references recorded in export change history.</comment>
+  </data>
+  <data name="Export_Containers" xml:space="preserve">
+    <value>Selecting new containers</value>
+    <comment>Run Profile phase: bringing containers created by the export into JIM and selecting them.</comment>
+  </data>
+</root>

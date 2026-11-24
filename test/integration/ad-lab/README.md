@@ -3,7 +3,7 @@
 The lab is three single-domain-controller Active Directory forests on Windows Server 2025 Datacenter, built by
 scripts from installation media, kept as Hyper-V production checkpoints, and reverted between scenarios. It exists so
 JIM's LDAP Connector meets a real Windows domain controller before a release, instead of only Samba AD. The design and
-the reasons are in [`engineering/prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md`](../../../engineering/prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md).
+the reasons are in [`engineering/prd/done/PRD_ACTIVE_DIRECTORY_LAB.md`](../../../engineering/prd/done/PRD_ACTIVE_DIRECTORY_LAB.md).
 
 | VM name      | Forest         | Domain controller  | Base DN              | Recycle Bin |
 |--------------|----------------|--------------------|----------------------|-------------|

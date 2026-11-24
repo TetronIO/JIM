@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ChangeSearchOperatorUnknown" xml:space="preserve">
+    <value>'{0}' is not a recognized attribute change operator.</value>
+  </data>
+  <data name="ChangeSearchMatchModeUnknown" xml:space="preserve">
+    <value>'{0}' is not a recognized condition match mode.</value>
+  </data>
+  <data name="MatchExpressionReadsMetaverse" xml:space="preserve">
+    <value>A matching expression reads only the Connected System Object, so it cannot read {0}: the Metaverse Object is what the rule is looking for. To compare with a normalized Metaverse value, derive a Metaverse attribute that holds it and match on that.</value>
+  </data>
+  <data name="LookupNoMatch" xml:space="preserve">
+    <value>No Metaverse Object holds these values, so a synchronization would try the next Object Matching Rule, and project the object if no rule matches and its Synchronization Rule projects.</value>
+  </data>
+  <data name="LookupJoinedToAnother" xml:space="preserve">
+    <value>The values match {0} on {1}, but another Connected System Object from this Connected System is already joined to it, so a synchronization would record that this object could not join.</value>
+  </data>
+  <data name="LookupWouldJoin" xml:space="preserve">
+    <value>A synchronization would join this object to {0}, matched on {1}.</value>
+  </data>
+  <data name="ProvSyncRuleUnavailable" xml:space="preserve">
+    <value>Synchronization Rule not available.</value>
+  </data>
+  <data name="ProvHeldUnderAnotherType" xml:space="preserve">
+    <value>Held as {0} until the next import: a schema refresh changed this attribute to {1}, so synchronization leaves the Metaverse Object's value as it is until an import reads the attribute again.</value>
+  </data>
+  <data name="ProvInputsHeld" xml:space="preserve">
+    <value>Not evaluated: {0} until the next import, because a schema refresh changed its data type. Synchronization leaves the Metaverse Object's value as it is until an import reads it again.</value>
+  </data>
+  <data name="ProvValueNotConvertible" xml:space="preserve">
+    <value>The Expression returned '{0}', which this {1} attribute cannot hold, so this source would supply no value and synchronization reports an expression error.</value>
+  </data>
+  <data name="ProvSeveralValues" xml:space="preserve">
+    <value>The Expression returned {0} values, but this attribute is single-valued, so this source would supply no value and synchronization reports an error.</value>
+  </data>
+  <data name="PwdNeverExpiresNeedsAccounts" xml:space="preserve">
+    <value>expiryBehaviour NeverExpires needs the accounts to be named. A password set on every Connected System configured for Password Synchronization leaves "Password never expires" as each account has it; name the Connected System Objects to choose Never expires for them.</value>
+  </data>
+  <data name="PwdNoAccounts" xml:space="preserve">
+    <value>At least one account is required. To set the password on every Connected System configured for Password Synchronization, name no accounts at all.</value>
+  </data>
+  <data name="MatchExpressionNonRepeatable" xml:space="preserve">
+    <value>The expression calls {0}, which returns a different value each time it runs, so the same object would match a different identity, or none, on every synchronization.</value>
+  </data>
+</root>

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+using JIM.Models.Localisation;
 using JIM.Models.Transactional.DTOs;
 
 namespace JIM.Models.Activities.DTOs;
@@ -56,6 +58,13 @@ public class ExecutionItemFollowUp
     /// What was recorded when the follow-up began, such as "Initial password queued for delivery to PANOPLY.".
     /// </summary>
     public string? Message { get; set; }
+
+    /// <summary>
+    /// <see cref="Message"/> as a message the portal shows in the viewer's language (#3039); null where the Activity
+    /// recorded English only. Not part of the REST API's shape.
+    /// </summary>
+    [JsonIgnore]
+    public JimMessage? MessageDetail { get; set; }
 
     /// <summary>
     /// For an Initial Password, where it stands at its Connected System: queued, retrying, set, parked and so on,

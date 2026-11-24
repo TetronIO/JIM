@@ -2,9 +2,12 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -37,27 +40,41 @@ public sealed class ObjectMatchingRuleValidator
     /// <param name="rule">The rule; its owner is not checked here (see <see cref="ObjectMatchingRule.DescribeInvalidity"/>).</param>
     /// <param name="objectType">The Connected System Object Type the rule reads, with its attributes loaded.</param>
     /// <param name="target">The Metaverse attribute the rule compares with.</param>
-    public string? DescribeProblem(ObjectMatchingRule rule, ConnectedSystemObjectType objectType, MetaverseAttribute target)
+    public string? DescribeProblem(ObjectMatchingRule rule, ConnectedSystemObjectType objectType, MetaverseAttribute target) =>
+        DescribeProblemDetail(rule, objectType, target)?.ToEnglish();
+
+    /// <summary>
+    /// <see cref="DescribeProblem"/> as a message, so the portal can show it in the reader's language.
+    /// </summary>
+    public JimMessage? DescribeProblemDetail(ObjectMatchingRule rule, ConnectedSystemObjectType objectType, MetaverseAttribute target)
     {
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(objectType);
         ArgumentNullException.ThrowIfNull(target);
 
-        var shape = rule.DescribeComparisonInvalidity();
+        var shape = rule.FindComparisonInvalidity() switch
+        {
+            ObjectMatchingRuleShapeProblem.NoSource => ServerMessage.Create(nameof(ServerMessages.MatchNoSource)),
+            ObjectMatchingRuleShapeProblem.SeveralSources => ServerMessage.Create(nameof(ServerMessages.MatchSeveralSources), rule.Sources.Count.ToString()),
+            ObjectMatchingRuleShapeProblem.AttributeAndExpression => ServerMessage.Create(nameof(ServerMessages.MatchAttributeAndExpression)),
+            ObjectMatchingRuleShapeProblem.NeitherAttributeNorExpression => ServerMessage.Create(nameof(ServerMessages.MatchNeitherAttributeNorExpression)),
+            ObjectMatchingRuleShapeProblem.NoTarget => ServerMessage.Create(nameof(ServerMessages.MatchNoTarget)),
+            _ => null
+        };
         if (shape != null)
             return shape;
 
         if (!ObjectMatchingRule.IsMatchableType(target.Type))
-            return $"The Metaverse Attribute '{target.Name}' is {target.Type}, which an Object Matching Rule cannot compare. " +
-                   $"Match on a {ObjectMatchingRule.MatchableTypesDescription} attribute.";
+            return ServerMessage.Create(nameof(ServerMessages.MatchTargetTypeNotMatchable), target.Name, target.Type.ToString(),
+                ObjectMatchingRule.MatchableTypesDescription);
 
         var source = rule.Sources[0];
         return string.IsNullOrWhiteSpace(source.Expression)
             ? DescribeAttributeProblem(source, objectType, target)
-            : DescribeExpressionProblem(source.Expression, objectType);
+            : DescribeExpressionProblemDetail(source.Expression, objectType);
     }
 
-    private static string? DescribeAttributeProblem(
+    private static JimMessage? DescribeAttributeProblem(
         ObjectMatchingRuleSource source,
         ConnectedSystemObjectType objectType,
         MetaverseAttribute target)
@@ -67,16 +84,14 @@ public sealed class ObjectMatchingRuleValidator
 
         if (attribute == null)
         {
-            var named = source.ConnectedSystemAttribute != null
-                ? $"'{source.ConnectedSystemAttribute.Name}'"
-                : $"with id {attributeId}";
-            return $"The Connected System attribute {named} is not an attribute of '{objectType.Name}', the Object Type this rule reads.";
+            return source.ConnectedSystemAttribute != null
+                ? ServerMessage.Create(nameof(ServerMessages.MatchAttributeNamedNotOnType), source.ConnectedSystemAttribute.Name, objectType.Name)
+                : ServerMessage.Create(nameof(ServerMessages.MatchAttributeIdNotOnType), attributeId.ToString(), objectType.Name);
         }
 
         if (attribute.Type != target.Type)
-            return $"The Connected System attribute '{attribute.Name}' is {attribute.Type} but the Metaverse Attribute '{target.Name}' is " +
-                   $"{target.Type}; an Object Matching Rule compares attributes of the same type. To compare them anyway, match on an " +
-                   "expression that converts the value.";
+            return ServerMessage.Create(nameof(ServerMessages.MatchAttributeTypeMismatch), attribute.Name, attribute.Type.ToString(),
+                target.Name, target.Type.ToString());
 
         return null;
     }
@@ -85,18 +100,24 @@ public sealed class ObjectMatchingRuleValidator
     /// Why <paramref name="expression"/> could never work as a matching expression over objects of
     /// <paramref name="objectType"/>, or null when it can.
     /// </summary>
-    public string? DescribeExpressionProblem(string expression, ConnectedSystemObjectType objectType)
+    public string? DescribeExpressionProblem(string expression, ConnectedSystemObjectType objectType) =>
+        DescribeExpressionProblemDetail(expression, objectType)?.ToEnglish();
+
+    /// <summary>
+    /// <see cref="DescribeExpressionProblem"/> as a message, so the portal can show it in the reader's language.
+    /// </summary>
+    public JimMessage? DescribeExpressionProblemDetail(string expression, ConnectedSystemObjectType objectType)
     {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(objectType);
 
         if (expression.Length > DynamicExpressoEvaluator.MaxExpressionLength)
-            return $"The expression is {expression.Length:N0} characters long; an expression can be at most " +
-                   $"{DynamicExpressoEvaluator.MaxExpressionLength:N0}.";
+            return ServerMessage.Create(nameof(ServerMessages.MatchExpressionTooLong), expression.Length,
+                DynamicExpressoEvaluator.MaxExpressionLength);
 
         var parsed = _expressionEvaluator.Validate(expression);
         if (!parsed.IsValid)
-            return $"The expression does not parse: {parsed.ErrorMessage}";
+            return ServerMessage.Create(nameof(ServerMessages.MatchExpressionDoesNotParse), parsed.ErrorMessage ?? string.Empty);
 
         var inputs = ExpressionInputResolver.Resolve(expression);
 
@@ -105,25 +126,21 @@ public sealed class ObjectMatchingRuleValidator
         // (#1750) is how to have it.
         var metaverseInput = inputs.FirstOrDefault(input => input.Source == ExpressionInputSource.Metaverse);
         if (metaverseInput != null)
-            return $"A matching expression reads only the Connected System Object, so it cannot read {metaverseInput.Accessor}: " +
-                   "the Metaverse Object is what the rule is looking for. To compare with a normalised Metaverse value, derive " +
-                   "a Metaverse attribute that holds it and match on that.";
+            return ServerMessage.Create(nameof(ServerMessages.MatchExpressionReadsMetaverse), metaverseInput.Accessor);
 
         var connectedSystemInputs = inputs.Where(input => input.Source == ExpressionInputSource.ConnectedSystem).ToList();
         if (connectedSystemInputs.Count == 0)
-            return "The expression reads no Connected System attribute, so it would compute the same value for every object and " +
-                   "match them all with the same identity. Read at least one attribute, as cs[\"attributeName\"].";
+            return ServerMessage.Create(nameof(ServerMessages.MatchExpressionReadsNothing));
 
         // Inputs are looked up case-insensitively when the expression runs (MatchValueResolver), so they are here too.
         var unknown = connectedSystemInputs.FirstOrDefault(input =>
             !objectType.Attributes.Any(a => string.Equals(a.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase)));
         if (unknown != null)
-            return $"The expression reads {unknown.Accessor}, but '{objectType.Name}' has no attribute of that name.";
+            return ServerMessage.Create(nameof(ServerMessages.MatchExpressionUnknownAttribute), unknown.Accessor, objectType.Name);
 
         var nonRepeatable = NonRepeatableFunctionDetector.Find(expression);
         if (nonRepeatable.Count > 0)
-            return $"The expression calls {string.Join(", ", nonRepeatable)}, which returns a different value each time it runs, so " +
-                   "the same object would match a different identity, or none, on every synchronisation.";
+            return ServerMessage.Create(nameof(ServerMessages.MatchExpressionNonRepeatable), string.Join(", ", nonRepeatable));
 
         return null;
     }

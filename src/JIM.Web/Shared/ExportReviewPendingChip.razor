@@ -9,11 +9,11 @@
 {
     <MudTooltip Arrow="true" Placement="Placement.Top">
         <TooltipContent>
-            <TooltipText Text="Reviewed against every export rule at the next synchronisation of any Connected System." />
+            <TooltipText Text="@MetaverseText.ErpReviewTooltip" />
         </TooltipContent>
         <ChildContent>
             <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Class="@Class" data-testid="jim-export-review-pending-chip">
-                Export review pending: @Count.ToString("N0")
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, MetaverseText.ErpChipLabel, Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
             </MudChip>
         </ChildContent>
     </MudTooltip>

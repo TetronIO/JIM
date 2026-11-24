@@ -2,6 +2,9 @@
 # in Microsoft Entra ID, from any branch: so a change to the Connector can be run live before it merges. The AD lab
 # (ad-lab.yml) runs the same scenarios nightly from main; this is the on-demand, pre-merge run.
 #
+# Scenario 039 (the Connector at scale, #3053) runs only when chosen, at the template chosen; it is never part of All.
+# It checks the template fits in the tenant before writing anything, and at the largest sizes takes hours.
+#
 # Neither scenario uses a directory, so no lab is needed: the runner brings up JIM, with OpenLDAP as the (unused)
 # directory, and the scenarios talk to the tenant. The harness signs in as the CI app through its federated
 # credential, which trusts GitHub's OIDC token for the jim-entra-tenant environment only; no Graph secret is stored
@@ -25,10 +28,15 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: 'Which Entra ID Connector scenario to run'
+        description: 'Which Entra ID Connector scenario to run (39 is the scale run)'
         type: choice
-        options: ['All', '36', '37']
+        options: ['All', '36', '37', '39']
         default: 'All'
+      template:
+        description: 'For Scenario 039: the size (users), checked against the tenant before anything is written'
+        type: choice
+        options: ['Nano', 'Micro', 'Small', 'Medium', 'MediumLarge', 'Large', 'Scale100k50Groups']
+        default: 'Small'
 
 permissions:
   contents: read
@@ -42,7 +50,8 @@ jobs:
     name: Entra ID Connector checks
     runs-on: ubuntu-24.04
     environment: jim-entra-tenant
-    timeout-minutes: 90
+    # GitHub-hosted jobs stop at six hours; the scale run's largest templates need most of that.
+    timeout-minutes: ${{ inputs.scenario == '39' && 355 || 90 }}
     permissions:
       contents: read
       # The CI app's federated credential: GitHub's OIDC token for this environment, exchanged for a Graph token.
@@ -68,13 +77,15 @@ jobs:
       - name: Run the Entra ID Connector scenarios
         env:
           SCENARIO: ${{ inputs.scenario }}
+          TEMPLATE: ${{ inputs.template }}
           JIM_SSO_ENTRA_TENANT_ID: ${{ vars.JIM_SSO_ENTRA_TENANT_ID }}
           JIM_SSO_ENTRA_CI_CLIENT_ID: ${{ vars.JIM_SSO_ENTRA_CI_CLIENT_ID }}
         run: |
           $scenarios = if ($env:SCENARIO -eq 'All') { @('36', '37') } else { @($env:SCENARIO) }
           $failed = @()
           foreach ($number in $scenarios) {
-            pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario $number -Template Nano -DirectoryType OpenLDAP
+            $template = if ($number -eq '39') { $env:TEMPLATE } else { 'Nano' }
+            pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario $number -Template $template -DirectoryType OpenLDAP
             if ($LASTEXITCODE -ne 0) { $failed += $number }
           }
           if ($failed.Count -gt 0) { Write-Host "::error::Entra ID Connector scenario(s) failed: $($failed -join ', ')"; exit 1 }

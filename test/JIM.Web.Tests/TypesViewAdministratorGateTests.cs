@@ -63,7 +63,7 @@ public class TypesViewAdministratorGateTests
     {
         var source = ReadViewRazorSource();
 
-        Assert.That(IsInsideAdministratorGate(source, "Text=\"Connections\""), Is.True,
+        Assert.That(IsInsideAdministratorGate(source, "Text=\"@MetaverseText.TvConnections\""), Is.True,
             "The Connections tab must be gated by <AuthorizeView Roles=\"Administrator\">.");
     }
 
@@ -90,7 +90,7 @@ public class TypesViewAdministratorGateTests
     {
         var source = ReadViewRazorSource();
 
-        var tabIndex = source.IndexOf("Text=\"Connections\"", System.StringComparison.Ordinal);
+        var tabIndex = source.IndexOf("Text=\"@MetaverseText.TvConnections\"", System.StringComparison.Ordinal);
         Assert.That(tabIndex, Is.GreaterThanOrEqualTo(0));
         var tabDeclaration = source.Substring(tabIndex, 260);
         Assert.That(tabDeclaration, Does.Contain("BadgeData=\"@(_object.ConnectorCount"),

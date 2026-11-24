@@ -4,7 +4,11 @@
 using JIM.Models.Exchange;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using System.Globalization;
+
 using JIM.Utilities;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -23,7 +27,7 @@ public static class ExchangeChangeOutcomeDisplay
     {
         if (string.IsNullOrEmpty(recipientType) || !ExchangeRecipientTypes.All.Contains(recipientType)
             || recipientType == ExchangeRecipientTypes.None)
-            return "Exchange recipient";
+            return MetaverseText.EchRecipientFallback;
 
         var noun = ExchangeRecipientRules.Noun(recipientType);
         return char.ToUpperInvariant(noun[0]) + noun[1..];
@@ -34,17 +38,17 @@ public static class ExchangeChangeOutcomeDisplay
     /// </summary>
     public static (string Label, string Modifier, bool Running) Pill(ExchangeChangeState state) => state switch
     {
-        ExchangeChangeState.Queued => ("Queued", "neutral", true),
-        ExchangeChangeState.Delivering => ("Delivering", "neutral", true),
-        ExchangeChangeState.Retrying => ("Retrying", "warn", true),
-        ExchangeChangeState.Held => ("Held", "warn", true),
-        ExchangeChangeState.Delivered => ("Delivered", "ok", false),
-        ExchangeChangeState.Withdrawn => ("Withdrawn", "ok", false),
-        ExchangeChangeState.Replaced => ("Replaced", "neutral", false),
-        ExchangeChangeState.Parked => ("Parked", "err", false),
-        ExchangeChangeState.Refused => ("Refused", "err", false),
-        ExchangeChangeState.NotMade => ("Not made", "warn", false),
-        _ => (state.ToString(), "neutral", false)
+        ExchangeChangeState.Queued => (MetaverseText.EchPillQueued, "neutral", true),
+        ExchangeChangeState.Delivering => (MetaverseText.EchPillDelivering, "neutral", true),
+        ExchangeChangeState.Retrying => (MetaverseText.EchPillRetrying, "warn", true),
+        ExchangeChangeState.Held => (MetaverseText.EchPillHeld, "warn", true),
+        ExchangeChangeState.Delivered => (MetaverseText.EchPillDelivered, "ok", false),
+        ExchangeChangeState.Withdrawn => (MetaverseText.EchPillWithdrawn, "ok", false),
+        ExchangeChangeState.Replaced => (MetaverseText.EchPillReplaced, "neutral", false),
+        ExchangeChangeState.Parked => (MetaverseText.EchPillParked, "err", false),
+        ExchangeChangeState.Refused => (MetaverseText.EchPillRefused, "err", false),
+        ExchangeChangeState.NotMade => (MetaverseText.EchPillNotMade, "warn", false),
+        _ => (state.ForDisplay(), "neutral", false)
     };
 
     /// <summary>
@@ -59,33 +63,37 @@ public static class ExchangeChangeOutcomeDisplay
         switch (outcome.State)
         {
             case ExchangeChangeState.Queued:
-                return "Queued; the Exchange delivery lane will pick it up in a moment";
+                return MetaverseText.EchWordsQueued;
 
             case ExchangeChangeState.Delivering:
-                return "Exchange is applying it now";
+                return MetaverseText.EchApplyingNow;
 
             case ExchangeChangeState.Held:
-                return "Held: its Connected System does not manage Exchange recipients now; delivered once it does again";
+                return MetaverseText.EchWordsHeld;
 
             case ExchangeChangeState.Retrying:
             {
-                var lead = outcome.FailureKind is { } kind ? Reason(kind) : "Retrying";
-                var words = message == null ? lead : $"{lead}: {message.TrimEnd('.')}";
+                var lead = outcome.FailureKind is { } kind ? Reason(kind) : MetaverseText.EchPillRetrying;
+                var words = message == null
+                    ? lead
+                    : string.Format(CultureInfo.CurrentCulture, MetaverseText.EchLeadWithMessage, lead, message.TrimEnd('.'));
                 if (outcome.AttemptCount is > 0)
-                    words += $". Attempt {outcome.AttemptCount}";
+                    words += string.Format(CultureInfo.CurrentCulture, MetaverseText.EchAttemptSuffix, outcome.AttemptCount);
                 return outcome.NextAttemptAt.HasValue
-                    ? $"{words}. Next attempt {outcome.NextAttemptAt.Value.ToLocalTime().ToFriendlyDate()}"
+                    ? string.Format(CultureInfo.CurrentCulture, MetaverseText.EchNextAttemptSuffix, words, outcome.NextAttemptAt.Value.ToLocalTime().ToFriendlyDate())
                     : words;
             }
 
             case ExchangeChangeState.Parked:
-                return message == null ? "Parked: JIM has stopped trying until somebody retries it" : $"Parked: {message}";
+                return message == null
+                    ? MetaverseText.EchParkedWords
+                    : string.Format(CultureInfo.CurrentCulture, MetaverseText.EchParkedWithMessage, message);
 
             case ExchangeChangeState.Delivered:
-                return message ?? "Exchange made the account the declared recipient";
+                return message ?? MetaverseText.EchDeliveredDefault;
 
             case ExchangeChangeState.Replaced:
-                return message ?? "Replaced by a newer declared state before it was delivered";
+                return message ?? MetaverseText.EchReplacedDefault;
 
             default:
                 return message ?? Pill(outcome.State).Label;
@@ -102,16 +110,16 @@ public static class ExchangeChangeOutcomeDisplay
 
         return change.State switch
         {
-            ExchangeChangeState.Queued => "Due now",
-            ExchangeChangeState.Delivering => "Exchange is applying it now",
-            ExchangeChangeState.Held => $"Waits until {change.ConnectedSystemName} manages Exchange recipients again",
+            ExchangeChangeState.Queued => MetaverseText.EchDueNow,
+            ExchangeChangeState.Delivering => MetaverseText.EchApplyingNow,
+            ExchangeChangeState.Held => string.Format(CultureInfo.CurrentCulture, MetaverseText.EchWaitsUntilManages, change.ConnectedSystemName),
             ExchangeChangeState.Retrying => change.NextRetryAt is { } next
-                ? $"Attempt {change.AttemptCount}; next {next.ToLocalTime().ToFriendlyDate()}"
-                : $"Attempt {change.AttemptCount}; due now",
+                ? string.Format(CultureInfo.CurrentCulture, MetaverseText.EchAttemptNext, change.AttemptCount, next.ToLocalTime().ToFriendlyDate())
+                : string.Format(CultureInfo.CurrentCulture, MetaverseText.EchAttemptDueNow, change.AttemptCount),
             ExchangeChangeState.Parked => change.LastAttemptedAt is { } last
-                ? $"Since {last.ToLocalTime().ToFriendlyDate()}"
-                : "Waiting for somebody to retry it",
-            _ => "Waits on a new declared state"
+                ? string.Format(CultureInfo.CurrentCulture, MetaverseText.EchSince, last.ToLocalTime().ToFriendlyDate())
+                : MetaverseText.EchWaitingRetry,
+            _ => MetaverseText.EchWaitsNewState
         };
     }
 
@@ -125,7 +133,7 @@ public static class ExchangeChangeOutcomeDisplay
 
         var message = string.IsNullOrWhiteSpace(change.FailureMessage) ? null : change.FailureMessage.Trim();
         if (change.FailureKind is { } kind)
-            return message == null ? Reason(kind) : $"{Reason(kind)}: {message}";
+            return message == null ? Reason(kind) : string.Format(CultureInfo.CurrentCulture, MetaverseText.EchLeadWithMessage, Reason(kind), message);
 
         return message;
     }
@@ -133,11 +141,11 @@ public static class ExchangeChangeOutcomeDisplay
     /// <summary>How an attempt failed, in an administrator's words.</summary>
     public static string Reason(ExchangeChangeFailureKind kind) => kind switch
     {
-        ExchangeChangeFailureKind.ObjectNotFound => "Exchange could not find the account yet",
-        ExchangeChangeFailureKind.Refused => "Exchange refused the change",
-        ExchangeChangeFailureKind.InsufficientPermissions => "JIM's account lacks the Exchange permissions",
-        ExchangeChangeFailureKind.AuthenticationFailed => "Signing in to Exchange failed",
-        ExchangeChangeFailureKind.Unreachable => "Unreachable or timed out",
-        _ => kind.ToString().SplitOnCapitalLetters()
+        ExchangeChangeFailureKind.ObjectNotFound => MetaverseText.EchReasonObjectNotFound,
+        ExchangeChangeFailureKind.Refused => MetaverseText.EchReasonRefused,
+        ExchangeChangeFailureKind.InsufficientPermissions => MetaverseText.EchReasonPermissions,
+        ExchangeChangeFailureKind.AuthenticationFailed => MetaverseText.EchReasonAuthentication,
+        ExchangeChangeFailureKind.Unreachable => MetaverseText.EchReasonUnreachable,
+        _ => kind.ForDisplay()
     };
 }

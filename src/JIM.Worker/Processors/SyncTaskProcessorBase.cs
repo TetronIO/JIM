@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using System.Globalization;
 using JIM.Application;
 using JIM.Application.Diagnostics;
@@ -689,10 +691,9 @@ public abstract class SyncTaskProcessorBase
     {
         foreach (var (attributeName, (count, reasons)) in _generatedValuesWaiting)
         {
-            var warning = string.Create(CultureInfo.InvariantCulture,
-                $"JIM held back {count} {attributeName} {(count == 1 ? "value" : "values")} until the values built from {(count == 1 ? "it" : "them")} can be worked out. " +
-                $"{(count == 1 ? "It waits" : "They wait")} for {string.Join("; ", reasons.Take(5))}{(reasons.Count > 5 ? "; and more" : string.Empty)}.");
-            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+            ActivityMessage.AddWarning(_activity, ActivityMessage.Counted(nameof(ActivityMessages.GeneratedValuesHeldBackOne), count,
+                ActivityMessage.Plain(count), attributeName, string.Join("; ", reasons.Take(5)),
+                reasons.Count > 5 ? ActivityMessage.Create(nameof(ActivityMessages.GeneratedValuesAndMore)) : string.Empty));
             Log.Information("ReportGeneratedValuesWaiting: {Count} {Attribute} value(s) held back for Activity {ActivityId} until values built from them can be worked out.",
                 count, LogSanitiser.Sanitise(attributeName), _activity.Id);
         }
@@ -1535,7 +1536,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-            runProfileExecutionItem.ErrorMessage = e.Message;
+            ActivityMessage.SetError(runProfileExecutionItem, e);
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
@@ -1872,7 +1873,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = joinEx.ErrorType;
-            runProfileExecutionItem.ErrorMessage = joinEx.Message;
+            ActivityMessage.SetError(runProfileExecutionItem, joinEx);
             runProfileExecutionItem.MatchCandidates = [.. joinEx.MatchCandidates];
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
@@ -1934,7 +1935,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
-            runProfileExecutionItem.ErrorMessage = scopingEx.Message;
+            ActivityMessage.SetError(runProfileExecutionItem, scopingEx);
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             // As for the expression errors above: anything staged on a shared Metaverse Object is never applied.
@@ -1950,7 +1951,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-            runProfileExecutionItem.ErrorMessage = e.Message;
+            ActivityMessage.SetError(runProfileExecutionItem, e);
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
@@ -6051,12 +6052,8 @@ public abstract class SyncTaskProcessorBase
         // longer exists is not counted: there is no value left to deliver.
         if (unreadableRecords > 0)
         {
-            var warning = unreadableRecords == 1
-                ? "1 Metaverse Object recorded changes made outside synchronisation that could not be read; it was reviewed for export scope only, " +
-                  "and those changes were not delivered to Connected Systems. Edit the affected object again to deliver its values."
-                : string.Create(CultureInfo.InvariantCulture,
-                    $"{unreadableRecords} Metaverse Objects recorded changes made outside synchronisation that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.");
-            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+            ActivityMessage.AddWarning(_activity, ActivityMessage.Counted(nameof(ActivityMessages.UnreadableRecordsOne), unreadableRecords,
+                ActivityMessage.Plain(unreadableRecords)));
             Log.Warning("ProcessScopeReviewPendingMetaverseObjectsAsync: {Count} Metaverse Object(s) had recorded changes made outside " +
                 "synchronisation that could not be read, so they were reviewed for export scope only (Activity {ActivityId})", unreadableRecords, _activity.Id);
         }

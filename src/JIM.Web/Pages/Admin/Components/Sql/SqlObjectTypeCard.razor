@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Connectors.Sql
 @using JIM.Models.Staging
 @using JIM.Web.Models
@@ -14,7 +15,7 @@
          @onclick="ToggleAsync" @onkeydown="OnHeaderKeyDownAsync" data-testid="jim-sql-object-type-card-header">
         <MudIcon Icon="@Icons.Material.Outlined.TableChart" Class="mr-3 mud-text-secondary" />
         <div class="jim-sql-object-type-card-title">
-            <MudText Typo="Typo.h6" Inline="true">@(string.IsNullOrWhiteSpace(ObjectType.Name) ? "Unnamed Object Type" : ObjectType.Name)</MudText>
+            <MudText Typo="Typo.h6" Inline="true">@(string.IsNullOrWhiteSpace(ObjectType.Name) ? SqlText.UnnamedObjectType : ObjectType.Name)</MudText>
             @if (IsSelect || string.IsNullOrWhiteSpace(ObjectType.Table))
             {
                 <MudText Inline="true" Class="mud-text-secondary ml-3">@SqlObjectTypesEditorModel.SourceOf(ObjectType)</MudText>
@@ -38,7 +39,7 @@
         {
             <span class="jim-sql-object-type-card-problems mud-error-text" data-testid="jim-sql-object-type-problem-marker">
                 <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Small" Class="mr-1" />
-                @(Problems.Count == 1 ? "1 problem" : $"{Problems.Count} problems")
+                @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(Problems.Count, SqlText.CardProblemsOne, SqlText.CardProblemsOther), Problems.Count)
             </span>
         }
         <MudIcon Icon="@(Expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Class="ml-2" />
@@ -72,33 +73,33 @@
                     @* Commits on blur rather than per keystroke: renaming moves every reference to the Object Type
                        onto the new name, and doing that for each partial name typed could pass through another
                        Object Type's name on the way. *@
-                    <MudTextField T="string" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                    <MudTextField T="string" Label="@CommonText.ColumnName" Variant="Variant.Outlined" Margin="Margin.Dense"
                                   Value="@ObjectType.Name" ValueChanged="OnNameChangedAsync"
-                                  HelperText="What JIM calls this Object Type." data-testid="jim-sql-object-type-name" />
+                                  HelperText="@SqlText.NameHelp" data-testid="jim-sql-object-type-name" />
                 </MudItem>
                 @if (IsSelect)
                 {
                     <MudItem xs="12" md="8">
-                        <MudTextField T="string" Label="SELECT statement" Variant="Variant.Outlined" Margin="Margin.Dense"
+                        <MudTextField T="string" Label="@SqlText.SourceSelectStatement" Variant="Variant.Outlined" Margin="Margin.Dense"
                                       Lines="4" Class="jim-setting-text" spellcheck="false"
                                       Value="@ObjectType.Select" ValueChanged="OnSelectChangedAsync"
-                                      HelperText="An Object Type read from a statement can be imported, but JIM cannot export to it." />
+                                      HelperText="@SqlText.SelectHelp" />
                     </MudItem>
                 }
                 else
                 {
                     <MudItem xs="12" sm="6" md="3">
-                        <SqlCatalogueNameField Label="Schema" Value="@ObjectType.Schema" Options="@SchemaOptions"
+                        <SqlCatalogueNameField Label="@SqlText.SchemaLabel" Value="@ObjectType.Schema" Options="@SchemaOptions"
                                                ValueChanged="OnSchemaChangedAsync" TestId="jim-sql-object-type-schema" />
                     </MudItem>
                     <MudItem xs="12" sm="6" md="5">
-                        <SqlCatalogueNameField Label="Table or view" Value="@ObjectType.Table" Options="@TableOptions(ObjectType.Schema)"
+                        <SqlCatalogueNameField Label="@SqlText.TableOrView" Value="@ObjectType.Table" Options="@TableOptions(ObjectType.Schema)"
                                                ValueChanged="OnTableChangedAsync" TestId="jim-sql-object-type-table" />
                     </MudItem>
                 }
             </MudGrid>
             <MudButton Variant="Variant.Text" Size="Size.Small" Class="mt-1" OnClick="ToggleSourceKindAsync">
-                @(IsSelect ? "Read from a table or view instead" : "Read from a SELECT statement instead")
+                @(IsSelect ? SqlText.ReadFromTableInstead : SqlText.ReadFromSelectInstead)
             </MudButton>
             @if (_sourceMessage != null)
             {
@@ -106,33 +107,33 @@
             }
 
             @* ─── Anchor ─── *@
-            <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">Anchor</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">The column or columns whose values identify a row, in key order.</MudText>
+            <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">@SqlText.AnchorHeading</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SqlText.AnchorHelp</MudText>
             <SqlAnchorColumnsField ObjectType="@ObjectType" ColumnOptions="@ColumnOptions" OnChanged="NotifyAsync" />
             @if (PrimaryKeyAnchor.Count > 0)
             {
                 <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-inline-alert mt-3" data-testid="jim-sql-anchor-suggestion">
                     <div class="jim-sql-inline-alert-body">
                         <span class="jim-sql-inline-alert-text">
-                            The table's primary key is <SqlColumnList Columns="@PrimaryKeyAnchor" />, which identifies each row.
+                            @((MarkupString)string.Format(CultureInfo.CurrentCulture, SqlText.PrimaryKeyAnchorSuggestion, string.Join(", ", PrimaryKeyAnchor.Select(Code))))
                         </span>
                         <span class="jim-sql-inline-alert-actions">
-                            <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="UsePrimaryKeyAsync">Use the primary key</AlertButton>
+                            <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="UsePrimaryKeyAsync">@SqlText.UsePrimaryKey</AlertButton>
                         </span>
                     </div>
                 </MudAlert>
             }
 
             @* ─── References ─── *@
-            <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">References to other Object Types</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Columns whose values hold another object's anchor, such as a manager.</MudText>
+            <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">@SqlText.ReferencesHeading</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SqlText.ReferencesHelp</MudText>
             <SqlObjectTypeReferences ObjectType="@ObjectType" ObjectTypeNames="@ObjectTypeNames" ColumnOptions="@ColumnOptions"
                                      Suggestions="@Suggestions" OnAccept="AcceptAsync" OnDismiss="DismissAsync"
                                      OnAddObjectType="OnAddObjectType" OnChanged="NotifyAsync" />
 
             @* ─── Multi-valued attributes ─── *@
-            <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">Multi-valued attributes</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Child tables holding one row per value, such as phone numbers or group members.</MudText>
+            <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">@SqlText.MultiValuedHeading</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SqlText.MultiValuedHelp</MudText>
             <SqlObjectTypeRelatedTables ObjectType="@ObjectType" ObjectTypeNames="@ObjectTypeNames" CatalogueObjects="@CatalogueObjects"
                                         LoadTable="@LoadTable" ShowWatermark="@(DeltaImportMode == SqlConnectorConstants.DeltaImportModeWatermarkColumn)"
                                         OnChanged="NotifyAsync" />
@@ -140,72 +141,72 @@
             @* ─── Delta Import ─── *@
             @if (DeltaImportMode == SqlConnectorConstants.DeltaImportModeWatermarkColumn)
             {
-                <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">Delta Import</MudText>
+                <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">@SqlText.DeltaImportHeading</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-                    Delta Import Mode is Watermark Column: a Delta Import reads the rows whose watermark has moved on since the last import.
+                    @SqlText.WatermarkModeHelp
                 </MudText>
-                <SqlCatalogueNameField Label="Watermark column" Value="@ObjectType.WatermarkColumn" Options="@ColumnOptions"
+                <SqlCatalogueNameField Label="@SqlText.WatermarkColumnLabel" Value="@ObjectType.WatermarkColumn" Options="@ColumnOptions"
                                        ValueChanged="@(v => SetAndNotifyAsync(() => ObjectType.WatermarkColumn = v))"
-                                       HelperText="A last-modified timestamp or row version on the source." Class="jim-sql-wide-picker"
+                                       HelperText="@SqlText.WatermarkColumnHelp" Class="jim-sql-wide-picker"
                                        TestId="jim-sql-watermark-column" />
             }
             else if (DeltaImportMode == SqlConnectorConstants.DeltaImportModeChangeLogTable)
             {
-                <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">Delta Import</MudText>
+                <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">@SqlText.DeltaImportHeading</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-                    Delta Import Mode is Change-Log Table: a Delta Import reads a table recording each change, deletions included.
+                    @SqlText.ChangeLogModeHelp
                 </MudText>
                 <div data-testid="jim-sql-change-log">
                     @if (ObjectType.ChangeLog is not { } changeLog)
                     {
-                        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="AddChangeLogAsync">Add change-log table</MudButton>
+                        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="AddChangeLogAsync">@SqlText.AddChangeLogTable</MudButton>
                     }
                     else
                     {
                         <MudGrid Spacing="2">
                             <MudItem xs="12" sm="5">
-                                <SqlCatalogueNameField Label="Change-log schema" Value="@changeLog.Schema" Options="@SchemaOptions"
+                                <SqlCatalogueNameField Label="@SqlText.ChangeLogSchema" Value="@changeLog.Schema" Options="@SchemaOptions"
                                                        ValueChanged="@(v => SetAndNotifyAsync(() => changeLog.Schema = v))" />
                             </MudItem>
                             <MudItem xs="12" sm="7">
-                                <SqlCatalogueNameField Label="Change-log table" Value="@changeLog.Table" Options="@TableOptions(changeLog.Schema)"
+                                <SqlCatalogueNameField Label="@SqlText.ChangeLogTable" Value="@changeLog.Table" Options="@TableOptions(changeLog.Schema)"
                                                        ValueChanged="OnChangeLogTableChangedAsync" />
                             </MudItem>
                             @for (var i = 0; i < AnchorColumns.Count; i++)
                             {
                                 var position = i;
                                 <MudItem xs="12" sm="6">
-                                    <SqlCatalogueNameField Label="@($"Column holding {AnchorColumns[position]}")" Value="@ChangeLogAnchorAt(position)"
+                                    <SqlCatalogueNameField Label="@string.Format(CultureInfo.CurrentCulture, SqlText.JoinColumnLabel, AnchorColumns[position])" Value="@ChangeLogAnchorAt(position)"
                                                            Options="@ChangeLogColumnOptions" ValueChanged="@(v => SetChangeLogAnchorAsync(position, v))" />
                                 </MudItem>
                             }
                             <MudItem xs="12" sm="6">
-                                <SqlCatalogueNameField Label="Sequence column" Value="@changeLog.SequenceColumn" Options="@ChangeLogColumnOptions"
+                                <SqlCatalogueNameField Label="@SqlText.SequenceColumn" Value="@changeLog.SequenceColumn" Options="@ChangeLogColumnOptions"
                                                        ValueChanged="@(v => SetAndNotifyAsync(() => changeLog.SequenceColumn = v))"
-                                                       HelperText="Orders the changes: a sequence number or timestamp." />
+                                                       HelperText="@SqlText.SequenceColumnHelp" />
                             </MudItem>
                             <MudItem xs="12" sm="6">
-                                <SqlCatalogueNameField Label="Change type column" Value="@changeLog.ChangeTypeColumn" Options="@ChangeLogColumnOptions"
+                                <SqlCatalogueNameField Label="@SqlText.ChangeTypeColumn" Value="@changeLog.ChangeTypeColumn" Options="@ChangeLogColumnOptions"
                                                        ValueChanged="@(v => SetAndNotifyAsync(() => changeLog.ChangeTypeColumn = v))"
-                                                       HelperText="Says whether a row records a creation, an update or a deletion." />
+                                                       HelperText="@SqlText.ChangeTypeColumnHelp" />
                             </MudItem>
                             <MudItem xs="12" sm="4">
-                                <MudTextField T="string" Label="Created when" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                <MudTextField T="string" Label="@SqlText.CreatedWhen" Variant="Variant.Outlined" Margin="Margin.Dense"
                                               Value="@JoinValues(changeLog.CreateValues)" ValueChanged="@(v => SetAndNotifyAsync(() => changeLog.CreateValues = SplitValues(v)))"
-                                              HelperText="Values meaning created, separated by commas." />
+                                              HelperText="@SqlText.CreatedWhenHelp" />
                             </MudItem>
                             <MudItem xs="12" sm="4">
-                                <MudTextField T="string" Label="Updated when" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                <MudTextField T="string" Label="@SqlText.UpdatedWhen" Variant="Variant.Outlined" Margin="Margin.Dense"
                                               Value="@JoinValues(changeLog.UpdateValues)" ValueChanged="@(v => SetAndNotifyAsync(() => changeLog.UpdateValues = SplitValues(v)))"
-                                              HelperText="Values meaning updated." />
+                                              HelperText="@SqlText.UpdatedWhenHelp" />
                             </MudItem>
                             <MudItem xs="12" sm="4">
-                                <MudTextField T="string" Label="Deleted when" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                <MudTextField T="string" Label="@SqlText.DeletedWhen" Variant="Variant.Outlined" Margin="Margin.Dense"
                                               Value="@JoinValues(changeLog.DeleteValues)" ValueChanged="@(v => SetAndNotifyAsync(() => changeLog.DeleteValues = SplitValues(v)))"
-                                              HelperText="Values meaning deleted." />
+                                              HelperText="@SqlText.DeletedWhenHelp" />
                             </MudItem>
                         </MudGrid>
-                        <MudButton Variant="Variant.Text" Size="Size.Small" Class="mt-1" OnClick="@(() => SetAndNotifyAsync(() => ObjectType.ChangeLog = null))">Remove change-log table</MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Class="mt-1" OnClick="@(() => SetAndNotifyAsync(() => ObjectType.ChangeLog = null))">@SqlText.RemoveChangeLogTable</MudButton>
                     }
                 </div>
             }
@@ -216,12 +217,12 @@
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-sql-other-columns">
                         <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Class="mr-1" Style="vertical-align: text-bottom;" />
-                        @(otherColumns == 1 ? "The other column is" : $"The other {otherColumns} columns are") discovered and typed automatically on the Schema tab.
+                        @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(otherColumns, SqlText.OtherColumnsOne, SqlText.OtherColumnsOther), otherColumns)
                     </MudText>
                 }
                 <MudSpacer />
                 <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
-                           OnClick="@(() => OnRemove.InvokeAsync())" data-testid="jim-sql-object-type-remove">Remove Object Type</MudButton>
+                           OnClick="@(() => OnRemove.InvokeAsync())" data-testid="jim-sql-object-type-remove">@SqlText.RemoveObjectTypeButton</MudButton>
             </div>
         </div>
     }
@@ -329,7 +330,7 @@
 
             var described = await DescribeStatement(ObjectType.Select);
             _source = described.Value;
-            _sourceMessage = described.Failure != null ? $"The statement's columns could not be read, so type their names: {described.Failure}" : null;
+            _sourceMessage = described.Failure != null ? string.Format(CultureInfo.CurrentCulture, SqlText.StatementColumnsUnreadable, described.Failure) : null;
         }
         else
         {
@@ -339,8 +340,8 @@
             var read = await LoadTable(ObjectType.Schema, ObjectType.Table);
             _source = read.Value;
             _sourceMessage = read.Failure != null
-                ? $"The table's columns could not be read, so type their names: {read.Failure}"
-                : read.Value == null ? "The database account cannot see a table or view of that name. Check the name, the schema, and the account's permissions." : null;
+                ? string.Format(CultureInfo.CurrentCulture, SqlText.TableColumnsUnreadable, read.Failure)
+                : read.Value == null ? SqlText.TableOrViewNotVisible : null;
         }
 
         await LoadChangeLogTableAsync();
@@ -495,6 +496,10 @@
         var values = (text ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return values.Length == 0 ? null : [.. values];
     }
+
+    /// <summary>A name as inline code, HTML-encoded: the editor names columns this way in running text.</summary>
+    private static string Code(string? text) =>
+        $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(text)}</code>";
 
     private static Color ChipColour(SqlObjectTypeSummaryChipKind kind) => kind switch
     {

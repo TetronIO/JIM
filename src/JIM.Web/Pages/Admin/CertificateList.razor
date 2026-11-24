@@ -1,5 +1,6 @@
 @page "/admin/certificates"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
@@ -18,10 +19,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Trusted Certificates</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Trusted Certificates
-    <PageInfo Title="Trusted Certificates" DocsPage="configuration/certificates.md">
-        Manage the certificates JIM trusts: for Connectors' secure connections (LDAPS, HTTPS, SQL Server), for signing in through your identity provider, or both. Certificates can be uploaded directly or referenced from the connector-files mount.
+<PageTitle>@AdminText.CertificatePageTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@AdminText.CertificatePageTitle
+    <PageInfo Title="@AdminText.CertificatePageTitle" DocsPage="configuration/certificates.md">
+        @AdminText.CertificatePageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -33,60 +34,59 @@
                      ContainerId="certificate-list"
                      DefaultSortBy="name"
                      LoadWindow="LoadCertificateWindowAsync"
-                     SingularName="Trusted Certificate"
-                     PluralName="Trusted Certificates">
+                     SingularName="@AdminText.CertificateNounSingular"
+                     PluralName="@AdminText.CertificateNounPlural">
     <ToolBarExtras>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload"
-                   DropShadow="false" Class="me-2">Upload Certificate</MudButton>
+                   DropShadow="false" Class="me-2">@AdminText.CertificateUploadButton</MudButton>
         <MudButton Variant="Variant.Filled" OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder"
-                   DropShadow="false">Reference File Path</MudButton>
+                   DropShadow="false">@AdminText.CertificateReferenceFileButton</MudButton>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Actions" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnActions" Sortable="false">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Actions</MudText>
+                <MudText Typo="Typo.button">@CommonText.ColumnActions</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
-                    <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context.Item)">View
-                        Details</MudMenuItem>
-                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context.Item)">Edit
+                    <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context.Item)">@AdminText.CertificateMenuViewDetails</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context.Item)">@CommonText.Edit
                     </MudMenuItem>
-                    <MudMenuItem Icon="@Icons.Material.Outlined.History" OnClick="_ => ShowHistoryDialogAsync(context.Item)">Change History
+                    <MudMenuItem Icon="@Icons.Material.Outlined.History" OnClick="_ => ShowHistoryDialogAsync(context.Item)">@AdminText.CertificateMenuChangeHistory
                     </MudMenuItem>
-                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context.Item)">Delete
+                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context.Item)">@CommonText.Delete
                     </MudMenuItem>
                 </MudMenu>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Name" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnName" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Name" Name="name" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
                 @context.Item.Name
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Trusted for" Sortable="false">
+        <TemplateColumn Title="@AdminText.CertificateTrustedFor" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Trusted for" Name="trustedFor" />
+                <VirtualisedSortHeader Title="@AdminText.CertificateTrustedFor" Name="trustedFor" />
             </HeaderTemplate>
             <CellTemplate>
                 <div class="jim-one-line-list">
                     @if (context.Item.TrustedFor.HasFlag(CertificateTrustPurpose.SignIn))
                     {
-                        <MudChip T="string" Color="Color.Primary">Sign-in</MudChip>
+                        <MudChip T="string" Color="Color.Primary">@AdminText.CertificatePurposeSignIn</MudChip>
                     }
                     @if (context.Item.TrustedFor.HasFlag(CertificateTrustPurpose.Connectors))
                     {
-                        <MudChip T="string" Color="Color.Default">Connectors</MudChip>
+                        <MudChip T="string" Color="Color.Default">@AdminText.CertificatePurposeConnectors</MudChip>
                     }
                 </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Subject" Sortable="false">
+        <TemplateColumn Title="@AdminText.CertificateSubject" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Subject" Name="subject" />
+                <VirtualisedSortHeader Title="@AdminText.CertificateSubject" Name="subject" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudTooltip Text="@context.Item.Subject" Arrow="true" Placement="Placement.Top">
@@ -94,33 +94,33 @@
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Source" Sortable="false">
+        <TemplateColumn Title="@AdminText.CertificateSource" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Source" Name="source" />
+                <VirtualisedSortHeader Title="@AdminText.CertificateSource" Name="source" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.SourceType == CertificateSourceType.Uploaded)
                 {
-                    <MudChip T="string" Color="Color.Info">Uploaded</MudChip>
+                    <MudChip T="string" Color="Color.Info">@AdminText.CertificateUploaded</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Color="Color.Default">File Path</MudChip>
+                    <MudChip T="string" Color="Color.Default">@AdminText.CertificateFilePath</MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Expires" Sortable="false">
+        <TemplateColumn Title="@AdminText.CertificateExpires" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Expires" Name="expires" />
+                <VirtualisedSortHeader Title="@AdminText.CertificateExpires" Name="expires" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.IsExpired)
                 {
-                    <MudChip T="string" Color="Color.Error">Expired</MudChip>
+                    <MudChip T="string" Color="Color.Error">@AdminText.CertificateExpired</MudChip>
                 }
                 else if (context.Item.IsExpiringSoon)
                 {
-                    <MudChip T="string" Color="Color.Warning">@context.Item.DaysUntilExpiry days</MudChip>
+                    <MudChip T="string" Color="Color.Warning">@DescribeDaysUntilExpiry(context.Item.DaysUntilExpiry)</MudChip>
                 }
                 else
                 {
@@ -128,29 +128,29 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Status" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnStatus" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Status" Name="status" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.IsEnabled && _signInStatus.IsUsedBySignIn(context.Item.Id))
                 {
                     <MudTooltip Arrow="true" Placement="Placement.Top">
                         <TooltipContent>
-                            <TooltipText Text="@($"Your identity provider's certificate chains to this one, so sign-in relies on it. Checked {_signInStatus.CheckedUtc.ToLocalTime().ToRelativeTime()}.")" />
+                            <TooltipText Text="@string.Format(CultureInfo.CurrentCulture, AdminText.CertificateInUseBySignInTooltip, _signInStatus.CheckedUtc.ToLocalTime().ToRelativeTime())" />
                         </TooltipContent>
                         <ChildContent>
-                            <MudChip T="string" Color="Color.Success">In use by sign-in</MudChip>
+                            <MudChip T="string" Color="Color.Success">@AdminText.CertificateInUseBySignIn</MudChip>
                         </ChildContent>
                     </MudTooltip>
                 }
                 else if (context.Item.IsEnabled)
                 {
-                    <MudChip T="string" Color="Color.Success">Enabled</MudChip>
+                    <MudChip T="string" Color="Color.Success">@CommonText.Enabled</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Color="Color.Default">Disabled</MudChip>
+                    <MudChip T="string" Color="Color.Default">@CommonText.Disabled</MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
@@ -159,16 +159,16 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No Trusted Certificates match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.CertificateEmptySearch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.EnhancedEncryption"
-                             PrimaryText="No Trusted Certificates have been added yet"
-                             SecondaryText="Use the Upload Certificate or Reference File Path buttons to add one." />
+                             PrimaryText="@AdminText.CertificateEmptyNone"
+                             SecondaryText="@AdminText.CertificateEmptyNoneHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -177,42 +177,42 @@
 <MudDialog @bind-Visible="_uploadDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Upload" Class="mr-3" /> Upload Certificate
+            <MudIcon Icon="@Icons.Material.Filled.Upload" Class="mr-3" /> @AdminText.CertificateUploadButton
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_uploadName" Label="Name" Required="true"
-            RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
-            HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
+        <MudTextField T="string" @bind-Value="_uploadName" Label="@CommonText.FieldName" Required="true"
+            RequiredError="@AdminText.CertificateNameRequired" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
+            HelperText="@AdminText.CertificateNameHelper" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
             <CustomContent>
                 <MudButton Variant="Variant.Filled"
                     StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5"
                     OnClick="@context.OpenFilePickerAsync">
-                    @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")
+                    @(_uploadFile != null ? _uploadFile.Name : AdminText.CertificateSelectFile)
                 </MudButton>
             </CustomContent>
         </MudFileUpload>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-            Supported formats: PEM (.pem, .crt) or DER (.cer, .der)
+            @AdminText.CertificateFormats
         </MudText>
         <TrustedForField @bind-SignIn="_uploadForSignIn" @bind-Connectors="_uploadForConnectors" Class="mt-5" />
-        <MudTextField T="string" @bind-Value="_uploadNotes" Label="Notes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
-            Class="mt-5" HelperText="Optional notes about this certificate" />
+        <MudTextField T="string" @bind-Value="_uploadNotes" Label="@AdminText.CertificateNotes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
+            Class="mt-5" HelperText="@AdminText.CertificateNotesHelper" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _uploadDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton OnClick="() => _uploadDialogVisible = false" DropShadow="false">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
             Disabled="@(string.IsNullOrWhiteSpace(_uploadName) || _uploadFile == null || !(_uploadForSignIn || _uploadForConnectors) || _uploading)"
             OnClick="HandleUploadAsync">
             @if (_uploading)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Uploading</span>
+                <span class="ms-2">@AdminText.CertificateUploading</span>
             }
             else
             {
-                <text>Upload</text>
+                <text>@AdminText.CertificateUploadVerb</text>
             }
         </MudButton>
     </DialogActions>
@@ -222,33 +222,33 @@
 <MudDialog @bind-Visible="_filePathDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Folder" Class="mr-3" /> Reference Certificate File
+            <MudIcon Icon="@Icons.Material.Filled.Folder" Class="mr-3" /> @AdminText.CertificateReferenceDialogTitle
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_filePathName" Label="Name" Required="true"
-            RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
-            HelperText="A friendly name for this certificate" />
-        <MudTextField T="string" @bind-Value="_filePath" Label="File Path" Required="true"
-            RequiredError="A file path is required" Immediate="true" Variant="Variant.Outlined" Class="mt-5"
-            HelperText="Full path to the certificate file (e.g., /connector-files/certs/root-ca.pem)" />
+        <MudTextField T="string" @bind-Value="_filePathName" Label="@CommonText.FieldName" Required="true"
+            RequiredError="@AdminText.CertificateNameRequired" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
+            HelperText="@AdminText.CertificateReferenceNameHelper" />
+        <MudTextField T="string" @bind-Value="_filePath" Label="@AdminText.CertificateFilePath" Required="true"
+            RequiredError="@AdminText.CertificateFilePathRequired" Immediate="true" Variant="Variant.Outlined" Class="mt-5"
+            HelperText="@AdminText.CertificateFilePathHelper" />
         <TrustedForField @bind-SignIn="_filePathForSignIn" @bind-Connectors="_filePathForConnectors" Class="mt-5" />
-        <MudTextField T="string" @bind-Value="_filePathNotes" Label="Notes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
-            Class="mt-5" HelperText="Optional notes about this certificate" />
+        <MudTextField T="string" @bind-Value="_filePathNotes" Label="@AdminText.CertificateNotes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
+            Class="mt-5" HelperText="@AdminText.CertificateNotesHelper" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _filePathDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton OnClick="() => _filePathDialogVisible = false" DropShadow="false">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
             Disabled="@(string.IsNullOrWhiteSpace(_filePathName) || string.IsNullOrWhiteSpace(_filePath) || !(_filePathForSignIn || _filePathForConnectors) || _addingFromPath)"
             OnClick="HandleAddFromPathAsync">
             @if (_addingFromPath)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Adding</span>
+                <span class="ms-2">@AdminText.CertificateAdding</span>
             }
             else
             {
-                <text>Add Certificate</text>
+                <text>@AdminText.CertificateAddButton</text>
             }
         </MudButton>
     </DialogActions>
@@ -259,7 +259,7 @@
     <TitleContent>
         <div class="d-flex justify-space-between align-center">
             <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-3" /> Certificate Details
+                <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-3" /> @AdminText.CertificateDetailsTitle
             </MudText>
             @if (_selectedCertificate != null)
             {
@@ -272,51 +272,51 @@
         {
             <MudGrid>
                 <MudItem xs="12">
-                    <MudField Label="Name" Variant="Variant.Outlined">@_selectedCertificate.Name</MudField>
+                    <MudField Label="@CommonText.FieldName" Variant="Variant.Outlined">@_selectedCertificate.Name</MudField>
                 </MudItem>
                 <MudItem xs="12">
-                    <MudField Label="Subject" Variant="Variant.Outlined">@_selectedCertificate.Subject</MudField>
+                    <MudField Label="@AdminText.CertificateSubject" Variant="Variant.Outlined">@_selectedCertificate.Subject</MudField>
                 </MudItem>
                 <MudItem xs="12">
-                    <MudField Label="Issuer" Variant="Variant.Outlined">@_selectedCertificate.Issuer</MudField>
+                    <MudField Label="@AdminText.CertificateIssuer" Variant="Variant.Outlined">@_selectedCertificate.Issuer</MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Valid From" Variant="Variant.Outlined">@_selectedCertificate.ValidFrom.ToFriendlyDate()
+                    <MudField Label="@AdminText.CertificateValidFrom" Variant="Variant.Outlined">@_selectedCertificate.ValidFrom.ToFriendlyDate()
                     </MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Valid To" Variant="Variant.Outlined">@_selectedCertificate.ValidTo.ToFriendlyDate()
+                    <MudField Label="@AdminText.CertificateValidTo" Variant="Variant.Outlined">@_selectedCertificate.ValidTo.ToFriendlyDate()
                     </MudField>
                 </MudItem>
                 <MudItem xs="12">
-                    <MudField Label="Thumbprint" Variant="Variant.Outlined">@_selectedCertificate.Thumbprint</MudField>
+                    <MudField Label="@AdminText.CertificateThumbprint" Variant="Variant.Outlined">@_selectedCertificate.Thumbprint</MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Serial Number" Variant="Variant.Outlined">@_selectedCertificate.SerialNumber</MudField>
+                    <MudField Label="@AdminText.CertificateSerialNumber" Variant="Variant.Outlined">@_selectedCertificate.SerialNumber</MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Source Type" Variant="Variant.Outlined">@_selectedCertificate.SourceType</MudField>
+                    <MudField Label="@AdminText.CertificateSourceType" Variant="Variant.Outlined">@_selectedCertificate.SourceType</MudField>
                 </MudItem>
                 <MudItem xs="12">
-                    <MudField Label="Trusted for" Variant="Variant.Outlined">@DescribePurpose(_selectedCertificate.TrustedFor)</MudField>
+                    <MudField Label="@AdminText.CertificateTrustedFor" Variant="Variant.Outlined">@DescribePurpose(_selectedCertificate.TrustedFor)</MudField>
                 </MudItem>
                 @if (_selectedCertificate.SourceType == CertificateSourceType.FilePath)
                 {
                     <MudItem xs="12">
-                        <MudField Label="File Path" Variant="Variant.Outlined">@_selectedCertificate.FilePath</MudField>
+                        <MudField Label="@AdminText.CertificateFilePath" Variant="Variant.Outlined">@_selectedCertificate.FilePath</MudField>
                     </MudItem>
                 }
                 @if (!string.IsNullOrEmpty(_selectedCertificate.Notes))
                 {
                     <MudItem xs="12">
-                        <MudField Label="Notes" Variant="Variant.Outlined">@_selectedCertificate.Notes</MudField>
+                        <MudField Label="@AdminText.CertificateNotes" Variant="Variant.Outlined">@_selectedCertificate.Notes</MudField>
                     </MudItem>
                 }
             </MudGrid>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _detailsDialogVisible = false" DropShadow="false">Close</MudButton>
+        <MudButton OnClick="() => _detailsDialogVisible = false" DropShadow="false">@CommonText.Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -324,29 +324,29 @@
 <MudDialog @bind-Visible="_editDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Certificate
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> @AdminText.CertificateEditTitle
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true" RequiredError="A name is required"
+        <MudTextField T="string" @bind-Value="_editName" Label="@CommonText.FieldName" Required="true" RequiredError="@AdminText.CertificateNameRequired"
             Immediate="true" Variant="Variant.Outlined" Class="mt-3" />
-        <MudTextField T="string" @bind-Value="_editNotes" Label="Notes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
+        <MudTextField T="string" @bind-Value="_editNotes" Label="@AdminText.CertificateNotes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
             Class="mt-5" />
         <TrustedForField @bind-SignIn="_editForSignIn" @bind-Connectors="_editForConnectors" Class="mt-5" />
-        <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="Enabled" Class="mt-5" />
+        <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="@CommonText.Enabled" Class="mt-5" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
             Disabled="@(string.IsNullOrWhiteSpace(_editName) || !(_editForSignIn || _editForConnectors) || _saving)" OnClick="HandleSaveEditAsync">
             @if (_saving)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Saving</span>
+                <span class="ms-2">@AdminText.CertificateSaving</span>
             }
             else
             {
-                <text>Save Changes</text>
+                <text>@CommonText.SaveChanges</text>
             }
         </MudButton>
     </DialogActions>
@@ -361,9 +361,9 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Certificates", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavAdministration, href: "/admin"),
+        new(AdminText.CertificateBreadcrumb, href: null, disabled: true)
     };
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
@@ -543,7 +543,7 @@
         try
         {
             // offer an optional reason for the configuration change history; cancelling aborts the upload
-            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Upload");
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, AdminText.CertificateUploadVerb);
             if (cancelled)
                 return;
 
@@ -561,13 +561,13 @@
             // Add certificate
             await jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes, changeReason, Purpose(_uploadForSignIn, _uploadForConnectors));
 
-            Snackbar.Add("Certificate uploaded successfully.", Severity.Success);
+            Snackbar.Add(AdminText.CertificateUploadedSuccess, Severity.Success);
             _uploadDialogVisible = false;
             await ReloadListAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to upload certificate: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateUploadFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -586,7 +586,7 @@
         try
         {
             // offer an optional reason for the configuration change history; cancelling aborts the add
-            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Add");
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Add);
             if (cancelled)
                 return;
 
@@ -594,13 +594,13 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes, changeReason, Purpose(_filePathForSignIn, _filePathForConnectors));
 
-            Snackbar.Add("Certificate added successfully.", Severity.Success);
+            Snackbar.Add(AdminText.CertificateAddedSuccess, Severity.Success);
             _filePathDialogVisible = false;
             await ReloadListAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to add certificate: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateAddFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -620,7 +620,7 @@
         {
             var trustedFor = Purpose(_editForSignIn, _editForConnectors);
             if (SignInLockoutGuard.WouldStopSignIn(_signInStatus, _editingCertificate.Id, enabledAfter: _editEnabled, trustedForAfter: trustedFor)
-                && !await ConfirmSignInLockoutAsync(_editingCertificate, "Save Changes"))
+                && !await ConfirmSignInLockoutAsync(_editingCertificate, CommonText.SaveChanges))
                 return;
 
             // offer an optional reason for the configuration change history; cancelling aborts the save
@@ -639,13 +639,13 @@
             changeReason,
             trustedFor);
 
-            Snackbar.Add("Certificate updated successfully.", Severity.Success);
+            Snackbar.Add(AdminText.CertificateUpdatedSuccess, Severity.Success);
             _editDialogVisible = false;
             await ReloadListAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to update certificate: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateUpdateFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -656,30 +656,30 @@
     private async Task ShowHistoryDialogAsync(TrustedCertificate certificate)
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.TrustedCertificate,
-            certificate.Id, "Trusted Certificate", certificate.Name);
+            certificate.Id, AdminText.CertificateNounSingular, certificate.Name);
     }
 
     private async Task HandleDeleteAsync(TrustedCertificate certificate)
     {
         if (SignInLockoutGuard.WouldStopSignIn(_signInStatus, certificate.Id, deleting: true))
         {
-            if (!await ConfirmSignInLockoutAsync(certificate, "Delete"))
+            if (!await ConfirmSignInLockoutAsync(certificate, CommonText.Delete))
                 return;
         }
         else
         {
             var result = await DialogService.ShowMessageBoxAsync(
-            "Delete Certificate",
-            $"Are you sure you want to delete the certificate '{certificate.Name}'? This action cannot be undone.",
-            yesText: "Delete",
-            cancelText: "Cancel");
+            AdminText.CertificateDeleteTitle,
+            string.Format(CultureInfo.CurrentCulture, AdminText.CertificateDeleteMessage, certificate.Name),
+            yesText: CommonText.Delete,
+            cancelText: CommonText.Cancel);
 
             if (result != true)
                 return;
         }
 
         // offer an optional reason for the configuration change history; cancelling aborts the delete
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Delete);
         if (cancelled)
             return;
 
@@ -689,23 +689,26 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Certificates.DeleteAsync(certificate.Id, user, changeReason);
 
-            Snackbar.Add("Certificate deleted successfully.", Severity.Success);
+            Snackbar.Add(AdminText.CertificateDeletedSuccess, Severity.Success);
             await ReloadListAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to delete certificate: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateDeleteFailed, ex.ToDisplayText()), Severity.Error);
         }
     }
 
     private static CertificateTrustPurpose Purpose(bool signIn, bool connectors) =>
         (signIn ? CertificateTrustPurpose.SignIn : CertificateTrustPurpose.None) | (connectors ? CertificateTrustPurpose.Connectors : CertificateTrustPurpose.None);
 
+    private static string DescribeDaysUntilExpiry(int days) =>
+        string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(days, AdminText.CertificateDaysUntilExpiryOne, AdminText.CertificateDaysUntilExpiryOther), days);
+
     private static string DescribePurpose(CertificateTrustPurpose trustedFor) => trustedFor switch
     {
-        CertificateTrustPurpose.SignIn => "Sign-in",
-        CertificateTrustPurpose.Connectors => "Connectors",
-        _ => "Sign-in and Connectors"
+        CertificateTrustPurpose.SignIn => AdminText.CertificatePurposeSignIn,
+        CertificateTrustPurpose.Connectors => AdminText.CertificatePurposeConnectors,
+        _ => AdminText.CertificatePurposeBoth
     };
 
     /// <summary>
@@ -722,7 +725,7 @@
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
 
-        var dialog = await DialogService.ShowAsync<ConsequenceConfirmationDialog>($"Stop sign-in through '{certificate.Name}'?", parameters, options);
+        var dialog = await DialogService.ShowAsync<ConsequenceConfirmationDialog>(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateStopSignInTitle, certificate.Name), parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false };
     }

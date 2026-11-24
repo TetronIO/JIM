@@ -7,6 +7,7 @@ using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -63,10 +64,13 @@ public static class ConfigurationTestCaseDrafts
             };
         }
 
-        var target = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "its target";
+        var target = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? SyncRuleText.TestCaseTargetFallback;
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
         return new ConfigurationTestCase
         {
-            Name = mapping.Generation != null ? $"Generated Value base for {target}" : $"Attribute Flow to {target}",
+            Name = mapping.Generation != null
+                ? string.Format(culture, SyncRuleText.TestCaseGeneratedBaseName, target)
+                : string.Format(culture, SyncRuleText.TestCaseAttributeFlowName, target),
             Kind = mapping.Generation != null ? ConfigurationTestCaseKind.GeneratedValue : ConfigurationTestCaseKind.AttributeFlow,
             SyncRuleMappingId = mapping.Id,
             Inputs = inputs
@@ -97,7 +101,7 @@ public static class ConfigurationTestCaseDrafts
         var inScope = explanation.Outcome == ScopingRuleOutcome.InScope;
         return new ConfigurationTestCase
         {
-            Name = inScope ? "In scope" : "Out of scope",
+            Name = inScope ? SyncRuleText.TestCaseInScopeName : SyncRuleText.TestCaseOutOfScopeName,
             Kind = ConfigurationTestCaseKind.Scope,
             SyncRuleId = syncRule.Id,
             Inputs = inputs.Select(input => new ConfigurationTestInput(null, input.AttributeName, ValuesOf(input.State))).ToList(),

@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DeltaImportWatermarkColumnMissing" xml:space="preserve">
+    <value>Der Deltaimportmodus ist „{0}“ und dieser Objekttyp ist für die Synchronisierung ausgewählt, daher benötigt er eine Wasserzeichenspalte. Wählen Sie eine aus oder heben Sie die Auswahl des Objekttyps auf der Registerkarte „Schema“ auf, wenn JIM ihn nie importiert.</value>
+  </data>
+  <data name="MultiValuedWatermarkColumnMissing" xml:space="preserve">
+    <value>Der Deltaimportmodus ist „{0}“, daher benötigt das mehrwertige Attribut „{1}“ eine Wasserzeichenspalte in seiner eigenen Tabelle: Eine hinzugefügte oder entfernte Zeile ändert das Objekt, ohne die Zeile des Objekts selbst zu berühren.</value>
+  </data>
+  <data name="ChangeLogTableMissing" xml:space="preserve">
+    <value>Der Deltaimportmodus ist „{0}“ und dieser Objekttyp ist für die Synchronisierung ausgewählt, daher benötigt er eine Änderungsprotokolltabelle. Wählen Sie eine aus oder heben Sie die Auswahl des Objekttyps auf der Registerkarte „Schema“ auf, wenn JIM ihn nie importiert.</value>
+  </data>
+  <data name="SourceSelectStatement" xml:space="preserve">
+    <value>SELECT-Anweisung</value>
+  </data>
+  <data name="SourceNoneChosen" xml:space="preserve">
+    <value>Keine Quelle gewählt</value>
+  </data>
+  <data name="AddColumn" xml:space="preserve">
+    <value>Spalte hinzufügen</value>
+  </data>
+  <data name="JsonViewPlaceholder" xml:space="preserve">
+    <value>Fügen Sie das Dokument ein oder geben Sie es ein, oder fügen Sie das Beispiel als Ausgangspunkt ein.</value>
+  </data>
+  <data name="JsonViewLabel" xml:space="preserve">
+    <value>Dokument der Objekttypen</value>
+  </data>
+  <data name="JsonProblemsFixOne" xml:space="preserve">
+    <value>Die Karten können dieses Dokument anzeigen, sobald dies behoben ist.</value>
+  </data>
+  <data name="JsonProblemsFixOther" xml:space="preserve">
+    <value>Die Karten können dieses Dokument anzeigen, sobald diese behoben sind.</value>
+  </data>
+  <data name="JsonProblemsCount" xml:space="preserve">
+    <value>{0} Probleme müssen behoben werden, bevor dieses Dokument gespeichert werden kann.</value>
+  </data>
+  <data name="JsonProblemLine" xml:space="preserve">
+    <value>Zeile {0}</value>
+  </data>
+  <data name="JsonProblemSeparator" xml:space="preserve">
+    <value>: </value>
+  </data>
+  <data name="ColumnLabel" xml:space="preserve">
+    <value>Spalte</value>
+  </data>
+  <data name="ObjectTypeLabel" xml:space="preserve">
+    <value>Objekttyp</value>
+  </data>
+  <data name="RemoveReference" xml:space="preserve">
+    <value>Diesen Verweis entfernen</value>
+  </data>
+  <data name="EditMultiValuedAttribute" xml:space="preserve">
+    <value>Dieses mehrwertige Attribut bearbeiten</value>
+  </data>
+  <data name="RemoveMultiValuedAttribute" xml:space="preserve">
+    <value>Dieses mehrwertige Attribut entfernen</value>
+  </data>
+  <data name="AddMultiValuedAttribute" xml:space="preserve">
+    <value>Mehrwertiges Attribut hinzufügen</value>
+  </data>
+  <data name="AddReference" xml:space="preserve">
+    <value>Verweis hinzufügen</value>
+  </data>
+  <data name="Dismiss" xml:space="preserve">
+    <value>Verwerfen</value>
+  </data>
+  <data name="AddObjectTypeForIt" xml:space="preserve">
+    <value>Objekttyp dafür hinzufügen</value>
+  </data>
+  <data name="RelatedTableDescribe" xml:space="preserve">
+    <value>{0} aus {1}, verknüpft über {2}</value>
+  </data>
+  <data name="RelatedTableReferencing" xml:space="preserve">
+    <value>, verweist auf {0}</value>
+  </data>
+  <data name="RelatedTableWatermark" xml:space="preserve">
+    <value>, Wasserzeichen {0}</value>
+  </data>
+  <data name="UnnamedAttribute" xml:space="preserve">
+    <value>unbenannt</value>
+  </data>
+  <data name="ParentFallbackName" xml:space="preserve">
+    <value>Eltern</value>
+  </data>
+  <data name="ReferenceSuggestion" xml:space="preserve">
+    <value>{0} hat einen Fremdschlüssel auf den Anker von {1}, sieht also nach einem Verweis auf {2} aus.</value>
+  </data>
+  <data name="ForeignKeySuggestion" xml:space="preserve">
+    <value>{0} hat einen Fremdschlüssel auf {1}, aus dem noch kein Objekttyp liest.</value>
+  </data>
+  <data name="RelatedDialogIntro" xml:space="preserve">
+    <value>Eine untergeordnete Tabelle mit einer Zeile pro Wert. Jede Zeile wird über die Spalten, die den Anker des übergeordneten Objekts enthalten, mit dem zugehörigen {0}-Objekt verknüpft.</value>
+  </data>
+  <data name="RelatedAttributeName" xml:space="preserve">
+    <value>Attributname</value>
+  </data>
+  <data name="NameTheAttribute" xml:space="preserve">
+    <value>Geben Sie dem Attribut einen Namen</value>
+  </data>
+  <data name="AttributeNameHelper" xml:space="preserve">
+    <value>Wie das Attribut am Objekttyp heißt.</value>
+  </data>
+  <data name="SchemaLabel" xml:space="preserve">
+    <value>Schema</value>
+  </data>
+  <data name="TableLabel" xml:space="preserve">
+    <value>Tabelle</value>
+  </data>
+  <data name="ValueColumnLabel" xml:space="preserve">
+    <value>Wertspalte</value>
+  </data>
+  <data name="ValueColumnHelper" xml:space="preserve">
+    <value>Die Spalte, die den jeweiligen Wert enthält.</value>
+  </data>
+  <data name="JoinColumnLabel" xml:space="preserve">
+    <value>Spalte mit {0}</value>
+  </data>
+  <data name="JoinColumnHelper" xml:space="preserve">
+    <value>Verknüpft jede Zeile mit ihrem übergeordneten Objekt: eine Spalte pro Ankerspalte, in derselben Reihenfolge.</value>
+  </data>
+  <data name="ValuesReferenceLabel" xml:space="preserve">
+    <value>Verweis der Werte</value>
+  </data>
+  <data name="ValuesReferenceHelper" xml:space="preserve">
+    <value>Wählen Sie einen Objekttyp, wenn jeder Wert den Anker dieses Objekttyps enthält, wie bei Gruppenmitgliedern.</value>
+  </data>
+  <data name="ValuesReferenceNothing" xml:space="preserve">
+    <value>Keiner: Die Werte sind einfache Werte</value>
+  </data>
+  <data name="WatermarkColumnLabel" xml:space="preserve">
+    <value>Wasserzeichenspalte</value>
+  </data>
+  <data name="WatermarkColumnHelper" xml:space="preserve">
+    <value>Der Deltaimportmodus ist „Wasserzeichenspalte“: die Spalte für die letzte Änderung dieser Tabelle, damit ein hinzugefügter oder entfernter Wert erkannt wird.</value>
+  </data>
+  <data name="Update" xml:space="preserve">
+    <value>Aktualisieren</value>
+  </data>
+  <data name="TableColumnsUnreadable" xml:space="preserve">
+    <value>Die Spalten der Tabelle konnten nicht gelesen werden, geben Sie daher ihre Namen ein: {0}</value>
+  </data>
+  <data name="TableNotVisible" xml:space="preserve">
+    <value>Das Datenbankkonto kann keine Tabelle mit diesem Namen sehen, daher können ihre Spalten nicht aufgelistet werden.</value>
+  </data>
+  <data name="AddMultiValuedAttributeTitle" xml:space="preserve">
+    <value>Mehrwertiges Attribut hinzufügen</value>
+  </data>
+  <data name="EditMultiValuedAttributeTitle" xml:space="preserve">
+    <value>Mehrwertiges Attribut bearbeiten</value>
+  </data>
+  <data name="ObjectTypesSummaryOne" xml:space="preserve">
+    <value>1 Objekttyp. Wählen Sie ihn aus, um ihn zu ändern.</value>
+  </data>
+  <data name="ObjectTypesSummaryOther" xml:space="preserve">
+    <value>{0} Objekttypen. Wählen Sie einen aus, um ihn zu ändern.</value>
+  </data>
+  <data name="DocumentSummary" xml:space="preserve">
+    <value>Das Dokument, das REST und PowerShell als Wert dieser Einstellung senden.</value>
+  </data>
+  <data name="ObjectTypesIntro" xml:space="preserve">
+    <value>Aus welchen Tabellen und Sichten JIM Objekte liest und was sie identifiziert.</value>
+  </data>
+  <data name="ViewAsCards" xml:space="preserve">
+    <value>Als Karten anzeigen</value>
+  </data>
+  <data name="ViewAsJson" xml:space="preserve">
+    <value>Als JSON anzeigen</value>
+  </data>
+  <data name="InsertExample" xml:space="preserve">
+    <value>Beispiel einfügen</value>
+  </data>
+  <data name="AddObjectType" xml:space="preserve">
+    <value>Objekttyp hinzufügen</value>
+  </data>
+  <data name="ReadingCatalogue" xml:space="preserve">
+    <value>Tabellen und Sichten der Datenbank werden gelesen...</value>
+  </data>
+  <data name="CatalogueUnavailable" xml:space="preserve">
+    <value>JIM konnte die Tabellen und Sichten der Datenbank nicht lesen, daher werden Namen eingegeben statt ausgewählt.</value>
+  </data>
+  <data name="RemoveObjectTypeTitle" xml:space="preserve">
+    <value>Objekttyp entfernen?</value>
+  </data>
+  <data name="RemovalSubjectUnnamed" xml:space="preserve">
+    <value>diesen Objekttyp</value>
+  </data>
+  <data name="RemovalSubjectNamed" xml:space="preserve">
+    <value>Objekttyp &lt;strong&gt;{0}&lt;/strong&gt;</value>
+  </data>
+  <data name="RemovalWithoutReferences" xml:space="preserve">
+    <value>Möchten Sie {0} entfernen? Seine Objekte werden nach dem Speichern der Einstellungen nicht mehr importiert.</value>
+  </data>
+  <data name="RemovalWithReferences" xml:space="preserve">
+    <value>Möchten Sie {0} entfernen? Diese Verweise darauf werden mit entfernt:{1}</value>
+  </data>
+  <data name="RemovalReferenceItem" xml:space="preserve">
+    <value>{0}: {1} {2}</value>
+  </data>
+  <data name="RemovalKindMultiValued" xml:space="preserve">
+    <value>mehrwertiges Attribut</value>
+  </data>
+  <data name="RemovalKindColumn" xml:space="preserve">
+    <value>Spalte</value>
+  </data>
+  <data name="UnnamedObjectType" xml:space="preserve">
+    <value>Unbenannter Objekttyp</value>
+  </data>
+  <data name="UnnamedName" xml:space="preserve">
+    <value>unbenannt</value>
+  </data>
+  <data name="CopyFailed" xml:space="preserve">
+    <value>Der Browser hat das Kopieren in die Zwischenablage nicht zugelassen. Markieren Sie den Text und kopieren Sie ihn stattdessen.</value>
+  </data>
+  <data name="SettingCopied" xml:space="preserve">
+    <value>{0} in die Zwischenablage kopiert.</value>
+  </data>
+  <data name="CardProblemsOne" xml:space="preserve">
+    <value>1 Problem</value>
+  </data>
+  <data name="CardProblemsOther" xml:space="preserve">
+    <value>{0} Probleme</value>
+  </data>
+  <data name="SelectHelp" xml:space="preserve">
+    <value>Ein Objekttyp, der aus einer Anweisung gelesen wird, kann importiert werden, aber JIM kann nicht darauf exportieren.</value>
+  </data>
+  <data name="NameHelp" xml:space="preserve">
+    <value>Wie JIM diesen Objekttyp nennt.</value>
+  </data>
+  <data name="TableOrView" xml:space="preserve">
+    <value>Tabelle oder Sicht</value>
+  </data>
+  <data name="ReadFromTableInstead" xml:space="preserve">
+    <value>Stattdessen aus einer Tabelle oder Sicht lesen</value>
+  </data>
+  <data name="ReadFromSelectInstead" xml:space="preserve">
+    <value>Stattdessen aus einer SELECT-Anweisung lesen</value>
+  </data>
+  <data name="AnchorHeading" xml:space="preserve">
+    <value>Anker</value>
+  </data>
+  <data name="AnchorHelp" xml:space="preserve">
+    <value>Die Spalte oder Spalten, deren Werte eine Zeile identifizieren, in Schlüsselreihenfolge.</value>
+  </data>
+  <data name="PrimaryKeyAnchorSuggestion" xml:space="preserve">
+    <value>Der Primärschlüssel der Tabelle ist {0} und identifiziert jede Zeile.</value>
+  </data>
+  <data name="UsePrimaryKey" xml:space="preserve">
+    <value>Primärschlüssel verwenden</value>
+  </data>
+  <data name="ReferencesHeading" xml:space="preserve">
+    <value>Verweise auf andere Objekttypen</value>
+  </data>
+  <data name="ReferencesHelp" xml:space="preserve">
+    <value>Spalten, deren Werte den Anker eines anderen Objekts enthalten, etwa ein Vorgesetzter.</value>
+  </data>
+  <data name="MultiValuedHeading" xml:space="preserve">
+    <value>Mehrwertige Attribute</value>
+  </data>
+  <data name="MultiValuedHelp" xml:space="preserve">
+    <value>Untergeordnete Tabellen mit einer Zeile pro Wert, etwa Telefonnummern oder Gruppenmitglieder.</value>
+  </data>
+  <data name="DeltaImportHeading" xml:space="preserve">
+    <value>Deltaimport</value>
+  </data>
+  <data name="WatermarkModeHelp" xml:space="preserve">
+    <value>Der Deltaimportmodus ist „Wasserzeichenspalte“: Ein Deltaimport liest die Zeilen, deren Wasserzeichen seit dem letzten Import weitergerückt ist.</value>
+  </data>
+  <data name="WatermarkColumnHelp" xml:space="preserve">
+    <value>Ein Zeitstempel der letzten Änderung oder eine Zeilenversion in der Quelle.</value>
+  </data>
+  <data name="ChangeLogModeHelp" xml:space="preserve">
+    <value>Der Deltaimportmodus ist „Änderungsprotokolltabelle“: Ein Deltaimport liest eine Tabelle, die jede Änderung festhält, einschließlich Löschungen.</value>
+  </data>
+  <data name="AddChangeLogTable" xml:space="preserve">
+    <value>Änderungsprotokolltabelle hinzufügen</value>
+  </data>
+  <data name="ChangeLogSchema" xml:space="preserve">
+    <value>Schema des Änderungsprotokolls</value>
+  </data>
+  <data name="ChangeLogTable" xml:space="preserve">
+    <value>Änderungsprotokolltabelle</value>
+  </data>
+  <data name="SequenceColumn" xml:space="preserve">
+    <value>Sequenzspalte</value>
+  </data>
+  <data name="SequenceColumnHelp" xml:space="preserve">
+    <value>Ordnet die Änderungen: eine Sequenznummer oder ein Zeitstempel.</value>
+  </data>
+  <data name="ChangeTypeColumn" xml:space="preserve">
+    <value>Spalte für die Änderungsart</value>
+  </data>
+  <data name="ChangeTypeColumnHelp" xml:space="preserve">
+    <value>Gibt an, ob eine Zeile eine Erstellung, eine Aktualisierung oder eine Löschung festhält.</value>
+  </data>
+  <data name="CreatedWhen" xml:space="preserve">
+    <value>Erstellt, wenn</value>
+  </data>
+  <data name="CreatedWhenHelp" xml:space="preserve">
+    <value>Werte für „erstellt“, durch Kommas getrennt.</value>
+  </data>
+  <data name="UpdatedWhen" xml:space="preserve">
+    <value>Aktualisiert, wenn</value>
+  </data>
+  <data name="UpdatedWhenHelp" xml:space="preserve">
+    <value>Werte für „aktualisiert“.</value>
+  </data>
+  <data name="DeletedWhen" xml:space="preserve">
+    <value>Gelöscht, wenn</value>
+  </data>
+  <data name="DeletedWhenHelp" xml:space="preserve">
+    <value>Werte für „gelöscht“.</value>
+  </data>
+  <data name="RemoveChangeLogTable" xml:space="preserve">
+    <value>Änderungsprotokolltabelle entfernen</value>
+  </data>
+  <data name="OtherColumnsOne" xml:space="preserve">
+    <value>Die andere Spalte wird auf der Registerkarte „Schema“ automatisch erkannt und typisiert.</value>
+  </data>
+  <data name="OtherColumnsOther" xml:space="preserve">
+    <value>Die anderen {0} Spalten werden auf der Registerkarte „Schema“ automatisch erkannt und typisiert.</value>
+  </data>
+  <data name="RemoveObjectTypeButton" xml:space="preserve">
+    <value>Objekttyp entfernen</value>
+  </data>
+  <data name="StatementColumnsUnreadable" xml:space="preserve">
+    <value>Die Spalten der Anweisung konnten nicht gelesen werden, geben Sie daher ihre Namen ein: {0}</value>
+  </data>
+  <data name="TableOrViewNotVisible" xml:space="preserve">
+    <value>Das Datenbankkonto kann keine Tabelle oder Sicht mit diesem Namen sehen. Prüfen Sie den Namen, das Schema und die Berechtigungen des Kontos.</value>
+  </data>
+  <data name="StepsLabel" xml:space="preserve">
+    <value>Schritte</value>
+  </data>
+  <data name="StepSource" xml:space="preserve">
+    <value>Quelle</value>
+  </data>
+  <data name="StepReferences" xml:space="preserve">
+    <value>Verweise</value>
+  </data>
+  <data name="OptionalStep" xml:space="preserve">
+    <value>optional</value>
+  </data>
+  <data name="AddNameHelp" xml:space="preserve">
+    <value>Wie JIM diesen Objekttyp nennt. Verwenden Sie, wo passend, einen Standardnamen (User, Group, Person); JIM ordnet ihn dem entsprechenden Metaverse-Objekttyp zu.</value>
+  </data>
+  <data name="WhereObjectsCome" xml:space="preserve">
+    <value>Woher die Objekte stammen</value>
+  </data>
+  <data name="StatementHelp" xml:space="preserve">
+    <value>Eine einzelne Anweisung, die mit SELECT oder WITH beginnt, für den Fall, dass keine Sicht erstellt werden kann. JIM kann daraus importieren, aber nicht darauf exportieren.</value>
+  </data>
+  <data name="AnchorIntroStatement" xml:space="preserve">
+    <value>Die Spalte oder Spalten, deren Werte eine Zeile der Anweisung identifizieren, in Schlüsselreihenfolge.</value>
+  </data>
+  <data name="AnchorIntroTable" xml:space="preserve">
+    <value>Die Spalte oder Spalten, deren Werte eine Zeile von {0} identifizieren, in Schlüsselreihenfolge.</value>
+  </data>
+  <data name="ReadingColumns" xml:space="preserve">
+    <value>Spalten und Schlüssel werden gelesen...</value>
+  </data>
+  <data name="AddReferencesIntro" xml:space="preserve">
+    <value>Spalten, deren Werte den Anker eines anderen Objekts enthalten, etwa ein Vorgesetzter. Überspringen Sie diesen Schritt, wenn es keine gibt; Sie können sie später hinzufügen.</value>
+  </data>
+  <data name="AddMultiValuedIntro" xml:space="preserve">
+    <value>Untergeordnete Tabellen mit einer Zeile pro Wert, etwa Telefonnummern oder Gruppenmitglieder. Überspringen Sie diesen Schritt, wenn es keine gibt; Sie können sie später hinzufügen.</value>
+  </data>
+  <data name="AnchorPreselected" xml:space="preserve">
+    <value>Aus dem Primärschlüssel der Tabelle vorausgewählt, in Schlüsselreihenfolge.</value>
+  </data>
+  <data name="AnchorViewNoKeys" xml:space="preserve">
+    <value>Eine Sicht deklariert keine Schlüssel, daher kann JIM keinen Anker vorschlagen. Wählen Sie die Spalte oder Spalten, die eine Zeile identifizieren.</value>
+  </data>
+  <data name="AnchorTableNoKey" xml:space="preserve">
+    <value>Die Tabelle deklariert keinen Primärschlüssel, daher kann JIM keinen Anker vorschlagen. Wählen Sie die Spalte oder Spalten, die eine Zeile identifizieren.</value>
+  </data>
+  <data name="AnchorStatementNoKeys" xml:space="preserve">
+    <value>Eine SELECT-Anweisung deklariert keine Schlüssel, daher kann JIM keinen Anker vorschlagen. Wählen Sie die Spalte oder Spalten, die eine Zeile identifizieren.</value>
+  </data>
+  <data name="AnchorColumnsUnreadable" xml:space="preserve">
+    <value>Die Spalten konnten nicht gelesen werden, geben Sie daher ihre Namen ein: {0}</value>
+  </data>
+  <data name="AnchorColumnsUnreadableNoReason" xml:space="preserve">
+    <value>Die Spalten konnten nicht gelesen werden, geben Sie daher ihre Namen ein.</value>
+  </data>
+</root>

@@ -9,6 +9,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -106,6 +107,9 @@ public class SyncServer : ISyncServer
     #region Activity Management
 
     public Task FailActivityWithErrorAsync(Activity activity, string errorMessage)
+        => _jim.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+
+    public Task FailActivityWithErrorAsync(Activity activity, JimMessage errorMessage)
         => _jim.Activities.FailActivityWithErrorAsync(activity, errorMessage);
 
     public Task FailActivityWithErrorAsync(Activity activity, Exception exception)

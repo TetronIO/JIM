@@ -1,6 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
+
 namespace JIM.Application.Services;
 
 /// <summary>
@@ -15,14 +19,15 @@ public static class ObjectTypeDeselectionMessages
     /// </summary>
     /// <param name="objectTypeName">The Object Type being deselected.</param>
     /// <param name="syncRuleNames">The enabled Synchronisation Rules bound to it, in the order to list them.</param>
-    public static string StillManaged(string objectTypeName, IReadOnlyList<string> syncRuleNames)
-    {
-        var rules = string.Join(", ", syncRuleNames);
-        return syncRuleNames.Count == 1
-            ? $"Object Type '{objectTypeName}' cannot be deselected while an enabled Synchronisation Rule still " +
-              $"manages it: {rules}. Disable that Synchronisation Rule first, or keep the Object Type selected."
-            : $"Object Type '{objectTypeName}' cannot be deselected while {syncRuleNames.Count} enabled " +
-              $"Synchronisation Rules still manage it: {rules}. Disable those Synchronisation Rules first, or keep " +
-              "the Object Type selected.";
-    }
+    public static string StillManaged(string objectTypeName, IReadOnlyList<string> syncRuleNames) =>
+        StillManagedMessage(objectTypeName, syncRuleNames).ToEnglish();
+
+    /// <summary>
+    /// <see cref="StillManaged"/> as a message the portal can show in the viewer's language (#3030).
+    /// </summary>
+    /// <param name="objectTypeName">The Object Type being deselected.</param>
+    /// <param name="syncRuleNames">The enabled Synchronisation Rules bound to it, in the order to list them.</param>
+    public static JimMessage StillManagedMessage(string objectTypeName, IReadOnlyList<string> syncRuleNames) =>
+        ConnectedSystemMessage.Counted(nameof(ConnectedSystemMessages.ObjectTypeStillManagedOne), syncRuleNames.Count,
+            objectTypeName, syncRuleNames.Count, string.Join(", ", syncRuleNames));
 }

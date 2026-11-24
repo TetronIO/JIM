@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Transactional.DTOs
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -43,8 +44,8 @@
         ? $"/admin/operations?t=generated-values&syncRuleId={syncRuleId}"
         : $"/admin/operations?t=generated-values&connectedSystemId={ConnectedSystemId}";
 
-    private string TooltipText =>
-        $"{(NeedsDecisionCount == 1 ? "1 generated value needs" : $"{NeedsDecisionCount:N0} generated values need")} a decision. " +
-        "A target rejected each as already in use and JIM could not safely correct it, so its export is held. " +
-        "Open Generated Values to allow the rename or try again.";
+    private string TooltipText => string.Format(CultureInfo.CurrentCulture,
+            PluralRules.Choose(NeedsDecisionCount, GeneratedValueText.AttentionCountOne, GeneratedValueText.AttentionCountOther),
+            NeedsDecisionCount.ToString("N0", CultureInfo.CurrentCulture))
+        + " " + GeneratedValueText.AttentionExplain;
 }

@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 
 namespace JIM.Models.Staging;
 
@@ -35,12 +37,8 @@ public static class ConnectorSettingValidator
         // required-value validation: every relevant required setting must have a value of the appropriate type
         foreach (var settingValue in settingValues.Where(sv => IsSettingRequired(settingValues, sv.Setting) && !IsRequiredValueSupplied(sv)))
         {
-            results.Add(new ConnectorSettingValueValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = $"Please supply a value for {settingValue.Setting.Name}",
-                SettingValue = settingValue
-            });
+            results.Add(ConnectorSettingValueValidationResult.Failure(settingValue,
+                JimMessage.Create(MessageCatalogues.SettingValidation, nameof(SettingValidationMessages.SupplyAValue), settingValue.Setting.Name)));
         }
 
         // required-group (either/or, optionally mutually exclusive) validation. Only members that currently apply are
@@ -59,19 +57,11 @@ public static class ConnectorSettingValidator
 
             if (suppliedCount == 0)
             {
-                results.Add(new ConnectorSettingValueValidationResult
-                {
-                    IsValid = false,
-                    ErrorMessage = BuildGroupErrorMessage(members, cardinality)
-                });
+                results.Add(ConnectorSettingValueValidationResult.Failure(null, BuildGroupMessage(members, cardinality)));
             }
             else if (cardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne && suppliedCount > 1)
             {
-                results.Add(new ConnectorSettingValueValidationResult
-                {
-                    IsValid = false,
-                    ErrorMessage = BuildExclusiveGroupErrorMessage(members)
-                });
+                results.Add(ConnectorSettingValueValidationResult.Failure(null, BuildExclusiveGroupMessage(members)));
             }
         }
 
@@ -211,21 +201,28 @@ public static class ConnectorSettingValidator
     /// The quantifier reflects the group's cardinality ("at least one" or "exactly one"). Pass the applicable members
     /// from <see cref="GetApplicableGroupMembers"/>, so the message never names a setting that is not on screen.
     /// </summary>
-    public static string BuildGroupErrorMessage(IEnumerable<ConnectedSystemSettingValue> groupMembers, ConnectorSettingRequiredGroupCardinality cardinality = ConnectorSettingRequiredGroupCardinality.AtLeastOne)
-    {
-        var settingNames = string.Join(", ", groupMembers.Select(sv => $"'{sv.Setting.Name}'"));
-        var quantifier = cardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne ? "exactly one" : "at least one";
-        return $"Provide a value for {quantifier} of these settings: {settingNames}.";
-    }
+    public static string BuildGroupErrorMessage(IEnumerable<ConnectedSystemSettingValue> groupMembers, ConnectorSettingRequiredGroupCardinality cardinality = ConnectorSettingRequiredGroupCardinality.AtLeastOne) =>
+        BuildGroupMessage(groupMembers, cardinality).ToEnglish();
+
+    /// <summary>
+    /// The same message as <see cref="BuildGroupErrorMessage"/>, held as a catalogue key and arguments so the portal can show it in
+    /// the viewer's language. The names are the settings' own names, as the Connector declares them.
+    /// </summary>
+    public static JimMessage BuildGroupMessage(IEnumerable<ConnectedSystemSettingValue> groupMembers, ConnectorSettingRequiredGroupCardinality cardinality = ConnectorSettingRequiredGroupCardinality.AtLeastOne) =>
+        JimMessage.Create(MessageCatalogues.SettingValidation,
+            cardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne ? nameof(SettingValidationMessages.GroupExactly) : nameof(SettingValidationMessages.GroupAtLeast),
+            string.Join(", ", groupMembers.Select(sv => $"'{sv.Setting.Name}'")));
 
     /// <summary>
     /// Builds the administrator-facing error message for a mutually exclusive group where more than one value was supplied.
     /// Pass the applicable members from <see cref="GetApplicableGroupMembers"/>, so the message never names a setting
     /// that is not on screen.
     /// </summary>
-    public static string BuildExclusiveGroupErrorMessage(IEnumerable<ConnectedSystemSettingValue> groupMembers)
-    {
-        var settingNames = string.Join(", ", groupMembers.Select(sv => $"'{sv.Setting.Name}'"));
-        return $"Provide a value for only one of these settings, not more than one: {settingNames}.";
-    }
+    public static string BuildExclusiveGroupErrorMessage(IEnumerable<ConnectedSystemSettingValue> groupMembers) =>
+        BuildExclusiveGroupMessage(groupMembers).ToEnglish();
+
+    /// <summary>The same message as <see cref="BuildExclusiveGroupErrorMessage"/>, held as a catalogue key and arguments.</summary>
+    public static JimMessage BuildExclusiveGroupMessage(IEnumerable<ConnectedSystemSettingValue> groupMembers) =>
+        JimMessage.Create(MessageCatalogues.SettingValidation, nameof(SettingValidationMessages.GroupOnly),
+            string.Join(", ", groupMembers.Select(sv => $"'{sv.Setting.Name}'")));
 }

@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -156,7 +157,7 @@
                     @if (PhraseRequired)
                     {
                         <div data-testid="jim-consequence-phrase">
-                            <MudText Typo="Typo.body2" Class="mb-1">Type <b>@ConfirmationPhrase</b> to confirm</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-1">@((MarkupString)string.Format(CultureInfo.CurrentCulture, System.Net.WebUtility.HtmlEncode(SharedText.ConsequenceTypeToConfirm), "<b>" + System.Net.WebUtility.HtmlEncode(ConfirmationPhrase) + "</b>"))</MudText>
                             <MudTextField @bind-Value="_typedPhrase" Variant="Variant.Outlined" Immediate="true"
                                           Placeholder="@ConfirmationPhrase" AutoFocus="true"
                                           Adornment="Adornment.End"
@@ -169,7 +170,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" DropShadow="false" data-testid="jim-consequence-cancel">
-            @(Blocked ? "Close" : "Cancel")
+            @(Blocked ? CommonText.Close : CommonText.Cancel)
         </MudButton>
         <MudButton Color="@ConfirmButtonColour" Variant="Variant.Filled" DropShadow="false"
                    Disabled="@(!CanConfirm)" OnClick="ConfirmAsync" data-testid="jim-consequence-confirm">
@@ -201,7 +202,7 @@
     /// Text shown beside the progress indicator whilst <see cref="Loading"/>.
     /// </summary>
     [Parameter]
-    public string LoadingText { get; set; } = "Evaluating impact...";
+    public string LoadingText { get; set; } = SharedText.ConsequenceEvaluating;
 
     /// <summary>
     /// Reasons the change cannot proceed. Any blocker makes the dialog read-only: the confirm action
@@ -268,13 +269,13 @@
     /// Label for the confirm button, naming the action and its scale where useful.
     /// </summary>
     [Parameter]
-    public string ConfirmButtonText { get; set; } = "Confirm";
+    public string ConfirmButtonText { get; set; } = CommonText.Confirm;
 
     /// <summary>
     /// Label shown on the confirm button whilst the action runs.
     /// </summary>
     [Parameter]
-    public string BusyText { get; set; } = "Working...";
+    public string BusyText { get; set; } = SharedText.ConsequenceWorking;
 
     /// <summary>
     /// Colour of the confirm button. Defaults to Error, since this dialog exists for destructive

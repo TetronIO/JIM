@@ -1,12 +1,14 @@
 @page
 @model JIM.Web.Pages.ErrorModel
+@using JIM.Web.Resources
 @{
     Layout = "_ErrorPageLayout";
-    ViewData["Title"] = "Something went wrong";
+    ViewData["Title"] = SignInText.ErrorTitle;
 }
 
+@* i18n: exempt - a Razor section declaration, not text *@
 @section Illustration {
-    <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Broken cog illustration">
+    <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="@SignInText.ErrorIllustrationLabel">
         <circle class="jim-err-float-shape jim-err-shape-1" cx="55" cy="45" r="7" fill="var(--jim-error-shape-tertiary)" opacity="0.6"/>
         <circle class="jim-err-float-shape jim-err-shape-2" cx="345" cy="75" r="11" fill="var(--jim-error-shape-secondary)" opacity="0.5"/>
         <circle class="jim-err-float-shape jim-err-shape-3" cx="75" cy="230" r="6" fill="var(--jim-error-shape-primary)" opacity="0.4"/>
@@ -87,23 +89,23 @@
     </svg>
 }
 
-<h1 class="jim-error-title">Something went wrong</h1>
-<p class="jim-error-subtitle">Well, that wasn't supposed to happen. A cog has slipped!</p>
+<h1 class="jim-error-title">@SignInText.ErrorTitle</h1>
+<p class="jim-error-subtitle">@SignInText.ErrorSubtitle</p>
 
 @if (Model.ShowRequestId)
 {
     <p class="jim-error-request-id">
-        Request ID: <code>@Model.RequestId</code>
+        @SignInText.ErrorRequestId <code>@Model.RequestId</code>
     </p>
 }
 
 <div class="jim-error-actions">
     <a href="/" class="jim-error-button jim-error-button-filled">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 9v12h5v-7h6v7h5V9l-8-6z"/></svg>
-        Go to Dashboard
+        @SignInText.ErrorGoToDashboard
     </a>
     <a href="javascript:location.reload();" class="jim-error-button jim-error-button-outlined">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-        Try Again
+        @SignInText.TryAgain
     </a>
 </div>

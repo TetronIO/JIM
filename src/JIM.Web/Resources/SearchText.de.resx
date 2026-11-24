@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PredefinedSearches" xml:space="preserve">
+    <value>Vordefinierte Suchen</value>
+  </data>
+  <data name="PredefinedSearch" xml:space="preserve">
+    <value>Vordefinierte Suche</value>
+  </data>
+  <data name="ListPageInfo" xml:space="preserve">
+    <value>Vordefinierte Suchen erleichtern das Auffinden von Objekten und steuern, welche Attribute zurückgegeben werden.</value>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>Nach Name oder URI suchen</value>
+  </data>
+  <data name="ColumnUri" xml:space="preserve">
+    <value>URI</value>
+  </data>
+  <data name="ColumnObjectType" xml:space="preserve">
+    <value>Objekttyp</value>
+  </data>
+  <data name="ColumnDefault" xml:space="preserve">
+    <value>Standard?</value>
+  </data>
+  <data name="ColumnBuiltIn" xml:space="preserve">
+    <value>Integriert?</value>
+  </data>
+  <data name="ColumnAttributes" xml:space="preserve">
+    <value>Attribute</value>
+  </data>
+  <data name="ColumnCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Ja</value>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>Nein</value>
+  </data>
+  <data name="NoSearchesMatch" xml:space="preserve">
+    <value>Keine vordefinierten Suchen entsprechen „{0}“</value>
+  </data>
+  <data name="NoSearchesYet" xml:space="preserve">
+    <value>Noch keine vordefinierten Suchen</value>
+  </data>
+  <data name="NoSearchesYetHint" xml:space="preserve">
+    <value>Integrierte vordefinierte Suchen werden erstellt, wenn der Dienst initialisiert wird.</value>
+  </data>
+  <data name="SearchNoLongerExists" xml:space="preserve">
+    <value>Die vordefinierte Suche existiert nicht mehr.</value>
+  </data>
+  <data name="SearchEnabledSnackbar" xml:space="preserve">
+    <value>Vordefinierte Suche „{0}“ aktiviert.</value>
+  </data>
+  <data name="SearchDisabledSnackbar" xml:space="preserve">
+    <value>Vordefinierte Suche „{0}“ deaktiviert.</value>
+  </data>
+  <data name="UpdateFailed" xml:space="preserve">
+    <value>Die vordefinierte Suche konnte nicht aktualisiert werden: {0}</value>
+  </data>
+  <data name="DetailHeading" xml:space="preserve">
+    <value>Vordefinierte Suche:</value>
+  </data>
+  <data name="DetailPageTitle" xml:space="preserve">
+    <value>Vordefinierte Suche: {0}</value>
+  </data>
+  <data name="DetailPageInfo" xml:space="preserve">
+    <value>Eine vordefinierte Suche ist eine gespeicherte Suche über einen Metaverse-Objekttyp: die Kriterien, die ihre Objekte auswählen, und die Attribute, die sie für jedes Objekt anzeigt.</value>
+  </data>
+  <data name="Details" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="Changes" xml:space="preserve">
+    <value>Änderungen</value>
+  </data>
+  <data name="FieldUri" xml:space="preserve">
+    <value>URI</value>
+  </data>
+  <data name="IsDefaultForObjectType" xml:space="preserve">
+    <value>Standard für Objekttyp?</value>
+  </data>
+  <data name="DisabledSearchesHint" xml:space="preserve">
+    <value>Deaktivierte Suchen erscheinen nicht im Portal.</value>
+  </data>
+  <data name="MetaverseAttributes" xml:space="preserve">
+    <value>Metaverse-Attribute</value>
+  </data>
+  <data name="MetaverseAttributesIntro" xml:space="preserve">
+    <value>Dies sind die Attribute, die in den Suchergebnissen angezeigt werden:</value>
+  </data>
+  <data name="Criteria" xml:space="preserve">
+    <value>Kriterien</value>
+  </data>
+  <data name="CriteriaIntro" xml:space="preserve">
+    <value>Kriterien filtern die Objekte, die diese Suche zurückgibt. Alle Kriterien werden mit UND verknüpft.</value>
+  </data>
+  <data name="AddCriteriaGroup" xml:space="preserve">
+    <value>Kriteriengruppe hinzufügen</value>
+  </data>
+  <data name="NoCriteriaAlert" xml:space="preserve">
+    <value>Diese Suche hat keine Kriterien; sie gibt alle {0}-Objekte zurück. Fügen Sie eine Kriteriengruppe hinzu, um mit dem Filtern zu beginnen.</value>
+  </data>
+  <data name="BuiltInCriteriaTooltip" xml:space="preserve">
+    <value>Integrierte vordefinierte Suchen können nicht geändert werden</value>
+  </data>
+  <data name="LogicType" xml:space="preserve">
+    <value>Logiktyp</value>
+  </data>
+  <data name="AddGroup" xml:space="preserve">
+    <value>Gruppe hinzufügen</value>
+  </data>
+  <data name="EditCriteria" xml:space="preserve">
+    <value>Kriterium bearbeiten</value>
+  </data>
+  <data name="AddCriteria" xml:space="preserve">
+    <value>Kriterium hinzufügen</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Speichern</value>
+  </data>
+  <data name="MetaverseAttribute" xml:space="preserve">
+    <value>Metaverse-Attribut</value>
+  </data>
+  <data name="SelectMetaverseAttribute" xml:space="preserve">
+    <value>Bitte wählen Sie ein Metaverse-Attribut aus</value>
+  </data>
+  <data name="ComparisonType" xml:space="preserve">
+    <value>Vergleichstyp</value>
+  </data>
+  <data name="SelectComparisonType" xml:space="preserve">
+    <value>Bitte wählen Sie die Art des Vergleichs aus</value>
+  </data>
+  <data name="CriteriaGroupHeading" xml:space="preserve">
+    <value>KRITERIENGRUPPE. LOGIKTYP:</value>
+  </data>
+  <data name="DeleteGroupTooltip" xml:space="preserve">
+    <value>Gruppe löschen</value>
+  </data>
+  <data name="DeleteGroupAriaLabel" xml:space="preserve">
+    <value>Gruppe löschen</value>
+  </data>
+  <data name="NoCriteriaInGroup" xml:space="preserve">
+    <value>In dieser Gruppe gibt es noch keine Kriterien.</value>
+  </data>
+  <data name="EditCriteriaTooltip" xml:space="preserve">
+    <value>Kriterium bearbeiten</value>
+  </data>
+  <data name="EditCriteriaAriaLabel" xml:space="preserve">
+    <value>Kriterium bearbeiten</value>
+  </data>
+  <data name="DeleteCriteriaTooltip" xml:space="preserve">
+    <value>Kriterium löschen</value>
+  </data>
+  <data name="DeleteCriteriaAriaLabel" xml:space="preserve">
+    <value>Kriterium löschen</value>
+  </data>
+  <data name="CriteriaGroupAdded" xml:space="preserve">
+    <value>Kriteriengruppe hinzugefügt.</value>
+  </data>
+  <data name="AddGroupFailed" xml:space="preserve">
+    <value>Die Kriteriengruppe konnte nicht hinzugefügt werden: {0}</value>
+  </data>
+  <data name="CriteriaGroupDeleted" xml:space="preserve">
+    <value>Kriteriengruppe gelöscht.</value>
+  </data>
+  <data name="DeleteGroupFailed" xml:space="preserve">
+    <value>Die Kriteriengruppe konnte nicht gelöscht werden: {0}</value>
+  </data>
+  <data name="CriteriaUpdated" xml:space="preserve">
+    <value>Kriterium aktualisiert.</value>
+  </data>
+  <data name="CriteriaAdded" xml:space="preserve">
+    <value>Kriterium hinzugefügt.</value>
+  </data>
+  <data name="SaveCriteriaFailed" xml:space="preserve">
+    <value>Das Kriterium konnte nicht gespeichert werden: {0}</value>
+  </data>
+  <data name="CriteriaDeleted" xml:space="preserve">
+    <value>Kriterium gelöscht.</value>
+  </data>
+  <data name="DeleteCriteriaFailed" xml:space="preserve">
+    <value>Das Kriterium konnte nicht gelöscht werden: {0}</value>
+  </data>
+</root>

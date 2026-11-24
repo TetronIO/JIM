@@ -9,34 +9,37 @@
     restates the full consequence (trigger mode, sources by name, grace period) in one sentence so a
     misconfiguration is visible before Save. Blazor re-rendering keeps it current as the administrator
     changes the trigger mode, source selection or grace period.
+
+    Each sentence is one resource string. Its values are passed in as fragments (see Rich), so a translation
+    can place the object type, the grace period and the source names where its grammar needs them.
 *@
 
 <MudAlert Severity="Severity.Info">
     <MudText Typo="Typo.body1">
         @if (SourceNames.Count == 0)
         {
-            <text>Select at least one authoritative source. No source is selected, so this configuration cannot be saved.</text>
+            @ConnectorSpaceText.DtsNoSource
         }
         else if (TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect)
         {
             if (SourceNames.Count == 1)
             {
-                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> when </text>@JoinedNames("and")<text> disconnects.</text>
+                @Rich(ConnectorSpaceText.DtsAllSingle, Strong(ObjectTypeName), FateFragment, NameList(SourceNames, ConnectorSpaceText.DtsListAnd))
             }
             else
             {
-                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> only when </text>@JoinedNames("and")<text> have <strong>all</strong> disconnected. While any of them remains connected the object is retained.</text>
+                @Rich(ConnectorSpaceText.DtsAllMany, Strong(ObjectTypeName), FateFragment, NameList(SourceNames, ConnectorSpaceText.DtsListAnd), Strong(ConnectorSpaceText.DtsAllWord))
             }
         }
         else
         {
             if (SourceNames.Count == 1)
             {
-                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> when </text>@JoinedNames("or")<text> disconnects, regardless of other connectors.</text>
+                @Rich(ConnectorSpaceText.DtsAnySingle, Strong(ObjectTypeName), FateFragment, NameList(SourceNames, ConnectorSpaceText.DtsListOr))
             }
             else
             {
-                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> when <strong>any</strong> of </text>@JoinedNames("or")<text> disconnects, even if the others remain connected.</text>
+                @Rich(ConnectorSpaceText.DtsAnyMany, Strong(ObjectTypeName), FateFragment, Strong(ConnectorSpaceText.DtsAnyWord), NameList(SourceNames, ConnectorSpaceText.DtsListOr))
             }
         }
     </MudText>
@@ -68,33 +71,62 @@
     public TimeSpan? GracePeriod { get; set; }
 
     /// <summary>
-    /// "scheduled for deletion, with a 30 day grace period," or "deleted immediately, with no grace period,".
+    /// "scheduled for deletion, with a 30 day grace period," or "deleted immediately, with no grace period,"; the grace
+    /// period is set in bold.
     /// </summary>
-    private RenderFragment FatePhrase => __builder =>
+    private RenderFragment FateFragment =>
+        GracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero
+            ? Rich(ConnectorSpaceText.DtsFateGrace, Strong(FormatGracePeriodAdjective(gracePeriod)))
+            : Plain(ConnectorSpaceText.DtsFateImmediate);
+
+    /// <summary>
+    /// Renders a resource sentence in which each <c>{n}</c> is replaced by the fragment given at that position, so a
+    /// translation can put each value where its grammar needs it. Text is encoded by Blazor; markup is only what this
+    /// component builds.
+    /// </summary>
+    private static RenderFragment Rich(string template, params RenderFragment[] parts) => builder =>
     {
-        if (GracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero)
+        var sequence = 0;
+        var position = 0;
+        while (position < template.Length)
         {
-            <text>scheduled for deletion, with a <strong>@FormatGracePeriodAdjective(gracePeriod)</strong> grace period,</text>
+            var open = template.IndexOf('{', position);
+            if (open < 0)
+            {
+                builder.AddContent(sequence++, template[position..]);
+                break;
+            }
+
+            var close = template.IndexOf('}', open);
+            builder.AddContent(sequence++, template[position..open]);
+            builder.AddContent(sequence++, parts[int.Parse(template[(open + 1)..close], System.Globalization.CultureInfo.InvariantCulture)]);
+            position = close + 1;
         }
-        else
-        {
-            <text>deleted immediately, with no grace period,</text>
-        }
+    };
+
+    private static RenderFragment Plain(string text) => builder => builder.AddContent(0, text);
+
+    private static RenderFragment Strong(string text) => builder =>
+    {
+        builder.OpenElement(0, "strong");
+        builder.AddContent(1, text);
+        builder.CloseElement();
     };
 
     /// <summary>
     /// The selected source names in bold, joined with commas and the given final conjunction,
     /// e.g. "HR, Payroll and Active Directory".
     /// </summary>
-    private RenderFragment JoinedNames(string conjunction) => __builder =>
+    private static RenderFragment NameList(IReadOnlyList<string> names, string conjunction) => builder =>
     {
-        for (var i = 0; i < SourceNames.Count; i++)
+        var sequence = 0;
+        for (var i = 0; i < names.Count; i++)
         {
             if (i > 0)
-            {
-                @(i == SourceNames.Count - 1 ? $" {conjunction} " : ", ")
-            }
-            <strong>@SourceNames[i]</strong>
+                builder.AddContent(sequence++, i == names.Count - 1 ? $" {conjunction} " : ", ");
+            builder.OpenElement(sequence++, "strong");
+            builder.AddContent(sequence++, names[i]);
+            builder.CloseElement();
         }
     };
 
@@ -105,9 +137,9 @@
     private static string FormatGracePeriodAdjective(TimeSpan period)
     {
         var parts = new List<string>();
-        if (period.Days > 0) parts.Add($"{period.Days} day");
-        if (period.Hours > 0) parts.Add($"{period.Hours} hour");
-        if (period.Minutes > 0) parts.Add($"{period.Minutes} minute");
-        return parts.Count > 0 ? string.Join(", ", parts) : "0 minute";
+        if (period.Days > 0) parts.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DtsAdjDay, period.Days));
+        if (period.Hours > 0) parts.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DtsAdjHour, period.Hours));
+        if (period.Minutes > 0) parts.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DtsAdjMinute, period.Minutes));
+        return parts.Count > 0 ? string.Join(", ", parts) : ConnectorSpaceText.DtsAdjZero;
     }
 }

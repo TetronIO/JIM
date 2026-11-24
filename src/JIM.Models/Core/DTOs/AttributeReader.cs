@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Core.DTOs;
 
 /// <summary>
@@ -57,4 +59,11 @@ public class AttributeReader
     /// A sentence naming the reader and where it lives, for messages and the portal.
     /// </summary>
     public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// <see cref="Description"/> as a message the portal shows in the viewer's language (#3030); <see cref="Description"/>
+    /// is always its British English. Never serialised: the REST API keeps the English.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public JimMessage? DescriptionDetail { get; set; }
 }

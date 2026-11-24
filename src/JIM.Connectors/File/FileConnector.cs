@@ -5,7 +5,9 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
+using JIM.Connectors.Resources;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -131,12 +133,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 // For import modes, file must exist
                 if (!System.IO.File.Exists(filePath))
                 {
-                    response.Add(new ConnectorSettingValueValidationResult
-                    {
-                        IsValid = false,
-                        ErrorMessage = $"File not found: '{filePath}'. For {mode} mode, the file must exist. Check the path and ensure it maps to a Docker Volume.",
-                        SettingValue = filePathSetting
-                    });
+                    response.Add(ConnectorSettingValueValidationResult.Failure(filePathSetting,
+                        JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.FileNotFound), filePath, mode)));
                 }
                 break;
 
@@ -154,12 +152,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                         }
                         catch (Exception ex)
                         {
-                            response.Add(new ConnectorSettingValueValidationResult
-                            {
-                                IsValid = false,
-                                ErrorMessage = $"Export directory could not be created: '{exportDir}'. Error: {ex.Message}",
-                                SettingValue = filePathSetting
-                            });
+                            response.Add(ConnectorSettingValueValidationResult.Failure(filePathSetting,
+                                JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.FileExportDirectoryNotCreated), exportDir, ex.Message)));
                         }
                     }
                 }

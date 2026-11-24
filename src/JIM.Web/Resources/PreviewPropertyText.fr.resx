@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AttributeFlowRules" xml:space="preserve">
+    <value>Règles de flux d’attributs</value>
+  </data>
+  <data name="Enabled" xml:space="preserve">
+    <value>Activé</value>
+  </data>
+  <data name="Selected" xml:space="preserve">
+    <value>Sélectionné</value>
+  </data>
+  <data name="ObjectScopingCriteriaGroups" xml:space="preserve">
+    <value>Groupes de critères de périmètre des objets</value>
+  </data>
+  <data name="OutboundDeprovisionAction" xml:space="preserve">
+    <value>Action de déprovisionnement sortant</value>
+  </data>
+  <data name="InboundOutOfScopeAction" xml:space="preserve">
+    <value>Action hors périmètre entrante</value>
+  </data>
+  <data name="Direction" xml:space="preserve">
+    <value>Direction</value>
+  </data>
+  <data name="DeletionTriggerConnectedSystemIds" xml:space="preserve">
+    <value>Systèmes connectés déclenchant la suppression</value>
+  </data>
+  <data name="ObjectMatchingRules" xml:space="preserve">
+    <value>Règles de correspondance d’objets</value>
+  </data>
+  <data name="ObjectMatchingRuleMode" xml:space="preserve">
+    <value>Mode des règles de correspondance d’objets</value>
+  </data>
+  <data name="MaxObjects" xml:space="preserve">
+    <value>Nombre maximal d’objets</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>Statut</value>
+  </data>
+  <data name="ProvisionToConnectedSystem" xml:space="preserve">
+    <value>Provisionner vers le système connecté</value>
+  </data>
+  <data name="ProjectToMetaverse" xml:space="preserve">
+    <value>Projeter vers le Metaverse</value>
+  </data>
+  <data name="EnforceState" xml:space="preserve">
+    <value>Appliquer l’état</value>
+  </data>
+</root>

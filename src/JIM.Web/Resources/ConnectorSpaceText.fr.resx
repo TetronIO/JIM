@@ -1,0 +1,1247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DeletedObjectsPageTitle" xml:space="preserve">
+    <value>Objets supprimés</value>
+  </data>
+  <data name="DeletedInfoLead" xml:space="preserve">
+    <value>Lorsque des objets sont supprimés, leur historique des modifications est conservé ici à des fins d’audit et de conformité. Cliquez sur</value>
+  </data>
+  <data name="DeletedInfoTrail" xml:space="preserve">
+    <value>pour afficher l’historique complet des modifications apportées à un objet avant sa suppression.</value>
+  </data>
+  <data name="DeletedView" xml:space="preserve">
+    <value>Afficher</value>
+  </data>
+  <data name="DeletedHomeBreadcrumb" xml:space="preserve">
+    <value>Accueil</value>
+  </data>
+  <data name="DeletedAdministrationBreadcrumb" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="DeletedCsoTab" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="DeletedMvoTab" xml:space="preserve">
+    <value>Objets Metaverse supprimés</value>
+  </data>
+  <data name="DeletedFromDate" xml:space="preserve">
+    <value>Date de début</value>
+  </data>
+  <data name="DeletedToDate" xml:space="preserve">
+    <value>Date de fin</value>
+  </data>
+  <data name="DeletedConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="DeletedObjectType" xml:space="preserve">
+    <value>Type d’objet</value>
+  </data>
+  <data name="DeletedCsoSingular" xml:space="preserve">
+    <value>Objet de système connecté supprimé</value>
+  </data>
+  <data name="DeletedCsoPlural" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="DeletedMvoSingular" xml:space="preserve">
+    <value>Objet Metaverse supprimé</value>
+  </data>
+  <data name="DeletedMvoPlural" xml:space="preserve">
+    <value>Objets Metaverse supprimés</value>
+  </data>
+  <data name="DeletedSearchExternalId" xml:space="preserve">
+    <value>Rechercher par ID externe</value>
+  </data>
+  <data name="DeletedSearchDisplayName" xml:space="preserve">
+    <value>Rechercher par nom d’affichage</value>
+  </data>
+  <data name="DeletedColumnExternalId" xml:space="preserve">
+    <value>ID externe</value>
+  </data>
+  <data name="DeletedColumnDisplayName" xml:space="preserve">
+    <value>Nom d’affichage</value>
+  </data>
+  <data name="DeletedColumnDeleted" xml:space="preserve">
+    <value>Supprimé</value>
+  </data>
+  <data name="DeletedColumnDeletedBy" xml:space="preserve">
+    <value>Supprimé par</value>
+  </data>
+  <data name="DeletedNotAvailable" xml:space="preserve">
+    <value>S/O</value>
+  </data>
+  <data name="DeletedConnectedSystemIdFallback" xml:space="preserve">
+    <value>ID : {0}</value>
+  </data>
+  <data name="DeletedCsoNoSearchMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté supprimé ne correspond à « {0} »</value>
+  </data>
+  <data name="DeletedCsoNoQueryMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté supprimé ne correspond à votre requête</value>
+  </data>
+  <data name="DeletedCsoNoneRecorded" xml:space="preserve">
+    <value>Aucune suppression d’objet de système connecté n’a encore été enregistrée</value>
+  </data>
+  <data name="DeletedCsoNoneRecordedHint" xml:space="preserve">
+    <value>Lorsque des objets de systèmes connectés sont supprimés, leur historique des modifications est conservé ici.</value>
+  </data>
+  <data name="DeletedMvoNoSearchMatch" xml:space="preserve">
+    <value>Aucun objet Metaverse supprimé ne correspond à « {0} »</value>
+  </data>
+  <data name="DeletedMvoNoQueryMatch" xml:space="preserve">
+    <value>Aucun objet Metaverse supprimé ne correspond à votre requête</value>
+  </data>
+  <data name="DeletedMvoNoneRecorded" xml:space="preserve">
+    <value>Aucune suppression d’objet Metaverse n’a encore été enregistrée</value>
+  </data>
+  <data name="DeletedMvoNoneRecordedHint" xml:space="preserve">
+    <value>Lorsque des objets Metaverse sont supprimés, leur historique des modifications est conservé ici.</value>
+  </data>
+  <data name="DeletedAdjustCriteria" xml:space="preserve">
+    <value>Modifiez les critères ci-dessus et relancez la recherche, ou effacez-les pour afficher toutes les suppressions.</value>
+  </data>
+  <data name="DeletedClearCriteria" xml:space="preserve">
+    <value>Effacer les critères</value>
+  </data>
+  <data name="DeletedHistoryTitle" xml:space="preserve">
+    <value>Historique des modifications : {0}</value>
+  </data>
+  <data name="DeletedNoHistory" xml:space="preserve">
+    <value>Aucun historique des modifications disponible</value>
+  </data>
+  <data name="DeletedCsoNoHistoryHint" xml:space="preserve">
+    <value>Aucune modification n’a été enregistrée pour cet objet de système connecté avant sa suppression.</value>
+  </data>
+  <data name="DeletedMvoNoHistoryHint" xml:space="preserve">
+    <value>Aucune modification n’a été enregistrée pour cet objet Metaverse avant sa suppression.</value>
+  </data>
+  <data name="DeletedCsoNotFound" xml:space="preserve">
+    <value>Aucun enregistrement de suppression n’a été trouvé pour cet objet de système connecté.</value>
+  </data>
+  <data name="DeletedMvoNotFound" xml:space="preserve">
+    <value>Aucun enregistrement de suppression n’a été trouvé pour cet objet Metaverse.</value>
+  </data>
+  <data name="CsoLoadingTitle" xml:space="preserve">
+    <value>Chargement…</value>
+  </data>
+  <data name="CsoPageTitle" xml:space="preserve">
+    <value>Objet de système connecté : {0}</value>
+  </data>
+  <data name="CsoStillLoading" xml:space="preserve">
+    <value>Chargement en cours. Les objets volumineux peuvent prendre quelques secondes à récupérer.</value>
+  </data>
+  <data name="CsoHeadingLabel" xml:space="preserve">
+    <value>Objet de système connecté :</value>
+  </data>
+  <data name="CsoTerm" xml:space="preserve">
+    <value>Objet de système connecté</value>
+  </data>
+  <data name="CsoPageInfo" xml:space="preserve">
+    <value>Une vue de cet objet telle qu’elle est préparée dans JIM. Elle comprend les valeurs d’attributs importées du système connecté, ainsi que les exportations en attente qui doivent encore être exportées.</value>
+  </data>
+  <data name="CsoLabelType" xml:space="preserve">
+    <value>Type :</value>
+  </data>
+  <data name="CsoLabelStatus" xml:space="preserve">
+    <value>Statut :</value>
+  </data>
+  <data name="CsoLabelCreated" xml:space="preserve">
+    <value>Créé :</value>
+  </data>
+  <data name="CsoLabelUpdated" xml:space="preserve">
+    <value>Mis à jour :</value>
+  </data>
+  <data name="CsoLabelMetaverseObject" xml:space="preserve">
+    <value>Objet Metaverse :</value>
+  </data>
+  <data name="CsoLabelJoinType" xml:space="preserve">
+    <value>Type de jointure :</value>
+  </data>
+  <data name="CsoPreviewing" xml:space="preserve">
+    <value>Prévisualisation…</value>
+  </data>
+  <data name="CsoPreviewSync" xml:space="preserve">
+    <value>Prévisualiser la synchronisation</value>
+  </data>
+  <data name="CsoExploreCausality" xml:space="preserve">
+    <value>Explorer la causalité</value>
+  </data>
+  <data name="CsoSetPassword" xml:space="preserve">
+    <value>Définir le mot de passe</value>
+  </data>
+  <data name="CsoPendingExportsTitle" xml:space="preserve">
+    <value>Exportations en attente</value>
+  </data>
+  <data name="CsoPendingExportsIntro" xml:space="preserve">
+    <value>Les modifications d’attributs suivantes sont en attente pour ce système connecté. Elles peuvent attendre d’être exportées, ou avoir déjà été exportées et attendre une confirmation lors d’une importation ultérieure. Une fois confirmées, ces modifications seront reflétées dans les valeurs d’attributs de l’objet de système connecté ci-dessous.</value>
+  </data>
+  <data name="CsoSearchPendingExports" xml:space="preserve">
+    <value>Rechercher dans les exportations en attente...</value>
+  </data>
+  <data name="CsoChangeSingular" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="CsoChangePlural" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="CsoColumnAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="CsoColumnChangeType" xml:space="preserve">
+    <value>Type de modification</value>
+  </data>
+  <data name="CsoColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="CsoColumnExportAttempts" xml:space="preserve">
+    <value>Tentatives d’exportation</value>
+  </data>
+  <data name="CsoColumnLastExported" xml:space="preserve">
+    <value>Dernière exportation</value>
+  </data>
+  <data name="CsoPendingNoSearchMatch" xml:space="preserve">
+    <value>Aucune modification en file d’attente ne correspond à « {0} »</value>
+  </data>
+  <data name="CsoPendingNoneQueued" xml:space="preserve">
+    <value>Aucune modification n’est en file d’attente pour cet objet</value>
+  </data>
+  <data name="CsoPendingNoneQueuedHint" xml:space="preserve">
+    <value>Les modifications apparaissent ici tant qu’une exportation en attente attend d’être exportée, et sont effacées une fois que le système connecté les a confirmées.</value>
+  </data>
+  <data name="CsoTabAttributes" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="CsoTabChangeHistory" xml:space="preserve">
+    <value>Historique des modifications</value>
+  </data>
+  <data name="CsoColumnPlurality" xml:space="preserve">
+    <value>Pluralité</value>
+  </data>
+  <data name="CsoColumnExternalIdQuestion" xml:space="preserve">
+    <value>ID externe ?</value>
+  </data>
+  <data name="CsoChipSecondaryId" xml:space="preserve">
+    <value>ID secondaire</value>
+  </data>
+  <data name="CsoPluralityMulti" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="CsoPluralitySingle" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="CsoChipUnmanaged" xml:space="preserve">
+    <value>Non géré</value>
+  </data>
+  <data name="CsoUnmanagedTooltip" xml:space="preserve">
+    <value>Exportation initiale uniquement : JIM a défini cet attribut lors du provisionnement initial (s’il a provisionné l’objet) et n’exporte plus de modifications pour lui ; le système connecté est propriétaire de la valeur.</value>
+  </data>
+  <data name="CsoChipCreateOnly" xml:space="preserve">
+    <value>Défini à la création uniquement</value>
+  </data>
+  <data name="CsoNoAttributeValues" xml:space="preserve">
+    <value>Cet objet ne possède aucune valeur d’attribut</value>
+  </data>
+  <data name="CsoNoAttributeValuesHint" xml:space="preserve">
+    <value>Les valeurs apparaissent ici une fois qu’une importation les a récupérées depuis le système connecté.</value>
+  </data>
+  <data name="CsoNoChangeHistory" xml:space="preserve">
+    <value>Aucun historique des modifications n’a été enregistré pour cet objet.</value>
+  </data>
+  <data name="CsoLoadMore" xml:space="preserve">
+    <value>Charger plus ({0} restants)</value>
+  </data>
+  <data name="CsoPreviewBlocking" xml:space="preserve">
+    <value>L’aperçu de synchronisation a relevé un élément qui empêcherait la synchronisation ; voir les détails ci-dessous.</value>
+  </data>
+  <data name="CsoPreviewFailed" xml:space="preserve">
+    <value>L’aperçu de synchronisation a échoué : {0}</value>
+  </data>
+  <data name="CsoAttributeFallback" xml:space="preserve">
+    <value>Attribut {0}</value>
+  </data>
+  <data name="CsoFullSynchronisation" xml:space="preserve">
+    <value>Synchronisation complète</value>
+  </data>
+  <data name="CsoBreadcrumbConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="CsoBreadcrumbConnectorSpace" xml:space="preserve">
+    <value>Espace connecteur</value>
+  </data>
+  <data name="CsoListPageTitle" xml:space="preserve">
+    <value>Espace connecteur : {0}</value>
+  </data>
+  <data name="CsoListHeadingLabel" xml:space="preserve">
+    <value>Espace connecteur :</value>
+  </data>
+  <data name="CsoListPageInfo" xml:space="preserve">
+    <value>L’espace connecteur contient les objets de systèmes connectés de ce système connecté. Les modifications entrantes du système y sont conservées avant d’être validées dans le Metaverse. Les modifications sortantes y sont conservées avant la synchronisation avec le système connecté.</value>
+  </data>
+  <data name="CsoListFilterStatus" xml:space="preserve">
+    <value>Filtrer par statut :</value>
+  </data>
+  <data name="CsoListFilterObjectType" xml:space="preserve">
+    <value>Filtrer par type d’objet :</value>
+  </data>
+  <data name="CsoListFilterJoinType" xml:space="preserve">
+    <value>Filtrer par type de jointure :</value>
+  </data>
+  <data name="CsoListFilterReferences" xml:space="preserve">
+    <value>Filtrer par références :</value>
+  </data>
+  <data name="CsoListUnresolved" xml:space="preserve">
+    <value>Non résolues</value>
+  </data>
+  <data name="CsoListDeleteAll" xml:space="preserve">
+    <value>Supprimer tous les objets</value>
+  </data>
+  <data name="CsoListColumnsMenu" xml:space="preserve">
+    <value>Colonnes</value>
+  </data>
+  <data name="CsoListShowColumns" xml:space="preserve">
+    <value>Afficher les colonnes</value>
+  </data>
+  <data name="CsoListColumnsHint" xml:space="preserve">
+    <value>Mémorisé pour {0} dans ce navigateur.</value>
+  </data>
+  <data name="CsoListExternalIdHeader" xml:space="preserve">
+    <value>ID externe</value>
+  </data>
+  <data name="CsoListExternalIdHeaderNamed" xml:space="preserve">
+    <value>ID externe ({0})</value>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeader" xml:space="preserve">
+    <value>ID externe secondaire</value>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeaderNamed" xml:space="preserve">
+    <value>ID externe secondaire ({0})</value>
+  </data>
+  <data name="CsoListColumnDateJoined" xml:space="preserve">
+    <value>Date de jointure</value>
+  </data>
+  <data name="CsoListColumnState" xml:space="preserve">
+    <value>État</value>
+  </data>
+  <data name="CsoListColumnJoinType" xml:space="preserve">
+    <value>Type de jointure</value>
+  </data>
+  <data name="CsoListNoSearchMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté ne correspond à « {0} »</value>
+  </data>
+  <data name="CsoListEveryReferenceResolved" xml:space="preserve">
+    <value>Toutes les références ont été résolues</value>
+  </data>
+  <data name="CsoListNoUnresolvedInSystem" xml:space="preserve">
+    <value>Aucun objet de système connecté de {0} ne détient de valeur de référence qui n’a pas pu être liée.</value>
+  </data>
+  <data name="CsoListNoFilterMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté ne correspond aux filtres sélectionnés</value>
+  </data>
+  <data name="CsoListClearFilterHint" xml:space="preserve">
+    <value>Effacez les filtres ci-dessus pour parcourir tout l’espace connecteur.</value>
+  </data>
+  <data name="CsoListNoneYet" xml:space="preserve">
+    <value>Aucun objet de système connecté pour le moment</value>
+  </data>
+  <data name="CsoListNoneYetHint" xml:space="preserve">
+    <value>Les objets apparaissent ici une fois qu’une importation les récupère depuis le système connecté.</value>
+  </data>
+  <data name="CsoListClearTitle" xml:space="preserve">
+    <value>Vider l’espace connecteur</value>
+  </data>
+  <data name="CsoListClearWarning" xml:space="preserve">
+    <value>Cette action supprime de JIM tous les objets de systèmes connectés.</value>
+  </data>
+  <data name="CsoListClearExplain1" xml:space="preserve">
+    <value>L’effacement ne touche pas au système externe. Il supprime les objets de l’espace connecteur, leurs jointures Metaverse et toutes les exportations en attente vers ce système connecté ; le Metaverse lui-même n’est pas modifié par l’effacement.</value>
+  </data>
+  <data name="CsoListClearExplain2" xml:space="preserve">
+    <value>Exécutez une importation complète pour reconstruire l’espace connecteur. Lors de la première synchronisation complète qui suit la réussite de cette importation, les valeurs Metaverse apportées par des objets qui ne sont pas revenus sont rappelées automatiquement. La règle de suppression du type de chaque objet Metaverse s’applique ensuite aux objets qui ne sont pas revenus, avec son délai de grâce configuré.</value>
+  </data>
+  <data name="CsoListClearExplain3" xml:space="preserve">
+    <value>Remarque : une exécution de synchronisation complète avant ce moment ne fait rien de plus qu’une synchronisation ordinaire. La réconciliation refuse, en laissant tout en l’état, si beaucoup moins d’objets reviennent que d’objets effacés ; réimportez le reste, ou augmentez la part autorisée dans les paramètres de service, puis exécutez à nouveau une synchronisation complète.</value>
+  </data>
+  <data name="CsoListClearExplain4Lead" xml:space="preserve">
+    <value>Les suppressions d’objets Metaverse seront exécutées via une tâche et peuvent prendre un certain temps. Consultez la page</value>
+  </data>
+  <data name="CsoListOperationsLink" xml:space="preserve">
+    <value>Opérations</value>
+  </data>
+  <data name="CsoListClearExplain4Trail" xml:space="preserve">
+    <value>ou actualisez celle-ci pour suivre la progression.</value>
+  </data>
+  <data name="CsoListDeleteHistory" xml:space="preserve">
+    <value>Supprimer l’historique des modifications des objets effacés</value>
+  </data>
+  <data name="CsoListDeleteHistoryHint" xml:space="preserve">
+    <value>Lorsque cette option est activée, tous les enregistrements d’historique des modifications des objets de systèmes connectés effacés seront également supprimés. Cela est recommandé lorsque l’on efface en vue d’une réimportation, car l’ancien historique n’a plus d’intérêt.</value>
+  </data>
+  <data name="CsoListTaskFailed" xml:space="preserve">
+    <value>Impossible de créer la tâche.</value>
+  </data>
+  <data name="CsoPluralName" xml:space="preserve">
+    <value>Objets de systèmes connectés</value>
+  </data>
+  <data name="CsoListSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par ID externe, ID secondaire ou nom d’affichage</value>
+  </data>
+  <data name="CsoListQueuedForDeletion" xml:space="preserve">
+    <value>Les objets de systèmes connectés ont été mis en file d’attente pour suppression.</value>
+  </data>
+  <data name="PexPageTitle" xml:space="preserve">
+    <value>Détail de l’exportation en attente</value>
+  </data>
+  <data name="PexHeadingLabel" xml:space="preserve">
+    <value>Exportation en attente :</value>
+  </data>
+  <data name="PexTerm" xml:space="preserve">
+    <value>Exportation en attente</value>
+  </data>
+  <data name="PexPageInfo" xml:space="preserve">
+    <value>Une exportation en attente est une modification que JIM a mise en file d’attente pour un système connecté et qu’il n’a pas encore confirmée : l’objet auquel elle s’applique, les modifications d’attributs qu’elle transporte et le résultat de ses tentatives.</value>
+  </data>
+  <data name="PexCardDetails" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="PexCardRelated" xml:space="preserve">
+    <value>Objets liés</value>
+  </data>
+  <data name="PexLabelId" xml:space="preserve">
+    <value>ID</value>
+  </data>
+  <data name="PexLabelHasUnresolved" xml:space="preserve">
+    <value>Contient des références non résolues</value>
+  </data>
+  <data name="PexLabelTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="PexLabelSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="PexNewObject" xml:space="preserve">
+    <value>Nouvel objet (sera créé)</value>
+  </data>
+  <data name="PexErrorInformation" xml:space="preserve">
+    <value>Informations sur l’erreur</value>
+  </data>
+  <data name="PexLabelFailedAttempts" xml:space="preserve">
+    <value>Tentatives échouées</value>
+  </data>
+  <data name="PexAttemptsAgain" xml:space="preserve">
+    <value>JIM la retente à chaque exécution d’exportation.</value>
+  </data>
+  <data name="PexLabelFailingSince" xml:space="preserve">
+    <value>En échec depuis</value>
+  </data>
+  <data name="PexLabelLastAttempted" xml:space="preserve">
+    <value>Dernière tentative</value>
+  </data>
+  <data name="PexLabelErrorMessage" xml:space="preserve">
+    <value>Message d’erreur</value>
+  </data>
+  <data name="PexLabelStackTrace" xml:space="preserve">
+    <value>Trace de la pile</value>
+  </data>
+  <data name="PexUnresolvedTitle" xml:space="preserve">
+    <value>Références non résolues</value>
+  </data>
+  <data name="PexUnresolvedIntro" xml:space="preserve">
+    <value>Ces valeurs de référence n’ont pas encore été écrites dans le système connecté. Tout le reste de cette exportation en attente est écrit dès que possible ; chaque référence est écrite lorsque l’objet auquel elle renvoie peut être adressé dans ce système connecté.</value>
+  </data>
+  <data name="PexColumnReferencedObject" xml:space="preserve">
+    <value>Objet référencé</value>
+  </data>
+  <data name="PexColumnReason" xml:space="preserve">
+    <value>Motif</value>
+  </data>
+  <data name="PexReasonResolvable" xml:space="preserve">
+    <value>Résolvable à la prochaine exportation</value>
+  </data>
+  <data name="PexReasonAwaitingAnchor" xml:space="preserve">
+    <value>En attente d’un ancrage</value>
+  </data>
+  <data name="PexReasonNotInSystem" xml:space="preserve">
+    <value>Absent de ce système connecté</value>
+  </data>
+  <data name="PexExplainResolvable" xml:space="preserve">
+    <value>L’objet référencé dispose désormais d’un ancrage dans ce système connecté. La référence est écrite à la prochaine exécution d’exportation.</value>
+  </data>
+  <data name="PexExplainAwaitingAnchor" xml:space="preserve">
+    <value>L’objet référencé existe dans ce système connecté mais ne porte pas encore d’ancrage. Sa propre exportation n’a pas été exécutée ou confirmée. La référence est écrite une fois qu’elle l’a été.</value>
+  </data>
+  <data name="PexExplainNotInSystem" xml:space="preserve">
+    <value>L’objet référencé n’a pas d’objet de système connecté dans ce système connecté. Il est hors périmètre pour chaque règle de synchronisation vers ce système, ou n’a pas été provisionné. La référence ne peut pas être écrite tant que ce n’est pas le cas.</value>
+  </data>
+  <data name="PexAttributeChanges" xml:space="preserve">
+    <value>Modifications d’attributs</value>
+  </data>
+  <data name="PexColumnAttributeFlow" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="PexColumnValueFrom" xml:space="preserve">
+    <value>Valeur provenant de</value>
+  </data>
+  <data name="PexSeveral" xml:space="preserve">
+    <value>Plusieurs</value>
+  </data>
+  <data name="PexChangesOne" xml:space="preserve">
+    <value>{0} modification</value>
+  </data>
+  <data name="PexChangesOther" xml:space="preserve">
+    <value>{0} modifications</value>
+  </data>
+  <data name="PexAttributeChangesZero" xml:space="preserve">
+    <value>Modifications d’attributs (0)</value>
+  </data>
+  <data name="PexNoChangesDelete" xml:space="preserve">
+    <value>Aucune modification d’attribut (l’objet sera supprimé).</value>
+  </data>
+  <data name="PexNoChanges" xml:space="preserve">
+    <value>Aucune modification d’attribut enregistrée.</value>
+  </data>
+  <data name="PexNotFound" xml:space="preserve">
+    <value>Cette exportation en attente n’est plus en file d’attente. Elle a soit été exportée vers le système connecté, soit remplacée par une modification ultérieure du même objet de système connecté. Les exportations en attente sont supprimées dès qu’elles n’attendent plus d’être appliquées ; les liens vers l’une d’elles cessent donc de fonctionner une fois son exportation exécutée.</value>
+  </data>
+  <data name="PexBackToList" xml:space="preserve">
+    <value>Retour à la liste</value>
+  </data>
+  <data name="PexBreadcrumbNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="PexUnknown" xml:space="preserve">
+    <value>Inconnu</value>
+  </data>
+  <data name="PexListPageTitle" xml:space="preserve">
+    <value>Exportations en attente : {0}</value>
+  </data>
+  <data name="PexListHeadingLabel" xml:space="preserve">
+    <value>Exportations en attente :</value>
+  </data>
+  <data name="PexListPageInfo" xml:space="preserve">
+    <value>Les exportations en attente sont des modifications qui doivent être appliquées au système connecté. Elles sont créées lorsque des objets Metaverse changent et doivent être synchronisées vers ce système cible.</value>
+  </data>
+  <data name="PexFilterStatus" xml:space="preserve">
+    <value>Filtrer par statut</value>
+  </data>
+  <data name="PexStatusPending" xml:space="preserve">
+    <value>En attente</value>
+  </data>
+  <data name="PexStatusExecuting" xml:space="preserve">
+    <value>En cours d’exécution</value>
+  </data>
+  <data name="PexStatusExportNotConfirmed" xml:space="preserve">
+    <value>Exportation non confirmée</value>
+  </data>
+  <data name="PexStatusExported" xml:space="preserve">
+    <value>Exportée</value>
+  </data>
+  <data name="PexStatusParked" xml:space="preserve">
+    <value>Suspendue</value>
+  </data>
+  <data name="PexFilterChangeType" xml:space="preserve">
+    <value>Filtrer par type de modification</value>
+  </data>
+  <data name="PexChangeTypeUpdate" xml:space="preserve">
+    <value>Mise à jour</value>
+  </data>
+  <data name="PexFailingOnly" xml:space="preserve">
+    <value>En échec uniquement</value>
+  </data>
+  <data name="PexColumnSourceMvo" xml:space="preserve">
+    <value>Objet Metaverse source</value>
+  </data>
+  <data name="PexColumnTargetCso" xml:space="preserve">
+    <value>Objet de système connecté cible</value>
+  </data>
+  <data name="PexColumnChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="PexListSearch" xml:space="preserve">
+    <value>Rechercher une cible, un objet Metaverse source ou des erreurs</value>
+  </data>
+  <data name="PexNewObjectShort" xml:space="preserve">
+    <value>Nouvel objet</value>
+  </data>
+  <data name="PexUnresolvedTooltip" xml:space="preserve">
+    <value>Cette exportation a été écrite sans ces références ; elles sont réessayées automatiquement dès que leurs cibles existent. La page de détail explique chacune d’elles.</value>
+  </data>
+  <data name="PexFailingSinceTooltip" xml:space="preserve">
+    <value>{0}. JIM la retente à chaque exécution d’exportation.</value>
+  </data>
+  <data name="PexNoSearchMatch" xml:space="preserve">
+    <value>Aucune exportation en attente ne correspond à « {0} »</value>
+  </data>
+  <data name="PexNoneFailing" xml:space="preserve">
+    <value>Aucune exportation en attente n’est en échec</value>
+  </data>
+  <data name="PexNoneFailingHint" xml:space="preserve">
+    <value>La dernière tentative de chaque exportation en attente a réussi, ou elle n’a pas encore été tentée.</value>
+  </data>
+  <data name="PexShowAll" xml:space="preserve">
+    <value>Tout afficher</value>
+  </data>
+  <data name="PexNoFilterMatch" xml:space="preserve">
+    <value>Aucune exportation en attente ne correspond aux filtres</value>
+  </data>
+  <data name="PexNoFilterMatchHint" xml:space="preserve">
+    <value>Essayez d’autres filtres, ou effacez-les.</value>
+  </data>
+  <data name="PexClearFilters" xml:space="preserve">
+    <value>Effacer les filtres</value>
+  </data>
+  <data name="PexNoneYet" xml:space="preserve">
+    <value>Aucune exportation en attente</value>
+  </data>
+  <data name="PexNoneYetHint" xml:space="preserve">
+    <value>Les modifications en attente d’écriture dans ce système connecté apparaissent ici.</value>
+  </data>
+  <data name="PexAll" xml:space="preserve">
+    <value>Tous</value>
+  </data>
+  <data name="PexSelectedCount" xml:space="preserve">
+    <value>{0} sélectionnés</value>
+  </data>
+  <data name="UrefHandlingLabel" xml:space="preserve">
+    <value>Gestion des références non résolues :</value>
+  </data>
+  <data name="UrefChange" xml:space="preserve">
+    <value>Modifier</value>
+  </data>
+  <data name="UrefRecordedByRun" xml:space="preserve">
+    <value>Enregistré par l’exécution : {0}</value>
+  </data>
+  <data name="UrefLikelyCause" xml:space="preserve">
+    <value>Cause probable :</value>
+  </data>
+  <data name="UrefNextSteps" xml:space="preserve">
+    <value>Actions suivantes</value>
+  </data>
+  <data name="UrefIntroObject" xml:space="preserve">
+    <value>Ces valeurs de référence n’ont pas pu être liées à des objets de systèmes connectés dans {0} ; elles ne peuvent donc pas remonter vers le Metaverse tant qu’elles ne sont pas résolues. Chaque cause probable est évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefThisConnectedSystem" xml:space="preserve">
+    <value>ce système connecté</value>
+  </data>
+  <data name="UrefObjectFallback" xml:space="preserve">
+    <value>objet</value>
+  </data>
+  <data name="UrefValuesOne" xml:space="preserve">
+    <value>{0} valeur de référence sur cet objet de type {1}</value>
+  </data>
+  <data name="UrefValuesOther" xml:space="preserve">
+    <value>{0} valeurs de référence sur cet objet de type {1}</value>
+  </data>
+  <data name="UrefSomeValues" xml:space="preserve">
+    <value>quelques valeurs de référence sur cet objet de type {0}</value>
+  </data>
+  <data name="UrefRunErrorSentence" xml:space="preserve">
+    <value>Cette exécution n’a pas pu lier {0} à des objets de systèmes connectés ; elles ne peuvent donc pas remonter vers le Metaverse tant qu’elles ne sont pas résolues.</value>
+  </data>
+  <data name="UrefUnresolvedOne" xml:space="preserve">
+    <value>{0} valeur de référence</value>
+  </data>
+  <data name="UrefUnresolvedOther" xml:space="preserve">
+    <value>{0} valeurs de référence</value>
+  </data>
+  <data name="UrefUnresolvedUnknown" xml:space="preserve">
+    <value>des valeurs de référence</value>
+  </data>
+  <data name="UrefRunLeft" xml:space="preserve">
+    <value>Cette exécution a laissé {0} sans résolution. Elles n’ont pas été comptées comme une erreur, car la gestion des références non résolues n’était pas réglée sur Erreur à ce moment-là.</value>
+  </data>
+  <data name="UrefRunLeftAlso" xml:space="preserve">
+    <value>Cette exécution a aussi laissé {0} sans résolution. Elles ne sont pas comptées comme l’erreur de cet élément, car l’erreur ci-dessus en est déjà une.</value>
+  </data>
+  <data name="UrefDeletedSince" xml:space="preserve">
+    <value>L’objet de système connecté a depuis été supprimé ; ses références ne peuvent donc plus être affichées, et aucune d’elles n’est encore en attente.</value>
+  </data>
+  <data name="UrefNoneNow" xml:space="preserve">
+    <value>Toutes ont depuis été résolues ou retirées de la source. Rien ne les concernant n’est encore en attente.</value>
+  </data>
+  <data name="UrefFewerOne" xml:space="preserve">
+    <value>{0} reste non résolue ; les autres ont depuis été résolues ou retirées de la source. Celles qui subsistent sont listées ci-dessous avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefFewerOther" xml:space="preserve">
+    <value>{0} restent non résolues ; les autres ont depuis été résolues ou retirées de la source. Celles qui subsistent sont listées ci-dessous avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefMore" xml:space="preserve">
+    <value>Des importations ultérieures ont laissé davantage de références non résolues : l’objet de système connecté en détient désormais {0}. Toutes sont listées ci-dessous avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefAsTheyStand" xml:space="preserve">
+    <value>Elles sont listées ci-dessous telles qu’elles se présentent aujourd’hui sur l’objet de système connecté, avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefSingular" xml:space="preserve">
+    <value>Référence non résolue</value>
+  </data>
+  <data name="UrefSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher un attribut ou une valeur</value>
+  </data>
+  <data name="UrefColumnLikelyCause" xml:space="preserve">
+    <value>Cause probable</value>
+  </data>
+  <data name="UrefColumnWhereToFix" xml:space="preserve">
+    <value>Où corriger</value>
+  </data>
+  <data name="UrefColumnNextStep" xml:space="preserve">
+    <value>Action suivante</value>
+  </data>
+  <data name="UrefNoSearchMatch" xml:space="preserve">
+    <value>Aucune référence non résolue ne correspond à « {0} »</value>
+  </data>
+  <data name="UrefAllResolved" xml:space="preserve">
+    <value>Toutes les références de cet objet ont été résolues</value>
+  </data>
+  <data name="UrefResolvedAfterOpen" xml:space="preserve">
+    <value>Elles ont été résolues après l’ouverture de cette page.</value>
+  </data>
+  <data name="UrefViewObject" xml:space="preserve">
+    <value>Afficher l’objet de système connecté</value>
+  </data>
+  <data name="UrefCauseNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="UrefCauseNotFoundInScope" xml:space="preserve">
+    <value>Introuvable dans le périmètre</value>
+  </data>
+  <data name="UrefCauseContainerNotInScope" xml:space="preserve">
+    <value>Conteneur hors périmètre</value>
+  </data>
+  <data name="UrefCauseContainerExcluded" xml:space="preserve">
+    <value>Conteneur exclu</value>
+  </data>
+  <data name="UrefCausePartitionNotSelected" xml:space="preserve">
+    <value>Partition non sélectionnée</value>
+  </data>
+  <data name="UrefCauseOutsideSystem" xml:space="preserve">
+    <value>En dehors de ce système connecté</value>
+  </data>
+  <data name="UrefCauseAmbiguousObjectType" xml:space="preserve">
+    <value>Type d’objet ambigu</value>
+  </data>
+  <data name="UrefFixSource" xml:space="preserve">
+    <value>Système source</value>
+  </data>
+  <data name="UrefActionReviewScope" xml:space="preserve">
+    <value>Examiner la portée du conteneur</value>
+  </data>
+  <data name="UrefActionViewSchema" xml:space="preserve">
+    <value>Voir le schéma</value>
+  </data>
+  <data name="UrefActionViewSettings" xml:space="preserve">
+    <value>Voir les paramètres</value>
+  </data>
+  <data name="UrefActionViewRunProfiles" xml:space="preserve">
+    <value>Voir les profils d’exécution</value>
+  </data>
+  <data name="UrefHandlingIgnore" xml:space="preserve">
+    <value>La gestion des références non résolues est réglée sur Ignorer, si bien que les exécutions ne les signalent pas.</value>
+  </data>
+  <data name="UrefHandlingSetTo" xml:space="preserve">
+    <value>La gestion des références non résolues est réglée sur {0}.</value>
+  </data>
+  <data name="UrefReferenceOne" xml:space="preserve">
+    <value>{0} référence</value>
+  </data>
+  <data name="UrefReferenceOther" xml:space="preserve">
+    <value>{0} références</value>
+  </data>
+  <data name="UrefObjectOne" xml:space="preserve">
+    <value>{0} objet de système connecté</value>
+  </data>
+  <data name="UrefObjectOther" xml:space="preserve">
+    <value>{0} objets de systèmes connectés</value>
+  </data>
+  <data name="UrefOnObjects" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="UrefNotResolvedOne" xml:space="preserve">
+    <value>{0} n’a pas pu être résolue.</value>
+  </data>
+  <data name="UrefNotResolvedOther" xml:space="preserve">
+    <value>{0} n’ont pas pu être résolues.</value>
+  </data>
+  <data name="UrefSignpostTooltip" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="UrefOnObjectOne" xml:space="preserve">
+    <value>sur {0} objet</value>
+  </data>
+  <data name="UrefOnObjectOther" xml:space="preserve">
+    <value>sur {0} objets</value>
+  </data>
+  <data name="UrefBelowChanges" xml:space="preserve">
+    <value>Ci-dessous, les modifications qui les résoudraient, chaque cause probable étant évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefWherePointsTitle" xml:space="preserve">
+    <value>Vers où elles pointent</value>
+  </data>
+  <data name="UrefFixInJim" xml:space="preserve">
+    <value>Corriger dans JIM</value>
+  </data>
+  <data name="UrefFixInSystem" xml:space="preserve">
+    <value>Corriger dans {0}</value>
+  </data>
+  <data name="UrefGroupCounts" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="UrefStepOne" xml:space="preserve">
+    <value>{0} action</value>
+  </data>
+  <data name="UrefStepOther" xml:space="preserve">
+    <value>{0} actions</value>
+  </data>
+  <data name="UrefShowFewer" xml:space="preserve">
+    <value>Afficher moins d’actions</value>
+  </data>
+  <data name="UrefShowAll" xml:space="preserve">
+    <value>Afficher les {0} actions</value>
+  </data>
+  <data name="UrefTooltipLikely" xml:space="preserve">
+    <value>Cause probable : {0}. {1} {2}</value>
+  </data>
+  <data name="PdlPageTitle" xml:space="preserve">
+    <value>Suppressions en attente</value>
+  </data>
+  <data name="PdlPageInfo" xml:space="preserve">
+    <value>Objets Metaverse engagés dans le circuit de suppression. Comprend les objets Metaverse en cours de déprovisionnement depuis des systèmes connectés, et ceux qui attendent une suppression automatique à l’expiration de leur délai de grâce.</value>
+  </data>
+  <data name="PdlTotalPending" xml:space="preserve">
+    <value>Total en attente</value>
+  </data>
+  <data name="PdlDeprovisioning" xml:space="preserve">
+    <value>Déprovisionnement</value>
+  </data>
+  <data name="PdlTipDeprovisioning" xml:space="preserve">
+    <value>Objets Metaverse encore connectés à d’autres systèmes, en attente de suppression en cascade</value>
+  </data>
+  <data name="PdlAwaitingGrace" xml:space="preserve">
+    <value>En attente du délai de grâce</value>
+  </data>
+  <data name="PdlTipAwaitingGrace" xml:space="preserve">
+    <value>Objets Metaverse entièrement déconnectés, en attente de l’expiration du délai de grâce</value>
+  </data>
+  <data name="PdlReady" xml:space="preserve">
+    <value>Prêts à être supprimés</value>
+  </data>
+  <data name="PdlTipReady" xml:space="preserve">
+    <value>Objets Metaverse éligibles à la suppression (délai de grâce expiré, aucun connecteur)</value>
+  </data>
+  <data name="PdlFilterObjectType" xml:space="preserve">
+    <value>Filtrer par type d’objet</value>
+  </data>
+  <data name="PdlSingular" xml:space="preserve">
+    <value>Suppression en attente</value>
+  </data>
+  <data name="PdlColumnTriggeredBy" xml:space="preserve">
+    <value>Déclenchée par</value>
+  </data>
+  <data name="PdlTipTriggeredBy" xml:space="preserve">
+    <value>Le système connecté dont la déconnexion a déclenché la suppression planifiée</value>
+  </data>
+  <data name="PdlColumnDisconnected" xml:space="preserve">
+    <value>Déconnecté le</value>
+  </data>
+  <data name="PdlColumnEligible" xml:space="preserve">
+    <value>Suppression possible</value>
+  </data>
+  <data name="PdlColumnConnectors" xml:space="preserve">
+    <value>Connecteurs</value>
+  </data>
+  <data name="PdlStatusGrace" xml:space="preserve">
+    <value>Délai de grâce</value>
+  </data>
+  <data name="PdlStatusReady" xml:space="preserve">
+    <value>Prêt</value>
+  </data>
+  <data name="PdlNoConnectorRemains" xml:space="preserve">
+    <value>Aucun connecteur restant</value>
+  </data>
+  <data name="PdlOverdueBy" xml:space="preserve">
+    <value>En retard de {0}</value>
+  </data>
+  <data name="PdlImmediate" xml:space="preserve">
+    <value>Immédiat</value>
+  </data>
+  <data name="PdlDayOne" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="PdlDayOther" xml:space="preserve">
+    <value>{0} jours</value>
+  </data>
+  <data name="PdlConnectorsRemaining" xml:space="preserve">
+    <value>{0} connecteur(s) restant(s) - en attente de suppression en cascade</value>
+  </data>
+  <data name="PdlNoSearchMatch" xml:space="preserve">
+    <value>Aucune suppression en attente ne correspond à « {0} »</value>
+  </data>
+  <data name="PdlNoneOfType" xml:space="preserve">
+    <value>Aucun objet Metaverse du type sélectionné n’est en attente de suppression</value>
+  </data>
+  <data name="PdlNoneOfTypeHint" xml:space="preserve">
+    <value>Effacez le filtre de type d’objet pour voir toutes les suppressions en attente.</value>
+  </data>
+  <data name="PdlClearFilter" xml:space="preserve">
+    <value>Effacer le filtre</value>
+  </data>
+  <data name="PdlNone" xml:space="preserve">
+    <value>Aucun objet Metaverse n’est en attente de suppression</value>
+  </data>
+  <data name="PdlNoneHint" xml:space="preserve">
+    <value>Les objets Metaverse apparaissent ici lorsqu’une déconnexion planifie leur suppression automatique.</value>
+  </data>
+  <data name="ImpTitle" xml:space="preserve">
+    <value>Objet importé</value>
+  </data>
+  <data name="ImpJson" xml:space="preserve">
+    <value>JSON</value>
+  </data>
+  <data name="ImpViewAria" xml:space="preserve">
+    <value>Affichage de l’objet importé</value>
+  </data>
+  <data name="ImpRunLimit" xml:space="preserve">
+    <value>Non enregistré : cette exécution avait déjà enregistré les {0} premiers objets rejetés, où elle s’arrête. Ouvrez l’un des éléments rejetés antérieurs de l’exécution pour voir ce que le connecteur a renvoyé.</value>
+  </data>
+  <data name="ImpIntro" xml:space="preserve">
+    <value>Ce que le connecteur a renvoyé pour cet objet, tel qu’enregistré lors de son rejet.</value>
+  </data>
+  <data name="ImpAttributesMarked" xml:space="preserve">
+    <value>Les attributs concernés par l’erreur sont signalés.</value>
+  </data>
+  <data name="ImpTipNamedInError" xml:space="preserve">
+    <value>L’erreur de l’élément concerne cet attribut.</value>
+  </data>
+  <data name="ImpNamedInError" xml:space="preserve">
+    <value>Nommé dans l’erreur</value>
+  </data>
+  <data name="ImpTipWithheld" xml:space="preserve">
+    <value>Cet attribut contient, ou peut contenir, un identifiant d’authentification ; JIM n’a donc pas enregistré ses valeurs.</value>
+  </data>
+  <data name="ImpWithheld" xml:space="preserve">
+    <value>Non enregistré (identifiant d’authentification)</value>
+  </data>
+  <data name="ImpOmittedValueOne" xml:space="preserve">
+    <value>+ {0} autre valeur non enregistrée</value>
+  </data>
+  <data name="ImpOmittedValueOther" xml:space="preserve">
+    <value>+ {0} autres valeurs non enregistrées</value>
+  </data>
+  <data name="ImpNoAttributes" xml:space="preserve">
+    <value>Le connecteur n’a renvoyé aucun attribut pour cet objet</value>
+  </data>
+  <data name="ImpCopyJson" xml:space="preserve">
+    <value>Copier le JSON</value>
+  </data>
+  <data name="ImpOmittedAttrOne" xml:space="preserve">
+    <value>{0} attribut a été omis pour conserver l’enregistrement dans sa limite de taille{1}</value>
+  </data>
+  <data name="ImpOmittedAttrOther" xml:space="preserve">
+    <value>{0} attributs ont été omis pour conserver l’enregistrement dans sa limite de taille{1}</value>
+  </data>
+  <data name="ImpOmittedNames" xml:space="preserve">
+    <value> : {0}</value>
+  </data>
+  <data name="ImpAndOthers" xml:space="preserve">
+    <value>, et d’autres</value>
+  </data>
+  <data name="ImpCredentialsNote" xml:space="preserve">
+    <value>Les valeurs des attributs qui contiennent, ou peuvent contenir, des identifiants d’authentification ne sont jamais enregistrées. L’enregistrement est conservé tant que cette activité existe.</value>
+  </data>
+  <data name="ImpCopied" xml:space="preserve">
+    <value>Copié dans le presse-papiers</value>
+  </data>
+  <data name="ImpCopyFailed" xml:space="preserve">
+    <value>Le navigateur n’a pas permis à JIM de copier le JSON. Sélectionnez-le et copiez-le à la place.</value>
+  </data>
+  <data name="ImvSearch" xml:space="preserve">
+    <value>Rechercher dans {0}...</value>
+  </data>
+  <data name="ImvValuesPlural" xml:space="preserve">
+    <value>Valeurs</value>
+  </data>
+  <data name="ImvNoMatch" xml:space="preserve">
+    <value>Aucune valeur ne correspond à « {0} »</value>
+  </data>
+  <data name="DelManualTyped" xml:space="preserve">
+    <value>La règle de suppression des objets {0} a été définie sur {1} ; la suppression automatique a été désactivée.</value>
+  </data>
+  <data name="DelManualUntyped" xml:space="preserve">
+    <value>La règle de suppression a été définie sur {0} ; la suppression automatique a été désactivée.</value>
+  </data>
+  <data name="DelManualLabel" xml:space="preserve">
+    <value>suppression manuelle uniquement</value>
+  </data>
+  <data name="DelLastConnectorTyped" xml:space="preserve">
+    <value>La règle de suppression des objets {0} exigeait que {1} soit déconnecté ; les autres objets de systèmes connectés sont restés connectés.</value>
+  </data>
+  <data name="DelLastConnectorUntyped" xml:space="preserve">
+    <value>La règle de suppression exigeait que {0} soit déconnecté ; les autres objets de systèmes connectés sont restés connectés.</value>
+  </data>
+  <data name="DelAllConnectors" xml:space="preserve">
+    <value>tous les connecteurs</value>
+  </data>
+  <data name="DelNotSourceSystem" xml:space="preserve">
+    <value>{0} n’a pas été configuré comme source faisant autorité ; sa déconnexion n’a donc pas déclenché de suppression.</value>
+  </data>
+  <data name="DelAllSourcesMode" xml:space="preserve">
+    <value>Le mode de déclenchement était {0} : {1} s’est déconnecté, mais {2} sur {3} sources sélectionnées sont restées connectées ({4}).</value>
+  </data>
+  <data name="DelAllSourcesLabel" xml:space="preserve">
+    <value>Toutes les sources se déconnectent</value>
+  </data>
+  <data name="DelAuthoritativeTyped" xml:space="preserve">
+    <value>La règle de suppression des objets {0} exigeait qu’une source faisant autorité se déconnecte ; les conditions enregistrées n’ont pas déclenché de suppression.</value>
+  </data>
+  <data name="DelAuthoritativeUntyped" xml:space="preserve">
+    <value>La règle de suppression exigeait qu’une source faisant autorité se déconnecte ; les conditions enregistrées n’ont pas déclenché de suppression.</value>
+  </data>
+  <data name="DelExplainFooter" xml:space="preserve">
+    <value>Cette explication reflète la politique de suppression enregistrée lors de l’exécution de cette activité.</value>
+  </data>
+  <data name="DpvLeadTyped" xml:space="preserve">
+    <value>Les objets {0} ont été configurés avec la règle de suppression suivante lors de l’exécution de cette activité :</value>
+  </data>
+  <data name="DpvLeadUntyped" xml:space="preserve">
+    <value>La règle de suppression suivante a été configurée lors de l’exécution de cette activité :</value>
+  </data>
+  <data name="DpvManualLabel" xml:space="preserve">
+    <value>Suppression manuelle uniquement.</value>
+  </data>
+  <data name="DpvManualBody" xml:space="preserve">
+    <value>L’objet Metaverse ne serait pas supprimé automatiquement, même lorsque tous les connecteurs ont été retirés ; un administrateur doit le supprimer manuellement.</value>
+  </data>
+  <data name="DpvLastLabel" xml:space="preserve">
+    <value>Suppression lorsque le dernier connecteur se déconnecte.</value>
+  </data>
+  <data name="DpvFateGraceLast" xml:space="preserve">
+    <value>L’objet Metaverse serait marqué pour suppression avec un délai de grâce de {0} lorsque tous les objets de systèmes connectés auront été retirés.</value>
+  </data>
+  <data name="DpvFateImmediateLast" xml:space="preserve">
+    <value>L’objet Metaverse serait supprimé immédiatement lorsque tous les objets de systèmes connectés auront été retirés.</value>
+  </data>
+  <data name="DpvAuthLabel" xml:space="preserve">
+    <value>Suppression lorsqu’une source faisant autorité se déconnecte.</value>
+  </data>
+  <data name="DpvFateGrace" xml:space="preserve">
+    <value>L’objet Metaverse serait marqué pour suppression avec un délai de grâce de {0}.</value>
+  </data>
+  <data name="DpvFateImmediate" xml:space="preserve">
+    <value>L’objet Metaverse serait supprimé immédiatement.</value>
+  </data>
+  <data name="DpvTriggerMode" xml:space="preserve">
+    <value>Mode de déclenchement : {0} ; {1}</value>
+  </data>
+  <data name="DpvModeAll" xml:space="preserve">
+    <value>la suppression n’intervient qu’une fois que toutes les sources sélectionnées se sont déconnectées.</value>
+  </data>
+  <data name="DpvModeAny" xml:space="preserve">
+    <value>la suppression intervient lorsque l’une des sources sélectionnées se déconnecte.</value>
+  </data>
+  <data name="DpvModeSpecific" xml:space="preserve">
+    <value>Source(s) spécifique(s) se déconnectent</value>
+  </data>
+  <data name="DpvTriggeredBy" xml:space="preserve">
+    <value>Évaluation déclenchée par la déconnexion de {0}.</value>
+  </data>
+  <data name="DpvStillConnected" xml:space="preserve">
+    <value>Sources sélectionnées encore connectées au moment de la décision : {0}.</value>
+  </data>
+  <data name="DpvNoneConnected" xml:space="preserve">
+    <value>Aucune source sélectionnée n’était encore connectée au moment de la décision.</value>
+  </data>
+  <data name="DpvRecorded" xml:space="preserve">
+    <value>Enregistré lors de l’exécution de cette activité.</value>
+  </data>
+  <data name="DpvHourOne" xml:space="preserve">
+    <value>{0} heure</value>
+  </data>
+  <data name="DpvHourOther" xml:space="preserve">
+    <value>{0} heures</value>
+  </data>
+  <data name="DpvMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+  </data>
+  <data name="DpvMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+  </data>
+  <data name="CsoMvaNoValues" xml:space="preserve">
+    <value>Cet attribut ne possède aucune valeur</value>
+  </data>
+  <data name="PmvNoMatch" xml:space="preserve">
+    <value>Aucune modification ne correspond à « {0} »</value>
+  </data>
+  <data name="PmvNone" xml:space="preserve">
+    <value>Aucune modification n’est en file d’attente pour cet attribut</value>
+  </data>
+  <data name="PmvNoneHint" xml:space="preserve">
+    <value>Les modifications apparaissent ici tant que l’exportation en attente attend d’être exportée, et sont effacées une fois que le système connecté les a confirmées.</value>
+  </data>
+  <data name="DtsNoSource" xml:space="preserve">
+    <value>Sélectionnez au moins une source faisant autorité. Aucune source n’est sélectionnée : cette configuration ne peut donc pas être enregistrée.</value>
+  </data>
+  <data name="DtsAllSingle" xml:space="preserve">
+    <value>Un objet {0} sera {1} lorsque {2} se déconnectera.</value>
+  </data>
+  <data name="DtsAllMany" xml:space="preserve">
+    <value>Un objet {0} sera {1} seulement lorsque {2} auront {3} été déconnectés. Tant que l’un d’eux reste connecté, l’objet est conservé.</value>
+  </data>
+  <data name="DtsAllWord" xml:space="preserve">
+    <value>tous</value>
+  </data>
+  <data name="DtsAnySingle" xml:space="preserve">
+    <value>Un objet {0} sera {1} lorsque {2} se déconnectera, quels que soient les autres connecteurs.</value>
+  </data>
+  <data name="DtsAnyMany" xml:space="preserve">
+    <value>Un objet {0} sera {1} lorsque {2} de {3} se déconnectera, même si les autres restent connectés.</value>
+  </data>
+  <data name="DtsAnyWord" xml:space="preserve">
+    <value>n’importe lequel</value>
+  </data>
+  <data name="DtsListAnd" xml:space="preserve">
+    <value>et</value>
+  </data>
+  <data name="DtsListOr" xml:space="preserve">
+    <value>ou</value>
+  </data>
+  <data name="DtsFateGrace" xml:space="preserve">
+    <value>programmé pour suppression, avec un délai de grâce de {0},</value>
+  </data>
+  <data name="DtsFateImmediate" xml:space="preserve">
+    <value>supprimé immédiatement, sans délai de grâce,</value>
+  </data>
+  <data name="DtsAdjDay" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="DtsAdjHour" xml:space="preserve">
+    <value>{0} heure</value>
+  </data>
+  <data name="DtsAdjMinute" xml:space="preserve">
+    <value>{0} minute</value>
+  </data>
+  <data name="DtsAdjZero" xml:space="preserve">
+    <value>0 minute</value>
+  </data>
+  <data name="ExrTitle" xml:space="preserve">
+    <value>Destinataire Exchange</value>
+  </data>
+  <data name="ExrColDeclared" xml:space="preserve">
+    <value>Déclaré</value>
+  </data>
+  <data name="ExrColInExchange" xml:space="preserve">
+    <value>Dans Exchange</value>
+  </data>
+  <data name="ExrAsOf" xml:space="preserve">
+    <value>à la dernière importation</value>
+  </data>
+  <data name="ExrRecipientType" xml:space="preserve">
+    <value>Type de destinataire</value>
+  </data>
+  <data name="ExrAlias" xml:space="preserve">
+    <value>Alias</value>
+  </data>
+  <data name="ExrDatabase" xml:space="preserve">
+    <value>Base de données</value>
+  </data>
+  <data name="ExrPrimarySmtp" xml:space="preserve">
+    <value>Adresse SMTP principale</value>
+  </data>
+  <data name="ExrExternalAddress" xml:space="preserve">
+    <value>Adresse externe</value>
+  </data>
+  <data name="ExrNotRecipient" xml:space="preserve">
+    <value>Pas un destinataire</value>
+  </data>
+  <data name="ExrExchangeChooses" xml:space="preserve">
+    <value>Choisi par Exchange</value>
+  </data>
+  <data name="ExrPoliciesApply" xml:space="preserve">
+    <value>Les stratégies d’adresses de messagerie s’appliquent</value>
+  </data>
+  <data name="MchMetaverse" xml:space="preserve">
+    <value>Objets Metaverse correspondants</value>
+  </data>
+  <data name="MchConnected" xml:space="preserve">
+    <value>Objets de systèmes connectés correspondants</value>
+  </data>
+  <data name="MchColMv" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="MchColMatched" xml:space="preserve">
+    <value>Correspondance sur</value>
+  </data>
+  <data name="MchColJoined" xml:space="preserve">
+    <value>Jointe à</value>
+  </data>
+  <data name="MchColObject" xml:space="preserve">
+    <value>Objet</value>
+  </data>
+  <data name="MchNoLongerExists" xml:space="preserve">
+    <value>(n’existe plus)</value>
+  </data>
+  <data name="AwsTitle" xml:space="preserve">
+    <value>Modifications en attente de synchronisation : {0}</value>
+  </data>
+  <data name="AwsBodyCounted" xml:space="preserve">
+    <value>La prochaine synchronisation de ce système connecté, delta ou complète, les applique en traitant chaque objet {0} ({1}).</value>
+  </data>
+  <data name="AwsBodyPlain" xml:space="preserve">
+    <value>La prochaine synchronisation de ce système connecté, delta ou complète, les applique en traitant chaque objet {0}.</value>
+  </data>
+  <data name="AwsOtherTypes" xml:space="preserve">
+    <value>Les autres types d’objets sont traités normalement.</value>
+  </data>
+  <data name="AwsTruncated" xml:space="preserve">
+    <value>Affichage des {0} modifications les plus récentes sur {1}.</value>
+  </data>
+  <data name="AwsRunNow" xml:space="preserve">
+    <value>Exécuter maintenant</value>
+  </data>
+  <data name="AwsQueues" xml:space="preserve">
+    <value>Met en file d’attente le profil d’exécution {0} ; vous pouvez en choisir un autre.</value>
+  </data>
+  <data name="AwsNoRunProfile" xml:space="preserve">
+    <value>Ce système connecté n’a ni profil d’exécution de synchronisation delta ni profil d’exécution de synchronisation complète à mettre en file d’attente.</value>
+  </data>
+  <data name="AwsRunDelta" xml:space="preserve">
+    <value>Synchronisation delta</value>
+  </data>
+  <data name="AwsColChanged" xml:space="preserve">
+    <value>Modifié</value>
+  </data>
+  <data name="AwsColWhatDone" xml:space="preserve">
+    <value>Action effectuée</value>
+  </data>
+  <data name="AwsColLastMade" xml:space="preserve">
+    <value>Dernière modification</value>
+  </data>
+  <data name="AwsColBy" xml:space="preserve">
+    <value>Par</value>
+  </data>
+  <data name="AwsHideChanges" xml:space="preserve">
+    <value>Masquer les modifications</value>
+  </data>
+  <data name="AwsShowChanges" xml:space="preserve">
+    <value>Afficher les {0} modifications</value>
+  </data>
+  <data name="CavBinary" xml:space="preserve">
+    <value>[Binaire : {0} octets]</value>
+  </data>
+  <data name="PevUnresolved" xml:space="preserve">
+    <value>[Référence non résolue : {0}]</value>
+  </data>
+  <data name="PevBinary" xml:space="preserve">
+    <value>[Données binaires : {0} octets]</value>
+  </data>
+</root>

@@ -15,21 +15,21 @@
    Selecting Everything adds a leading Object column so a row's owner is never ambiguous. *@
 
 <div class="tv" @ref="_panelRef">
-    <nav class="tv-nav" aria-label="Objects touched">
+    <nav class="tv-nav" aria-label="@CausalityText.TableViewObjectsTouched">
         @RenderNavButton(EverythingObject)
         @if (SourceObject is { } source)
         {
-            <div class="tv-group-caption">Object being synchronised</div>
+            <div class="tv-group-caption">@CausalityText.TableViewGroupSource</div>
             @RenderNavButton(source)
         }
         @if (IdentityObject is { } identity)
         {
-            <div class="tv-group-caption">Metaverse Object</div>
+            <div class="tv-group-caption">@CausalityText.TableViewGroupMetaverseObject</div>
             @RenderNavButton(identity)
         }
         @if (DownstreamObjects.Count > 0)
         {
-            <div class="tv-group-caption">Downstream objects</div>
+            <div class="tv-group-caption">@CausalityText.TableViewGroupDownstream</div>
             @foreach (var downstream in DownstreamObjects)
             {
                 @RenderNavButton(downstream)
@@ -41,7 +41,7 @@
        lag), holding it as the --tv-nav-width custom property on the panel div above. Nothing here is
        persisted: a reload always returns to the 240px default the grid's var() fallback names. *@
     <div class="tv-resize-handle" role="separator" aria-orientation="vertical"
-         aria-label="Resize the objects list" tabindex="0"
+         aria-label="@CausalityText.TableViewResizeObjectsList" tabindex="0"
          @ref="_resizeHandleRef" @onkeydown="OnResizeHandleKeyDownAsync"></div>
 
     <div class="tv-main">
@@ -53,7 +53,7 @@
                     <span class="tv-type-chip">@SelectedObject.Subtitle</span>
                 }
             </div>
-            <div class="filter-chips" role="group" aria-label="Filter by change">
+            <div class="filter-chips" role="group" aria-label="@CausalityText.TableViewFilterByChange">
                 @foreach (var filter in Filters)
                 {
                     <button type="button" class="@(filter == _filter ? "on" : null)"
@@ -84,14 +84,14 @@
                     <tr>
                         @if (IsEverythingSelected)
                         {
-                            <th>@RenderHeader(0, "object", "Object")</th>
+                            <th>@RenderHeader(0, "object", CausalityText.TableViewColumnObject)</th>
                         }
-                        <th>@RenderHeader(ColumnIndex(0), "change", "Change")</th>
-                        <th>@RenderHeader(ColumnIndex(1), "attribute", "Attribute")</th>
+                        <th>@RenderHeader(ColumnIndex(0), "change", CausalityText.TableViewColumnChange)</th>
+                        <th>@RenderHeader(ColumnIndex(1), "attribute", CausalityText.TableViewColumnAttribute)</th>
                         <th>@RenderHeader(ColumnIndex(2), "current", Model.CurrentHeading)</th>
                         <th>@RenderHeader(ColumnIndex(3), "wouldbe", Model.NextHeading)</th>
-                        <th>@RenderHeader(ColumnIndex(4), "via", "Synchronisation Rule")</th>
-                        <th>@RenderHeader(ColumnIndex(5), "outcome", "Outcome")</th>
+                        <th>@RenderHeader(ColumnIndex(4), "via", CausalityText.TableViewColumnSynchronisationRule)</th>
+                        <th>@RenderHeader(ColumnIndex(5), "outcome", CausalityText.TableViewColumnOutcome)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -114,7 +114,7 @@
                                     <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
                                                Class="tv-summary-view-all ml-2"
                                                OnClick="() => OnViewAllAttributeChanges.InvokeAsync(summarisedEvent)">
-                                        View all @row.SummarisedRowCount.ToString("N0", CultureInfo.InvariantCulture)
+                                        @string.Format(CultureInfo.CurrentCulture, CausalityText.TableViewViewAll, row.SummarisedRowCount.ToString("N0", CultureInfo.InvariantCulture))
                                     </MudButton>
                                 </td>
                             }
@@ -143,8 +143,8 @@
             @if (VisibleRows.Count == 0)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                                 PrimaryText="No rows match this filter"
-                                 SecondaryText="Choose All to see every change this object carries." />
+                                 PrimaryText="@CausalityText.TableViewNoRowsMatch"
+                                 SecondaryText="@CausalityText.TableViewChooseAll" />
             }
         </div>
     </div>
@@ -176,11 +176,13 @@
     private static string GetSummaryCounts(CausalityEvent summarisedEvent)
     {
         if (summarisedEvent.AttributeRowSummary is not { } summary)
-            return $"{summarisedEvent.AttributeRowCount.ToString("N0", CultureInfo.InvariantCulture)} attribute changes";
+            return string.Format(CultureInfo.CurrentCulture, CausalityText.PanelAttributeChangesOther,
+                summarisedEvent.AttributeRowCount.ToString("N0", CultureInfo.InvariantCulture));
 
-        return string.Join(" · ", new[] { (summary.AddCount, "added"), (summary.RemoveCount, "removed"), (summary.SetCount, "set") }
+        return new[] { (summary.AddCount, CausalityText.TableViewSummaryAdded), (summary.RemoveCount, CausalityText.TableViewSummaryRemoved), (summary.SetCount, CausalityText.TableViewSummarySet) }
             .Where(part => part.Item1 > 0)
-            .Select(part => $"{part.Item1.ToString("N0", CultureInfo.InvariantCulture)} {part.Item2}"));
+            .Select(part => string.Format(CultureInfo.CurrentCulture, part.Item2, part.Item1.ToString("N0", CultureInfo.InvariantCulture)))
+            .Aggregate((joined, next) => string.Format(CultureInfo.CurrentCulture, CausalityText.TableViewSummaryJoin, joined, next));
     }
 
     /// <summary>
@@ -408,7 +410,7 @@
             }
         </button>
         <span class="tv-col-grip" role="separator" aria-orientation="vertical"
-              aria-label="@($"Resize the {title} column")" tabindex="0"
+              aria-label="@string.Format(CultureInfo.CurrentCulture, CausalityText.TableViewResizeColumn, title)" tabindex="0"
               @onkeydown="e => OnColumnGripKeyDownAsync(e, index)"></span>
     };
 
@@ -519,15 +521,15 @@
     /// </summary>
     private static string GetOutcomeTitle(CausalityTableRow row)
     {
-        return string.IsNullOrWhiteSpace(row.OutcomeDetail) ? row.OutcomeLabel : $"{row.OutcomeLabel}: {row.OutcomeDetail}";
+        return string.IsNullOrWhiteSpace(row.OutcomeDetail) ? row.OutcomeLabel : string.Format(CultureInfo.CurrentCulture, CausalityText.TableViewOutcomeTitle, row.OutcomeLabel, row.OutcomeDetail);
     }
 
     private static string GetFilterLabel(CausalityTableFilter filter) => filter switch
     {
-        CausalityTableFilter.ScopeAndJoin => "Scope & Join",
-        CausalityTableFilter.AttributeChanges => "Attribute changes",
-        CausalityTableFilter.ObjectChanges => "Object changes",
-        CausalityTableFilter.Destructive => "Destructive",
-        _ => "All"
+        CausalityTableFilter.ScopeAndJoin => CausalityText.TableViewFilterScopeAndJoin,
+        CausalityTableFilter.AttributeChanges => CausalityText.TableViewFilterAttributeChanges,
+        CausalityTableFilter.ObjectChanges => CausalityText.TableViewFilterObjectChanges,
+        CausalityTableFilter.Destructive => CausalityText.TableViewFilterDestructive,
+        _ => CausalityText.TableViewFilterAll
     };
 }

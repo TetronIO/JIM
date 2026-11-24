@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SupplyAValue" xml:space="preserve">
+    <value>Veuillez indiquer une valeur pour {0}</value>
+  </data>
+  <data name="GroupAtLeast" xml:space="preserve">
+    <value>Indiquez une valeur pour au moins un de ces paramètres : {0}.</value>
+  </data>
+  <data name="GroupExactly" xml:space="preserve">
+    <value>Indiquez une valeur pour un seul de ces paramètres : {0}.</value>
+  </data>
+  <data name="GroupOnly" xml:space="preserve">
+    <value>Indiquez une valeur pour un seul de ces paramètres, pas pour plusieurs : {0}.</value>
+  </data>
+  <data name="ExchangeDeliveryHeldOne" xml:space="preserve">
+    <value>La remise vers Exchange est suspendue : {0} modification est en attente. Elle sera remise lorsque ce système connecté gérera de nouveau les destinataires Exchange.</value>
+  </data>
+  <data name="ExchangeDeliveryHeldOther" xml:space="preserve">
+    <value>La remise vers Exchange est suspendue : {0} modifications sont en attente. Elles seront remises lorsque ce système connecté gérera de nouveau les destinataires Exchange.</value>
+  </data>
+</root>

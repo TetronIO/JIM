@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Scheduling
 @using JIM.Models.Staging
@@ -34,18 +35,18 @@
     {
         <div class="jim-activity-ledger-row">
             <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Warning" />
-            <MudText Typo="Typo.h6" id="activity-queued-heading" Class="jim-activity-ledger-title">Queued</MudText>
-            <span class="jim-activity-ledger-message">@(Filters.IsActive ? "Nothing queued matches the filters." : "Nothing is queued.")</span>
+            <MudText Typo="Typo.h6" id="activity-queued-heading" Class="jim-activity-ledger-title">@OperationsText.ScheduleExecQueued</MudText>
+            <span class="jim-activity-ledger-message">@(Filters.IsActive ? OperationsText.QueueNothingMatches : OperationsText.QueueNothingQueued)</span>
         </div>
     }
     else
     {
         <div class="jim-activity-section-header">
-            @SectionToggle(ActivitySection.Queued, QueuedExpanded, "Queued", QueuedBodyId)
+            @SectionToggle(ActivitySection.Queued, QueuedExpanded, OperationsText.ScheduleExecQueued, QueuedBodyId)
             <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Warning" />
-            <MudText Typo="Typo.h6" id="activity-queued-heading">Queued</MudText>
+            <MudText Typo="Typo.h6" id="activity-queued-heading">@OperationsText.ScheduleExecQueued</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="activity-queued-count">@_queuedCount</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Next run at the bottom, nearest In Progress</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@OperationsText.QueueNextAtBottom</MudText>
         </div>
         <MudCollapse Expanded="@QueuedExpanded">
             <MudPaper Outlined="true" Class="jim-activity-table-paper" id="@QueuedBodyId">
@@ -62,18 +63,18 @@
                     </colgroup>
                     <thead>
                         <tr>
-                            <th><MudText Typo="Typo.button">Runs</MudText></th>
-                            <th><MudText Typo="Typo.button">Connected System</MudText></th>
-                            <th><MudText Typo="Typo.button">Run Profile</MudText></th>
-                            <th><MudText Typo="Typo.button">Status</MudText></th>
-                            <th><MudText Typo="Typo.button">Initiated By</MudText></th>
-                            <th><MudText Typo="Typo.button">Queued</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.QueueColRuns</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.CompletedColConnectedSystem</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.CompletedColRunProfile</MudText></th>
+                            <th><MudText Typo="Typo.button">@CommonText.ColumnStatus</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.CompletedColInitiatedBy</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.ScheduleExecQueued</MudText></th>
                             <th>
                                 <MudTooltip Arrow="true" Placement="Placement.Top">
                                     <TooltipContent>
-                                        <TooltipText Text="When each task is expected to start. Estimated from the median of the last five successful runs of each Run Profile ahead of it. Left blank where there is nothing to estimate from." />
+                                        <TooltipText Text="@OperationsText.QueueEstStartTooltip" />
                                     </TooltipContent>
-                                    <ChildContent><MudText Typo="Typo.button">Est. Start</MudText></ChildContent>
+                                    <ChildContent><MudText Typo="Typo.button">@OperationsText.QueueColEstStart</MudText></ChildContent>
                                 </MudTooltip>
                             </th>
                             <th></th>
@@ -86,7 +87,7 @@
                                 <td colspan="8">
                                     <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ToggleShowAllQueued"
                                                StartIcon="@(_showAllQueued ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)">
-                                        @(_showAllQueued ? "Show fewer" : $"Show {_hiddenQueuedCount} more")
+                                        @(_showAllQueued ? OperationsText.QueueShowFewer : string.Format(CultureInfo.CurrentCulture, OperationsText.QueueShowMore, _hiddenQueuedCount))
                                     </MudButton>
                                 </td>
                             </tr>
@@ -109,7 +110,7 @@
                                             <MudChip T="string" Variant="Variant.Text" Color="@(row.PositionLabel == "Next" ? Color.Info : Color.Default)" Class="ma-0">@row.PositionLabel</MudChip>
                                             @if (row.IsParallel)
                                             {
-                                                <MudTooltip Text="Starts at the same time as the other tasks of its Schedule step" Arrow="true" Placement="Placement.Top">
+                                                <MudTooltip Text="@OperationsText.QueueSameTimeQueued" Arrow="true" Placement="Placement.Top">
                                                     <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" />
                                                 </MudTooltip>
                                             }
@@ -120,7 +121,7 @@
                                     <td>
                                         <MudChip T="string" Variant="Variant.Text" Class="ma-0"
                                                  Color="@(task.Status == WorkerTaskStatus.Queued ? Color.Warning : Color.Default)">
-                                            @(task.Status == WorkerTaskStatus.Queued ? "Queued" : "Waiting for previous step")
+                                            @(task.Status == WorkerTaskStatus.Queued ? OperationsText.ScheduleExecQueued : OperationsText.QueueWaitingPrevious)
                                         </MudChip>
                                     </td>
                                     <td>@InitiatorCell(task)</td>
@@ -153,16 +154,16 @@
     {
         <div class="jim-activity-ledger-row">
             <span class="jim-activity-now-dot jim-activity-now-dot--idle" aria-hidden="true"></span>
-            <MudText Typo="Typo.h6" id="activity-running-heading" Class="jim-activity-ledger-title">In Progress</MudText>
-            <span class="jim-activity-ledger-message">@(Filters.IsActive ? "Nothing running matches the filters." : "Nothing is running.")</span>
+            <MudText Typo="Typo.h6" id="activity-running-heading" Class="jim-activity-ledger-title">@OperationsText.CompletedStatusInProgress</MudText>
+            <span class="jim-activity-ledger-message">@(Filters.IsActive ? OperationsText.QueueNothingRunningMatches : OperationsText.QueueNothingRunning)</span>
         </div>
     }
     else
     {
         <div class="jim-activity-section-header">
-            @SectionToggle(ActivitySection.InProgress, InProgressExpanded, "In Progress", RunningBodyId)
+            @SectionToggle(ActivitySection.InProgress, InProgressExpanded, OperationsText.CompletedStatusInProgress, RunningBodyId)
             <span class="jim-activity-now-dot" aria-hidden="true"></span>
-            <MudText Typo="Typo.h6" id="activity-running-heading">In Progress</MudText>
+            <MudText Typo="Typo.h6" id="activity-running-heading">@OperationsText.CompletedStatusInProgress</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="activity-in-progress-count">@_runningCount</MudText>
         </div>
         <MudCollapse Expanded="@InProgressExpanded">
@@ -180,18 +181,18 @@
                     </colgroup>
                     <thead>
                         <tr>
-                            <th><MudText Typo="Typo.button">Status</MudText></th>
-                            <th><MudText Typo="Typo.button">Connected System</MudText></th>
-                            <th><MudText Typo="Typo.button">Run Profile</MudText></th>
-                            <th><MudText Typo="Typo.button">Progress</MudText></th>
-                            <th><MudText Typo="Typo.button">Initiated By</MudText></th>
-                            <th><MudText Typo="Typo.button">Started</MudText></th>
+                            <th><MudText Typo="Typo.button">@CommonText.ColumnStatus</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.CompletedColConnectedSystem</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.CompletedColRunProfile</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.QueueColProgress</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.CompletedColInitiatedBy</MudText></th>
+                            <th><MudText Typo="Typo.button">@OperationsText.SchedulesExecStarted</MudText></th>
                             <th>
                                 <MudTooltip Arrow="true" Placement="Placement.Top">
                                     <TooltipContent>
-                                        <TooltipText Text="When each run is expected to finish. Estimated from the median of the Run Profile's last five successful runs, and never sooner than its current step needs. Left blank where there is nothing to estimate from." />
+                                        <TooltipText Text="@OperationsText.QueueEstFinishTooltip" />
                                     </TooltipContent>
-                                    <ChildContent><MudText Typo="Typo.button">Est. Finish</MudText></ChildContent>
+                                    <ChildContent><MudText Typo="Typo.button">@OperationsText.QueueColEstFinish</MudText></ChildContent>
                                 </MudTooltip>
                             </th>
                             <th></th>
@@ -215,11 +216,11 @@
                                         <div class="d-flex align-center gap-1">
                                             <MudChip T="string" Variant="Variant.Text" Class="ma-0"
                                                      Color="@(task.Status == WorkerTaskStatus.Processing ? Color.Success : Color.Warning)">
-                                                @(task.Status == WorkerTaskStatus.Processing ? "Processing" : "Cancelling")
+                                                @(task.Status == WorkerTaskStatus.Processing ? OperationsText.QueueProcessing : OperationsText.QueueCancelling)
                                             </MudChip>
                                             @if (row.IsParallel)
                                             {
-                                                <MudTooltip Text="Running at the same time as the other tasks of its Schedule step" Arrow="true" Placement="Placement.Top">
+                                                <MudTooltip Text="@OperationsText.QueueSameTimeRunning" Arrow="true" Placement="Placement.Top">
                                                     <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" />
                                                 </MudTooltip>
                                             }
@@ -274,10 +275,10 @@
 @code {
     /// <summary>The chevron that asks the tab to fold or unfold a section; the tab answers through the Expanded parameters.</summary>
     private RenderFragment SectionToggle(ActivitySection section, bool expanded, string name, string controlsId) =>
-        @<MudTooltip Text="@(expanded ? $"Collapse {name}" : $"Expand {name}")" Arrow="true" Placement="Placement.Top">
+        @<MudTooltip Text="@(expanded ? string.Format(CultureInfo.CurrentCulture, OperationsText.QueueCollapseSection, name) : string.Format(CultureInfo.CurrentCulture, OperationsText.QueueExpandSection, name))" Arrow="true" Placement="Placement.Top">
             <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
                            Class="@($"jim-activity-collapse-toggle{(expanded ? " jim-activity-collapse-toggle--open" : string.Empty)}")"
-                           aria-label="@(expanded ? $"Collapse {name}" : $"Expand {name}")"
+                           aria-label="@(expanded ? string.Format(CultureInfo.CurrentCulture, OperationsText.QueueCollapseSection, name) : string.Format(CultureInfo.CurrentCulture, OperationsText.QueueExpandSection, name))"
                            aria-expanded="@(expanded ? "true" : "false")" aria-controls="@controlsId"
                            OnClick="@(() => ToggleRequested.InvokeAsync(section))" />
         </MudTooltip>;
@@ -645,10 +646,10 @@
         var tasks = _workerTaskHeaders.Where(t => t.ScheduleExecutionId == scheduleExecutionId).ToList();
         var progress = ProgressFor(scheduleExecutionId);
         return progress == null
-            ? $"{tasks.Count} tasks"
+            ? string.Format(CultureInfo.CurrentCulture, OperationsText.QueueTasksCount, tasks.Count)
             : progress.CurrentStepNumber.HasValue
-                ? $"Step {progress.CurrentStepNumber} of {progress.TotalSteps}"
-                : $"{tasks.Count} tasks across {progress.TotalSteps} steps";
+                ? string.Format(CultureInfo.CurrentCulture, OperationsText.QueueStepOf, progress.CurrentStepNumber, progress.TotalSteps)
+                : string.Format(CultureInfo.CurrentCulture, OperationsText.QueueTasksAcross, tasks.Count, progress.TotalSteps);
     }
 
     private static RenderFragment InitiatorCell(WorkerTaskHeader task) =>
@@ -664,9 +665,9 @@
         : @<EmptyValue />;
 
     private RenderFragment CancelButton(WorkerTaskHeader task) =>
-        @<MudTooltip Text="Cancel Task" Arrow="true" Placement="Placement.Top">
+        @<MudTooltip Text="@OperationsText.QueueCancelTask" Arrow="true" Placement="Placement.Top">
             <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
-                           OnClick="() => HandleCancelTaskAsync(task)" Size="Size.Small" aria-label="Cancel Task" />
+                           OnClick="() => HandleCancelTaskAsync(task)" Size="Size.Small" aria-label="@OperationsText.QueueCancelTask" />
         </MudTooltip>;
 
     private static string FormatEstimate(DateTime utc)
@@ -721,17 +722,17 @@
     private async Task HandleCancelTaskAsync(WorkerTaskHeader workerTaskHeader)
     {
         var result = await DialogService.ShowMessageBoxAsync(
-            "Cancel Task",
-            $"Are you sure you want to cancel the task '{workerTaskHeader.Name}'?",
-            yesText: "Cancel Task",
-            cancelText: "Keep It");
+            OperationsText.QueueCancelTask,
+            string.Format(CultureInfo.CurrentCulture, OperationsText.QueueCancelTaskConfirm, workerTaskHeader.Name),
+            yesText: OperationsText.QueueCancelTask,
+            cancelText: OperationsText.QueueKeepIt);
 
         if (result != true)
             return;
 
         using var jim = JimFactory.Create();
         await jim.Tasking.RequestWorkerTaskCancellationAsync(workerTaskHeader.Id);
-        Snackbar.Add("Worker task cancellation requested.", Severity.Success);
+        Snackbar.Add(OperationsText.QueueCancelRequested, Severity.Success);
     }
 
     private async Task HandleCancelScheduleExecutionAsync(Guid scheduleExecutionId)
@@ -739,13 +740,13 @@
         var scheduleName = _workerTaskHeaders
             .Where(t => t.ScheduleExecutionId == scheduleExecutionId)
             .Select(t => t.ScheduleExecutionName)
-            .FirstOrDefault() ?? "this schedule execution";
+            .FirstOrDefault() ?? OperationsText.QueueThisExecution;
 
         var result = await DialogService.ShowMessageBoxAsync(
-            "Cancel Schedule Execution",
-            $"Are you sure you want to cancel '{scheduleName}'? All tasks will be cancelled immediately, including any that are currently processing.",
-            yesText: "Cancel Execution",
-            cancelText: "Keep Running");
+            OperationsText.QueueCancelExecTitle,
+            string.Format(CultureInfo.CurrentCulture, OperationsText.QueueCancelExecConfirm, scheduleName),
+            yesText: OperationsText.QueueCancelExec,
+            cancelText: OperationsText.QueueKeepRunning);
 
         if (result != true)
             return;
@@ -753,9 +754,9 @@
         using var jim = JimFactory.Create();
         var cancelled = await jim.Scheduler.CancelScheduleExecutionAsync(scheduleExecutionId);
         if (cancelled)
-            Snackbar.Add("Schedule execution cancelled.", Severity.Success);
+            Snackbar.Add(OperationsText.QueueExecCancelled, Severity.Success);
         else
-            Snackbar.Add("Could not cancel execution; it may have already completed.", Severity.Warning);
+            Snackbar.Add(OperationsText.QueueExecCancelFailed, Severity.Warning);
     }
 
     /// <summary>

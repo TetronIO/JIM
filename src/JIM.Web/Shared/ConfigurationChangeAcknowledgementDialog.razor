@@ -19,8 +19,8 @@
                                Consequences="@ConfigurationChangePreflightConsequences.For(Preflight)"
                                Counts="@(Verdict == null ? Counts : [])"
                                AdditionalContent="@RenderChanges"
-                               ConfirmButtonText="Save changes"
-                               BusyText="Saving..."
+                               ConfirmButtonText="@ActivityText.ActivityAckSaveChanges"
+                               BusyText="@ActivityText.ActivityAckSaving"
                                ConfirmButtonColour="@(Preflight.IsDestructive ? Color.Error : Color.Warning)" />
 
 @code {
@@ -34,7 +34,7 @@
     /// The kind of object being changed, e.g. "Synchronisation Rule". Title Case, as a JIM domain entity name.
     /// </summary>
     [Parameter]
-    public string ObjectTypeLabel { get; set; } = "configuration";
+    public string ObjectTypeLabel { get; set; } = ActivityText.ActivityAckDefaultLabel;
 
     /// <summary>
     /// The object's own name, rendered in the accent colour so it stands out from the label beside it.
@@ -68,7 +68,7 @@
               {
                   <MudText Typo="Typo.body2" Class="mt-1">@verdict.Detail</MudText>
               }
-              <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">From the preview.</MudText>
+              <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">@ActivityText.ActivityAckFromPreview</MudText>
           </MudAlert>;
 
     // A change touching dozens of properties is real (a scoping rewrite, a bulk mapping edit); listing every one
@@ -77,7 +77,7 @@
 
     private RenderFragment RenderChanges => @<div>
         <MudText Typo="Typo.subtitle2" Class="mb-1">
-            @(Preflight.Items.Count == 1 ? "Change to" : "Changes to") @ObjectTypeLabel:
+            @(Preflight.Items.Count == 1 ? ActivityText.ActivityAckChangeTo : ActivityText.ActivityAckChangesTo) @ObjectTypeLabel:
             <span class="mud-primary-text">@ObjectName</span>
         </MudText>
         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Outlined="true">
@@ -100,13 +100,13 @@
                                 @* carries a truer word for what it did (a Container carved out of a selection is in  *@
                                 @* the snapshot for the first time, so it arrives, but it was not "Added").           *@
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    @(item.CollectionItemVerb ?? (item.ChangeType == ConfigurationDiffChangeType.Added ? "Added" : "Removed"))
+                                    @(item.CollectionItemVerb ?? (item.ChangeType == ConfigurationDiffChangeType.Added ? ActivityText.ActivityAckAdded : ActivityText.ActivityAckRemoved))
                                 </MudText>
                             }
                             else if (item.OldDisplayValue == null && item.NewDisplayValue == null)
                             {
                                 @* A secret is reported as changed and never by value. *@
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Changed</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@ActivityText.ActivityAckChanged</MudText>
                             }
                             else
                             {
@@ -122,7 +122,7 @@
         @if (Preflight.Items.Count > MaxListedChanges)
         {
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                and @((Preflight.Items.Count - MaxListedChanges).ToString("N0")) more change(s).
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityAckAndMore, (Preflight.Items.Count - MaxListedChanges).ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
             </MudText>
         }
         @* Guidance rather than a warning: nothing has gone wrong, but saving alone changes nothing that already exists. *@
@@ -131,7 +131,7 @@
             @* A Synchronisation Rule save says what this save will do (#2615), worked out from the decisions the save makes, so
                each part is present exactly when the save will act on it. *@
             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" data-testid="jim-effect">
-                <MudText Typo="Typo.subtitle2">When this takes effect</MudText>
+                <MudText Typo="Typo.subtitle2">@ActivityText.ActivityAckWhenTakesEffect</MudText>
                 @foreach (var estimate in effect.ObjectTypesProcessedInFull)
                 {
                     <MudText Typo="Typo.body2" Class="mt-1" data-testid="jim-effect-awaiting-synchronisation">
@@ -161,8 +161,7 @@
             @* A surface that does not state its effect, or a Synchronisation Rule change with nothing to state: the general
                reminder that a Full Synchronisation is what applies a change to existing objects. *@
             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" data-testid="jim-effect-general">
-                Saving does not apply this to existing objects. Run a Full Synchronisation for the Connected Systems
-                concerned to put it into effect.
+                @ActivityText.ActivityAckGeneralEffect
             </MudAlert>
         }
     </div>;
@@ -211,7 +210,7 @@
 
         // "Confirm a change to object removal" holds whichever way a destructive property is being moved, which
         // "Confirm a destructive change" does not: turning deletion off is the same class of change.
-        var title = preflight.IsDestructive ? "Confirm a change to object removal" : "Confirm a configuration change";
+        var title = preflight.IsDestructive ? ActivityText.ActivityAckConfirmRemoval : ActivityText.ActivityAckConfirmChange;
         var dialog = await dialogService.ShowAsync<ConfigurationChangeAcknowledgementDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false };

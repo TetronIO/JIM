@@ -145,6 +145,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text");
 
+                    b.Property<string>("ErrorMessageDetailJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("ErrorStackTrace")
                         .HasColumnType("text");
 
@@ -197,6 +200,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Message")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MessageDetailJson")
                         .HasColumnType("text");
 
                     b.Property<int?>("MetaverseAttributeId")
@@ -279,6 +285,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("TargetName")
                         .HasColumnType("text");
 
+                    b.Property<string>("TargetNameDetailJson")
+                        .HasColumnType("text");
+
                     b.Property<int>("TargetOperationType")
                         .HasColumnType("integer");
 
@@ -340,6 +349,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("WarningMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WarningMessageDetailJson")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -457,6 +469,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ErrorMessageDetailJson")
                         .HasColumnType("text");
 
                     b.Property<string>("ErrorStackTrace")

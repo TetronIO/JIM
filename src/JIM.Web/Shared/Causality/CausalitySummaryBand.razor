@@ -70,7 +70,7 @@
     @if (AfterThisRunPills is { Count: > 0 } afterThisRunPills)
     {
         <div class="outcome-strip after-strip">
-            <span class="after-strip-label">After this run</span>
+            <span class="after-strip-label">@CausalityText.SummaryBandAfterThisRun</span>
             @foreach (var pill in afterThisRunPills)
             {
                 @if (OnAfterThisRunSelected.HasDelegate)
@@ -152,12 +152,12 @@
 
         string? label = (hasSystem, hasProfile) switch
         {
-            (true, true) => $"{Context.ConnectedSystemName} · {Context.RunProfileName}",
+            (true, true) => string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.SummaryBandRunLabel, Context.ConnectedSystemName, Context.RunProfileName),
             (true, false) => Context.ConnectedSystemName,
             (false, true) => Context.RunProfileName,
             _ => null
         };
 
-        return label != null && IsSpeculative ? $"Would run: {label}" : label;
+        return label != null && IsSpeculative ? string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.SummaryBandWouldRun, label) : label;
     }
 }

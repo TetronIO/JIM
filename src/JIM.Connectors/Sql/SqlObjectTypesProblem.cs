@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Connectors.Sql;
 
 /// <summary>
@@ -12,6 +14,7 @@ namespace JIM.Connectors.Sql;
 /// <param name="ObjectTypeName">The name of that Object Type, where it has one.</param>
 /// <param name="Field">The field it concerns, where one can be named (a misspelt field's own name, for one).</param>
 /// <param name="LineNumber">The one-based line the problem is on, where the problem is in the JSON itself rather than in what it says.</param>
+/// <param name="Detail">The same words as <paramref name="Message"/>, held as a message the portal can show in the viewer's language; null where only English text exists.</param>
 /// <param name="Column">The one-based position within <paramref name="LineNumber"/>, in bytes, where known.</param>
 public sealed record SqlObjectTypesProblem(
     string Message,
@@ -19,4 +22,5 @@ public sealed record SqlObjectTypesProblem(
     string? ObjectTypeName = null,
     string? Field = null,
     long? LineNumber = null,
-    long? Column = null);
+    long? Column = null,
+    JimMessage? Detail = null);

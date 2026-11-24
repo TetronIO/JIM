@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
 using System.Globalization;
 using JIM.Models.Expressions;
 
@@ -59,7 +61,7 @@ internal static class ExpressionValueSets
     /// </summary>
     internal static object? RefuseReflection(object? value) =>
         value is Delegate || (value != null && ReflectionRefusingVisitor.IsReflectionType(value.GetType()))
-            ? throw new ExpressionEvaluationException("Reflection is not available in expressions.")
+            ? throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.ReflectionNotAvailable)))
             : value;
 
     /// <summary>
@@ -98,7 +100,7 @@ internal static class ExpressionValueSets
 
         var kind = KindOf(values[0]!, functionName);
         if (values.Any(value => KindOf(value!, functionName) != kind))
-            throw new ExpressionEvaluationException($"{functionName} needs values of one kind: numbers, dates or text.");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.ExtremeMixedKinds), functionName));
 
         var best = values[0]!;
         foreach (var value in values.Skip(1))
@@ -121,14 +123,14 @@ internal static class ExpressionValueSets
         DateTime or DateTimeOffset => OrderedKind.Date,
         string => OrderedKind.Text,
         _ => throw new ExpressionEvaluationException(
-            $"{functionName} works on numbers, dates or text, not a {DescribeKind(value)} value.")
+            ExpressionMessage.Of(nameof(ExpressionMessages.ExtremeUnsupportedKind), functionName, DescribeKind(value)))
     };
 
-    private static string DescribeKind(object value) => value switch
+    private static MessageArgument DescribeKind(object value) => value switch
     {
-        bool => "Boolean",
-        Guid => "Guid",
-        byte[] => "Binary",
+        bool => ExpressionMessage.Of(nameof(ExpressionMessages.ValueKindBoolean)),
+        Guid => ExpressionMessage.Of(nameof(ExpressionMessages.ValueKindGuid)),
+        byte[] => ExpressionMessage.Of(nameof(ExpressionMessages.ValueKindBinary)),
         _ => value.GetType().Name
     };
 

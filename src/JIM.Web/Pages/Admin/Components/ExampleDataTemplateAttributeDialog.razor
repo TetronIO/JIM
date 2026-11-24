@@ -1,4 +1,5 @@
-﻿@using JIM.Models.Core
+﻿@using System.Globalization
+@using JIM.Models.Core
 @using JIM.Models.ExampleData
 @using JIM.Models.Search
 @using JIM.Utilities
@@ -15,47 +16,47 @@
         @if (_loaded)
         {
             <MudStack Spacing="4">
-                <MudSelect T="MetaverseAttribute" Label="Metaverse Attribute" Variant="Variant.Outlined"
+                <MudSelect T="MetaverseAttribute" Label="@ExampleDataText.MetaverseAttribute" Variant="Variant.Outlined"
                            Value="@_draft.Attribute" ValueChanged="OnAttributeChanged"
-                           ToStringFunc="@(a => a == null ? string.Empty : $"{a.Name} ({a.Type.ToString().SplitOnCapitalLetters()})")"
+                           ToStringFunc="@(a => a == null ? string.Empty : $"{a.Name} ({a.Type.ForDisplay()})")"
                            HelperText="@AttributeHelperText()" Disabled="@(_attributeChoices.Count == 0)">
                     @foreach (var choice in _attributeChoices)
                     {
-                        <MudSelectItem T="MetaverseAttribute" Value="@choice">@choice.Name (@choice.Type.ToString().SplitOnCapitalLetters())</MudSelectItem>
+                        <MudSelectItem T="MetaverseAttribute" Value="@choice">@choice.Name (@choice.Type.ForDisplay())</MudSelectItem>
                     }
                 </MudSelect>
 
                 @if (_draft.ShowsPopulation)
                 {
-                    <MudNumericField T="int" Label="Objects given a value (%)" Variant="Variant.Outlined" Immediate="true"
+                    <MudNumericField T="int" Label="@ExampleDataText.ObjectsGivenValuePercent" Variant="Variant.Outlined" Immediate="true"
                                      @bind-Value="_draft.PopulatedValuesPercentage" Min="1" Max="100"
-                                     HelperText="The rest of the objects are left without a value for this attribute." />
+                                     HelperText="@ExampleDataText.RestOfObjectsNoValue" />
                 }
 
                 @* ─── Text: where values come from ─── *@
                 @if (_draft.ShowsTextSources)
                 {
-                    <MudSelect T="ExampleDataTextSource" Label="Values come from" Variant="Variant.Outlined" @bind-Value="_draft.TextSource">
-                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.DataSets">Example Data Sets</MudSelectItem>
-                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Pattern">A pattern</MudSelectItem>
-                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.WeightedValues">Weighted values</MudSelectItem>
-                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Expression">An expression</MudSelectItem>
-                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Numbers">A number</MudSelectItem>
+                    <MudSelect T="ExampleDataTextSource" Label="@ExampleDataText.ValuesComeFrom" Variant="Variant.Outlined" @bind-Value="_draft.TextSource">
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.DataSets">@ExampleDataText.ExampleDataSets</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Pattern">@ExampleDataText.APattern</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.WeightedValues">@ExampleDataText.WeightedValues</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Expression">@ExampleDataText.AnExpression</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Numbers">@ExampleDataText.ANumber</MudSelectItem>
                     </MudSelect>
 
                     @if (_draft.TextSource == ExampleDataTextSource.Pattern)
                     {
-                        <MudTextField T="string" Label="Pattern" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.Pattern"
-                                      HelperText="Literal text, other attributes as {First Name}, Example Data Sets as {0}, {1} in the order below, and [UniqueInt] to add a number only where a value would repeat." />
+                        <MudTextField T="string" Label="@ExampleDataText.Pattern" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.Pattern"
+                                      HelperText="@ExampleDataText.PatternHelp" />
                     }
 
                     @if (_draft.TextSource is ExampleDataTextSource.DataSets or ExampleDataTextSource.Pattern)
                     {
                         <div>
-                            <MudText Typo="Typo.subtitle2">Example Data Sets</MudText>
+                            <MudText Typo="Typo.subtitle2">@ExampleDataText.ExampleDataSets</MudText>
                             @if (_draft.TextSource == ExampleDataTextSource.DataSets)
                             {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Each value is picked at random from these sets.</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@ExampleDataText.EachValuePickedFromSets</MudText>
                             }
                             @for (var i = 0; i < _draft.DataSets.Count; i++)
                             {
@@ -68,14 +69,14 @@
                                     }
                                     <MudText>@dataSet.Name</MudText>
                                     <MudSpacer />
-                                    <MudTooltip Text="Remove" Arrow="true" Placement="Placement.Top">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@($"Remove {dataSet.Name}")"
+                                    <MudTooltip Text="@CommonText.Remove" Arrow="true" Placement="Placement.Top">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@string.Format(CultureInfo.CurrentCulture, ExampleDataText.RemoveNamed, dataSet.Name)"
                                                        OnClick="@(() => _draft.DataSets.RemoveAt(index))" />
                                     </MudTooltip>
                                 </div>
                             }
                             @* keyed on the count so the picker empties again once a set is added. *@
-                            <MudSelect @key="_draft.DataSets.Count" T="ExampleDataSet" Label="Add an Example Data Set" Variant="Variant.Outlined" Class="mt-2"
+                            <MudSelect @key="_draft.DataSets.Count" T="ExampleDataSet" Label="@ExampleDataText.AddExampleDataSet" Variant="Variant.Outlined" Class="mt-2"
                                        Value="@((ExampleDataSet?)null)" ValueChanged="AddDataSet" ToStringFunc="@(s => s?.Name ?? string.Empty)">
                                 @foreach (var dataSet in _dataSets.Where(s => _draft.DataSets.All(chosen => chosen.Id != s.Id)))
                                 {
@@ -88,31 +89,31 @@
                     @if (_draft.TextSource == ExampleDataTextSource.WeightedValues)
                     {
                         <div>
-                            <MudText Typo="Typo.subtitle2">Weighted values</MudText>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Each value is picked in proportion to its weight.</MudText>
+                            <MudText Typo="Typo.subtitle2">@ExampleDataText.WeightedValues</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@ExampleDataText.EachValuePickedByWeight</MudText>
                             @for (var i = 0; i < _draft.WeightedValues.Count; i++)
                             {
                                 var index = i;
                                 var weighted = _draft.WeightedValues[index];
                                 <div class="d-flex align-center gap-2 mt-2">
-                                    <MudTextField T="string" Label="Value" Variant="Variant.Outlined" Immediate="true" @bind-Value="weighted.Value" Class="flex-grow-1" />
-                                    <MudNumericField T="float" Label="Weight" Variant="Variant.Outlined" Immediate="true" @bind-Value="weighted.Weight" Min="0" Step="0.1f" Style="max-width: 9rem" />
-                                    <MudTooltip Text="Remove" Arrow="true" Placement="Placement.Top">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Remove value"
+                                    <MudTextField T="string" Label="@ExampleDataText.Value" Variant="Variant.Outlined" Immediate="true" @bind-Value="weighted.Value" Class="flex-grow-1" />
+                                    <MudNumericField T="float" Label="@ExampleDataText.Weight" Variant="Variant.Outlined" Immediate="true" @bind-Value="weighted.Weight" Min="0" Step="0.1f" Style="max-width: 9rem" />
+                                    <MudTooltip Text="@CommonText.Remove" Arrow="true" Placement="Placement.Top">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@ExampleDataText.RemoveValue"
                                                        OnClick="@(() => _draft.WeightedValues.RemoveAt(index))" />
                                     </MudTooltip>
                                 </div>
                             }
                             <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" Class="mt-2"
-                                       OnClick="@(() => _draft.WeightedValues.Add(new ExampleDataWeightedValueDraft()))">Add Value</MudButton>
+                                       OnClick="@(() => _draft.WeightedValues.Add(new ExampleDataWeightedValueDraft()))">@ExampleDataText.AddValue</MudButton>
                         </div>
                     }
 
                     @if (_draft.TextSource == ExampleDataTextSource.Expression)
                     {
-                        <ExpressionEditor @bind-Value="_draft.Expression" Label="Expression" Lines="2"
+                        <ExpressionEditor @bind-Value="_draft.Expression" Label="@ExampleDataText.Expression" Lines="2"
                                           MetaverseAttributeNames="@_siblingAttributeNames"
-                                          HelperText="Read the object's other generated values with mv[&quot;Attribute Name&quot;]." />
+                                          HelperText="@ExampleDataText.ExpressionHelp" />
                     }
                 }
 
@@ -120,28 +121,28 @@
                 @if (_draft.ShowsNumberRange)
                 {
                     <div class="d-flex gap-4">
-                        <MudNumericField T="int?" Label="Minimum" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MinNumber" Class="flex-grow-1" />
-                        <MudNumericField T="int?" Label="Maximum" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MaxNumber" Class="flex-grow-1" />
+                        <MudNumericField T="int?" Label="@ExampleDataText.Minimum" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MinNumber" Class="flex-grow-1" />
+                        <MudNumericField T="int?" Label="@ExampleDataText.Maximum" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MaxNumber" Class="flex-grow-1" />
                     </div>
-                    <SegmentedToggle TValue="ExampleDataNumberOrder" Options="@NumberOrderOptions" @bind-Value="_draft.NumberOrder" AriaLabel="Number order" />
+                    <SegmentedToggle TValue="ExampleDataNumberOrder" Options="@NumberOrderOptions" @bind-Value="_draft.NumberOrder" AriaLabel="@ExampleDataText.NumberOrder" />
                 }
 
                 @* ─── Dates ─── *@
                 @if (_draft.ShowsDateRange)
                 {
                     <div class="d-flex gap-4">
-                        <MudDatePicker Label="Earliest" Variant="Variant.Outlined" @bind-Date="_draft.MinDate" Class="flex-grow-1" />
-                        <MudDatePicker Label="Latest" Variant="Variant.Outlined" @bind-Date="_draft.MaxDate" Class="flex-grow-1" />
+                        <MudDatePicker Label="@ExampleDataText.Earliest" Variant="Variant.Outlined" @bind-Date="_draft.MinDate" Class="flex-grow-1" />
+                        <MudDatePicker Label="@ExampleDataText.Latest" Variant="Variant.Outlined" @bind-Date="_draft.MaxDate" Class="flex-grow-1" />
                     </div>
                 }
 
                 @* ─── References ─── *@
                 @if (_draft.ShowsReferenceTargets)
                 {
-                    <MudSelect T="int" Label="Refers to" Variant="Variant.Outlined" MultiSelection="true"
+                    <MudSelect T="int" Label="@ExampleDataText.RefersTo" Variant="Variant.Outlined" MultiSelection="true"
                                SelectedValues="@_draft.ReferenceObjectTypes.Select(t => t.Id).ToList()" SelectedValuesChanged="OnReferenceTargetsChanged"
                                ToStringFunc="@(id => _objectTypes.FirstOrDefault(t => t.Id == id)?.Name ?? string.Empty)"
-                               HelperText="Each reference points at an object of one of these Metaverse Object Types.">
+                               HelperText="@ExampleDataText.ReferenceHelp">
                         @foreach (var objectType in _objectTypes)
                         {
                             <MudSelectItem T="int" Value="@objectType.Id">@objectType.Name</MudSelectItem>
@@ -152,42 +153,42 @@
                 @if (_draft.ShowsReferenceCountRange)
                 {
                     <div class="d-flex gap-4">
-                        <MudNumericField T="int?" Label="Fewest references" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MvaMin" Min="0" Class="flex-grow-1" />
-                        <MudNumericField T="int?" Label="Most references" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MvaMax" Min="1" Class="flex-grow-1" />
+                        <MudNumericField T="int?" Label="@ExampleDataText.FewestReferences" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MvaMin" Min="0" Class="flex-grow-1" />
+                        <MudNumericField T="int?" Label="@ExampleDataText.MostReferences" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MvaMax" Min="1" Class="flex-grow-1" />
                     </div>
                 }
 
                 @if (_draft.ShowsManagerDepth)
                 {
-                    <MudNumericField T="int?" Label="Manager depth (%)" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.ManagerDepthPercentage" Min="1" Max="99"
-                                     HelperText="The percentage of Users who manage other Users. Every other User is given one of them as a manager." />
+                    <MudNumericField T="int?" Label="@ExampleDataText.ManagerDepthPercent" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.ManagerDepthPercentage" Min="1" Max="99"
+                                     HelperText="@ExampleDataText.ManagerDepthHelp" />
                 }
 
                 @if (_draft.ShowsBooleanDistribution)
                 {
-                    <MudNumericField T="int?" Label="Objects given true (%)" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.BoolTrueDistribution" Min="0" Max="100"
+                    <MudNumericField T="int?" Label="@ExampleDataText.ObjectsGivenTrue" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.BoolTrueDistribution" Min="0" Max="100"
                                      HelperText="@BooleanDistributionHelperText()" />
                 }
 
                 @if (_draft.Attribute?.Type == AttributeDataType.Guid)
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Each object is given a new identifier.</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@ExampleDataText.NewIdentifierEachObject</MudText>
                 }
 
                 @* ─── Condition ─── *@
                 @if (_draft.Attribute != null)
                 {
                     <MudSwitch T="bool" @bind-Value="_draft.HasCondition" Color="Color.Primary" Disabled="@(_conditionChoices.Count == 0)"
-                               Label="Only generate a value when another attribute has a given value" />
+                               Label="@ExampleDataText.OnlyWhenAttributeHasValue" />
                     @if (_conditionChoices.Count == 0)
                     {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-n3">Add another attribute to this Metaverse Object Type first; a condition reads one of its values.</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-n3">@ExampleDataText.AddAnotherAttributeFirst</MudText>
                     }
 
                     @if (_draft.HasCondition)
                     {
                         <div class="d-flex gap-4">
-                            <MudSelect T="MetaverseAttribute" Label="Attribute" Variant="Variant.Outlined" Class="flex-grow-1"
+                            <MudSelect T="MetaverseAttribute" Label="@ExampleDataText.Attribute" Variant="Variant.Outlined" Class="flex-grow-1"
                                        Value="@_draft.ConditionAttribute" ValueChanged="OnConditionAttributeChanged" ToStringFunc="@(a => a?.Name ?? string.Empty)">
                                 @foreach (var choice in _conditionChoices)
                                 {
@@ -196,7 +197,7 @@
                             </MudSelect>
                             @if (_draft.ConditionAttribute != null)
                             {
-                                <MudSelect T="SearchComparisonType" Label="Condition" Variant="Variant.Outlined" Class="flex-grow-1" @bind-Value="_draft.ConditionOperator">
+                                <MudSelect T="SearchComparisonType" Label="@ExampleDataText.Condition" Variant="Variant.Outlined" Class="flex-grow-1" @bind-Value="_draft.ConditionOperator">
                                     @foreach (var option in CriterionOperatorOptions.ForType(_draft.ConditionAttribute.Type, CriterionContext.ExampleData))
                                     {
                                         <MudSelectItem T="SearchComparisonType" Value="@option.Operator">@option.Label</MudSelectItem>
@@ -206,7 +207,7 @@
                         </div>
                         @if (_draft.ConditionAttribute != null && SearchComparisonOperators.TakesValue(_draft.ConditionOperator))
                         {
-                            <MudTextField T="string" Label="Value" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.ConditionValue" />
+                            <MudTextField T="string" Label="@ExampleDataText.Value" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.ConditionValue" />
                         }
                     }
                 }
@@ -234,9 +235,9 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanSave())" OnClick="SaveAsync">
-            @(ExistingAttribute == null ? "Add Attribute" : "Save Attribute")
+            @(ExistingAttribute == null ? ExampleDataText.AddAttribute : ExampleDataText.SaveAttribute)
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -259,10 +260,11 @@
     [Parameter]
     public ExampleDataTemplateAttribute? ExistingAttribute { get; set; }
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<ExampleDataNumberOrder>> NumberOrderOptions =
+    // A property rather than a static field, so the labels follow the viewer's language on every use.
+    private static IReadOnlyList<SegmentedToggleOption<ExampleDataNumberOrder>> NumberOrderOptions =>
     [
-        new(ExampleDataNumberOrder.Sequential, "Count up from the minimum"),
-        new(ExampleDataNumberOrder.Random, "Random within the range")
+        new(ExampleDataNumberOrder.Sequential, ExampleDataText.CountUpFromMinimum),
+        new(ExampleDataNumberOrder.Random, ExampleDataText.RandomWithinRange)
     ];
 
     private bool _loaded;
@@ -311,13 +313,13 @@
     }
 
     private string? AttributeHelperText() => _attributeChoices.Count == 0
-        ? "Every attribute of this Metaverse Object Type that can be generated already has rules in this template."
+        ? ExampleDataText.AttributeHelperText
         : null;
 
     // Says what the empty field means, since leaving it empty is a choice in its own right (random, not "none true").
     private string BooleanDistributionHelperText() => _draft.BoolTrueDistribution.HasValue
-        ? "Exactly this share of the objects given a value are given true, rounded to the nearest object; the rest are given false."
-        : "Leave empty to give each object true or false at random.";
+        ? ExampleDataText.BoolDistributionExact
+        : ExampleDataText.BoolDistributionRandom;
 
     private void OnAttributeChanged(MetaverseAttribute? attribute)
     {
@@ -350,7 +352,7 @@
 
     private async Task SaveAsync()
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, ExistingAttribute == null ? "Add" : "Save");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, ExistingAttribute == null ? CommonText.Add : CommonText.Save);
         if (cancelled)
             return;
 
@@ -387,8 +389,8 @@
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
         var title = existingAttribute?.MetaverseAttribute == null
-            ? $"Add Attribute to {objectType.MetaverseObjectType.Name}"
-            : $"Edit {existingAttribute.MetaverseAttribute.Name}";
+            ? string.Format(CultureInfo.CurrentCulture, ExampleDataText.AddAttributeTo, objectType.MetaverseObjectType.Name)
+            : string.Format(CultureInfo.CurrentCulture, ExampleDataText.EditNamed, existingAttribute.MetaverseAttribute.Name);
         var dialog = await dialogService.ShowAsync<ExampleDataTemplateAttributeDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };

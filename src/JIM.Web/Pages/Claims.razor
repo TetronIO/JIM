@@ -1,4 +1,5 @@
 @page "/claims"
+@using System.Globalization
 @using System.Security.Claims
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
@@ -6,10 +7,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Your Claims</PageTitle>
-<MudText Typo="Typo.h3">Your Claims
-    <PageInfo Title="Your Claims" DocsPage="administration/sso-setup.md#3-verify-claims">
-        Claims are what your identity provider asserted about you when you signed in. JIM uses them to establish who you are, show your name and decide what you may do. This page lists every claim on your session, which helps when diagnosing sign-in, authorisation or identity mapping problems.
+<PageTitle>@AdminText.ClaimsPageTitle</PageTitle>
+<MudText Typo="Typo.h3">@AdminText.ClaimsPageTitle
+    <PageInfo Title="@AdminText.ClaimsPageTitle" DocsPage="administration/sso-setup.md#3-verify-claims">
+        @AdminText.ClaimsPageInfo
     </PageInfo>
 </MudText>
 
@@ -24,21 +25,21 @@
                          UrlParameterPrefix="cl-"
                          DefaultSortBy="type"
                          LoadWindow="LoadClaimWindowAsync"
-                         SingularName="Claim"
-                         PluralName="Claims"
-                         SearchPlaceholder="Search claims">
+                         SingularName="@AdminText.ClaimsNounSingular"
+                         PluralName="@AdminText.ClaimsNounPlural"
+                         SearchPlaceholder="@AdminText.ClaimsSearchPlaceholder">
         <Columns>
-            <TemplateColumn Title="Claim Type" Sortable="false">
+            <TemplateColumn Title="@AdminText.ClaimsColumnType" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Claim Type" Name="type" />
+                    <VirtualisedSortHeader Title="@AdminText.ClaimsColumnType" Name="type" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @context.Item.Type
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Claim Value" Sortable="false">
+            <TemplateColumn Title="@AdminText.ClaimsColumnValue" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Claim Value" Name="value" />
+                    <VirtualisedSortHeader Title="@AdminText.ClaimsColumnValue" Name="value" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @* A claim value is a literal an identity provider asserted (a GUID, a SID, an email,
@@ -52,24 +53,23 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No claims match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.ClaimsEmptySearch, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.Badge"
-                                 PrimaryText="Your session carries no claims"
-                                 SecondaryText="Claims are asserted by your identity provider during sign-in; an empty list means it sent none." />
+                                 PrimaryText="@AdminText.ClaimsEmptyNone"
+                                 SecondaryText="@AdminText.ClaimsEmptyNoneHint" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>
 
-    <MudText Typo="Typo.h4" Class="mt-8">Identity Provider</MudText>
+    <MudText Typo="Typo.h4" Class="mt-8">@AdminText.ClaimsIdpHeading</MudText>
     <MudText Typo="Typo.body1" Class="mt-2">
-        Non-sensitive details about the identity provider JIM is configured to trust, together with runtime information
-        about how your current session was authenticated. Secrets (client secret, tokens) are deliberately excluded.
+        @AdminText.ClaimsIdpIntro
     </MudText>
 
     <VirtualisedDataGrid T="IdpInfoRow"
@@ -77,28 +77,28 @@
                          UrlParameterPrefix="idp-"
                          DefaultSortBy="setting"
                          LoadWindow="LoadIdpInfoWindowAsync"
-                         SingularName="Setting"
-                         PluralName="Settings"
-                         SearchPlaceholder="Search settings">
+                         SingularName="@AdminText.ClaimsSettingNounSingular"
+                         PluralName="@AdminText.ClaimsSettingNounPlural"
+                         SearchPlaceholder="@AdminText.SettingsSearchPlaceholder">
         <Columns>
-            <TemplateColumn Title="Setting" Sortable="false">
+            <TemplateColumn Title="@AdminText.SettingsColumnSetting" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Setting" Name="setting" />
+                    <VirtualisedSortHeader Title="@AdminText.SettingsColumnSetting" Name="setting" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @context.Item.Label
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Value" Sortable="false">
+            <TemplateColumn Title="@AdminText.SettingsColumnValue" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Value" Name="value" />
+                    <VirtualisedSortHeader Title="@AdminText.SettingsColumnValue" Name="value" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (string.IsNullOrEmpty(context.Item.Value))
                     {
                         @* "(not set)" is prose standing in for an absent value, not a value, so it keeps
                            the ordinary face; only the setting's actual value takes the code face. *@
-                        <MudText Typo="Typo.body2" Color="Color.Secondary"><em>(not set)</em></MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary"><em>@AdminText.SettingsNotSet</em></MudText>
                     }
                     else
                     {
@@ -111,16 +111,16 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No identity provider settings match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.ClaimsIdpEmptySearch, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.Login"
-                                 PrimaryText="No identity provider details are available"
-                                 SecondaryText="Single Sign-On has not been configured yet; configure it under Service Settings." />
+                                 PrimaryText="@AdminText.ClaimsIdpEmptyNone"
+                                 SecondaryText="@AdminText.ClaimsIdpEmptyNoneHint" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>
@@ -147,16 +147,16 @@
 
         _idpInfo =
         [
-            new IdpInfoRow("Authority", settings?.SSOAuthority),
-            new IdpInfoRow("Client ID", settings?.SSOClientId),
-            new IdpInfoRow("Unique identifier claim", settings?.SSOUniqueIdentifierClaimType),
-            new IdpInfoRow("Mapped metaverse attribute", settings?.SSOUniqueIdentifierMetaverseAttribute?.Name),
-            new IdpInfoRow("Sign-out enabled", settings is null ? null : settings.SSOEnableLogOut ? "Yes" : "No"),
-            new IdpInfoRow("Token issuer (iss)", issuer),
-            new IdpInfoRow("Authentication type", identity?.AuthenticationType),
-            new IdpInfoRow("Is authenticated", identity?.IsAuthenticated == true ? "Yes" : "No"),
-            new IdpInfoRow("Name claim type", identity?.NameClaimType),
-            new IdpInfoRow("Role claim type", identity?.RoleClaimType),
+            new IdpInfoRow(AdminText.ClaimsIdpAuthority, settings?.SSOAuthority),
+            new IdpInfoRow(AdminText.ClaimsIdpClientId, settings?.SSOClientId),
+            new IdpInfoRow(AdminText.ClaimsIdpUniqueClaim, settings?.SSOUniqueIdentifierClaimType),
+            new IdpInfoRow(AdminText.ClaimsIdpMappedAttribute, settings?.SSOUniqueIdentifierMetaverseAttribute?.Name),
+            new IdpInfoRow(AdminText.ClaimsIdpSignOutEnabled, settings is null ? null : settings.SSOEnableLogOut ? CommonText.Yes : CommonText.No),
+            new IdpInfoRow(AdminText.ClaimsIdpTokenIssuer, issuer),
+            new IdpInfoRow(AdminText.ClaimsIdpAuthType, identity?.AuthenticationType),
+            new IdpInfoRow(AdminText.ClaimsIdpIsAuthenticated, identity?.IsAuthenticated == true ? CommonText.Yes : CommonText.No),
+            new IdpInfoRow(AdminText.ClaimsIdpNameClaimType, identity?.NameClaimType),
+            new IdpInfoRow(AdminText.ClaimsIdpRoleClaimType, identity?.RoleClaimType),
         ];
     }
 

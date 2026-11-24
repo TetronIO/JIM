@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Logic.Scoping;
 
 /// <summary>
@@ -14,6 +16,12 @@ public sealed class ScopeTestResult
     /// and time attribute. When any are present the scoping criteria were not evaluated.
     /// </summary>
     public IReadOnlyList<string> InputErrors { get; init; } = [];
+
+    /// <summary>
+    /// <see cref="InputErrors"/> as messages, in the same order, for the portal to show in the viewer's language (#3030).
+    /// A shorter list than <see cref="InputErrors"/> means the errors are English only.
+    /// </summary>
+    public IReadOnlyList<JimMessage> InputErrorDetails { get; init; } = [];
 
     /// <summary>
     /// The evaluation, from the same code synchronisation runs. Null when <see cref="InputErrors"/> stopped the test.

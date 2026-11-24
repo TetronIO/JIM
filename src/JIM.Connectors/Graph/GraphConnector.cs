@@ -3,6 +3,8 @@
 
 using System.Security.Cryptography.X509Certificates;
 using JIM.Connectors.Http;
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
@@ -331,22 +333,19 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
         {
             var tenantError = CheckTenantId(tenantId.StringValue.Trim());
             if (tenantError != null)
-                response.Add(Error(tenantId, tenantError));
+                response.Add(Failure(tenantId, tenantError));
         }
 
         var clientId = Find(settingValues, GraphConnectorConstants.SettingClientId);
         if (!string.IsNullOrWhiteSpace(clientId?.StringValue) && !Guid.TryParse(clientId.StringValue.Trim(), out _))
         {
-            response.Add(Error(clientId,
-                $"The {GraphConnectorConstants.SettingClientId} must be the app registration's Application (client) ID, a GUID such as " +
-                "00000000-0000-0000-0000-000000000000, shown on its Overview page."));
+            response.Add(Failure(clientId, Message(nameof(ConnectorMessages.GraphClientIdInvalid), GraphConnectorConstants.SettingClientId)));
         }
 
         var cloud = Find(settingValues, GraphConnectorConstants.SettingCloud);
         if (cloud != null && !GraphCloud.TryResolve(cloud.StringValue, out _))
         {
-            response.Add(Error(cloud,
-                $"'{cloud.StringValue}' is not a cloud this Connector knows. Choose one of: {string.Join(", ", GraphCloud.All.Select(c => c.Name))}."));
+            response.Add(Failure(cloud, Message(nameof(ConnectorMessages.GraphCloudUnknown), cloud.StringValue, string.Join(", ", GraphCloud.All.Select(c => c.Name)))));
         }
 
         CheckRange(settingValues, GraphConnectorConstants.SettingConnectionTimeout, 1, GraphConnectorConstants.MaximumConnectionTimeoutSeconds, response);
@@ -356,8 +355,7 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
         var managedIdentityClientId = Find(settingValues, GraphConnectorConstants.SettingManagedIdentityClientId);
         if (!string.IsNullOrWhiteSpace(managedIdentityClientId?.StringValue) && !Guid.TryParse(managedIdentityClientId.StringValue.Trim(), out _))
         {
-            response.Add(Error(managedIdentityClientId,
-                $"The {GraphConnectorConstants.SettingManagedIdentityClientId} must be the managed identity's client id, a GUID shown on its Overview page in the Azure portal."));
+            response.Add(Failure(managedIdentityClientId, Message(nameof(ConnectorMessages.GraphManagedIdentityIdInvalid), GraphConnectorConstants.SettingManagedIdentityClientId)));
         }
 
         var authenticationMethod = Find(settingValues, GraphConnectorConstants.SettingAuthenticationMethod)?.StringValue ?? GraphConnectorConstants.AuthMethodCertificate;
@@ -383,29 +381,27 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     /// A tenant ID is a GUID or a verified domain name. The multi-tenant aliases that sign-in pages accept are refused:
     /// app-only authentication acts in one specific tenant, and Entra ID rejects client credentials requests to them.
     /// </summary>
-    private static string? CheckTenantId(string tenantId)
+    private static JimMessage? CheckTenantId(string tenantId)
     {
         if (Guid.TryParse(tenantId, out _))
             return null;
 
         if (MultiTenantAliases.Contains(tenantId, StringComparer.OrdinalIgnoreCase))
         {
-            return $"'{tenantId}' is a multi-tenant sign-in alias, not a tenant. Supply the tenant's ID (a GUID) or one of its " +
-                   "verified domain names, shown as Directory (tenant) ID on the app registration's Overview page.";
+            return Message(nameof(ConnectorMessages.GraphTenantAlias), tenantId);
         }
 
         if (Uri.CheckHostName(tenantId) == UriHostNameType.Dns && tenantId.Contains('.'))
             return null;
 
-        return $"The {GraphConnectorConstants.SettingTenantId} must be the tenant's ID (a GUID) or one of its verified domain names, " +
-               "i.e. contoso.onmicrosoft.com. Supply the value on its own, not a sign-in URL.";
+        return Message(nameof(ConnectorMessages.GraphTenantInvalid), GraphConnectorConstants.SettingTenantId);
     }
 
     private ConnectorSettingValueValidationResult? CheckCertificate(List<ConnectedSystemSettingValue> settingValues, ConnectedSystemSettingValue certificate)
     {
         var pfx = Decrypt(certificate.StringEncryptedValue);
         if (string.IsNullOrWhiteSpace(pfx))
-            return Error(certificate, $"The {GraphConnectorConstants.SettingCertificate} setting could not be decrypted.");
+            return Failure(certificate, Message(nameof(ConnectorMessages.GraphSettingNotDecrypted), GraphConnectorConstants.SettingCertificate));
 
         var password = Decrypt(Find(settingValues, GraphConnectorConstants.SettingCertificatePassword)?.StringEncryptedValue);
 
@@ -519,19 +515,17 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
         catch (HttpAuthenticationException ex)
         {
             logger.Warning(ex, "The Microsoft Graph connectivity test could not acquire an access token.");
-            return [Error(tenantId, ex.Message)];
+            return [ex.Detail != null ? Failure(tenantId, ex.Detail) : Error(tenantId, ex.Message)];
         }
         catch (GraphRequestException ex)
         {
             logger.Warning(ex, "The Microsoft Graph connectivity test failed.");
-            return [Error(tenantId, $"Authenticated, but Microsoft Graph refused the test request: {LogSanitiser.Sanitise(ex.Message)}")];
+            return [Failure(tenantId, Message(nameof(ConnectorMessages.GraphTestRequestRefused), LogSanitiser.Sanitise(ex.Message)))];
         }
         catch (Exception ex) when (ex is HttpRequestException or TimeoutException or TaskCanceledException)
         {
             logger.Warning(ex, "The Microsoft Graph connectivity test could not connect.");
-            return [Error(tenantId,
-                "Could not connect to Microsoft Entra ID or Microsoft Graph. Check that JIM can reach them on HTTPS (port 443). Where a proxy " +
-                "inspects TLS traffic, add its CA certificate to JIM's certificate store under Admin > Certificates.")];
+            return [Failure(tenantId, Message(nameof(ConnectorMessages.GraphCouldNotConnect)))];
         }
     }
 
@@ -563,7 +557,8 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     {
         var setting = Find(settingValues, name);
         if (setting?.IntValue is { } value && (value < minimum || value > maximum))
-            response.Add(Error(setting, $"{name} must be from {minimum} to {maximum}."));
+            response.Add(Failure(setting, Message(nameof(ConnectorMessages.GraphNumberOutOfRange), name,
+                minimum.ToString(System.Globalization.CultureInfo.InvariantCulture), maximum.ToString(System.Globalization.CultureInfo.InvariantCulture))));
     }
 
     /// <summary>The stored value as entered, decrypting it where JIM has encrypted it at rest.</summary>
@@ -575,4 +570,10 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
 
     private static ConnectorSettingValueValidationResult Error(ConnectedSystemSettingValue settingValue, string message) =>
         new() { IsValid = false, ErrorMessage = message, SettingValue = settingValue };
+
+    private static ConnectorSettingValueValidationResult Failure(ConnectedSystemSettingValue settingValue, JimMessage message) =>
+        ConnectorSettingValueValidationResult.Failure(settingValue, message);
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 }

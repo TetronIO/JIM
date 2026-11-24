@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Servers.Scoping;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -39,7 +41,7 @@ internal static class ExpressionWhere
     private static bool Meets(object candidate, AttributeDataType type, SearchComparisonType op, ScopingValue expected, bool caseSensitive)
     {
         if (TypeOf(candidate) != type)
-            throw new ExpressionEvaluationException("Where needs values of one type.");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.WhereNeedsOneType)));
 
         var cursor = new OneValueCursor(ToScopingValue(candidate));
         return CriterionComparer.Evaluate(ref cursor, type, op, expected, caseSensitive).Met;
@@ -55,14 +57,14 @@ internal static class ExpressionWhere
 
         if (match is { } op && !SearchComparisonOperators.TakesValue(op))
             throw new ExpressionEvaluationException(
-                $"Where keeps the values that meet an operator, and '{trimmed}' tests the attribute rather than a value. Use Count or IsNullOrEmpty instead.");
+                ExpressionMessage.Of(nameof(ExpressionMessages.WhereOperatorTestsAttribute), trimmed ?? string.Empty));
 
         if (match is { } found && valid.Contains(found))
             return found;
 
         var names = string.Join(", ", valid.Where(SearchComparisonOperators.TakesValue).Select(o => $"'{SearchComparisonOperators.LabelFor(o, type)}'"));
         throw new ExpressionEvaluationException(
-            $"Where does not know the operator '{trimmed}' for {Describe(type)} values. Use one of: {names}.");
+            ExpressionMessage.Of(nameof(ExpressionMessages.WhereUnknownOperator), trimmed ?? string.Empty, Describe(type), names));
     }
 
     private static ScopingValue ExpectedValue(object? value, AttributeDataType type, SearchComparisonType op)
@@ -75,14 +77,14 @@ internal static class ExpressionWhere
 
         var text = one as string ?? (ExpressionText.TryFormat(one, out var formatted) ? formatted : null);
         if (string.IsNullOrEmpty(text))
-            throw new ExpressionEvaluationException("Where needs a value to compare with.");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.WhereNeedsValue)));
 
         if (SearchComparisonOperators.IsPattern(op) && SearchComparisonOperators.ValidatePattern(text) is { } patternError)
             throw new ExpressionEvaluationException(patternError);
 
         var criterion = new CriterionValues();
         if (CriterionValueText.Read(text, type, criterion) is { } readError)
-            throw new ExpressionEvaluationException($"Where could not compare: {readError}");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.WhereCouldNotCompare), readError));
 
         return new ScopingValue(criterion.StringValue, criterion.IntValue, criterion.LongValue, criterion.DecimalValue,
             criterion.DateTimeValue, criterion.BoolValue, criterion.GuidValue);
@@ -97,7 +99,7 @@ internal static class ExpressionWhere
         DateTime or DateTimeOffset => AttributeDataType.DateTime,
         bool => AttributeDataType.Boolean,
         Guid => AttributeDataType.Guid,
-        _ => throw new ExpressionEvaluationException("Where works on text, number, date, Boolean or Guid values.")
+        _ => throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.WhereUnsupportedType)))
     };
 
     private static ScopingValue ToScopingValue(object value) => value switch
@@ -112,12 +114,17 @@ internal static class ExpressionWhere
         _ => default
     };
 
-    private static string Describe(AttributeDataType type) => type switch
+    private static JimMessage Describe(AttributeDataType type) => type switch
     {
-        AttributeDataType.LongNumber => "long number",
-        AttributeDataType.DateTime => "date",
-        AttributeDataType.Guid => "Guid",
-        AttributeDataType.Boolean => "Boolean",
-        _ => type.ToString().ToLowerInvariant()
+        AttributeDataType.Text => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindText)),
+        AttributeDataType.Number => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindNumber)),
+        AttributeDataType.LongNumber => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindLongNumber)),
+        AttributeDataType.Decimal => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindDecimal)),
+        AttributeDataType.DateTime => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindDateTime)),
+        AttributeDataType.Guid => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindGuid)),
+        AttributeDataType.Boolean => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindBoolean)),
+        AttributeDataType.Binary => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindBinary)),
+        AttributeDataType.Reference => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindReference)),
+        _ => ExpressionMessage.Of(nameof(ExpressionMessages.WhereKindNotSet))
     };
 }

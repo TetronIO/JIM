@@ -31,20 +31,20 @@
 
 <MudPaper Class="@(exchangeRecipientFlows != null ? "pa-4 mt-6" : "pa-4")" Outlined="true">
     <div class="d-flex align-center">
-        <MudText Typo="Typo.h6">Attribute Flow</MudText>
+        <MudText Typo="Typo.h6">@SyncRuleText.AttributeFlowTitle</MudText>
         <TermHint Term="Term.AttributeFlow" />
     </div>
     <div class="d-flex align-center mt-3">
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
             OnClick="HandleOpenAddAttributeFlowRuleDialogAsync"
-            Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
+            Disabled="DisableAddAttributeFlowButton()" DropShadow="false">@SyncRuleText.AddAttributeFlowButton</MudButton>
     </div>
 
     @if (SyncRule.AttributeFlowRules.Count > 0)
     {
         <MudStack Row="true" Spacing="6" Class="mt-3 mb-1 flex-wrap" AlignItems="AlignItems.Start">
             <div>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Mapping Type:</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SyncRuleText.MappingTypeLabel</MudText>
                 <MudChipSet T="AttributeFlowMappingType"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedMappingTypes"
@@ -55,7 +55,7 @@
                                  Color="@(_selectedMappingTypes.Contains(type.Key) ? Color.Default : Helpers.GetMappingTypeChipColour(type.Key))"
                                  Variant="@(_selectedMappingTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetMappingTypeChipColour(type.Key)">
-                            @type.Key.ToString().SplitOnCapitalLetters()
+                            @AttributeFlowSectionSummaries.MappingTypeName(type.Key)
                             <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
                         </MudChip>
                     }
@@ -63,7 +63,7 @@
             </div>
 
             <div>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Data Type:</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SyncRuleText.DataTypeLabel</MudText>
                 <MudChipSet T="AttributeDataType"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedDataTypes"
@@ -74,7 +74,7 @@
                                  Color="@(_selectedDataTypes.Contains(type.Key) ? Color.Default : Helpers.GetAttributeTypeChipColour(type.Key))"
                                  Variant="@(_selectedDataTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetAttributeTypeChipColour(type.Key)">
-                            @type.Key.ToString().SplitOnCapitalLetters()
+                            @AttributeFlowSectionSummaries.DataTypeName(type.Key)
                             <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
                         </MudChip>
                     }
@@ -82,7 +82,7 @@
             </div>
 
             <div>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Plurality:</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SyncRuleText.PluralityLabel</MudText>
                 <MudChipSet T="AttributePlurality"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedPluralities"
@@ -93,7 +93,7 @@
                                  Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Helpers.GetAttributePluralityChipColour(plurality.Key))"
                                  Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetAttributePluralityChipColour(plurality.Key)">
-                            @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                            @AttributeFlowSectionSummaries.PluralityName(plurality.Key)
                             <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
                         </MudChip>
                     }
@@ -110,23 +110,23 @@
                          UrlParameterPrefix="af-"
                          DefaultSortBy="target"
                          LoadWindow="LoadAttributeFlowWindowAsync"
-                         SingularName="Attribute Flow"
-                         PluralName="Attribute Flows"
-                         SearchPlaceholder="Search by attribute or expression">
+                         SingularName="@SyncRuleText.SingularAttributeFlow"
+                         PluralName="@SyncRuleText.PluralAttributeFlows"
+                         SearchPlaceholder="@SyncRuleText.SearchAttributeFlowsPlaceholder">
         <Columns>
-            <TemplateColumn Title="Type" Sortable="false">
+            <TemplateColumn Title="@CommonText.ColumnType" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Type" Name="type" />
+                    <VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">
-                        @(context.Item.Generation != null ? "Generated" : context.Item.GetSourceType().ToString().SplitOnCapitalLetters())
+                        @(context.Item.Generation != null ? SyncRuleText.TypeGenerated : AttributeFlowSectionSummaries.MappingTypeName(context.Item.GetSourceType()))
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Source" Sortable="false">
+            <TemplateColumn Title="@SyncRuleText.ColumnSource" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Source" Name="source" />
+                    <VirtualisedSortHeader Title="@SyncRuleText.ColumnSource" Name="source" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @* Unique Value Generation (#242, Phase 3): a generated mapping carries at most one source
@@ -153,7 +153,7 @@
                     {
                         @* A row in a virtualised grid is one line, and a flow can join several sources, so the
                            first is shown and the rest open in a dialog drawn with the same chips. *@
-                        <OverflowList TItem="SyncRuleMappingSource" Items="@context.Item.Sources.OrderBy(q => q.Order).ToList()" Title="Sources">
+                        <OverflowList TItem="SyncRuleMappingSource" Items="@context.Item.Sources.OrderBy(q => q.Order).ToList()" Title="@SyncRuleText.SourcesTitle">
                             <ItemTemplate Context="source">
                                 @if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
                                 {
@@ -184,9 +184,9 @@
                     <MudText Class="mud-text-secondary">→</MudText>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Target" Sortable="false">
+            <TemplateColumn Title="@SyncRuleText.ColumnTarget" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Target" Name="target" />
+                    <VirtualisedSortHeader Title="@SyncRuleText.ColumnTarget" Name="target" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @* One line, and the attribute name is the part that gives way: the modifier chips beside
@@ -216,19 +216,19 @@
                             {
                                 <MudTooltip Arrow="true" Placement="Placement.Top">
                                     <TooltipContent><TooltipText Text="@DescribeDisabledMapping(context.Item)" /></TooltipContent>
-                                    <ChildContent><MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Disabled</MudChip></ChildContent>
+                                    <ChildContent><MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@SyncRuleText.ChipDisabled</MudChip></ChildContent>
                                 </MudTooltip>
                             }
                             @if (context.Item.InitialExportOnly)
                             {
-                                <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                                <MudTooltip Text="@SyncRuleText.InitialExportOnlyTooltip" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">@SyncRuleText.InitialExportOnlyChip</MudChip>
                                 </MudTooltip>
                             }
                             @if (connectedSystemTarget.Writability == AttributeWritability.WritableOnCreate)
                             {
                                 <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">@SyncRuleText.SetOnCreationOnlyChip</MudChip>
                                 </MudTooltip>
                             }
                             @* A row is one line in a virtualised grid, so the note is an icon. *@
@@ -249,7 +249,7 @@
                         {
                             <MudTooltip Text="@RetiredChipTooltip(rowRetiredCount, TargetName(context.Item))" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Variant="Variant.Text" Color="Color.Default" data-testid="jim-retired-count"
-                                         OnClick="@(() => HandleViewRetiredValuesClickAsync(context.Item))">@($"{rowRetiredCount:N0} retired")</MudChip>
+                                         OnClick="@(() => HandleViewRetiredValuesClickAsync(context.Item))">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RetiredCount, rowRetiredCount)</MudChip>
                             </MudTooltip>
                         }
                         @if (MappingIsMvaToSva(context.Item))
@@ -261,9 +261,9 @@
                     </div>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Created" Sortable="false">
+            <TemplateColumn Title="@CommonText.ColumnCreated" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Created" Name="created" />
+                    <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -271,9 +271,9 @@
                     </MudTooltip>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Updated" Sortable="false">
+            <TemplateColumn Title="@SyncRuleText.ColumnUpdated" Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Updated" Name="updated" />
+                    <VirtualisedSortHeader Title="@SyncRuleText.ColumnUpdated" Name="updated" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.LastUpdated.HasValue)
@@ -299,23 +299,23 @@
                         {
                             <MudTooltip Text="@ViewRetiredValuesTooltip(RetiredValueCountFor(context.Item))" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.Archive" Variant="Variant.Filled" Color="Color.Default"
-                                    Size="Size.Small" aria-label="view retired values"
+                                    Size="Size.Small" aria-label="@SyncRuleText.ViewRetiredValuesAria"
                                     OnClick="@(() => HandleViewRetiredValuesClickAsync(context.Item))" />
                             </MudTooltip>
                         }
                         @if (GeneratedValuePreviewHelpers.ShowStartAgainAction(context.Item))
                         {
-                            <MudTooltip Text="Start again…" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@SyncRuleText.StartAgain" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Color="Color.Default"
-                                    Size="Size.Small" aria-label="start again"
+                                    Size="Size.Small" aria-label="@SyncRuleText.StartAgainAria"
                                     OnClick="@(() => HandleStartAgainClickAsync(context.Item))" />
                             </MudTooltip>
                         }
                         <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
-                            Size="Size.Small" aria-label="edit"
+                            Size="Size.Small" aria-label="@SyncRuleText.EditAria"
                             OnClick="@(() => HandleEditAttributeFlowRuleAsync(context.Item))" />
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
-                            Size="Size.Small" aria-label="delete"
+                            Size="Size.Small" aria-label="@SyncRuleText.DeleteAria"
                             OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(context.Item))" />
                     </div>
                 </CellTemplate>
@@ -325,22 +325,22 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No Attribute Flows match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.NoAttributeFlowsMatchSearch, grid.SearchText))"
+                                 SecondaryText="@SyncRuleText.NoAttributeFlowsMatchSearchHint"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else if (AnyAttributeFlowFilterIsActive)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                                 PrimaryText="No Attribute Flows match these filters"
-                                 SecondaryText="Clear a Mapping Type, Data Type or Plurality filter above to widen the list." />
+                                 PrimaryText="@SyncRuleText.NoAttributeFlowsMatchFilters"
+                                 SecondaryText="@SyncRuleText.NoAttributeFlowsMatchFiltersHint" />
             }
             else
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.Map"
-                                 PrimaryText="No Attribute Flows defined yet"
-                                 SecondaryText="Use the Add Attribute Flow button to say which attribute values this Synchronisation Rule moves." />
+                                 PrimaryText="@SyncRuleText.NoAttributeFlowsYet"
+                                 SecondaryText="@SyncRuleText.NoAttributeFlowsYetHint" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>
@@ -349,7 +349,7 @@
 <MudDialog @bind-Visible="_addAttributeFlowRuleDialogVisible" Options="DialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> @(_isEditingAttributeFlow ? "Edit Attribute Flow" : "Add Attribute Flow")
+            <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> @(_isEditingAttributeFlow ? SyncRuleText.EditAttributeFlowTitle : SyncRuleText.AddAttributeFlowButton)
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -367,7 +367,7 @@
                 StagedSyncRule="SyncRule" BaseExpressionCheck="AttributeFlowExpressionCheck"
                 MetaverseAttributeNames="SuggestedMetaverseAttributeNames"
                 ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
-                OnChanged="ScheduleFlowAnalysisAsync" SettingsHeader="DialogHeader" SettingsFooter="GeneratedSettingsFooter">
+                OnChanged="ScheduleFlowAnalysisAsync" SettingsHeader="@DialogHeader" SettingsFooter="@GeneratedSettingsFooter">
                 <BaseExpressionTools Context="insertIntoBaseExpression">
                     @* A generated mapping's base expression can read mv["..."] too (#1750, #242). *@
                     <div class="mt-1">
@@ -399,16 +399,15 @@
                             if (SyncRule.Direction == SyncRuleDirection.Import)
                             {
                                 <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                                    @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
-                                    Placeholder="Please select the source Connected System attribute" Required="true" Class="mt-5"
+                                    @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="@SyncRuleText.ConnectedSystemAttributeLabel"
+                                    Placeholder="@SyncRuleText.SelectSourceConnectedSystemAttribute" Required="true" Class="mt-5"
                                     Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                                     @* Credential attributes are excluded entirely: they are handled by JIM's password channel, never by Attribute Flow *@
                                     @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
                                                 !CredentialAttributes.IsCredentialAttribute(q.Name)))
                                     {
                                         <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span
-                                                style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
-                                                @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                                style="@($"color:{Colors.Gray.Darken1};")">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeTypeAndPlurality, AttributeFlowSectionSummaries.DataTypeName(connectedSystemAttribute.Type), AttributeFlowSectionSummaries.PluralityWords(connectedSystemAttribute.AttributePlurality))</span>
                                         </MudSelectItem>
                                     }
                                 </MudSelect>
@@ -416,15 +415,14 @@
                             else if (SyncRule.Direction == SyncRuleDirection.Export)
                             {
                                 <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMappingSource.MetaverseAttribute"
-                                    Label="Metaverse Attribute" Placeholder="Please select the source Metaverse attribute" Required="true"
+                                    Label="@SyncRuleText.MetaverseAttributeLabel" Placeholder="@SyncRuleText.SelectSourceMetaverseAttribute" Required="true"
                                     Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                                     @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
                                     {
                                         <MudSelectItem Value="@metaverseAttribute">
                                             <div class="jim-flow-option">
                                                 <span>@metaverseAttribute.Name <span
-                                                    style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
-                                                    @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                                    style="@($"color:{Colors.Gray.Darken1};")">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeTypeAndPlurality, AttributeFlowSectionSummaries.DataTypeName(metaverseAttribute.Type), AttributeFlowSectionSummaries.PluralityWords(metaverseAttribute.AttributePlurality))</span></span>
                                                 <span class="jim-flow-option-spacer"></span>
                                                 <StandardMappingHintLabel Hints="_standardMappingHints.ForAttribute(metaverseAttribute.Id)"
                                                                           ShowStandard="_standardMappingHints.HasMixedStandards" />
@@ -438,9 +436,9 @@
                         case "Expression":
                         <ExpressionEditor @ref="_expressionEditor" @bind-Value="_attributeFlowMappingSource.Expression"
                             @bind-Value:after="ScheduleFlowAnalysisAsync" Id="attribute-flow-expression"
-                            Label="Expression" Placeholder="@(SyncRule.Direction == SyncRuleDirection.Export
-                                ? "e.g. IIF(mv[\"Active\"] == true, Upper(mv[\"Display Name\"]), null)"
-                                : "e.g. IIF(mv[\"Active\"] == true, Upper(cs[\"Name\"]), null)")"
+                            Label="@SyncRuleText.ExpressionLabel" Placeholder="@(SyncRule.Direction == SyncRuleDirection.Export
+                                ? SyncRuleText.ExpressionPlaceholderExport
+                                : SyncRuleText.ExpressionPlaceholderImport)"
                             Required="true" SyntaxCheck="AttributeFlowExpressionCheck"
                             MetaverseAttributeNames="SuggestedMetaverseAttributeNames" ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
                             Class="mt-5" />
@@ -459,40 +457,40 @@
                         <DerivedFlowPanel Analysis="_derivedFlowAnalysis" ConnectedSystemName="@SyncRule.ConnectedSystem?.Name" />
 
                         @* ─── Built from generated value (#2014, mock screen 1): which generated value, and the Keep unique switch ─── *@
-                        <BuiltFromGeneratedValueBlock Description="_builtFromGeneratedValue" Mapping="_attributeFlowMapping" />
+                        <BuiltFromGeneratedValueBlock Description="@_builtFromGeneratedValue" Mapping="_attributeFlowMapping" />
 
                             @* Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it
                                produces a structurally broken value. Whether that matters is the administrator's call. *@
-                            <SettingsSection @ref="_expressionMissingInputSection" Title="Missing Input Behaviour" Class="mt-5"
+                            <SettingsSection @ref="_expressionMissingInputSection" Title="@SyncRuleText.MissingInputBehaviourTitle" Class="mt-5"
                                              Summary="@AttributeFlowSectionSummaries.MissingInput(_attributeFlowMappingSource.MissingInputBehaviour, generated: false)"
-                                             Attention="@(_attributeFlowMappingSource.MissingInputBehaviour == MissingInputBehaviour.FailObject ? "Fails the whole object" : null)">
+                                             Attention="@(_attributeFlowMappingSource.MissingInputBehaviour == MissingInputBehaviour.FailObject ? SyncRuleText.AttentionFailsWholeObject : null)">
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-                                    What to do when an attribute this Expression reads has no value on the object being synchronised.
+                                    @SyncRuleText.MissingInputIntro
                                 </MudText>
                                 <MudRadioGroup T="MissingInputBehaviour" @bind-Value="_attributeFlowMappingSource.MissingInputBehaviour">
                                     <MudStack Spacing="1">
                                         <MudRadio Value="MissingInputBehaviour.EvaluateAnyway" Color="Color.Primary">
-                                            <MudText Typo="Typo.body1">Evaluate anyway</MudText>
+                                            <MudText Typo="Typo.body1">@SyncRuleText.MissingInputEvaluateAnyway</MudText>
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                                Run the Expression without the input. For an Expression that handles a missing value itself. The default.
+                                                @SyncRuleText.MissingInputEvaluateAnywayHint
                                             </MudText>
                                         </MudRadio>
                                         <MudRadio Value="MissingInputBehaviour.ContributeNoValue" Color="Color.Primary">
-                                            <MudText Typo="Typo.body1">Contribute no value</MudText>
+                                            <MudText Typo="Typo.body1">@SyncRuleText.MissingInputContributeNoValue</MudText>
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                                Contribute nothing, so a lower-priority contributor can still win the attribute. No error.
+                                                @SyncRuleText.MissingInputContributeNoValueHint
                                             </MudText>
                                         </MudRadio>
                                         <MudRadio Value="MissingInputBehaviour.FailMapping" Color="Color.Primary">
-                                            <MudText Typo="Typo.body1">Fail this mapping</MudText>
+                                            <MudText Typo="Typo.body1">@SyncRuleText.MissingInputFailMapping</MudText>
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                                Record an error against the object; other Attribute Flows still run and the target keeps its value.
+                                                @SyncRuleText.MissingInputFailMappingHint
                                             </MudText>
                                         </MudRadio>
                                         <MudRadio Value="MissingInputBehaviour.FailObject" Color="Color.Primary">
-                                            <MudText Typo="Typo.body1">Fail the object</MudText>
+                                            <MudText Typo="Typo.body1">@SyncRuleText.MissingInputFailObject</MudText>
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                                Run no Attribute Flow on this Synchronisation Rule for the object. For identity-critical output.
+                                                @SyncRuleText.MissingInputFailObjectHint
                                             </MudText>
                                         </MudRadio>
                                     </MudStack>
@@ -500,9 +498,7 @@
                                 @if (_attributeFlowMappingSource.MissingInputBehaviour == MissingInputBehaviour.FailObject)
                                 {
                                     <MudAlert Severity="Severity.Warning" Class="mt-3">
-                                        While this is set, an object missing any attribute this Expression reads will not synchronise at
-                                        all: none of its attributes flow, and it is reported as an error on every run until the missing
-                                        value is supplied.
+                                        @SyncRuleText.MissingInputFailObjectWarning
                                     </MudAlert>
                                 }
                             </SettingsSection>
@@ -541,7 +537,7 @@
                                     </MudText>
                                 }
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
-                                    Standard Mappings are guidance only; any attribute can be chosen, and they never affect what synchronisation flows.
+                                    @SyncRuleText.StandardMappingsGuidance
                                 </MudText>
                                 @if (selectable.Count > 0)
                                 {
@@ -549,7 +545,7 @@
                                         @foreach (var suggestion in selectable)
                                         {
                                             <AlertButton Severity="Severity.Info"
-                                                OnClick="@(() => ApplyStandardMappingSuggestion(suggestion))">Use @suggestion.TargetName</AlertButton>
+                                                OnClick="@(() => ApplyStandardMappingSuggestion(suggestion))">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.UseSuggestion, suggestion.TargetName)</AlertButton>
                                         }
                                     </div>
                                 }
@@ -572,11 +568,11 @@
                                 <MudText Typo="Typo.body1">
                                     @if (alreadyContributes)
                                     {
-                                        @($"More than one Synchronisation Rule contributes {targetAttribute.Name}. Its priority order decides which value wins.")
+                                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.MoreThanOneRuleContributes, targetAttribute.Name)
                                     }
                                     else
                                     {
-                                        @($"{targetAttribute.Name} already has contributors. This mapping is added at the lowest priority and will not win resolution until it is promoted.")
+                                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeHasContributors, targetAttribute.Name)
                                     }
                                 </MudText>
                                 }
@@ -593,7 +589,7 @@
                                 {
                                 <MudText Typo="Typo.body2" Class="mt-3">
                                     <MudLink Href="@($"/admin/schema/object-types/{SyncRule.MetaverseObjectTypeId}")" Target="_blank">
-                                        Manage priority on the @(SyncRule.MetaverseObjectType?.Name ?? "Metaverse") Object Type page
+                                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ManagePriorityOnObjectType, SyncRule.MetaverseObjectType?.Name ?? SyncRuleText.MetaverseFallbackName)
                                     </MudLink>
                                 </MudText>
                                 }
@@ -601,54 +597,54 @@
                         }
 
                             @* ─── Value handling (#91, #843): what no value means, and how imported text is processed ─── *@
-                            <SettingsSection Title="Value handling" Class="mt-5"
+                            <SettingsSection Title="@SyncRuleText.ValueHandlingTitle" Class="mt-5"
                                              Summary="@AttributeFlowSectionSummaries.ValueHandling(_attributeFlowMapping, _attributeFlowMapping.TargetMetaverseAttribute?.Type == AttributeDataType.Text)"
-                                             Attention="@(_attributeFlowMapping.NullIsValue ? "A blank clears the value" : null)">
+                                             Attention="@(_attributeFlowMapping.NullIsValue ? SyncRuleText.AttentionBlankClears : null)">
                             @* ─── Null is a value (#91); no effect on an Accumulate target (#3059) ─── *@
                             <MudTooltip Arrow="true" Placement="Placement.Top" Inline="false"
                                         Disabled="@(!TargetAccumulates())" Text="@MetaverseAttributeText.NullIsValueAccumulateTooltip">
                                 <MudCheckBox T="bool" Dense="true" Class="mt-5"
                                     @bind-Value="_attributeFlowMapping.NullIsValue"
                                     Disabled="@TargetAccumulates()"
-                                    Label="Null is a value" />
+                                    Label="@SyncRuleText.NullIsValueLabel" />
                             </MudTooltip>
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                When this Synchronisation Rule applies to a Connected System Object that is joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value": clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor. A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope) is skipped regardless.
+                                @SyncRuleText.NullIsValueHelp
                             </MudText>
                             @if (_attributeFlowMapping.NullIsValue && !TargetAccumulates())
                             {
                                 <MudAlert Severity="Severity.Warning" Class="mt-3">
-                                    Wherever this Synchronisation Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.
+                                    @SyncRuleText.NullIsValueWarning
                                 </MudAlert>
                             }
                             @* ─── Inbound value processing (#843) ─── *@
                             @if (_attributeFlowMapping.TargetMetaverseAttribute?.Type == AttributeDataType.Text)
                             {
-                                <MudText Typo="Typo.subtitle2" Class="mt-5">Value processing</MudText>
+                                <MudText Typo="Typo.subtitle2" Class="mt-5">@SyncRuleText.ValueProcessingTitle</MudText>
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-                                    Apply transforms to the imported text value before it flows to the Metaverse. By default, whitespace-only and empty values are treated as no value (they do not flow, and clear any existing value).
+                                    @SyncRuleText.ValueProcessingHelp
                                 </MudText>
                                 <MudCheckBox T="bool" Dense="true"
                                     Value="HasProcessingFlag(InboundValueProcessing.TreatWhitespaceAsNoValue)"
                                     ValueChanged="@((bool v) => SetProcessingFlag(InboundValueProcessing.TreatWhitespaceAsNoValue, v))"
-                                    Label="Treat whitespace as no value" />
+                                    Label="@SyncRuleText.TreatWhitespaceAsNoValue" />
                                 <MudCheckBox T="bool" Dense="true"
                                     Value="HasProcessingFlag(InboundValueProcessing.TrimWhitespace)"
                                     ValueChanged="@((bool v) => SetProcessingFlag(InboundValueProcessing.TrimWhitespace, v))"
-                                    Label="Trim leading and trailing whitespace" />
+                                    Label="@SyncRuleText.TrimWhitespace" />
                                 <MudTooltip Arrow="true" Placement="Placement.Top" Inline="false"
-                                    Text="Reduces runs of consecutive whitespace inside the value to a single space; for example 'John···Smith' becomes 'John Smith' (each · is a space).">
+                                    Text="@SyncRuleText.CollapseWhitespaceTooltip">
                                     <MudCheckBox T="bool" Dense="true"
                                         Value="HasProcessingFlag(InboundValueProcessing.CollapseInternalWhitespace)"
                                         ValueChanged="@((bool v) => SetProcessingFlag(InboundValueProcessing.CollapseInternalWhitespace, v))"
-                                        Label="Collapse internal whitespace" />
+                                        Label="@SyncRuleText.CollapseInternalWhitespace" />
                                 </MudTooltip>
                                 <MudSelect T="InboundCaseNormalisation" @bind-Value="_attributeFlowMapping.CaseNormalisation"
-                                    Label="Case normalisation" Variant="Variant.Outlined" Class="mt-6">
-                                    <MudSelectItem Value="InboundCaseNormalisation.None">None</MudSelectItem>
-                                    <MudSelectItem Value="InboundCaseNormalisation.Upper">Upper case</MudSelectItem>
-                                    <MudSelectItem Value="InboundCaseNormalisation.Lower">Lower case</MudSelectItem>
-                                    <MudSelectItem Value="InboundCaseNormalisation.Title">Title case</MudSelectItem>
+                                    Label="@SyncRuleText.CaseNormalisationLabel" Variant="Variant.Outlined" Class="mt-6">
+                                    <MudSelectItem Value="InboundCaseNormalisation.None">@CommonText.None</MudSelectItem>
+                                    <MudSelectItem Value="InboundCaseNormalisation.Upper">@SyncRuleText.CaseUpper</MudSelectItem>
+                                    <MudSelectItem Value="InboundCaseNormalisation.Lower">@SyncRuleText.CaseLower</MudSelectItem>
+                                    <MudSelectItem Value="InboundCaseNormalisation.Title">@SyncRuleText.CaseTitle</MudSelectItem>
                                 </MudSelect>
                             }
                             </SettingsSection>
@@ -663,9 +659,9 @@
                         @* ─── Initial Export Only (#223) ─── *@
                         <MudCheckBox T="bool" Dense="true" Class="mt-5"
                             @bind-Value="_attributeFlowMapping.InitialExportOnly"
-                            Label="Initial Export Only" />
+                            Label="@SyncRuleText.InitialExportOnlyLabel" />
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            Only flow this attribute when JIM creates the object in the Connected System. Once provisioned, the attribute becomes unmanaged: Metaverse changes are not exported and Drift Correction leaves it alone, allowing the Connected System to own the value. Objects that join to pre-existing Connected System objects never receive the value.
+                            @SyncRuleText.InitialExportOnlyHelp
                         </MudText>
                         }
 
@@ -673,10 +669,9 @@
                         <MudCheckBox T="bool" Dense="true" Class="mt-5"
                             @bind-Value="_attributeFlowMapping.Enabled"
                             @bind-Value:after="ScheduleFlowAnalysisAsync"
-                            Label="Enabled" />
+                            Label="@CommonText.Enabled" />
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
-                            Where another Attribute Flow also contributes the attribute, its value takes over at the next synchronisation; values only this flow contributed stay in place.
+                            @SyncRuleText.EnabledHelp
                         </MudText>
                         @if (!string.IsNullOrWhiteSpace(_attributeFlowMapping.DisabledReason))
                         {
@@ -711,7 +706,7 @@
                 }
                 else if (_attributeFlowMappingSourceType == "Generated")
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Choose the attribute to assign the value to, then try it here.</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@SyncRuleText.ChooseAttributeToTry</MudText>
                 }
             </TryIt>
         </AttributeFlowEditorLayout>
@@ -719,9 +714,9 @@
     </DialogContent>
     <DialogActions>
         <MudButton DropShadow="false"
-            OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
+            OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="me-2">@CommonText.Cancel</MudButton>
         <MudButton Disabled="DisableAddAttributeFlowMappingButton()" DropShadow="false" Variant="Variant.Filled"
-            Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">@(_isEditingAttributeFlow ? "Update Attribute Flow" : "Add Attribute Flow")</MudButton>
+            Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">@(_isEditingAttributeFlow ? SyncRuleText.UpdateAttributeFlowButton : SyncRuleText.AddAttributeFlowButton)</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -748,7 +743,7 @@
     // since the panel's row is that attribute. The ordinary Add and Edit clear it.
     private bool _targetFixedByExchangePanel;
 
-    private string? ExchangePanelTargetHelperText => _targetFixedByExchangePanel ? "Chosen by Exchange recipients" : null;
+    private string? ExchangePanelTargetHelperText => _targetFixedByExchangePanel ? SyncRuleText.ChosenByExchangeRecipients : null;
     // Medium rather than the default Small: the dialog carries the attribute priority list (#91 Surface 1), whose
     // Connected System and Synchronisation Rule names wrap onto three lines each at 600px and are unreadable.
     private static readonly DialogOptions NarrowDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Medium };
@@ -789,20 +784,20 @@
     {
         <MudGrid Spacing="3">
             <MudItem xs="12" sm="6">
-            <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this Attribute Flow"
+            <MudSelect T="string" Label="@SyncRuleText.SourceTypeLabel" Placeholder="@SyncRuleText.SelectSourceType"
                 Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined"
                 ToStringFunc="@SourceTypeLabel">
                 <MudSelectItem Value="@("Attribute")">
-                    <div>Attribute</div>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Copies a value from a source attribute</MudText>
+                    <div>@SyncRuleText.SourceTypeAttribute</div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.SourceTypeAttributeHelp</MudText>
                 </MudSelectItem>
                 <MudSelectItem Value="@("Expression")">
-                    <div>Expression</div>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Computes a value using an expression</MudText>
+                    <div>@SyncRuleText.SourceTypeExpression</div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.SourceTypeExpressionHelp</MudText>
                 </MudSelectItem>
                 <MudSelectItem Value="@("Generated")">
-                    <div>Generated Value</div>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Generates a unique, persistent value</MudText>
+                    <div>@SyncRuleText.SourceTypeGenerated</div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.SourceTypeGeneratedHelp</MudText>
                 </MudSelectItem>
             </MudSelect>
             </MudItem>
@@ -815,15 +810,14 @@
                         @if (SyncRule.Direction == SyncRuleDirection.Import)
                         {
                             <MudSelect T="MetaverseAttribute" Value="_attributeFlowMapping.TargetMetaverseAttribute" ValueChanged="OnGeneratedMetaverseTargetChanged"
-                                Label="Assign the value to" Placeholder="Please select the target Metaverse attribute" Required="true"
+                                Label="@SyncRuleText.AssignValueTo" Placeholder="@SyncRuleText.SelectTargetMetaverseAttribute" Required="true"
                                 Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                                 @foreach (var metaverseAttribute in AvailableTargetMetaverseAttributes())
                                 {
                                     var disabledReason = GeneratedValueFormHelpers.GetGeneratedTargetDisabledReason(metaverseAttribute.Type, metaverseAttribute.AttributePlurality);
                                     <MudSelectItem Disabled="@(disabledReason != null)" Value="@metaverseAttribute">
                                         <div class="jim-flow-option">
-                                            <span>@metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
-                                                @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                            <span>@metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeTypeAndPlurality, AttributeFlowSectionSummaries.DataTypeName(metaverseAttribute.Type), AttributeFlowSectionSummaries.PluralityWords(metaverseAttribute.AttributePlurality))</span></span>
                                             @if (disabledReason != null)
                                             {
                                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@disabledReason</MudText>
@@ -836,18 +830,17 @@
                         else if (SyncRule.Direction == SyncRuleDirection.Export)
                         {
                             <MudSelect T="ConnectedSystemObjectTypeAttribute" Value="_attributeFlowMapping.TargetConnectedSystemAttribute" ValueChanged="OnGeneratedConnectedSystemTargetChanged"
-                                Label="Assign the value to" Placeholder="Please select the target Connected System attribute" Required="true"
+                                Label="@SyncRuleText.AssignValueTo" Placeholder="@SyncRuleText.SelectTargetConnectedSystemAttribute" Required="true"
                                 Disabled="_targetFixedByExchangePanel" HelperText="@ExchangePanelTargetHelperText"
                                 Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                                 @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
                                 {
                                     var disabledReason = connectedSystemAttribute.Writability == AttributeWritability.ReadOnly
-                                        ? "This Connected System reports this attribute as read-only."
+                                        ? SyncRuleText.ReadOnlyTargetReason
                                         : GeneratedValueFormHelpers.GetGeneratedTargetDisabledReason(connectedSystemAttribute.Type, connectedSystemAttribute.AttributePlurality);
                                     <MudSelectItem Disabled="@(disabledReason != null)" Value="@connectedSystemAttribute">
                                         <div class="jim-flow-option">
-                                            <span>@connectedSystemAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
-                                                @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                            <span>@connectedSystemAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeTypeAndPlurality, AttributeFlowSectionSummaries.DataTypeName(connectedSystemAttribute.Type), AttributeFlowSectionSummaries.PluralityWords(connectedSystemAttribute.AttributePlurality))</span></span>
                                             <ConnectorDefinedChip Attribute="@connectedSystemAttribute" ConnectorName="@ConnectorName" />
                                             @if (disabledReason != null)
                                             {
@@ -864,17 +857,16 @@
                         var targetSuggestions = GetStandardMappingSuggestions();
                         <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
                             @bind-Value:after="ScheduleFlowAnalysisAsync"
-                            Label="Assign the value to" Placeholder="Please select the target Metaverse attribute" Required="true"
+                            Label="@SyncRuleText.AssignValueTo" Placeholder="@SyncRuleText.SelectTargetMetaverseAttribute" Required="true"
                             Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                             @foreach (var metaverseAttribute in AvailableTargetMetaverseAttributes())
                             {
                                 <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)" Value="@metaverseAttribute">
                                     <div class="jim-flow-option">
-                                        <span>@metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
-                                            @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                        <span>@metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeTypeAndPlurality, AttributeFlowSectionSummaries.DataTypeName(metaverseAttribute.Type), AttributeFlowSectionSummaries.PluralityWords(metaverseAttribute.AttributePlurality))</span></span>
                                         @if (IsSuggested(targetSuggestions, metaverseAttribute))
                                         {
-                                            <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">Suggested</MudChip>
+                                            <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">@SyncRuleText.Suggested</MudChip>
                                         }
                                         <span class="jim-flow-option-spacer"></span>
                                         <StandardMappingHintLabel Hints="_standardMappingHints.ForAttribute(metaverseAttribute.Id)"
@@ -889,8 +881,8 @@
                     {
                         var targetSuggestions = GetStandardMappingSuggestions();
                         <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                            @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" @bind-Value:after="ScheduleFlowAnalysisAsync" Label="Assign the value to"
-                            Placeholder="Please select the target Connected System attribute" Required="true"
+                            @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" @bind-Value:after="ScheduleFlowAnalysisAsync" Label="@SyncRuleText.AssignValueTo"
+                            Placeholder="@SyncRuleText.SelectTargetConnectedSystemAttribute" Required="true"
                             Disabled="_targetFixedByExchangePanel" HelperText="@ExchangePanelTargetHelperText"
                             Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                             @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
@@ -899,12 +891,11 @@
                                     Value="@connectedSystemAttribute">
                                     <div class="jim-flow-option">
                                         <span>@connectedSystemAttribute.Name <span
-                                            style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
-                                            @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                            style="@($"color:{Colors.Gray.Darken1};")">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeTypeAndPlurality, AttributeFlowSectionSummaries.DataTypeName(connectedSystemAttribute.Type), AttributeFlowSectionSummaries.PluralityWords(connectedSystemAttribute.AttributePlurality))</span></span>
                                         <ConnectorDefinedChip Attribute="@connectedSystemAttribute" ConnectorName="@ConnectorName" />
                                         @if (IsSuggested(targetSuggestions, connectedSystemAttribute))
                                         {
-                                            <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">Suggested</MudChip>
+                                            <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">@SyncRuleText.Suggested</MudChip>
                                         }
                                         <span class="jim-flow-option-spacer"></span>
                                     </div>
@@ -922,9 +913,9 @@
     private RenderFragment GeneratedSettingsFooter => __builder =>
     {
         <MudCheckBox T="bool" Dense="true" Class="mt-5" @bind-Value="_attributeFlowMapping!.Enabled"
-            @bind-Value:after="ScheduleFlowAnalysisAsync" Label="Enabled" />
+            @bind-Value:after="ScheduleFlowAnalysisAsync" Label="@CommonText.Enabled" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
+            @SyncRuleText.EnabledHelpShort
         </MudText>
     };
 
@@ -999,7 +990,9 @@
     /// </summary>
     private static string SourceTypeLabel(string? sourceType) => sourceType switch
     {
-        "Generated" => "Generated Value",
+        "Attribute" => SyncRuleText.SourceTypeAttribute,
+        "Expression" => SyncRuleText.SourceTypeExpression,
+        "Generated" => SyncRuleText.SourceTypeGenerated,
         null => string.Empty,
         _ => sourceType
     };
@@ -1010,9 +1003,7 @@
     private (int ConnectedSystemId, int MetaverseObjectTypeId)? _loadedStandardMappingHintsKey;
 
     // Tooltip for the Multi-Valued to Single-Valued indicator in the Attribute Flow list (#435).
-    private const string MvaToSvaIndicatorTooltip =
-        "This mapping flows a Multi-Valued source to a Single-Valued target. Any object with more than one value will " +
-        "not flow this attribute and will be recorded as an error; a single value flows normally.";
+    private static string MvaToSvaIndicatorTooltip => SyncRuleText.MvaToSvaIndicatorTooltip;
 
     // ─── Metaverse-Derived Attribute Flows (#1750, Phase 6) ───
 
@@ -1056,8 +1047,7 @@
     /// What the note on a userAccountControl Attribute Flow says, wherever passwords are delivered to this rule's
     /// accounts (<see cref="AccountControlFlowNotes.ShowsPasswordDeliveryNote"/>).
     /// </summary>
-    private const string PasswordDeliveryNote =
-        "Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronised passwords do not change them.";
+    private static string PasswordDeliveryNote => SyncRuleText.PasswordDeliveryNote;
 
     /// <summary>
     /// Whether this rule's Connected System is configured for Password Synchronisation, so that passwords reach its
@@ -1159,10 +1149,16 @@
         mapping.Generation != null && (mapping.TargetMetaverseAttributeId.HasValue || mapping.TargetConnectedSystemAttributeId.HasValue);
 
     private static string ViewRetiredValuesTooltip(int count) =>
-        count > 0 ? $"View retired values ({count:N0})" : "View retired values";
+        count > 0
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ViewRetiredValuesWithCount, count)
+            : SyncRuleText.ViewRetiredValues;
 
     private static string RetiredChipTooltip(int count, string attributeName) =>
-        $"{count:N0} {(count == 1 ? "value" : "values")} of {attributeName} will never be issued again.";
+        string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            PluralRules.Choose(count, SyncRuleText.RetiredChipTooltipOne, SyncRuleText.RetiredChipTooltipOther),
+            count,
+            attributeName);
 
     private static string TargetName(SyncRuleMapping mapping) =>
         mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? string.Empty;
@@ -1611,8 +1607,8 @@
 
         var first = suggestions[0];
         // The picker's compact "SCIM 2.0 · LDAP/AD" label does not read as prose; spell the conjunction out.
-        var standard = System.Net.WebUtility.HtmlEncode(first.StandardLabel.Replace(" · ", " and ", StringComparison.Ordinal));
-        var targets = string.Join(" and ", suggestions.Select(s => Code(s.TargetName)));
+        var standard = System.Net.WebUtility.HtmlEncode(first.StandardLabel.Replace(" · ", SyncRuleText.ListAnd, StringComparison.Ordinal));
+        var targets = string.Join(SyncRuleText.ListAnd, suggestions.Select(s => Code(s.TargetName)));
         var notes = string.Join(" ", suggestions
             .Select(s => s.Notes)
             .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -1620,12 +1616,15 @@
             .Select(System.Net.WebUtility.HtmlEncode));
 
         var sentence = SyncRule.Direction == SyncRuleDirection.Import
-            ? $"In {standard}, {Code(first.CounterpartName)} corresponds to the Metaverse " +
-              $"{(suggestions.Count == 1 ? "Attribute" : "Attributes")} {targets}."
-            : $"In {standard}, {Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name)} corresponds to " +
-              $"{targets} in this Connected System.";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                PluralRules.Choose(suggestions.Count, SyncRuleText.StandardMappingImportOne, SyncRuleText.StandardMappingImportOther),
+                standard, Code(first.CounterpartName), targets)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.StandardMappingExport,
+                standard, Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name), targets);
 
-        return (MarkupString)(string.IsNullOrEmpty(notes) ? sentence : $"{sentence} {notes}");
+        return (MarkupString)(string.IsNullOrEmpty(notes)
+            ? sentence
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.SentenceAndSentence, sentence, notes));
     }
 
     /// <summary>
@@ -1637,29 +1636,39 @@
     {
         static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
 
-        var standard = System.Net.WebUtility.HtmlEncode(suggestion.StandardLabel.Replace(" · ", " and ", StringComparison.Ordinal));
+        var standard = System.Net.WebUtility.HtmlEncode(suggestion.StandardLabel.Replace(" · ", SyncRuleText.ListAnd, StringComparison.Ordinal));
         var sourceName = SyncRule.Direction == SyncRuleDirection.Import
             ? _attributeFlowMappingSource?.ConnectedSystemAttribute?.Name
             : _attributeFlowMappingSource?.MetaverseAttribute?.Name;
 
         // Following a sentence that has already named the standard and the source, repeating both reads as boilerplate.
-        var correspondence = continuesFromSuggestion
-            ? $"It also corresponds to {Code(suggestion.TargetName)}, "
-            : $"In {standard}, {Code(sourceName)} corresponds to {Code(suggestion.TargetName)}, ";
-        var reason = suggestion.Status switch
-        {
-            StandardMappingSuggestionStatus.TypeMismatch =>
-                "which holds a different data type, so the value cannot flow to it directly. An Expression source can convert it.",
-            StandardMappingSuggestionStatus.AlreadyTargeted =>
-                "which another Attribute Flow on this Synchronisation Rule already targets.",
-            StandardMappingSuggestionStatus.ReadOnlyTarget =>
-                "which this Connected System reports as read-only, so no Attribute Flow can write to it.",
-            _ => "which is not available as a target."
-        };
+        var sentence = continuesFromSuggestion
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                UnavailableAlsoTemplate(suggestion.Status), Code(suggestion.TargetName))
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                UnavailableFirstTemplate(suggestion.Status), standard, Code(sourceName), Code(suggestion.TargetName));
 
         var notes = string.IsNullOrWhiteSpace(suggestion.Notes) ? null : System.Net.WebUtility.HtmlEncode(suggestion.Notes.Trim());
-        return (MarkupString)(notes == null ? correspondence + reason : $"{correspondence}{reason} {notes}");
+        return (MarkupString)(notes == null
+            ? sentence
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.SentenceAndSentence, sentence, notes));
     }
+
+    private static string UnavailableAlsoTemplate(StandardMappingSuggestionStatus status) => status switch
+    {
+        StandardMappingSuggestionStatus.TypeMismatch => SyncRuleText.UnavailableAlsoTypeMismatch,
+        StandardMappingSuggestionStatus.AlreadyTargeted => SyncRuleText.UnavailableAlsoAlreadyTargeted,
+        StandardMappingSuggestionStatus.ReadOnlyTarget => SyncRuleText.UnavailableAlsoReadOnly,
+        _ => SyncRuleText.UnavailableAlsoOther
+    };
+
+    private static string UnavailableFirstTemplate(StandardMappingSuggestionStatus status) => status switch
+    {
+        StandardMappingSuggestionStatus.TypeMismatch => SyncRuleText.UnavailableFirstTypeMismatch,
+        StandardMappingSuggestionStatus.AlreadyTargeted => SyncRuleText.UnavailableFirstAlreadyTargeted,
+        StandardMappingSuggestionStatus.ReadOnlyTarget => SyncRuleText.UnavailableFirstReadOnly,
+        _ => SyncRuleText.UnavailableFirstOther
+    };
 
     /// <summary>
     /// Accepts a suggestion by setting it as the mapping's target; a convenience for a picker that can run to
@@ -1708,7 +1717,8 @@
     private static string MetaverseAttributeLabel(MetaverseAttribute? attribute)
         => attribute == null
             ? string.Empty
-            : $"{attribute.Name} ({attribute.Type} : {attribute.AttributePlurality.ToString().SplitOnCapitalLetters()})";
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeLabelWithType,
+                attribute.Name, AttributeFlowSectionSummaries.DataTypeName(attribute.Type), AttributeFlowSectionSummaries.PluralityWords(attribute.AttributePlurality));
 
     /// <summary>
     /// The Connected System sibling of <see cref="MetaverseAttributeLabel"/>, and it is load-bearing rather than
@@ -1718,7 +1728,8 @@
     private static string ConnectedSystemAttributeLabel(ConnectedSystemObjectTypeAttribute? attribute)
         => attribute == null
             ? string.Empty
-            : $"{attribute.Name} ({attribute.Type} : {attribute.AttributePlurality.ToString().SplitOnCapitalLetters()})";
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeLabelWithType,
+                attribute.Name, AttributeFlowSectionSummaries.DataTypeName(attribute.Type), AttributeFlowSectionSummaries.PluralityWords(attribute.AttributePlurality));
 
     /// <summary>
     /// Whether the mapping currently being added or edited in the dialog flows a Multi-Valued source attribute
@@ -1733,8 +1744,10 @@
     /// </summary>
     private static string DescribeDisabledMapping(SyncRuleMapping mapping)
     {
-        const string baseText = "This Attribute Flow is disabled and skipped by synchronisation until it is re-enabled.";
-        return string.IsNullOrWhiteSpace(mapping.DisabledReason) ? baseText : $"{baseText} {mapping.DisabledReason}";
+        var baseText = SyncRuleText.DisabledMappingDescription;
+        return string.IsNullOrWhiteSpace(mapping.DisabledReason)
+            ? baseText
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.SentenceAndSentence, baseText, mapping.DisabledReason);
     }
 
     private bool DialogMappingIsMvaToSva()
@@ -1770,18 +1783,12 @@
         {
             var source = Code(_attributeFlowMappingSource?.ConnectedSystemAttribute?.Name);
             var target = Code(_attributeFlowMapping?.TargetMetaverseAttribute?.Name);
-            return (MarkupString)(
-                $"{source} is Multi-Valued but {target} is Single-Valued. If a synchronised object has more than one value, " +
-                "no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). " +
-                "To always flow a value, target a Multi-Valued attribute or use an Expression to select one.");
+            return (MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.MvaToSvaWarningImport, source, target);
         }
 
         var mvSource = Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name);
         var csTarget = Code(_attributeFlowMapping?.TargetConnectedSystemAttribute?.Name);
-        return (MarkupString)(
-            $"{mvSource} is Multi-Valued but {csTarget} is Single-Valued. If an object has more than one value, " +
-            "no value will be exported for this attribute and an error will be recorded against that object (a single value exports normally). " +
-            "To always export a value, target a Multi-Valued attribute or use an Expression to select one.");
+        return (MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.MvaToSvaWarningExport, mvSource, csTarget);
     }
 
     /// <summary>
@@ -1919,7 +1926,7 @@
             if (GeneratedValuePreviewHelpers.ShouldConfirmSkipAhead(currentState, generation.SequenceStart))
             {
                 var attributeName = _attributeFlowMapping.TargetMetaverseAttribute?.Name
-                    ?? _attributeFlowMapping.TargetConnectedSystemAttribute?.Name ?? "this attribute";
+                    ?? _attributeFlowMapping.TargetConnectedSystemAttribute?.Name ?? SyncRuleText.ThisAttribute;
                 var confirmed = await GeneratedValueSkipAheadDialog.ShowAsync(
                     DialogService, attributeName, currentState!.NextNumber, generation.SequenceStart, generation.FixedWidth);
                 if (!confirmed)
@@ -1966,12 +1973,12 @@
             return true;
 
         var disabling = _editBaseline.AsOpened.Enabled && !edited.Enabled;
-        var targetName = _editBaseline.AsOpened.TargetMetaverseAttribute?.Name ?? "this attribute";
+        var targetName = _editBaseline.AsOpened.TargetMetaverseAttribute?.Name ?? SyncRuleText.ThisAttribute;
         return await DependentDerivedFlowsDialog.ConfirmAsync(DialogService,
-            disabling ? "Disable Attribute Flow?" : "Save Attribute Flow?",
-            $"{(disabling ? "disable" : "change")} the Attribute Flow to {targetName}",
+            disabling ? SyncRuleText.DisableAttributeFlowQuestion : SyncRuleText.SaveAttributeFlowQuestion,
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, disabling ? SyncRuleText.DisableFlowTo : SyncRuleText.ChangeFlowTo, targetName),
             dependants,
-            disabling ? "Disable" : "Save");
+            disabling ? SyncRuleText.DisableButton : CommonText.Save);
     }
 
     /// <summary>
@@ -1982,7 +1989,7 @@
     private async Task HandleStartAgainClickAsync(SyncRuleMapping attributeFlowRule)
     {
         var attributeName = attributeFlowRule.TargetMetaverseAttribute?.Name
-            ?? attributeFlowRule.TargetConnectedSystemAttribute?.Name ?? "this attribute";
+            ?? attributeFlowRule.TargetConnectedSystemAttribute?.Name ?? SyncRuleText.ThisAttribute;
         var configuredStart = attributeFlowRule.Generation!.SequenceStart;
         var restarted = await GeneratedValueStartAgainDialog.ShowAsync(
             DialogService, attributeFlowRule.Id, attributeName, configuredStart, attributeFlowRule.Generation.FixedWidth,
@@ -1999,8 +2006,8 @@
         // FR 3 (#1750): when Metaverse-Derived Attribute Flows read an attribute this flow is the last enabled
         // contributor of, say which before anything else; that confirmation stands in for the plain one below.
         var dependants = await GetDependantsOfRemovalAsync(attributeFlowRule);
-        if (dependants.Count > 0 && !await DependentDerivedFlowsDialog.ConfirmAsync(DialogService, "Remove Attribute Flow?",
-                $"remove the Attribute Flow to {attributeFlowRule.TargetMetaverseAttribute?.Name ?? "this attribute"}", dependants, "Remove"))
+        if (dependants.Count > 0 && !await DependentDerivedFlowsDialog.ConfirmAsync(DialogService, SyncRuleText.RemoveAttributeFlowQuestion,
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveFlowTo, attributeFlowRule.TargetMetaverseAttribute?.Name ?? SyncRuleText.ThisAttribute), dependants, SyncRuleText.RemoveButton))
             return;
 
         // a persisted import mapping with a target may hold the current values of its Metaverse attribute; if
@@ -2017,7 +2024,7 @@
                 choiceOffered = true;
                 var attributeName = attributeFlowRule.TargetMetaverseAttribute?.Name
                     ?? summary.Attributes.FirstOrDefault()?.AttributeName
-                    ?? "the attribute";
+                    ?? SyncRuleText.TheAttribute;
                 var (cancelled, keep) = await ContributedValuesChoiceDialog.ShowForMappingRemovalAsync(DialogService, attributeName, summary.TotalObjects);
                 if (cancelled)
                     return;
@@ -2027,7 +2034,7 @@
 
         if (!choiceOffered && dependants.Count == 0)
         {
-            var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to remove this Attribute Mapping?", yesText: "Remove!", cancelText: "Cancel");
+            var confirmationResult = await DialogService.ShowMessageBoxAsync(SyncRuleText.WarningTitle, SyncRuleText.ConfirmRemoveMapping, yesText: SyncRuleText.RemoveConfirmButton, cancelText: CommonText.Cancel);
             if (!confirmationResult.HasValue || !confirmationResult.Value)
                 return;
         }

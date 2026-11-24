@@ -21,10 +21,10 @@
             <MudStack Spacing="4">
                 @* ─── Name (live uniqueness) ─── *@
                 <MudTextField @bind-Value="_name"
-                              Label="Name"
+                              Label="@CommonText.FieldName"
                               Variant="Variant.Outlined"
                               Required="true"
-                              RequiredError="A name is required."
+                              RequiredError="@AdminText.AttrEditorNameRequired"
                               Immediate="true"
                               DebounceInterval="300"
                               OnDebounceIntervalElapsed="OnNameChangedAsync"
@@ -36,29 +36,29 @@
                               Disabled="@ReadOnly" />
 
                 <div class="d-flex gap-4">
-                    <MudSelect @bind-Value="_type" @bind-Value:after="OnTypeChanged" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
-                               Required="true" RequiredError="A data type is required." Class="flex-grow-1"
+                    <MudSelect @bind-Value="_type" @bind-Value:after="OnTypeChanged" T="AttributeDataType" Label="@AdminText.AttrEditorDataType" Variant="Variant.Outlined"
+                               Required="true" RequiredError="@AdminText.AttrEditorDataTypeRequired" Class="flex-grow-1"
                                Disabled="@(ReadOnly || TypeLocked)" HelperText="@TypeHelperText()">
                         @foreach (var type in _selectableTypes)
                         {
-                            <MudSelectItem Value="type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                            <MudSelectItem Value="type">@type.ForDisplay()</MudSelectItem>
                         }
                     </MudSelect>
-                    <MudSelect @bind-Value="_plurality" @bind-Value:after="OnPluralityChanged" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
+                    <MudSelect @bind-Value="_plurality" @bind-Value:after="OnPluralityChanged" T="AttributePlurality" Label="@AdminText.SchemaPlurality" Variant="Variant.Outlined"
                                Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || PluralityLocked)" HelperText="@PluralityHelperText()">
-                        <MudSelectItem Value="AttributePlurality.SingleValued">Single-valued</MudSelectItem>
-                        <MudSelectItem Value="AttributePlurality.MultiValued" Disabled="@(!AttributeDataTypeCapabilities.SupportsMultiValued(_type))">Multi-valued</MudSelectItem>
+                        <MudSelectItem Value="AttributePlurality.SingleValued">@AdminText.AttrEditorSingleValued</MudSelectItem>
+                        <MudSelectItem Value="AttributePlurality.MultiValued" Disabled="@(!AttributeDataTypeCapabilities.SupportsMultiValued(_type))">@AdminText.AttrEditorMultiValued</MudSelectItem>
                     </MudSelect>
                 </div>
 
                 @if (_plurality == AttributePlurality.MultiValued)
                 {
-                    <MudSelect @bind-Value="_renderingHint" T="AttributeRenderingHint" Label="Rendering Hint" Variant="Variant.Outlined"
-                               HelperText="How multi-valued content is displayed on object detail pages." Disabled="@ReadOnly">
-                        <MudSelectItem Value="AttributeRenderingHint.Default">Default (auto)</MudSelectItem>
-                        <MudSelectItem Value="AttributeRenderingHint.Table">Table</MudSelectItem>
-                        <MudSelectItem Value="AttributeRenderingHint.ChipSet">Chip set</MudSelectItem>
-                        <MudSelectItem Value="AttributeRenderingHint.List">List</MudSelectItem>
+                    <MudSelect @bind-Value="_renderingHint" T="AttributeRenderingHint" Label="@AdminText.AttrEditorRenderingHint" Variant="Variant.Outlined"
+                               HelperText="@AdminText.AttrEditorRenderingHelper" Disabled="@ReadOnly">
+                        <MudSelectItem Value="AttributeRenderingHint.Default">@AdminText.AttrEditorRenderDefault</MudSelectItem>
+                        <MudSelectItem Value="AttributeRenderingHint.Table">@AdminText.AttrEditorRenderTable</MudSelectItem>
+                        <MudSelectItem Value="AttributeRenderingHint.ChipSet">@AdminText.AttrEditorRenderChipSet</MudSelectItem>
+                        <MudSelectItem Value="AttributeRenderingHint.List">@AdminText.AttrEditorRenderList</MudSelectItem>
                     </MudSelect>
 
                     @* ─── Contribution mode (#3059) ─── *@
@@ -84,10 +84,10 @@
                 @* ─── Create-time bindings (create only) ─── *@
                 @if (!_isEdit)
                 {
-                    <MudSelect T="int" Label="Add to Object Types (optional)" Variant="Variant.Outlined"
+                    <MudSelect T="int" Label="@AdminText.AttrEditorAddToObjectTypes" Variant="Variant.Outlined"
                                MultiSelection="true" @bind-SelectedValues="_selectedObjectTypeIds"
                                MultiSelectionTextFunc="@(selected => string.Join(", ", selected.Select(s => int.TryParse(s, out var id) ? NameForObjectTypeId(id) : s)))"
-                               HelperText="Bind the new attribute to these Object Types on creation. Leave empty to create it unbound and assign later.">
+                               HelperText="@AdminText.AttrEditorObjectTypesHelper">
                         @foreach (var objectType in _objectTypes)
                         {
                             <MudSelectItem T="int" Value="objectType.Id">@objectType.Name</MudSelectItem>
@@ -97,30 +97,28 @@
 
                 @* ─── Standard Mappings ─── *@
                 <div>
-                    <MudText Typo="Typo.subtitle2">Standard Mappings</MudText>
+                    <MudText Typo="Typo.subtitle2">@AdminText.AttrEditorStandardMappings</MudText>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        How this attribute corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards,
-                        to guide you when designing Attribute Flows. For reference only: what synchronises is always determined
-                        by your Attribute Flows, never by these mappings.
+                        @AdminText.AttrEditorStandardMappingsIntro
                         @if (ReadOnly)
                         {
-                            <text> JIM maintains these automatically for built-in attributes.</text>
+                            <text> @AdminText.AttrEditorBuiltInMaintained</text>
                         }
                     </MudText>
                 </div>
 
                 @if (_mappings.Count == 0)
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No Standard Mappings.</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@AdminText.AttrEditorNoMappings</MudText>
                 }
                 else
                 {
                     <MudSimpleTable Dense="true">
                         <thead>
                             <tr>
-                                <th>Standard</th>
-                                <th>Counterpart Attribute</th>
-                                <th>Notes</th>
+                                <th>@AdminText.AttrEditorColStandard</th>
+                                <th>@AdminText.AttrEditorColCounterpart</th>
+                                <th>@AdminText.AttrEditorColNotes</th>
                                 @if (!ReadOnly)
                                 {
                                     <th></th>
@@ -147,11 +145,11 @@
                                     {
                                         <td>
                                             <div class="d-flex justify-end">
-                                                <MudTooltip Text="Edit Standard Mapping" Arrow="true" Placement="Placement.Top">
+                                                <MudTooltip Text="@AdminText.AttrEditorEditMapping" Arrow="true" Placement="Placement.Top">
                                                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" Disabled="@(_editingMapping != null)"
                                                                    OnClick="@(() => EditMapping(mapping))" />
                                                 </MudTooltip>
-                                                <MudTooltip Text="Remove Standard Mapping" Arrow="true" Placement="Placement.Top">
+                                                <MudTooltip Text="@AdminText.AttrEditorRemoveMapping" Arrow="true" Placement="Placement.Top">
                                                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Disabled="@(_editingMapping != null)"
                                                                    OnClick="@(() => RemoveMapping(mapping))" />
                                                 </MudTooltip>
@@ -168,7 +166,7 @@
                 {
                     <div>
                         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" OnClick="AddMapping">
-                            Add Standard Mapping
+                            @AdminText.AttrEditorAddMapping
                         </MudButton>
                     </div>
                 }
@@ -177,25 +175,25 @@
                 {
                     var editingMapping = _editingMapping;
                     <div class="d-flex gap-4">
-                        <MudSelect @bind-Value="editingMapping.Standard" T="AttributeStandard" Label="Standard" Variant="Variant.Outlined" Class="flex-grow-1">
+                        <MudSelect @bind-Value="editingMapping.Standard" T="AttributeStandard" Label="@AdminText.AttrEditorColStandard" Variant="Variant.Outlined" Class="flex-grow-1">
                             @foreach (var standard in _selectableStandards)
                             {
                                 <MudSelectItem Value="standard">@StandardLabel(standard)</MudSelectItem>
                             }
                         </MudSelect>
-                        <MudTextField @bind-Value="editingMapping.CounterpartName" Label="Counterpart Attribute" Variant="Variant.Outlined"
+                        <MudTextField @bind-Value="editingMapping.CounterpartName" Label="@AdminText.AttrEditorColCounterpart" Variant="Variant.Outlined"
                                       Immediate="true" Class="flex-grow-1"
-                                      HelperText="The equivalent attribute name in the chosen standard, e.g. name.givenName (SCIM) or givenName (LDAP)." />
+                                      HelperText="@AdminText.AttrEditorCounterpartHelper" />
                     </div>
-                    <MudTextField @bind-Value="editingMapping.Notes" Label="Notes (optional)" Variant="Variant.Outlined" Immediate="true" />
+                    <MudTextField @bind-Value="editingMapping.Notes" Label="@AdminText.AttrEditorNotesOptional" Variant="Variant.Outlined" Immediate="true" />
                     @if (MappingEditorError() is { } mappingError)
                     {
                         <MudText Typo="Typo.body2" Color="Color.Error">@mappingError</MudText>
                     }
                     <div class="d-flex justify-end gap-2">
-                        <MudButton OnClick="CancelMappingEdit">Cancel</MudButton>
+                        <MudButton OnClick="CancelMappingEdit">@CommonText.Cancel</MudButton>
                         <MudButton Variant="Variant.Filled" Disabled="@(!CanSaveMapping())" OnClick="SaveMapping">
-                            @(_editingMappingIsNew ? "Add" : "Update")
+                            @(_editingMappingIsNew ? CommonText.Add : AdminText.AttrEditorUpdate)
                         </MudButton>
                     </div>
                 }
@@ -205,14 +203,14 @@
     <DialogActions>
         @if (ReadOnly)
         {
-            <MudButton OnClick="Cancel">Close</MudButton>
+            <MudButton OnClick="Cancel">@CommonText.Close</MudButton>
         }
         else
         {
-            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton OnClick="Cancel">@CommonText.Cancel</MudButton>
             <MudButton Color="Color.Primary" Variant="Variant.Filled"
                        Disabled="@(!CanSubmit())" OnClick="SubmitAsync">
-                @(_isEdit ? "Save Changes" : "Create Attribute")
+                @(_isEdit ? CommonText.SaveChanges : AdminText.AttrEditorCreateButton)
             </MudButton>
         }
     </DialogActions>
@@ -353,13 +351,14 @@
         (!AttributeDataTypeCapabilities.SupportsMultiValued(_originalType) ||
          !AttributeSchemaChangeImpact.IsLosslessWideningChange(_originalType, _originalPlurality, _originalType, AttributePlurality.MultiValued));
 
-    private string ValuesHeldPhrase() => _valuesCount == 1
-        ? "1 Metaverse Object holds a value"
-        : $"{_valuesCount:N0} Metaverse Objects hold values";
+    private string ValuesHeldPhrase() => FormatCount(_valuesCount, AdminText.AttrEditorValuesHeldOne, AdminText.AttrEditorValuesHeldOther);
+
+    private static string FormatCount(int count, string one, string other) =>
+        string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, one, other), count.ToString("N0", CultureInfo.CurrentCulture));
 
     private string? TypeHelperText() => ReadOnly || !TypeLocked
         ? null
-        : $"Locked because {ValuesHeldPhrase()} for this attribute, and a different data type would invalidate them.";
+        : string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorTypeLocked, ValuesHeldPhrase());
 
     private string? PluralityHelperText()
     {
@@ -367,14 +366,14 @@
             return null;
 
         if (!AttributeDataTypeCapabilities.SupportsMultiValued(_type))
-            return "A Boolean attribute holds one value, so it is always single-valued.";
+            return AdminText.AttrEditorBooleanHelper;
 
         if (!HoldsValues)
             return null;
 
         return PluralityLocked
-            ? $"Locked because {ValuesHeldPhrase()} for this attribute, and single-valued could not keep them all."
-            : "Can be widened to multi-valued; every value already held is kept.";
+            ? string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorPluralityLocked, ValuesHeldPhrase())
+            : AdminText.AttrEditorPluralityWiden;
     }
 
     private static string StandardLabel(AttributeStandard standard) => standard switch
@@ -382,7 +381,7 @@
         AttributeStandard.Scim => "SCIM 2.0",
         AttributeStandard.Ldap => "LDAP/AD",
         AttributeStandard.Jim => "JIM",
-        _ => standard.ToString()
+        _ => standard.ForDisplay()
     };
 
     private string NameForObjectTypeId(int id) =>
@@ -412,7 +411,7 @@
             var unique = await jim.Metaverse.IsMetaverseAttributeNameUniqueAsync(trimmed, Attribute?.Id);
             _nameError = unique
                 ? null
-                : $"An attribute named \"{trimmed}\" already exists. Names are case-insensitive.";
+                : string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorNameTaken, trimmed);
         }
         finally
         {
@@ -494,7 +493,7 @@
         var duplicate = _mappings
             .Where((_, index) => index != _editingMappingIndex)
             .Any(m => m.Standard == _editingMapping.Standard && string.Equals(m.CounterpartName, trimmed, StringComparison.Ordinal));
-        return duplicate ? $"A {StandardLabel(_editingMapping.Standard)} mapping to \"{trimmed}\" already exists." : null;
+        return duplicate ? string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorMappingDuplicate, StandardLabel(_editingMapping.Standard), trimmed) : null;
     }
 
     private bool CanSaveMapping() =>
@@ -534,7 +533,7 @@
             var readers = await jim.Metaverse.GetMetaverseAttributeExpressionReadersAsync(Attribute!.Id, _originalName);
             if (readers.Count > 0)
             {
-                Snackbar.Add($"\"{_originalName}\" cannot be renamed while Expressions read it by name. Change these first: {string.Join("; ", readers.Select(r => r.Description))}.", Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorRenameBlocked, _originalName, string.Join("; ", readers.Select(r => r.ShowDescription()))), Severity.Error);
                 return;
             }
         }
@@ -545,7 +544,7 @@
             // every Attribute Flow targeting this attribute); a rename or a Standard Mapping edit shows nothing.
             var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseAttributeAsync(BuildProposedAttribute());
             if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                    "Metaverse Attribute", _name.Trim()))
+                    AdminText.SchemaNounAttributeSingular, _name.Trim()))
                 return;
         }
 
@@ -555,7 +554,7 @@
             !await ConfirmLeavingAccumulateAsync())
             return;
 
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, _isEdit ? "Save" : "Create");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, _isEdit ? CommonText.Save : CommonText.Create);
         if (cancelled)
             return;
 
@@ -588,12 +587,12 @@
                 if (_mappings.Count > 0)
                     await jim.Metaverse.UpdateMetaverseAttributeStandardMappingsAsync(attribute.Id, _mappings, user, changeReason);
 
-                Snackbar.Add($"Created attribute \"{trimmedName}\".", Severity.Success);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorCreated, trimmedName), Severity.Success);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"Failed to save attribute: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorSaveFailed, ex.ToDisplayText()), Severity.Error);
             return;
         }
 
@@ -638,7 +637,7 @@
             var impact = await jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(attributeId, _type, _plurality, user, changeReason);
             if (!impact.Applied)
             {
-                Snackbar.Add($"Cannot change the schema: {impact.TotalObjectsWithValues:N0} Metaverse Object(s) hold a stored value, and only a widening to multi-valued keeps them.", Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorSchemaRefused, impact.TotalObjectsWithValues.ToString("N0", CultureInfo.CurrentCulture)), Severity.Error);
                 return;
             }
         }
@@ -665,7 +664,7 @@
         if (MappingsChanged())
             await jim.Metaverse.UpdateMetaverseAttributeStandardMappingsAsync(attributeId, _mappings, user, changeReason);
 
-        Snackbar.Add($"Saved changes to \"{trimmedName}\".", Severity.Success);
+        Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorSaved, trimmedName), Severity.Success);
     }
 
     private async Task UpdateContributionModeAsync(JimApplication jim, int attributeId, MetaverseObject user, string? changeReason)
@@ -713,7 +712,11 @@
             { x => x.ReadOnly, readOnly }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var title = attribute == null ? "New Attribute" : readOnly ? $"View \"{attribute.Name}\"" : $"Edit \"{attribute.Name}\"";
+        var title = attribute == null
+            ? AdminText.SchemaNewAttribute
+            : readOnly
+                ? string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorViewTitle, attribute.Name)
+                : string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorEditTitle, attribute.Name);
         var dialog = await dialogService.ShowAsync<MetaverseAttributeEditorDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };

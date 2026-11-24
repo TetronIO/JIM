@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
@@ -194,15 +197,15 @@ public class SyncExportTaskProcessor
         if (pendingExportCount == 0)
         {
             Log.Information("PerformExportAsync: No Pending Exports for {SystemName}", _connectedSystem.Name);
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.NoExportsToProcess)));
             return;
         }
 
         // Check if connector supports export
         if (_connector is not (IConnectorExportUsingCalls or IConnectorExportUsingFiles))
         {
-            var errorMessage = $"Connector {_connector.Name} does not support export operations";
-            Log.Error("PerformExportAsync: {Error}", errorMessage);
+            var errorMessage = ActivityMessage.Create(nameof(ActivityMessages.ConnectorDoesNotSupportExport), _connector.Name);
+            Log.Error("PerformExportAsync: {Error}", errorMessage.ToEnglish());
             await _syncServer.FailActivityWithErrorAsync(_activity, errorMessage);
             return;
         }
@@ -211,7 +214,7 @@ public class SyncExportTaskProcessor
         if (_cancellationTokenSource.IsCancellationRequested)
         {
             Log.Information("PerformExportAsync: Cancellation requested before export started");
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Cancelled before export");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ExportCancelledBeforeStart)));
             return;
         }
 
@@ -322,7 +325,7 @@ public class SyncExportTaskProcessor
             // Finalise activity stats (RPEIs already persisted per-batch). The completion message it
             // builds is written at the end of the run rather than here: the steps that follow narrate
             // into the Activity's message as they are entered, and would bury it.
-            string completionMessage;
+            JimMessage completionMessage;
             using (Diagnostics.Sync.StartSpan("ProcessExportResult"))
             {
                 completionMessage = await ProcessExportResultAsync(result, throughput);
@@ -342,7 +345,7 @@ public class SyncExportTaskProcessor
             // surfacing as an OperationCanceledException, fails it below (#2083).
             Log.Information("PerformExportAsync: Export cancelled for {SystemName}", _connectedSystem.Name);
             await AutoSelectCreatedContainersAfterAnUnfinishedRunAsync();
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Export cancelled");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ExportCancelled)));
         }
         catch (Exception ex)
         {
@@ -478,11 +481,12 @@ public class SyncExportTaskProcessor
             else if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
                 executionItem.ErrorType = ToExecutionItemErrorType(exportItem.ErrorType);
-                executionItem.ErrorMessage = exportItem.ErrorCount > 1
-                    ? $"Export failed after {exportItem.ErrorCount} attempts: {exportItem.ErrorMessage}"
-                    : exportItem.ErrorCount == 1
-                        ? $"Export failed: {exportItem.ErrorMessage}"
-                        : exportItem.ErrorMessage;
+                if (exportItem.ErrorCount > 1)
+                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailedAfterAttempts), ActivityMessage.Plain(exportItem.ErrorCount), exportItem.ErrorMessage);
+                else if (exportItem.ErrorCount == 1)
+                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailed), exportItem.ErrorMessage);
+                else
+                    executionItem.ErrorMessage = exportItem.ErrorMessage;
             }
             else if (!string.IsNullOrEmpty(exportItem.UnresolvedReferenceMessage))
             {
@@ -589,7 +593,7 @@ public class SyncExportTaskProcessor
     /// Resolves what the export left outstanding and returns the run's completion message for the
     /// caller to write once every step has finished narrating.
     /// </summary>
-    private async Task<string> ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
+    private async Task<JimMessage> ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
     {
         // Resolve reference FKs on the change records this export wrote, plus any left over from the
         // preceding sync stage for this system (both persist reference DNs with ReferenceValueId
@@ -614,8 +618,7 @@ public class SyncExportTaskProcessor
         // they are logged only. Mirrors the import side's Warn summary.
         if (_connectedSystem.UnresolvedReferenceHandling == UnresolvedReferenceHandling.Warn && result.UnresolvableReferenceCount > 0)
         {
-            var warningSummary = $"{result.UnresolvableReferenceCount} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronisation Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.";
-            AppendActivityWarning(warningSummary);
+            AppendActivityWarning(ActivityMessage.Create(nameof(ActivityMessages.UnresolvableReferencesWarning), ActivityMessage.Plain(result.UnresolvableReferenceCount)));
         }
 
         // Run Profile Safeguards (#1618): populated (zero when nothing was withheld) on every Export
@@ -627,49 +630,49 @@ public class SyncExportTaskProcessor
         _activity.ExportDeletesWithheld = result.DeletesWithheld;
 
         if (result.CreatesWithheld > 0 && _runProfile.MaxCreates.HasValue)
-            AppendActivityWarning(ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Create, _runProfile.MaxCreates.Value, result.CreatesWithheld));
+            AppendActivityWarning(ActivityMessage.ExportWithheld(PendingExportChangeType.Create, _runProfile.MaxCreates.Value, result.CreatesWithheld));
 
         if (result.UpdatesWithheld > 0 && _runProfile.MaxUpdates.HasValue)
-            AppendActivityWarning(ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, _runProfile.MaxUpdates.Value, result.UpdatesWithheld));
+            AppendActivityWarning(ActivityMessage.ExportWithheld(PendingExportChangeType.Update, _runProfile.MaxUpdates.Value, result.UpdatesWithheld));
 
         if (result.DeletesWithheld > 0 && _runProfile.MaxDeletes.HasValue)
-            AppendActivityWarning(ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, _runProfile.MaxDeletes.Value, result.DeletesWithheld));
+            AppendActivityWarning(ActivityMessage.ExportWithheld(PendingExportChangeType.Delete, _runProfile.MaxDeletes.Value, result.DeletesWithheld));
 
         if (result.QueuedChangesWithdrawnCount > 0)
-            AppendActivityWarning(ExportOutcomeMessage.ForWithdrawn(result.QueuedChangesWithdrawnCount, result.PendingExportsWithdrawnCount));
+            AppendActivityWarning(ActivityMessage.ExportWithdrawn(result.QueuedChangesWithdrawnCount, result.PendingExportsWithdrawnCount));
 
         // #1936: auto-confirmed exports whose values could not be recorded were left unconfirmed to be sent again.
         if (result.UnrecordedExportCount > 0)
-            AppendActivityWarning(ExportOutcomeMessage.ForUnrecorded(result.UnrecordedExportCount));
+            AppendActivityWarning(ActivityMessage.ExportUnrecorded(result.UnrecordedExportCount));
 
         // Contained so the exports stay successful, but never left to the service log alone (#1121, #2064).
         if (result.InitialPasswordStagingFailedCount > 0)
-            AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordsNotStaged(result.InitialPasswordStagingFailedCount));
+            AppendActivityWarning(ActivityMessage.InitialPasswordsNotStaged(result.InitialPasswordStagingFailedCount));
 
         if (result.InitialPasswordMarkingFailedCount > 0)
-            AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(result.InitialPasswordMarkingFailedCount));
+            AppendActivityWarning(ActivityMessage.InitialPasswordMarkingFailed(result.InitialPasswordMarkingFailedCount));
 
         // #2723: contained so the exports stay successful, but never left to the service log alone.
         if (result.PartitionRecordingFailedCount > 0)
-            AppendActivityWarning(ExportOutcomeMessage.ForPartitionsNotRecorded(result.PartitionRecordingFailedCount));
+            AppendActivityWarning(ActivityMessage.PartitionsNotRecorded(result.PartitionRecordingFailedCount));
 
         // #2021: contained so the exports stay successful, but never left to the service log alone.
         if (result.ExchangeChangeStagingFailedCount > 0)
-            AppendActivityWarning(ExportOutcomeMessage.ForExchangeChangesNotStaged(result.ExchangeChangeStagingFailedCount));
+            AppendActivityWarning(ActivityMessage.ExchangeChangesNotStaged(result.ExchangeChangeStagingFailedCount));
 
         // #2160: an Initial Password not queued because another account's change holds the queue's one row.
 
         // Set completion message based on mode and results
-        string completionMessage;
+        JimMessage completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)
         {
-            completionMessage = ExportOutcomeMessage.ForPreview(result.TotalPendingExports);
+            completionMessage = ActivityMessage.ExportPreviewComplete(result.TotalPendingExports);
         }
         else
         {
             var processed = result.SuccessCount + result.FailedCount + result.DeferredCount;
-            completionMessage = ExportOutcomeMessage.ForExport(
-                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed),
+            completionMessage = ActivityMessage.ExportComplete(
+                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.CompletionArgument(processed),
                 result.PartiallyExportedCount);
         }
 
@@ -695,12 +698,7 @@ public class SyncExportTaskProcessor
     /// there. <see cref="Worker.CompleteActivityBasedOnExecutionResultsAsync"/> turns a non-empty
     /// warning message into Complete with warning once the Activity finishes.
     /// </summary>
-    private void AppendActivityWarning(string additionalWarning)
-    {
-        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-            ? additionalWarning
-            : $"{_activity.WarningMessage}\n{additionalWarning}";
-    }
+    private void AppendActivityWarning(JimMessage additionalWarning) => ActivityMessage.AddWarning(_activity, additionalWarning);
 
     /// <summary>
     /// Creates a new connector instance for use by a parallel export batch.

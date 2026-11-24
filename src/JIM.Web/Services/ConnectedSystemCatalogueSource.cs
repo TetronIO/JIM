@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
+using JIM.Web.Localisation;
 using JIM.Web.Models;
 
 namespace JIM.Web.Services;
@@ -41,11 +42,11 @@ public sealed class ConnectedSystemCatalogueSource(
         }
         catch (InvalidSettingValuesException ex)
         {
-            return new ConnectedSystemCatalogueRead<T>(default, ex.Message);
+            return new ConnectedSystemCatalogueRead<T>(default, ex.ToDisplayText());
         }
         catch (ArgumentException ex)
         {
-            return new ConnectedSystemCatalogueRead<T>(default, ex.Message);
+            return new ConnectedSystemCatalogueRead<T>(default, ex.ToDisplayText());
         }
         // Fallback dispatcher, as the REST endpoint has: any failure reading the source (unreachable, refused
         // credentials, a malformed response) is the reason the lists are unavailable, and the editor says so and

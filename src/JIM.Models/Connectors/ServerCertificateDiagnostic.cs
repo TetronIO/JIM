@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Connectors;
 
 /// <summary>
@@ -100,6 +103,25 @@ public class ServerCertificateDiagnostic
     /// A sentence naming what to do about it, shown alongside the certificate.
     /// </summary>
     public string? Remediation { get; set; }
+
+    /// <summary>
+    /// <see cref="Remediation"/> held as a message, so the portal can show it in the viewer's language (#3030);
+    /// <see cref="Remediation"/> is always its British English, which the REST API and Activities keep reading. Null
+    /// where the remediation was written by something other than the probe.
+    /// </summary>
+    /// <remarks>
+    /// Not serialised: this type is returned by the REST API as it is and stored in an Activity's error detail, and
+    /// neither changes shape for the portal's translation. A remediation read back from an Activity shows its English.
+    /// </remarks>
+    [JsonIgnore]
+    public JimMessage? RemediationDetail { get; set; }
+
+    /// <summary>Sets <see cref="RemediationDetail"/> and <see cref="Remediation"/> (its English) together.</summary>
+    public void SetRemediation(JimMessage detail)
+    {
+        RemediationDetail = detail;
+        Remediation = detail.ToEnglish();
+    }
 
     /// <summary>
     /// Whether only the root of the chain can be trusted to make this connection work. False for most connections,

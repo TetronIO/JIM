@@ -14,16 +14,15 @@
     <div class="jim-facts" data-testid="jim-detected-facts">
         <div class="jim-fact jim-fact-heading">
             <span class="jim-fact-label d-flex align-center">
-                Properties
-                <InfoPopover Title="Properties">
-                    Information the Connector detected about the target system during a previous connection, shown for
-                    reference. Nothing here can be changed, and reading it never opens a new connection.
+                @ConnectedSystemText.DetectedFactsHeading
+                <InfoPopover Title="@ConnectedSystemText.DetectedFactsHeading">
+                    @ConnectedSystemText.DetectedFactsInfo
                 </InfoPopover>
             </span>
             @if (Capabilities.Count == 0)
             {
                 <span class="jim-fact-value mud-text-secondary" data-testid="jim-detected-facts-empty">
-                    Nothing detected yet; facts appear after the first successful connection.
+                    @ConnectedSystemText.DetectedFactsEmpty
                 </span>
             }
         </div>

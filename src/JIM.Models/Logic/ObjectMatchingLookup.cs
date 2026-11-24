@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Logic;
 
@@ -30,5 +31,17 @@ public sealed class ObjectMatchingLookup
     public IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate> Candidates { get; init; } = [];
 
     /// <summary>What a synchronisation would do, in one or two sentences.</summary>
-    public string Description { get; init; } = string.Empty;
+    public string Description
+    {
+        get => _description ?? DescriptionDetail?.ToEnglish() ?? string.Empty;
+        init => _description = value;
+    }
+
+    private string? _description;
+
+    /// <summary>
+    /// <see cref="Description"/> as a message the portal renders in the viewer's language, where the lookup gave one;
+    /// <see cref="Description"/> is its British English, which the REST API keeps reading.
+    /// </summary>
+    public JimMessage? DescriptionDetail { get; init; }
 }

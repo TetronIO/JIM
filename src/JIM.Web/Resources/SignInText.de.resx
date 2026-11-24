@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProblemNone" xml:space="preserve">
+    <value>(keiner)</value>
+  </data>
+  <data name="ProblemWrongAudienceDescription" xml:space="preserve">
+    <value>Der Identitätsanbieter hat ein ID-Token für einen anderen Client ausgestellt, daher hat JIM es abgelehnt.</value>
+  </data>
+  <data name="ProblemWrongAudienceFix" xml:space="preserve">
+    <value>Legen Sie {0} auf die Client-ID fest, die der Identitätsanbieter für das Portal von JIM registriert hat.</value>
+  </data>
+  <data name="ProblemWrongIssuerDescription" xml:space="preserve">
+    <value>Das ID-Token stammt von einem Aussteller, den JIM nicht akzeptiert.</value>
+  </data>
+  <data name="ProblemApiWrongAudienceDescription" xml:space="preserve">
+    <value>Ein vom Identitätsanbieter ausgestelltes Zugriffstoken wurde abgelehnt, da es nicht für die API von JIM bestimmt ist.</value>
+  </data>
+  <data name="ProblemApiWrongAudienceFix" xml:space="preserve">
+    <value>JIM erwartet die Zielgruppe, die {0} benennt, sofern es sich um einen api://-URI handelt, andernfalls die Client-ID des Portals, {1}. Ändern Sie diese Einstellung, oder lassen Sie den Identitätsanbieter die von JIM erwartete Zielgruppe ausstellen.</value>
+  </data>
+  <data name="ProblemApiWrongIssuerDescription" xml:space="preserve">
+    <value>Ein Zugriffstoken stammt von einem Aussteller, den JIM nicht akzeptiert.</value>
+  </data>
+  <data name="ProblemMissingClaimDescription" xml:space="preserve">
+    <value>JIM konnte nicht feststellen, wer sich angemeldet hat, da die Anmeldung keinen Claim „{0}“ enthielt.</value>
+  </data>
+  <data name="ProblemMissingClaimFix" xml:space="preserve">
+    <value>Legen Sie {0} auf einen Claim fest, den der Identitätsanbieter für alle ausstellt, oder lassen Sie ihn „{1}“ ausstellen.</value>
+  </data>
+  <data name="ProblemEntraVersion1Fix" xml:space="preserve">
+    <value>Microsoft Entra ID hat ein Zugriffstoken der Version 1 ausgestellt. Legen Sie requestedAccessTokenVersion im Manifest der App-Registrierung auf 2 fest (Register-JIMIdentityProvider -Provider EntraId erledigt das), damit die Token die Client-ID als Zielgruppe tragen und vom Aussteller der Version 2 des Mandanten stammen, was JIM akzeptiert.</value>
+  </data>
+  <data name="ProblemIssuerFix" xml:space="preserve">
+    <value>Wenn dieser Aussteller zu Ihrem Identitätsanbieter gehört, fügen Sie ihn zu den aufgeführten Ausstellern in {0} hinzu; prüfen Sie andernfalls, ob {1} den Identitätsanbieter benennt, bei dem sich die Benutzer anmelden.</value>
+  </data>
+  <data name="ProblemInvalidClientDescription" xml:space="preserve">
+    <value>Der Identitätsanbieter hat den Portal-Client von JIM nicht akzeptiert.</value>
+  </data>
+  <data name="ProblemInvalidClientExpected" xml:space="preserve">
+    <value>dass der Identitätsanbieter den Client „{0}“ und sein Geheimnis akzeptiert</value>
+  </data>
+  <data name="ProblemInvalidClientFix" xml:space="preserve">
+    <value>Prüfen Sie, ob {0} den Client des Portals benennt und {1} sein aktuelles Geheimnis enthält. Register-JIMIdentityProvider -ResetClientSecret erzeugt ein neues.</value>
+  </data>
+  <data name="ProblemUnauthorizedClientDescription" xml:space="preserve">
+    <value>Der Identitätsanbieter erlaubt dem Portal-Client von JIM nicht, Benutzer auf diese Weise anzumelden.</value>
+  </data>
+  <data name="ProblemUnauthorizedClientExpected" xml:space="preserve">
+    <value>dass der Client „{0}“ Benutzer mit einem Autorisierungscode anmeldet</value>
+  </data>
+  <data name="ProblemUnauthorizedClientFix" xml:space="preserve">
+    <value>Prüfen Sie, ob {0} den Client des Portals benennt und der Identitätsanbieter ihm den Autorisierungscode-Flow erlaubt.</value>
+  </data>
+  <data name="ProblemInvalidScopeDescription" xml:space="preserve">
+    <value>Der Identitätsanbieter hat die von JIM angeforderten Scopes abgelehnt.</value>
+  </data>
+  <data name="ProblemInvalidScopeFix" xml:space="preserve">
+    <value>Legen Sie {0} auf einen Scope fest, den der Identitätsanbieter dem Portal-Client von JIM gewährt, oder lassen Sie das Feld leer.</value>
+  </data>
+  <data name="LockoutWarning" xml:space="preserve">
+    <value>Die Anmeldung hängt von „{0}“ ab. Diese Änderung verhindert, dass sich jemand bei JIM anmelden kann, Sie eingeschlossen. Solange kein anderes Zertifikat für die Anmeldung als vertrauenswürdig gilt, kann nur der API-Schlüssel der Infrastruktur dies beheben.</value>
+  </data>
+  <data name="LockoutWarningForHost" xml:space="preserve">
+    <value>Die Anmeldung hängt von „{0}“ ab: Es ist das einzige Zertifikat, dem JIM für {1} vertraut. Diese Änderung verhindert, dass sich jemand bei JIM anmelden kann, Sie eingeschlossen. Solange kein anderes Zertifikat für die Anmeldung als vertrauenswürdig gilt, kann nur der API-Schlüssel der Infrastruktur dies beheben.</value>
+  </data>
+  <data name="PassOnToAdministrator" xml:space="preserve">
+    <value>Wenn Sie diese JIM-Bereitstellung nicht betreuen, geben Sie diese Angaben an die zuständige Person weiter.</value>
+  </data>
+  <data name="TryAgain" xml:space="preserve">
+    <value>Erneut versuchen</value>
+  </data>
+  <data name="IllustrationIdentityProviderAbbreviation" xml:space="preserve">
+    <value>IdP</value>
+  </data>
+  <data name="ErrorTitle" xml:space="preserve">
+    <value>Etwas ist schiefgelaufen</value>
+  </data>
+  <data name="ErrorIllustrationLabel" xml:space="preserve">
+    <value>Illustration eines kaputten Zahnrads</value>
+  </data>
+  <data name="ErrorSubtitle" xml:space="preserve">
+    <value>Das war so nicht vorgesehen. Ein Zahnrad ist abgerutscht!</value>
+  </data>
+  <data name="ErrorRequestId" xml:space="preserve">
+    <value>Anfrage-ID:</value>
+  </data>
+  <data name="ErrorGoToDashboard" xml:space="preserve">
+    <value>Zum Dashboard</value>
+  </data>
+  <data name="FailedTitle" xml:space="preserve">
+    <value>Die Anmeldung konnte nicht abgeschlossen werden</value>
+  </data>
+  <data name="FailedIllustrationLabel" xml:space="preserve">
+    <value>Eine Anmeldeschleife zwischen JIM und dem Identitätsanbieter, durch ein Stoppschild unterbrochen, mit einem zerbröckelnden Cookie</value>
+  </data>
+  <data name="FailedSubtitle" xml:space="preserve">
+    <value>JIM hat die Anmeldung abgebrochen, statt Sie weiter zu Ihrem Identitätsanbieter zurückzuschicken.</value>
+  </data>
+  <data name="FailedPlainHttp" xml:space="preserve">
+    <value>Sie sind über unverschlüsseltes HTTP mit JIM verbunden. Ihr Browser verwirft die Cookies, von denen die Anmeldung abhängt, sofern die Verbindung nicht sicher ist, daher gilt: {0}.</value>
+  </data>
+  <data name="FailedPlainHttpEmphasis" xml:space="preserve">
+    <value>Der Browserzugriff von anderen Rechnern erfordert HTTPS</value>
+  </data>
+  <data name="FailedBehindProxy" xml:space="preserve">
+    <value>Wenn Ihre Adressleiste bereits {0} anzeigt, endet TLS an einem Reverse-Proxy, dem JIM nicht als vertrauenswürdig bekannt gemacht wurde. Legen Sie {1} fest, damit JIM erkennen kann, dass die ursprüngliche Verbindung sicher war.</value>
+  </data>
+  <data name="FailedCookiesMissing" xml:space="preserve">
+    <value>Ihr Browser ist vom Identitätsanbieter ohne die Cookies zurückgekehrt, die JIM zu Beginn der Anmeldung gesetzt hat, auch nachdem JIM sie neu gestartet hat. Prüfen Sie, ob Ihr Browser Cookies dieser Website akzeptiert und ob ein Reverse-Proxy vor JIM Cookies unverändert durchreicht.</value>
+  </data>
+  <data name="FailedDocsHttps" xml:space="preserve">
+    <value>JIM über HTTPS bereitstellen</value>
+  </data>
+  <data name="FailedDocsLoops" xml:space="preserve">
+    <value>Fehlerbehebung bei Anmeldeschleifen</value>
+  </data>
+  <data name="ProblemTitle" xml:space="preserve">
+    <value>Eine Einstellung hat die Anmeldung gestoppt</value>
+  </data>
+  <data name="ProblemIllustrationLabel" xml:space="preserve">
+    <value>JIM und der Identitätsanbieter, dazwischen ein Wert, der nicht übereinstimmt</value>
+  </data>
+  <data name="ProblemSetting" xml:space="preserve">
+    <value>Einstellung</value>
+  </data>
+  <data name="ProblemExpected" xml:space="preserve">
+    <value>Erwartet</value>
+  </data>
+  <data name="ProblemReceived" xml:space="preserve">
+    <value>Empfangen</value>
+  </data>
+  <data name="ProblemUnknown" xml:space="preserve">
+    <value>Eine Einstellung hat die Anmeldung gestoppt, aber JIM verfügt nicht mehr über die Einzelheiten, möglicherweise wegen eines Neustarts seitdem.</value>
+  </data>
+  <data name="ProblemTryAgain" xml:space="preserve">
+    <value>Versuchen Sie es erneut, um sie anzuzeigen. Ein Administrator kann zudem die letzten Anmeldeprobleme mit {0} auflisten oder im Protokoll von JIM finden.</value>
+  </data>
+  <data name="ProblemDocs" xml:space="preserve">
+    <value>Fehlerbehebung bei der Anmeldung</value>
+  </data>
+  <data name="UnavailableTitleAvailable" xml:space="preserve">
+    <value>Die Anmeldung ist verfügbar</value>
+  </data>
+  <data name="UnavailableTitleUnavailable" xml:space="preserve">
+    <value>Die Anmeldung ist nicht verfügbar</value>
+  </data>
+  <data name="UnavailableIllustrationLabel" xml:space="preserve">
+    <value>JIM und der Identitätsanbieter, dazwischen ein Vorhängeschloss, das JIM nicht öffnen kann</value>
+  </data>
+  <data name="UnavailableChainLabel" xml:space="preserve">
+    <value>Vorgelegte Zertifikatskette</value>
+  </data>
+  <data name="UnavailableChainPresentedBy" xml:space="preserve">
+    <value>Von {0} vorgelegte Zertifikatskette</value>
+  </data>
+  <data name="UnavailableNotSent" xml:space="preserve">
+    <value>Vom Server nicht gesendet</value>
+  </data>
+  <data name="UnavailableNotSentHint" xml:space="preserve">
+    <value>Beziehen Sie es von Ihrer Zertifizierungsstelle, um ihm zu vertrauen; ein Stammzertifikat überdauert alle Zertifikate, die es ausstellt.</value>
+  </data>
+  <data name="UnavailableServerCertificate" xml:space="preserve">
+    <value>Serverzertifikat</value>
+  </data>
+  <data name="UnavailableCertificateAuthority" xml:space="preserve">
+    <value>Zertifizierungsstelle</value>
+  </data>
+  <data name="UnavailableCertificateMeta" xml:space="preserve">
+    <value>Fingerabdruck {0} · gültig bis {1}</value>
+  </data>
+  <data name="UnavailableFixHeading" xml:space="preserve">
+    <value>Mit PowerShell als vertrauenswürdig festlegen, unter Verwendung des API-Schlüssels der Infrastruktur</value>
+  </data>
+  <data name="UnavailableFixFooter" xml:space="preserve">
+    <value>Prüfen Sie zuerst den Fingerabdruck anhand desjenigen, den Ihre Zertifizierungsstelle veröffentlicht. Ein bereits angemeldeter Administrator kann dem Zertifikat stattdessen über das Banner im Portal vertrauen.</value>
+  </data>
+  <data name="UnavailableDocs" xml:space="preserve">
+    <value>Dem Zertifikat Ihres Identitätsanbieters vertrauen</value>
+  </data>
+  <data name="UnavailablePolling" xml:space="preserve">
+    <value>Erneute Prüfung alle 10 Sekunden</value>
+  </data>
+  <data name="UnavailableSignIn" xml:space="preserve">
+    <value>Anmelden</value>
+  </data>
+  <data name="UnavailableAvailableMessage" xml:space="preserve">
+    <value>JIM vertraut Ihrem Identitätsanbieter. Es musste nichts neu gestartet werden.</value>
+  </data>
+  <data name="UnavailableTrusted" xml:space="preserve">
+    <value>Ihrem Identitätsanbieter wird vertraut.</value>
+  </data>
+  <data name="ProblemValue" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+</root>
