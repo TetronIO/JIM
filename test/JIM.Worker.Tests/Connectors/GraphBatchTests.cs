@@ -105,8 +105,8 @@ public class GraphBatchTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(responses.Single().Status, Is.EqualTo(429));
-            // Maximum Retries counts the initial attempt today, so two means two calls in all (#3023).
-            Assert.That(handler.CallCount, Is.EqualTo(2));
+            // The initial batch call plus two retries of the throttled request.
+            Assert.That(handler.CallCount, Is.EqualTo(3));
         }
     }
 
