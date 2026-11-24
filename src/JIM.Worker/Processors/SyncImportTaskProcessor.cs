@@ -725,8 +725,8 @@ public partial class SyncImportTaskProcessor
                             // watermark queries across all pages of a delta import.
                             ConnectedSystemImportResult result;
                             var fetchMessage = pageNumber > 0
-                                ? $"Importing objects from Connected System (page {pageNumber + 1})"
-                                : "Importing objects from Connected System";
+                                ? ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystemPage), ActivityMessage.Plain(pageNumber + 1))
+                                : ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystem));
                             await ReportProgressAsync(fetchMessage);
                             using (Diagnostics.Connector.StartSpan("ImportPage")
                                 .SetTag("connectedSystemId", _connectedSystem.Id)
@@ -762,10 +762,10 @@ public partial class SyncImportTaskProcessor
                             // How many have arrived is rendered from the Activity's counters, so the
                             // message says only what those cannot: which page is being read. A single
                             // page adds nothing over the running step's own name.
-                            var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
-                                ? $"Reading page {pageNumber:N0}"
-                                : string.Empty;
-                            await ReportProgressAsync(progressMessage);
+                            if (pageNumber > 1 || result.PaginationTokens.Count > 0)
+                                await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressReadingPage), pageNumber));
+                            else
+                                await ReportProgressAsync(string.Empty);
 
                             // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                             AddExternalIdsToCollection(result, externalIdsImported);
@@ -906,7 +906,7 @@ public partial class SyncImportTaskProcessor
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
                 // file based connectors return all the results from the Connected System in one go. no paging.
-                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Importing objects from file");
+                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromFile)));
                 ConnectedSystemImportResult result;
 
                 // The whole file is read inside this one call, so what the Connector reports about
@@ -1245,7 +1245,7 @@ public partial class SyncImportTaskProcessor
         var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
-        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, "Recording results");
+        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, ActivityMessage.Create(nameof(ActivityMessages.ProgressRecordingResults)));
         await FlushImportRpeisAsync(alsoCountInActivityTotals: reconciliation?.RaisedItemTotals);
         _activity.ObjectsProcessed = remainingRpeiCount;
 
@@ -1483,7 +1483,7 @@ public partial class SyncImportTaskProcessor
             if (!stagingUnit)
             {
                 _activity.ObjectsProcessed = totalCreatedSoFar;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating Connected System Objects");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressCreatingCsos)));
                 await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
             SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -1593,7 +1593,7 @@ public partial class SyncImportTaskProcessor
             if (!stagingUnit)
             {
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Updating Connected System Objects");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressUpdatingCsos)));
                 await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
             SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -3608,6 +3608,18 @@ public partial class SyncImportTaskProcessor
     /// otherwise.
     /// </summary>
     /// <param name="message">The Activity's new message, or null to report only its counters.</param>
+    private Task ReportProgressAsync(JimMessage message)
+    {
+        if (_progressThrottle is { } throttle)
+            return throttle.ReportAsync(message);
+
+        return _syncRepo.UpdateActivityMessageAsync(_activity, message);
+    }
+
+    /// <summary>
+    /// <see cref="ReportProgressAsync(JimMessage)"/> for narration that is not JIM's own wording (a Connector's), written as
+    /// English only.
+    /// </summary>
     private Task ReportProgressAsync(string? message = null)
     {
         if (_progressThrottle is { } throttle)
@@ -4329,7 +4341,7 @@ public partial class SyncImportTaskProcessor
                 _activity.ObjectsProcessed = importIndex + 1;
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
-                    await ReportProgressAsync("Processing imported objects");
+                    await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressProcessingImported)));
 
                     // Periodic memory diagnostics (#917): the import processing phase accumulates
                     // hydrated CSOs until the save phase, so at scale this is where peak memory
@@ -4353,7 +4365,7 @@ public partial class SyncImportTaskProcessor
         // Activity's counters carry what is left to say.
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
-            await ReportProgressAsync("Processing imported objects");
+            await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressProcessingImported)));
         }
 
         // Summary statistics for this page (#2521): counting every item held so far, on every page, made each page's

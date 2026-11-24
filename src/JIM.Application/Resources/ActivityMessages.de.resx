@@ -835,4 +835,43 @@
   <data name="GeneratedValueWidthExceeded" xml:space="preserve">
     <value>Der nächste Wert für {0} wäre „{1}“ und passt nicht mehr in die konfigurierte feste Breite von {2} Stellen.</value>
   </data>
+  <data name="ProgressSavingChanges" xml:space="preserve">
+    <value>Änderungen werden gespeichert</value>
+  </data>
+  <data name="ProgressCreatingCsos" xml:space="preserve">
+    <value>Objekte im verbundenen System werden erstellt</value>
+  </data>
+  <data name="ProgressUpdatingCsos" xml:space="preserve">
+    <value>Objekte im verbundenen System werden aktualisiert</value>
+  </data>
+  <data name="ProgressLoadingBatch" xml:space="preserve">
+    <value>Stapel {0} von {1} wird geladen (insgesamt {2} Objekte)</value>
+  </data>
+  <data name="ProgressProcessingImported" xml:space="preserve">
+    <value>Importierte Objekte werden verarbeitet</value>
+  </data>
+  <data name="ProgressImportingFromFile" xml:space="preserve">
+    <value>Objekte werden aus der Datei importiert</value>
+  </data>
+  <data name="ProgressImportingFromSystem" xml:space="preserve">
+    <value>Objekte werden aus dem verbundenen System importiert</value>
+  </data>
+  <data name="ProgressImportingFromSystemPage" xml:space="preserve">
+    <value>Objekte werden aus dem verbundenen System importiert (Seite {0})</value>
+  </data>
+  <data name="ProgressReadingPage" xml:space="preserve">
+    <value>Seite {0} wird gelesen</value>
+  </data>
+  <data name="ProgressRecordingResults" xml:space="preserve">
+    <value>Ergebnisse werden aufgezeichnet</value>
+  </data>
+  <data name="ProgressExporting" xml:space="preserve">
+    <value>{0} Änderungen werden exportiert</value>
+  </data>
+  <data name="ProgressPreparingDeltaSync" xml:space="preserve">
+    <value>Deltasynchronisierung wird vorbereitet</value>
+  </data>
+  <data name="ProgressProcessingModifiedCsos" xml:space="preserve">
+    <value>Geänderte Objekte im verbundenen System werden verarbeitet</value>
+  </data>
 </root>

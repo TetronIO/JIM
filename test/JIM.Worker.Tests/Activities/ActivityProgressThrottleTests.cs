@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using NUnit.Framework;
@@ -44,6 +47,27 @@ public class ActivityProgressThrottleTests
 
         Assert.That(_syncRepo.ActivityProgressWrites.Select(w => w.Message), Is.EqualTo(new[] { "Importing objects from Connected System" }),
             "The first report starts the administrator's view of this stretch of the run, so it cannot wait");
+    }
+
+    [Test]
+    public async Task ReportAsync_WithAMessage_WritesTheMessageBesideItsEnglish_AndAStringClearsItAsync()
+    {
+        await using var throttle = NewThrottle();
+
+        await throttle.ReportAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressReadingPage), 2));
+        var first = _syncRepo.ActivityProgressWrites[^1];
+
+        _clock.Advance(Interval + TimeSpan.FromMilliseconds(1));
+        await throttle.ReportAsync("From a Connector");
+        var second = _syncRepo.ActivityProgressWrites[^1];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.Message, Is.EqualTo("Reading page 2"));
+            Assert.That(MessageJson.Deserialise(first.MessageDetailJson)?.ToEnglish(), Is.EqualTo(first.Message));
+            Assert.That(second.Message, Is.EqualTo("From a Connector"));
+            Assert.That(second.MessageDetailJson, Is.Null, "English that is not JIM's own wording must not keep an earlier message");
+        }
     }
 
     [Test]

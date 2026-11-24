@@ -1100,4 +1100,56 @@
   <data name="GeneratedValueWidthExceeded" xml:space="preserve">
     <value>The next value for {0} would be "{1}", which no longer fits the configured fixed width of {2} digits.</value>
   </data>
+  <data name="ProgressSavingChanges" xml:space="preserve">
+    <value>Saving changes</value>
+    <comment>Live progress narration shown while a run is in progress.</comment>
+  </data>
+  <data name="ProgressCreatingCsos" xml:space="preserve">
+    <value>Creating Connected System Objects</value>
+    <comment>Live progress narration.</comment>
+  </data>
+  <data name="ProgressUpdatingCsos" xml:space="preserve">
+    <value>Updating Connected System Objects</value>
+    <comment>Live progress narration.</comment>
+  </data>
+  <data name="ProgressLoadingBatch" xml:space="preserve">
+    <value>Loading batch {0} of {1} ({2} objects in all)</value>
+    <comment>Live progress narration. {0} the batch, {1} how many batches, {2} how many objects.</comment>
+  </data>
+  <data name="ProgressProcessingImported" xml:space="preserve">
+    <value>Processing imported objects</value>
+    <comment>Live progress narration.</comment>
+  </data>
+  <data name="ProgressImportingFromFile" xml:space="preserve">
+    <value>Importing objects from file</value>
+    <comment>Live progress narration.</comment>
+  </data>
+  <data name="ProgressImportingFromSystem" xml:space="preserve">
+    <value>Importing objects from Connected System</value>
+    <comment>Live progress narration.</comment>
+  </data>
+  <data name="ProgressImportingFromSystemPage" xml:space="preserve">
+    <value>Importing objects from Connected System (page {0})</value>
+    <comment>Live progress narration. {0} is the page number.</comment>
+  </data>
+  <data name="ProgressReadingPage" xml:space="preserve">
+    <value>Reading page {0}</value>
+    <comment>Live progress narration. {0} is the page number.</comment>
+  </data>
+  <data name="ProgressRecordingResults" xml:space="preserve">
+    <value>Recording results</value>
+    <comment>Live progress narration.</comment>
+  </data>
+  <data name="ProgressExporting" xml:space="preserve">
+    <value>Exporting {0} changes</value>
+    <comment>Live progress narration. {0} is how many changes.</comment>
+  </data>
+  <data name="ProgressPreparingDeltaSync" xml:space="preserve">
+    <value>Preparing delta sync</value>
+    <comment>Live progress narration.</comment>
+  </data>
+  <data name="ProgressProcessingModifiedCsos" xml:space="preserve">
+    <value>Processing modified Connected System Objects</value>
+    <comment>Live progress narration.</comment>
+  </data>
 </root>

@@ -27,10 +27,11 @@ public partial class SyncRepository
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = @"UPDATE ""Activities"" SET ""ObjectsProcessed"" = @processed, ""ObjectsToProcess"" = @toProcess, ""Message"" = @message, ""MessageDetailJson"" = NULL WHERE ""Id"" = @id";
+        command.CommandText = @"UPDATE ""Activities"" SET ""ObjectsProcessed"" = @processed, ""ObjectsToProcess"" = @toProcess, ""Message"" = @message, ""MessageDetailJson"" = @messageDetail WHERE ""Id"" = @id";
         command.Parameters.AddWithValue("processed", activity.ObjectsProcessed);
         command.Parameters.AddWithValue("toProcess", activity.ObjectsToProcess);
         command.Parameters.AddWithValue("message", (object?)activity.Message ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("messageDetail", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)activity.MessageDetailJson ?? DBNull.Value });
         command.Parameters.AddWithValue("id", activity.Id);
         await command.ExecuteNonQueryAsync();
     }

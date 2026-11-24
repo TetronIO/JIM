@@ -27,7 +27,7 @@ namespace JIM.PostgresData.Repositories;
 internal sealed class ActivityProgressWriter(string connectionString) : IActivityProgressWriter
 {
     internal const string UpdateActivitySql =
-        """UPDATE "Activities" SET "Message" = $1, "MessageDetailJson" = NULL, "ObjectsProcessed" = $2, "ObjectsToProcess" = $3 WHERE "Id" = $4""";
+        """UPDATE "Activities" SET "Message" = $1, "MessageDetailJson" = $2, "ObjectsProcessed" = $3, "ObjectsToProcess" = $4 WHERE "Id" = $5""";
 
     public async Task WriteAsync(ActivityProgressWrite progress)
     {
@@ -39,6 +39,7 @@ internal sealed class ActivityProgressWriter(string connectionString) : IActivit
         {
             var update = new NpgsqlBatchCommand(UpdateActivitySql);
             update.Parameters.Add(new NpgsqlParameter { Value = (object?)progress.Message ?? DBNull.Value, NpgsqlDbType = NpgsqlDbType.Text });
+            update.Parameters.Add(new NpgsqlParameter { Value = (object?)progress.MessageDetailJson ?? DBNull.Value, NpgsqlDbType = NpgsqlDbType.Text });
             update.Parameters.Add(new NpgsqlParameter { Value = progress.ObjectsProcessed, NpgsqlDbType = NpgsqlDbType.Integer });
             update.Parameters.Add(new NpgsqlParameter { Value = progress.ObjectsToProcess, NpgsqlDbType = NpgsqlDbType.Integer });
             update.Parameters.Add(new NpgsqlParameter { Value = progress.ActivityId, NpgsqlDbType = NpgsqlDbType.Uuid });

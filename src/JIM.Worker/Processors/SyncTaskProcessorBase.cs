@@ -5162,7 +5162,7 @@ public abstract class SyncTaskProcessorBase
                 // The counters carry the reference values; the message names the objects, which the counters no longer do.
                 _activity.ObjectsProcessed = resolvedCount;
                 await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Loading batch {batchIndex + 1} of {totalBatches} ({totalCrossPagesToResolve:N0} objects in all)");
+                    ActivityMessage.Create(nameof(ActivityMessages.ProgressLoadingBatch), ActivityMessage.Plain(batchIndex + 1), ActivityMessage.Plain(totalBatches), totalCrossPagesToResolve));
 
                 // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
                 var csoIds = batch.Select(x => x.CsoId).ToList();
@@ -5364,7 +5364,7 @@ public abstract class SyncTaskProcessorBase
                     resolvedCount += progressUnits[unitIndex];
 
                 _activity.ObjectsProcessed = resolvedCount;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressSavingChanges)));
 
                 // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
                 // subsequent SaveChangesAsync calls (same pattern as per-page processing).

@@ -110,6 +110,6 @@ public static partial class ActivityMessage
     });
 
     /// <summary>The warning for a generated value that lost a race to another object holding it.</summary>
-    public static JimMessage GeneratedValueLostRace(string attributeName, string value) =>
-        Create(nameof(ActivityMessages.GeneratedValueLostRace), attributeName, value);
+    public static JimMessage GeneratedValueLostRace(string attributeName, string? value) =>
+        Create(nameof(ActivityMessages.GeneratedValueLostRace), attributeName, value ?? string.Empty);
 }

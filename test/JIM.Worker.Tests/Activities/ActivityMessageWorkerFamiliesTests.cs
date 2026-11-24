@@ -226,4 +226,27 @@ public class ActivityMessageWorkerFamiliesTests
         AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueWidthExceeded), "employeeId", "1000", ActivityMessage.Plain(3)),
             "The next value for employeeId would be \"1000\", which no longer fits the configured fixed width of 3 digits.");
     }
+
+    [TestCase(nameof(ActivityMessages.ProgressSavingChanges), "Saving changes")]
+    [TestCase(nameof(ActivityMessages.ProgressCreatingCsos), "Creating Connected System Objects")]
+    [TestCase(nameof(ActivityMessages.ProgressUpdatingCsos), "Updating Connected System Objects")]
+    [TestCase(nameof(ActivityMessages.ProgressProcessingImported), "Processing imported objects")]
+    [TestCase(nameof(ActivityMessages.ProgressImportingFromFile), "Importing objects from file")]
+    [TestCase(nameof(ActivityMessages.ProgressImportingFromSystem), "Importing objects from Connected System")]
+    [TestCase(nameof(ActivityMessages.ProgressRecordingResults), "Recording results")]
+    [TestCase(nameof(ActivityMessages.ProgressPreparingDeltaSync), "Preparing delta sync")]
+    [TestCase(nameof(ActivityMessages.ProgressProcessingModifiedCsos), "Processing modified Connected System Objects")]
+    public void ProgressNarration_EachPhase_SaysWhatItAlwaysSaid_AndTranslates(string key, string english) =>
+        AssertTranslated(ActivityMessage.Create(key), english);
+
+    [Test]
+    public void ProgressNarration_WithCounts_SaysWhatItAlwaysSaid_AndTranslates()
+    {
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ProgressLoadingBatch), ActivityMessage.Plain(2), ActivityMessage.Plain(5), 12345),
+            "Loading batch 2 of 5 (12,345 objects in all)");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ProgressExporting), 4200), "Exporting 4,200 changes");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ProgressReadingPage), 1234), "Reading page 1,234");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystemPage), ActivityMessage.Plain(3)),
+            "Importing objects from Connected System (page 3)");
+    }
 }

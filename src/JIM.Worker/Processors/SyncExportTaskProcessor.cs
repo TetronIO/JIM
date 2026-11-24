@@ -246,7 +246,7 @@ public class SyncExportTaskProcessor
             var throughput = new ThroughputTracker();
             var enteredDeferredPass = false;
             ExportExecutionResult result;
-            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, $"Exporting {pendingExportCount:N0} changes");
+            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, ActivityMessage.Create(nameof(ActivityMessages.ProgressExporting), pendingExportCount));
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
             {
                 result = await _syncServer.ExecuteExportsAsync(

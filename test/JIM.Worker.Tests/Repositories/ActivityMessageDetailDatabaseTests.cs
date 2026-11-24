@@ -172,6 +172,74 @@ public class ActivityMessageDetailDatabaseTests
         }
     }
 
+    [Test]
+    public async Task ProgressWriter_WithAMessage_WritesTheEnglishAndTheMessageTogetherAsync()
+    {
+        // Arrange: an Activity whose message is stale
+        await using var seed = NewContext();
+        var activityId = await SeedActivityAsync(seed, a => a.Message = "Old");
+        var narration = ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystemPage), "3");
+
+        // Act
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            sync.ConnectionStringForParallelWrites = _connectionString;
+            await sync.CreateActivityProgressWriter()!.WriteAsync(
+                new ActivityProgressWrite(activityId, narration.ToEnglish(), 10, 100, [], MessageJson.Serialise(narration)));
+        }
+
+        // Assert
+        await using var read = NewContext();
+        var stored = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Message, Is.EqualTo("Importing objects from Connected System (page 3)"));
+            Assert.That(stored.MessageDetail?.ToEnglish(), Is.EqualTo(stored.Message));
+            Assert.That(stored.ObjectsProcessed, Is.EqualTo(10));
+            Assert.That(stored.ObjectsToProcess, Is.EqualTo(100));
+        }
+    }
+
+    [Test]
+    public async Task UpdateActivityProgressOutOfBandAsync_WritesTheEnglishAndTheMessageTogetherAsync()
+    {
+        // Arrange
+        await using var seed = NewContext();
+        var activityId = await SeedActivityAsync(seed);
+        var narration = ActivityMessage.Create(nameof(ActivityMessages.ProgressCreatingCsos));
+
+        // Act: a message, then an English-only one, as the run narrates one phase after another
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            var activity = new Activity { Id = activityId, ObjectsProcessed = 5, ObjectsToProcess = 9, MessageDetail = narration };
+            await sync.UpdateActivityProgressOutOfBandAsync(activity);
+
+            await using var read = NewContext();
+            var first = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(first.Message, Is.EqualTo("Creating Connected System Objects"));
+                Assert.That(first.MessageDetail?.ToEnglish(), Is.EqualTo(first.Message));
+                Assert.That(first.ObjectsProcessed, Is.EqualTo(5));
+            }
+
+            activity.Message = "From a Connector";
+            activity.MessageDetailJson = null;
+            await sync.UpdateActivityProgressOutOfBandAsync(activity);
+        }
+
+        // Assert
+        await using var readAgain = NewContext();
+        var stored = await readAgain.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Message, Is.EqualTo("From a Connector"));
+            Assert.That(stored.MessageDetailJson, Is.Null);
+        }
+    }
+
     /// <summary>Two messages are equal when they say the same thing; the record's list arguments compare by reference.</summary>
     private static readonly IEqualityComparer<JimMessage?> MessageComparer = new EnglishComparer();
 

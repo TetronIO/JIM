@@ -837,4 +837,43 @@
   <data name="GeneratedValueWidthExceeded" xml:space="preserve">
     <value>La prochaine valeur pour {0} serait « {1} », qui ne tient plus dans la largeur fixe configurée de {2} chiffres.</value>
   </data>
+  <data name="ProgressSavingChanges" xml:space="preserve">
+    <value>Enregistrement des modifications</value>
+  </data>
+  <data name="ProgressCreatingCsos" xml:space="preserve">
+    <value>Création des objets de système connecté</value>
+  </data>
+  <data name="ProgressUpdatingCsos" xml:space="preserve">
+    <value>Mise à jour des objets de système connecté</value>
+  </data>
+  <data name="ProgressLoadingBatch" xml:space="preserve">
+    <value>Chargement du lot {0} sur {1} ({2} objets au total)</value>
+  </data>
+  <data name="ProgressProcessingImported" xml:space="preserve">
+    <value>Traitement des objets importés</value>
+  </data>
+  <data name="ProgressImportingFromFile" xml:space="preserve">
+    <value>Importation des objets depuis le fichier</value>
+  </data>
+  <data name="ProgressImportingFromSystem" xml:space="preserve">
+    <value>Importation des objets depuis le système connecté</value>
+  </data>
+  <data name="ProgressImportingFromSystemPage" xml:space="preserve">
+    <value>Importation des objets depuis le système connecté (page {0})</value>
+  </data>
+  <data name="ProgressReadingPage" xml:space="preserve">
+    <value>Lecture de la page {0}</value>
+  </data>
+  <data name="ProgressRecordingResults" xml:space="preserve">
+    <value>Enregistrement des résultats</value>
+  </data>
+  <data name="ProgressExporting" xml:space="preserve">
+    <value>Exportation de {0} modifications</value>
+  </data>
+  <data name="ProgressPreparingDeltaSync" xml:space="preserve">
+    <value>Préparation de la synchronisation delta</value>
+  </data>
+  <data name="ProgressProcessingModifiedCsos" xml:space="preserve">
+    <value>Traitement des objets de système connecté modifiés</value>
+  </data>
 </root>
