@@ -678,7 +678,7 @@ public interface IActivityRepository
     /// to complete-with-warning once anything has been rejected.
     /// </summary>
     /// <returns>True if the window's Activity existed and was updated; false if the caller must create it.</returns>
-    public Task<bool> AddToScimRequestSummaryAsync(JIM.Models.Scim.ScimRequestTally tally, string? warningMessage);
+    public Task<bool> AddToScimRequestSummaryAsync(JIM.Models.Scim.ScimRequestTally tally, JIM.Models.Localisation.JimMessage? warning);
 
     /// <summary>
     /// The requests a Connected System's SCIM endpoint rejected, across every key, in the SCIM request summary

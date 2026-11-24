@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Exceptions;
 
 /// <summary>
@@ -8,7 +10,16 @@ namespace JIM.Models.Exceptions;
 /// guard rather than by the run, so that the Activity records why the run stopped and what to do about it, instead
 /// of the run being killed by the operating system without a word.
 /// </summary>
-public class MemoryExhaustedException : OperationalException
+public class MemoryExhaustedException : OperationalException, IJimMessageCarrier
 {
     public MemoryExhaustedException(string message) : base(message) { }
+
+    /// <summary>A run the memory guard stopped, for the reason it gives as a message the portal can show in the reader's language.</summary>
+    public MemoryExhaustedException(JimMessage detail) : base(detail.ToEnglish())
+    {
+        Detail = detail;
+    }
+
+    /// <inheritdoc />
+    public JimMessage? Detail { get; }
 }

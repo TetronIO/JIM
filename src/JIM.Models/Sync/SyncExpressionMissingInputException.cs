@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Sync;
 
 /// <summary>
@@ -18,7 +21,7 @@ namespace JIM.Models.Sync;
 /// would have produced a value, and the administrator asked to be told rather than have it contributed.
 /// </para>
 /// </summary>
-public class SyncExpressionMissingInputException : Exception
+public class SyncExpressionMissingInputException : Exception, IJimMessageCarrier
 {
     /// <summary>
     /// The Expression that was not evaluated. Treated as administrator-authored, but still untrusted: sanitise
@@ -46,30 +49,41 @@ public class SyncExpressionMissingInputException : Exception
     public IReadOnlyList<string> MissingInputs { get; }
 
     public SyncExpressionMissingInputException(string? expression, string? targetAttributeName, IReadOnlyList<string> missingInputs)
-        : base(BuildMessage(targetAttributeName, missingInputs))
+        : this(BuildDetail(targetAttributeName, missingInputs), expression, targetAttributeName, missingInputs)
     {
+    }
+
+    private SyncExpressionMissingInputException(JimMessage detail, string? expression, string? targetAttributeName, IReadOnlyList<string> missingInputs)
+        : base(detail.ToEnglish())
+    {
+        Detail = detail;
         Expression = expression;
         TargetAttributeName = targetAttributeName;
         MissingInputs = missingInputs;
     }
+
+    /// <summary>The failure as a message, for the portal to show in the reader's language.</summary>
+    public JimMessage? Detail { get; }
 
     /// <summary>
     /// The error an administrator reads for this failure: the message, the hosting Synchronisation Rule when the
     /// mapping is a derived flow, and what to do about it. Shared by the worker's error record and Sync Preview, so a
     /// preview says exactly what the synchronisation would record.
     /// </summary>
-    public string DescribeForAdministrator() =>
-        Message +
-        (SyncRuleName == null ? string.Empty : $" The Attribute Flow is derived by Synchronisation Rule '{SyncRuleName}'.") +
-        " Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+    public string DescribeForAdministrator() => Describe().ToEnglish();
 
-    private static string BuildMessage(string? targetAttributeName, IReadOnlyList<string> missingInputs)
+    /// <summary><see cref="DescribeForAdministrator"/> as a message.</summary>
+    public JimMessage Describe() => SyncRuleName == null
+        ? JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExpressionMissingInputDescribed), Detail!)
+        : JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExpressionMissingInputDescribedDerived), Detail!, SyncRuleName);
+
+    private static JimMessage BuildDetail(string? targetAttributeName, IReadOnlyList<string> missingInputs)
     {
         // The inputs are attribute names an administrator configured, so they belong in the message; the raw
         // Expression is deliberately left out, as it is for an Expression that threw, so that logging the
         // exception object cannot become a log-injection vector. The worker sanitises and adds it explicitly.
         var inputs = missingInputs.Count > 0 ? string.Join(", ", missingInputs) : "(unknown)";
-        return $"Expression for target attribute '{targetAttributeName ?? "(unknown)"}' was not evaluated: " +
-               $"no value for {inputs}. Missing Input Behaviour is set to Fail the object.";
+        return JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExpressionMissingInput),
+            targetAttributeName ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.Unknown)), inputs);
     }
 }

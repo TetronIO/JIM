@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 using JIM.Models.Utility;
 
 namespace JIM.Models.Transactional;
@@ -73,6 +74,7 @@ public class ReferenceRecallResult
             Id = TimeOrderedIds.New(),
             ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
             ErrorMessage = failure.DescribeForAdministrator(),
+            ErrorMessageDetailJson = MessageJson.Serialise(failure.Describe()),
             DisplayNameSnapshot = ReferencingObjectDisplayNames.GetValueOrDefault(failure.MetaverseObjectId)
         });
 

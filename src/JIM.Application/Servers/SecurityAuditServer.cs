@@ -77,7 +77,7 @@ public class SecurityAuditServer
                 TargetType = ActivityTargetType.Authentication,
                 TargetOperationType = ActivityTargetOperationType.Authenticate,
                 TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetInteractiveSignInSucceeded)),
-                Message = "Interactive sign-in succeeded",
+                MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetInteractiveSignInSucceeded)),
                 ClientIpAddress = clientIp
             };
 

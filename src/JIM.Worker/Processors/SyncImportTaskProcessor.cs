@@ -725,8 +725,8 @@ public partial class SyncImportTaskProcessor
                             // watermark queries across all pages of a delta import.
                             ConnectedSystemImportResult result;
                             var fetchMessage = pageNumber > 0
-                                ? $"Importing objects from Connected System (page {pageNumber + 1})"
-                                : "Importing objects from Connected System";
+                                ? ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystemPage), ActivityMessage.Plain(pageNumber + 1))
+                                : ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystem));
                             await ReportProgressAsync(fetchMessage);
                             using (Diagnostics.Connector.StartSpan("ImportPage")
                                 .SetTag("connectedSystemId", _connectedSystem.Id)
@@ -762,10 +762,10 @@ public partial class SyncImportTaskProcessor
                             // How many have arrived is rendered from the Activity's counters, so the
                             // message says only what those cannot: which page is being read. A single
                             // page adds nothing over the running step's own name.
-                            var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
-                                ? $"Reading page {pageNumber:N0}"
-                                : string.Empty;
-                            await ReportProgressAsync(progressMessage);
+                            if (pageNumber > 1 || result.PaginationTokens.Count > 0)
+                                await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressReadingPage), pageNumber));
+                            else
+                                await ReportProgressAsync(string.Empty);
 
                             // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                             AddExternalIdsToCollection(result, externalIdsImported);
@@ -906,7 +906,7 @@ public partial class SyncImportTaskProcessor
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
                 // file based connectors return all the results from the Connected System in one go. no paging.
-                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Importing objects from file");
+                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromFile)));
                 ConnectedSystemImportResult result;
 
                 // The whole file is read inside this one call, so what the Connector reports about
@@ -1237,7 +1237,7 @@ public partial class SyncImportTaskProcessor
                 Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
                     hasCsoRef, LogSanitiser.Sanitise(extId));
                 orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
-                orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
+                ActivityMessage.SetError(orphanedRpei, ActivityMessage.Create(nameof(ActivityMessages.ImportOrphanedItem), extId, hasCsoRef.ToString()));
             }
         }
 
@@ -1245,7 +1245,7 @@ public partial class SyncImportTaskProcessor
         var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
-        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, "Recording results");
+        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, ActivityMessage.Create(nameof(ActivityMessages.ProgressRecordingResults)));
         await FlushImportRpeisAsync(alsoCountInActivityTotals: reconciliation?.RaisedItemTotals);
         _activity.ObjectsProcessed = remainingRpeiCount;
 
@@ -1483,7 +1483,7 @@ public partial class SyncImportTaskProcessor
             if (!stagingUnit)
             {
                 _activity.ObjectsProcessed = totalCreatedSoFar;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating Connected System Objects");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressCreatingCsos)));
                 await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
             SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -1593,7 +1593,7 @@ public partial class SyncImportTaskProcessor
             if (!stagingUnit)
             {
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Updating Connected System Objects");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressUpdatingCsos)));
                 await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
             SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -3608,6 +3608,18 @@ public partial class SyncImportTaskProcessor
     /// otherwise.
     /// </summary>
     /// <param name="message">The Activity's new message, or null to report only its counters.</param>
+    private Task ReportProgressAsync(JimMessage message)
+    {
+        if (_progressThrottle is { } throttle)
+            return throttle.ReportAsync(message);
+
+        return _syncRepo.UpdateActivityMessageAsync(_activity, message);
+    }
+
+    /// <summary>
+    /// <see cref="ReportProgressAsync(JimMessage)"/> for narration that is not JIM's own wording (a Connector's), written as
+    /// English only.
+    /// </summary>
     private Task ReportProgressAsync(string? message = null)
     {
         if (_progressThrottle is { } throttle)
@@ -3781,7 +3793,7 @@ public partial class SyncImportTaskProcessor
                 if (duplicateAttributeNames is { Count: > 0 })
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
-                    activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+                    ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateAttributes), string.Join(", ", duplicateAttributeNames)));
 
                     // The item records the object as returned, both copies of the attribute included (#874); see
                     // RecordRejectedObjectSnapshot, in the finally below.
@@ -3858,7 +3870,7 @@ public partial class SyncImportTaskProcessor
                         else if (returnedOnAnEarlierPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. An object with this external ID was already returned on an earlier page, so this copy has been rejected. This may indicate a directory server paging issue.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateExternalIdAcrossPages), externalIdValue));
                             Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. An earlier page already returned it. Rejecting this copy.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
@@ -3869,7 +3881,7 @@ public partial class SyncImportTaskProcessor
                         if (repeatedOnThisPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateExternalIdInBatch), externalIdValue));
                             Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' at index {Index}. This page returns it more than once, so every copy is rejected.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
 
@@ -4080,7 +4092,7 @@ public partial class SyncImportTaskProcessor
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
                             var extIdForError = activityRunProfileExecutionItem.ExternalIdSnapshot ?? "[unknown]";
-                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{extIdForError}'. No specific error was recorded.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportCsoCreationFailed), extIdForError));
                             Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
                                 LogSanitiser.Sanitise(extIdForError));
                         }
@@ -4208,7 +4220,7 @@ public partial class SyncImportTaskProcessor
                             _verificationDangerousDisagreementCount++;
                             var changedAttrCount = connectedSystemObject.PendingAttributeValueAdditions.Count + connectedSystemObject.PendingAttributeValueRemovals.Count;
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Verification Mode: the stored import content hash for CSO {connectedSystemObject.Id} matched the incoming hash, but the honest diff found {changedAttrCount} changed attribute value(s). A content-hash skip would have missed this change.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportHashVerificationFailed), connectedSystemObject.Id.ToString(), ActivityMessage.Plain(changedAttrCount)));
                             Log.Error("ProcessImportObjectsAsync: Verification Mode DANGEROUS DISAGREEMENT for CSO {CsoId}: stored hash matched incoming hash but the diff found {ChangedAttrCount} changed attribute value(s).",
                                 connectedSystemObject.Id, changedAttrCount);
                         }
@@ -4329,7 +4341,7 @@ public partial class SyncImportTaskProcessor
                 _activity.ObjectsProcessed = importIndex + 1;
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
-                    await ReportProgressAsync("Processing imported objects");
+                    await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressProcessingImported)));
 
                     // Periodic memory diagnostics (#917): the import processing phase accumulates
                     // hydrated CSOs until the save phase, so at scale this is where peak memory
@@ -4353,7 +4365,7 @@ public partial class SyncImportTaskProcessor
         // Activity's counters carry what is left to say.
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
-            await ReportProgressAsync("Processing imported objects");
+            await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressProcessingImported)));
         }
 
         // Summary statistics for this page (#2521): counting every item held so far, on every page, made each page's
@@ -5526,7 +5538,7 @@ public partial class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.Id);
 
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
-                activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
+                ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportUnexpectedAttribute), importObjectAttribute.Name));
                 csoIsInvalid = true;
 
                 Log.Error("CreateConnectedSystemObjectFromImportObject: Set ErrorType={ErrorType}, ErrorMessage={ErrorMessage} on RPEI {RpeiId}",

@@ -246,7 +246,7 @@ public class SyncExportTaskProcessor
             var throughput = new ThroughputTracker();
             var enteredDeferredPass = false;
             ExportExecutionResult result;
-            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, $"Exporting {pendingExportCount:N0} changes");
+            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, ActivityMessage.Create(nameof(ActivityMessages.ProgressExporting), pendingExportCount));
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
             {
                 result = await _syncServer.ExecuteExportsAsync(
@@ -290,7 +290,10 @@ public class SyncExportTaskProcessor
                             return;
                         }
 
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
+                        if (progressInfo.MessageDetail is { } narration)
+                            await _syncRepo.UpdateActivityMessageAsync(_activity, narration);
+                        else
+                            await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,

@@ -124,7 +124,7 @@ public class AuthServer
         {
             TargetType = ActivityTargetType.MetaverseObject,
             TargetOperationType = ActivityTargetOperationType.Create,
-            Message = "Creating initial administrator user on first sign-in"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AuthCreatingInitialAdmin))
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -186,7 +186,7 @@ public class AuthServer
                 TargetOperationType = ActivityTargetOperationType.Update,
                 TargetName = user.Name,
                 MetaverseObjectId = user.Id,
-                Message = $"Assigning {Constants.BuiltInRoles.Administrator} role to initial administrator"
+                MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AuthAssigningAdminRole), Constants.BuiltInRoles.Administrator)
             };
             await Application.Activities.CreateSystemActivityAsync(roleActivity);
 

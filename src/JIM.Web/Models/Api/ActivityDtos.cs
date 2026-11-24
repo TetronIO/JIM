@@ -60,6 +60,21 @@ public class ActivityHeader
     public string? Message { get; set; }
 
     /// <summary>
+    /// The message's key, for showing it in another language.
+    /// </summary>
+    public string? MessageKey { get; set; }
+
+    /// <summary>
+    /// The message's values, in order.
+    /// </summary>
+    public List<MessageArgumentDto>? MessageArguments { get; set; }
+
+    /// <summary>
+    /// Picks a counted message's singular or plural form.
+    /// </summary>
+    public long? MessageCount { get; set; }
+
+    /// <summary>
     /// The type of security principal that initiated this Activity.
     /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
@@ -284,6 +299,9 @@ public class ActivityHeader
             TargetName = activity.TargetName,
             TargetContext = activity.TargetContext,
             Message = activity.Message,
+            MessageKey = ApiMessage.KeyOf(activity.MessageDetail),
+            MessageArguments = ApiMessage.ArgumentsOf(activity.MessageDetail),
+            MessageCount = ApiMessage.CountOf(activity.MessageDetail),
             InitiatedByType = activity.InitiatedByType,
             InitiatedById = activity.InitiatedById,
             InitiatedByName = activity.InitiatedByName,
@@ -417,6 +435,21 @@ public class ActivityDetailDto
     public string? Message { get; set; }
 
     /// <summary>
+    /// The message's key, for showing it in another language.
+    /// </summary>
+    public string? MessageKey { get; set; }
+
+    /// <summary>
+    /// The message's values, in order.
+    /// </summary>
+    public List<MessageArgumentDto>? MessageArguments { get; set; }
+
+    /// <summary>
+    /// Picks a counted message's singular or plural form.
+    /// </summary>
+    public long? MessageCount { get; set; }
+
+    /// <summary>
     /// The type of security principal that initiated this Activity.
     /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
@@ -457,9 +490,39 @@ public class ActivityDetailDto
     public string? WarningMessage { get; set; }
 
     /// <summary>
+    /// The message's key, for showing it in another language.
+    /// </summary>
+    public string? WarningMessageKey { get; set; }
+
+    /// <summary>
+    /// The message's values, in order.
+    /// </summary>
+    public List<MessageArgumentDto>? WarningMessageArguments { get; set; }
+
+    /// <summary>
+    /// Picks a counted message's singular or plural form.
+    /// </summary>
+    public long? WarningMessageCount { get; set; }
+
+    /// <summary>
     /// Error message if the Activity failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// The message's key, for showing it in another language.
+    /// </summary>
+    public string? ErrorMessageKey { get; set; }
+
+    /// <summary>
+    /// The message's values, in order.
+    /// </summary>
+    public List<MessageArgumentDto>? ErrorMessageArguments { get; set; }
+
+    /// <summary>
+    /// Picks a counted message's singular or plural form.
+    /// </summary>
+    public long? ErrorMessageCount { get; set; }
 
     /// <summary>
     /// Error stack trace if the Activity failed.
@@ -762,6 +825,9 @@ public class ActivityDetailDto
             TargetName = activity.TargetName,
             TargetContext = activity.TargetContext,
             Message = activity.Message,
+            MessageKey = ApiMessage.KeyOf(activity.MessageDetail),
+            MessageArguments = ApiMessage.ArgumentsOf(activity.MessageDetail),
+            MessageCount = ApiMessage.CountOf(activity.MessageDetail),
             InitiatedByType = activity.InitiatedByType,
             InitiatedById = activity.InitiatedById,
             InitiatedByName = activity.InitiatedByName,
@@ -770,7 +836,13 @@ public class ActivityDetailDto
             ExecutionTime = activity.ExecutionTime,
             TotalActivityTime = activity.TotalActivityTime,
             WarningMessage = activity.WarningMessage,
+            WarningMessageKey = ApiMessage.KeyOf(activity.WarningMessageDetail),
+            WarningMessageArguments = ApiMessage.ArgumentsOf(activity.WarningMessageDetail),
+            WarningMessageCount = ApiMessage.CountOf(activity.WarningMessageDetail),
             ErrorMessage = activity.ErrorMessage,
+            ErrorMessageKey = ApiMessage.KeyOf(activity.ErrorMessageDetail),
+            ErrorMessageArguments = ApiMessage.ArgumentsOf(activity.ErrorMessageDetail),
+            ErrorMessageCount = ApiMessage.CountOf(activity.ErrorMessageDetail),
             ErrorStackTrace = activity.ErrorStackTrace,
             ErrorDetail = activity.ErrorDetail,
             ConnectedSystemRunType = activity.ConnectedSystemRunType,

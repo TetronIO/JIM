@@ -138,6 +138,7 @@ public class TaskingRepository : ITaskingRepository
                 ObjectsToProcess = workerTask.Activity?.ObjectsToProcess,
                 ObjectsProcessed = workerTask.Activity?.ObjectsProcessed,
                 ProgressMessage = workerTask.Activity?.Message,
+                ProgressMessageDetailJson = workerTask.Activity?.MessageDetailJson,
                 ScheduleExecutionId = workerTask.ScheduleExecutionId,
                 ScheduleExecutionName = workerTask.ScheduleExecution?.ScheduleName,
                 ScheduleStepIndex = workerTask.ScheduleStepIndex,
@@ -328,7 +329,8 @@ public class TaskingRepository : ITaskingRepository
             ActivityId = workerTask.Activity?.Id,
             ObjectsToProcess = workerTask.Activity?.ObjectsToProcess,
             ObjectsProcessed = workerTask.Activity?.ObjectsProcessed,
-            ProgressMessage = workerTask.Activity?.Message
+            ProgressMessage = workerTask.Activity?.Message,
+            ProgressMessageDetailJson = workerTask.Activity?.MessageDetailJson
         };
     }
 

@@ -13,6 +13,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -2000,7 +2001,7 @@ public class ExportEvaluationServer
                 catch (ScopingCriterionFailedException scopingEx)
                 {
                     // As on the fast path: nothing is staged for an object whose scope is unknown, and it is reported.
-                    result.ScopingFailures.Add(new ReferenceRecallScopingFailure(referencingMvo.Id, scopingEx.Message));
+                    result.ScopingFailures.Add(new ReferenceRecallScopingFailure(referencingMvo.Id, scopingEx.Message, scopingEx.DetailOf()));
                     continue;
                 }
 
@@ -2245,7 +2246,7 @@ public class ExportEvaluationServer
             }
             catch (ScopingCriterionFailedException scopingEx)
             {
-                result.ScopingFailures.Add(new ReferenceRecallScopingFailure(summary.Id, scopingEx.Message));
+                result.ScopingFailures.Add(new ReferenceRecallScopingFailure(summary.Id, scopingEx.Message, scopingEx.DetailOf()));
                 return false;
             }
         }

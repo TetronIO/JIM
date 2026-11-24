@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using System.Collections.Concurrent;
 using System.Globalization;
 using JIM.Application.Diagnostics;
@@ -199,7 +201,7 @@ public class ExportExecutionServer
             Phase = ExportPhase.Preparing,
             TotalExports = totalExportCount,
             ProcessedExports = 0,
-            Message = "Preparing exports"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportPreparing))
         });
 
         // If preview only mode, load IDs for preview and stop (Q5 decision)
@@ -396,7 +398,7 @@ public class ExportExecutionServer
             SuccessCount = result.SuccessCount,
             FailedCount = result.FailedCount,
             DeferredCount = result.DeferredCount,
-            Message = $"Export completed: {result.SuccessCount} succeeded, {result.FailedCount} failed, {result.DeferredCount} deferred"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportCompletedSummary), ActivityMessage.Plain(result.SuccessCount), ActivityMessage.Plain(result.FailedCount), ActivityMessage.Plain(result.DeferredCount))
         });
 
         return result;
@@ -996,7 +998,7 @@ public class ExportExecutionServer
                             TotalExports = result.TotalPendingExports,
                             ProcessedExports = processedCount,
                             CurrentBatchSize = immediateExports.Count,
-                            Message = "Exporting"
+                            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportExecuting))
                         });
 
                         // Mark batch as executing
@@ -1965,7 +1967,7 @@ public class ExportExecutionServer
                 PassTotal = passTotal,
                 PassProcessed = processedCount + (passProcessedOffset?.Invoke() ?? 0),
                 CurrentBatchSize = batch.Count,
-                Message = "Exporting deferred"
+                MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportExecutingDeferred))
             });
         }
     }
@@ -4894,7 +4896,7 @@ public class ExportExecutionServer
                 Phase = ExportPhase.Executing,
                 TotalExports = result.TotalPendingExports,
                 ProcessedExports = 0,
-                Message = $"Exporting {pendingExports.Count} changes to file"
+                MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportToFile), ActivityMessage.Plain(pendingExports.Count))
             });
 
             // File-based export - execute all at once (file connectors typically batch internally).

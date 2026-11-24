@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.UniqueValues;
@@ -48,6 +51,12 @@ public sealed record GenerationOutcome(
     /// generated value waits for its own inputs.
     /// </summary>
     public IReadOnlyList<GeneratedValueFormWait> FormWaits { get; init; } = [];
+
+    /// <summary>
+    /// <see cref="FailureMessage"/> as a message the portal can show in the reader's language (#3039), where the failure
+    /// has one; null otherwise. Its English is exactly <see cref="FailureMessage"/>.
+    /// </summary>
+    public JimMessage? FailureDetail { get; init; }
 
     /// <summary>
     /// The candidates passed over because a value built from them was already held (Generated Value Forms, #2023), each

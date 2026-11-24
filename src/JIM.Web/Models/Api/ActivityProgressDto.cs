@@ -30,6 +30,22 @@ public class ActivityProgressDto
     public string? Message { get; set; }
 
     /// <summary>
+    /// The key of the progress message, for rendering it in another language. Null when there is no message, or for
+    /// narration recorded as text only.
+    /// </summary>
+    public string? MessageKey { get; set; }
+
+    /// <summary>
+    /// The values placed into the progress message, in order. Null whenever the key is.
+    /// </summary>
+    public List<MessageArgumentDto>? MessageArguments { get; set; }
+
+    /// <summary>
+    /// For a counted progress message, the count that chooses its singular or plural form; null otherwise.
+    /// </summary>
+    public long? MessageCount { get; set; }
+
+    /// <summary>
     /// Objects processed so far within the current counting window. Some run phases reset the
     /// counters, so a decrease indicates a new phase, not lost work.
     /// </summary>
@@ -146,6 +162,9 @@ public class ActivityProgressDto
             Id = progress.ActivityId,
             Status = progress.Status,
             Message = progress.Message,
+            MessageKey = ApiMessage.KeyOf(progress.MessageDetail),
+            MessageArguments = ApiMessage.ArgumentsOf(progress.MessageDetail),
+            MessageCount = ApiMessage.CountOf(progress.MessageDetail),
             ObjectsProcessed = progress.ObjectsProcessed,
             ObjectsToProcess = progress.ObjectsToProcess,
             // The counters belong to the JIM step hosting any Connector step, so the unit is that step's.
