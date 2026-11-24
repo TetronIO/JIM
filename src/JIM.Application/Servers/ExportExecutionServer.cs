@@ -1260,6 +1260,7 @@ public class ExportExecutionServer
         var resolvedCount = 0;
         var writtenInPartCount = 0;
         var unresolvableReferenceCount = 0;
+        var withdrawnReferenceCount = 0;
         var missingMvoIds = new HashSet<Guid>();
         var preparationLock = new object();
 
@@ -1357,6 +1358,20 @@ public class ExportExecutionServer
                 }
             }
 
+            // A reference to a Metaverse Object that has been deleted can never be written (#3078): withdrawn, and an export
+            // it leaves with nothing to send is finished with here.
+            var withdrawal = await WithdrawReferencesToDeletedObjectsAsync(connectedSystem, chunkExports, anchors, repository);
+            Interlocked.Add(ref withdrawnReferenceCount, withdrawal.WithdrawnCount);
+            if (withdrawal.FinishedExportIds.Count > 0)
+            {
+                chunkExports.RemoveAll(pe => withdrawal.FinishedExportIds.Contains(pe.Id));
+                Interlocked.Add(ref finishedUnwritten, withdrawal.FinishedExportIds.Count);
+
+                // Nothing else this chunk does may report again (all of it may have been finished with here), so say so now.
+                if (reportProgress)
+                    await ReportPassProgressAsync($"Withdrew references to deleted objects from {withdrawal.FinishedExportIds.Count} deferred exports");
+            }
+
             // Separate resolved from still-unresolved exports. A still-unresolved export that has something it can write
             // now (issue #1398) is written now alongside the resolved ones and stays pending only for the references it
             // still owes; one with nothing writable is deferred whole, as before.
@@ -1400,7 +1415,7 @@ public class ExportExecutionServer
             // has no anchor yet is merely waiting; one whose target has no object in this system at all cannot resolve as
             // things stand, and is reported per the Connected System's Unresolved Reference Handling. Built before
             // anything is written so the write's own item can carry it.
-            var (notes, unresolvableCount) = await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, anchors, repository);
+            var (notes, unresolvableCount) = BuildUnresolvedReferenceNotes(connectedSystem, stillUnresolvedExports, anchors, withdrawal.Names);
             Interlocked.Add(ref unresolvableReferenceCount, unresolvableCount);
             foreach (var (exportId, note) in notes)
                 unresolvedReferenceNotes[exportId] = note;
@@ -1708,6 +1723,7 @@ public class ExportExecutionServer
 
         result.DeferredCount += deferredWholeCount;
         result.UnresolvableReferenceCount += unresolvableReferenceCount;
+        result.WithdrawnReferenceCount += withdrawnReferenceCount;
         result.ProcessedExportItems.AddRange(deferredItems);
 
         var stillUnresolvedCount = writtenInPartCount + deferredWholeCount;
@@ -1743,12 +1759,14 @@ public class ExportExecutionServer
     /// will carry (issue #1398). Mirrors the import side's treatment of its own unresolved references:
     /// Error marks the object, Warn leaves the count for the Activity's summary, Ignore logs only.
     /// </summary>
+    /// <param name="names">The display names of the referenced Metaverse Objects with no anchor, as
+    /// <see cref="WithdrawReferencesToDeletedObjectsAsync"/> read them.</param>
     /// <returns>Per Pending Export id, the message for its item; empty unless handling is Error.</returns>
-    private async Task<(Dictionary<Guid, string> Notes, int UnresolvableCount)> BuildUnresolvedReferenceNotesAsync(
+    private static (Dictionary<Guid, string> Notes, int UnresolvableCount) BuildUnresolvedReferenceNotes(
         ConnectedSystem connectedSystem,
         List<PendingExport> stillUnresolvedExports,
         IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
-        ISyncRepository repository)
+        IReadOnlyDictionary<Guid, string?> names)
     {
         var notes = new Dictionary<Guid, string>();
         if (stillUnresolvedExports.Count == 0)
@@ -1769,27 +1787,20 @@ public class ExportExecutionServer
 
         var handling = connectedSystem.UnresolvedReferenceHandling;
 
-        Log.Information("BuildUnresolvedReferenceNotesAsync: {Count} reference value(s) across {ExportCount} export(s) refer to Metaverse Objects with no " +
+        Log.Information("BuildUnresolvedReferenceNotes: {Count} reference value(s) across {ExportCount} export(s) refer to Metaverse Objects with no " +
             "Connected System Object in {SystemName} and cannot be written as things stand (handling: {Handling}).",
             unresolvable.Count, unresolvable.Select(u => u.Export.Id).Distinct().Count(), connectedSystem.Name, handling);
 
         if (handling == UnresolvedReferenceHandling.Ignore)
         {
             foreach (var (export, change, mvoId) in unresolvable)
-                Log.Debug("BuildUnresolvedReferenceNotesAsync: Export {ExportId} attribute {AttrName} refers to MVO {MvoId}, which has no CSO in the target. Ignored per Connected System setting.",
+                Log.Debug("BuildUnresolvedReferenceNotes: Export {ExportId} attribute {AttrName} refers to MVO {MvoId}, which has no CSO in the target. Ignored per Connected System setting.",
                     export.Id, change.Attribute?.Name ?? $"AttrId={change.AttributeId}", mvoId);
             return (notes, unresolvable.Count);
         }
 
         // Named, not just numbered: an administrator reading "Manager could not be written: 'Ada Ashcroft'
         // has no object in this system" knows what to do; a bare identifier sends them on a search.
-        Dictionary<Guid, string?> names;
-        using (Diagnostics.Diagnostics.Database.StartSpan("GetReferencedMetaverseObjectNames")
-            .SetTag("count", unresolvable.Count))
-        {
-            names = await repository.GetMetaverseObjectDisplayNamesAsync(unresolvable.Select(u => u.MvoId).Distinct().ToList());
-        }
-
         foreach (var group in unresolvable.GroupBy(u => u.Export.Id))
         {
             var export = group.First().Export;
@@ -1814,14 +1825,14 @@ public class ExportExecutionServer
             {
                 case UnresolvedReferenceHandling.Error:
                     notes[export.Id] = message;
-                    Log.Debug("BuildUnresolvedReferenceNotesAsync: Export {ExportId} for CSO {CsoId}: {Message}",
+                    Log.Debug("BuildUnresolvedReferenceNotes: Export {ExportId} for CSO {CsoId}: {Message}",
                         export.Id, export.ConnectedSystemObjectId, message);
                     break;
 
                 case UnresolvedReferenceHandling.Warn:
                 default:
                     // The item is deliberately left unmarked; the Activity carries a summary count instead.
-                    Log.Warning("BuildUnresolvedReferenceNotesAsync: Export {ExportId} for CSO {CsoId}: {Message}",
+                    Log.Warning("BuildUnresolvedReferenceNotes: Export {ExportId} for CSO {CsoId}: {Message}",
                         export.Id, export.ConnectedSystemObjectId, message);
                     break;
             }
@@ -2964,7 +2975,7 @@ public class ExportExecutionServer
     /// <param name="unresolvedReferenceNotes">
     /// Per Pending Export id, the message describing the references it could not write this run because
     /// the referenced object has no Connected System Object in the target (issue #1398), built by
-    /// <see cref="BuildUnresolvedReferenceNotesAsync"/> under Error handling only. Carried onto the
+    /// <see cref="BuildUnresolvedReferenceNotes"/> under Error handling only. Carried onto the
     /// export's processed item so the Run Profile Execution Item reports the write and the outstanding
     /// reference together, as the import side does. Null when nothing was noted.
     /// </param>
@@ -5369,6 +5380,12 @@ public class ExportExecutionServer
                 : new Dictionary<Guid, ReferenceAnchorSummary>();
         }
 
+        // A reference to a deleted Metaverse Object is withdrawn here as in the deferred pass (#3078), which is the only
+        // place an export of a file-based Connector meets it.
+        var withdrawal = await WithdrawReferencesToDeletedObjectsAsync(connectedSystem, unresolvedExports, anchors, SyncRepo);
+        result.WithdrawnReferenceCount += withdrawal.WithdrawnCount;
+        unresolvedExports.RemoveAll(pe => withdrawal.FinishedExportIds.Contains(pe.Id));
+
         // Resolve references using the pre-fetched anchors and collect resolved exports for batch update
         var resolvedExports = new List<PendingExport>();
         var resolvedChanges = new List<PendingExportAttributeValueChange>();
@@ -5408,6 +5425,84 @@ public class ExportExecutionServer
                 await SyncRepo.PersistResolvedReferencesAsync(resolvedExports, resolvedChanges);
             }
         }
+    }
+
+    /// <summary>
+    /// Withdraws the queued reference changes naming a Metaverse Object that has been deleted (#3078). Deleting a Metaverse
+    /// Object clears the references other Metaverse Objects hold to it, so no synchronisation stages the removal that would
+    /// cancel a member's queued addition, and the addition can never be written: the object it names will never have an
+    /// object in this system. Left in place it would be reported on every run as waiting for an object that is merely not
+    /// provisioned yet, and would hold its Pending Export open for good.
+    /// </summary>
+    /// <remarks>
+    /// Only references with no anchor are asked about, and the one query that asks also reads the names the unresolved
+    /// reference report gives (a deleted object is the one the query does not return). A Pending Export the withdrawal
+    /// leaves with nothing to send is finished with: an Update holding no changes is removed, and one holding only changes
+    /// already written and awaiting the confirming import is Exported, as when its last reference is written. A Create
+    /// keeps going, since its row has still to be made.
+    /// </remarks>
+    /// <returns>The names read, how many changes were withdrawn, and the exports finished with.</returns>
+    private static async Task<(IReadOnlyDictionary<Guid, string?> Names, int WithdrawnCount, HashSet<Guid> FinishedExportIds)> WithdrawReferencesToDeletedObjectsAsync(
+        ConnectedSystem connectedSystem,
+        List<PendingExport> exports,
+        IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
+        ISyncRepository repository)
+    {
+        var unanchored = CollectUnresolvedMvoIds(exports).Where(id => !anchors.ContainsKey(id)).ToList();
+        if (unanchored.Count == 0)
+            return (new Dictionary<Guid, string?>(), 0, []);
+
+        Dictionary<Guid, string?> names;
+        using (Diagnostics.Diagnostics.Database.StartSpan("GetReferencedMetaverseObjectNames")
+            .SetTag("count", unanchored.Count))
+        {
+            names = await repository.GetMetaverseObjectDisplayNamesAsync(unanchored);
+        }
+
+        var deleted = unanchored.Where(id => !names.ContainsKey(id)).ToHashSet();
+        if (deleted.Count == 0)
+            return (names, 0, []);
+
+        var withdrawn = new List<PendingExportAttributeValueChange>();
+        var emptied = new List<PendingExport>();
+        var writtenInFull = new List<PendingExport>();
+        foreach (var export in exports)
+        {
+            var naming = export.AttributeValueChanges
+                .Where(change => IsUnresolvedReference(change) && Guid.TryParse(change.UnresolvedReferenceValue, out var id) && deleted.Contains(id))
+                .ToList();
+            if (naming.Count == 0)
+                continue;
+
+            export.AttributeValueChanges.RemoveAll(naming.Contains);
+            withdrawn.AddRange(naming);
+            Log.Information("WithdrawReferencesToDeletedObjectsAsync: Withdrew {Count} reference change(s) from export {ExportId} for CSO {CsoId}: " +
+                "the Metaverse Object(s) they referred to have been deleted",
+                naming.Count, export.Id, export.ConnectedSystemObjectId);
+
+            if (export.ChangeType != PendingExportChangeType.Update)
+                continue;
+            if (export.AttributeValueChanges.Count == 0)
+                emptied.Add(export);
+            else if (export.AttributeValueChanges.All(change => change.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+                writtenInFull.Add(export);
+        }
+
+        await repository.DeleteUntrackedPendingExportAttributeValueChangesAsync(withdrawn);
+        if (emptied.Count > 0)
+            await repository.DeletePendingExportsAsync(emptied);
+        foreach (var export in writtenInFull)
+        {
+            export.HasUnresolvedReferences = false;
+            export.Status = PendingExportStatus.Exported;
+            await repository.UpdatePendingExportAsync(export);
+        }
+
+        Log.Information("WithdrawReferencesToDeletedObjectsAsync: {SystemName}: withdrew {Count} reference change(s) naming {Deleted} deleted " +
+            "Metaverse Object(s); {Emptied} export(s) left with nothing to send were removed and {Written} left only awaiting confirmation",
+            connectedSystem.Name, withdrawn.Count, deleted.Count, emptied.Count, writtenInFull.Count);
+
+        return (names, withdrawn.Count, emptied.Concat(writtenInFull).Select(pe => pe.Id).ToHashSet());
     }
 
     /// <summary>

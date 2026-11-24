@@ -376,6 +376,64 @@ public class GroupMembershipSyncTests
         }
     }
 
+    /// <summary>
+    /// A member added to a group, who leaves and whose Metaverse Object is deleted before the addition is exported,
+    /// leaves nothing queued for the target once the export runs (#3078): the addition names an object that no longer
+    /// exists, so it can never be exported or confirmed, and left in place it would hold the group's Pending Export open
+    /// for good.
+    /// </summary>
+    [Test]
+    public async Task MemberAddedThenDeletedBeforeExport_AdditionIsWithdrawnAsync()
+    {
+        await SetUpEntitlementScenarioAsync();
+        var person = await _harness.DbContext.MetaverseObjectTypes.SingleAsync(t => t.Name == "Person");
+        person.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        person.DeletionTriggerConnectedSystemIds = [_harness.GetConnectedSystem("Source").Id];
+        await _harness.DbContext.SaveChangesAsync();
+        await PerformInitialSyncAsync();
+
+        // Diana joins the group.
+        var diana = ReferenceUsers.Single(u => u.DisplayName == "Diana Ross");
+        var dianaDn = $"CN={diana.DisplayName},OU=Users,DC=test,DC=local";
+        var source = _harness.GetConnector("Source");
+        source.QueueImportObjects([.. GenerateSourceUsers(), GroupWithMembers(m => m.Add(dianaDn))]);
+        await _harness.ExecuteFullImportAsync("Source");
+        await _harness.ExecuteFullSyncAsync("Source");
+        var dianaMvoId = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.ConnectedSystemId == _harness.GetConnectedSystem("Source").Id &&
+                         c.AttributeValues.Any(v => v.GuidValue == diana.ObjectGuid)).MetaverseObjectId!.Value;
+        Assert.That(TargetChangesNaming(dianaMvoId), Has.Some.Matches<PendingExportAttributeValueChange>(c => c.ChangeType == PendingExportAttributeChangeType.Add),
+            "precondition: Diana's addition to the group is queued");
+
+        // Before it is exported, Diana leaves the source, and the group, and her Metaverse Object is deleted.
+        source.QueueImportObjects([.. GenerateSourceUsers().Where(u => !u.Attributes.Any(a => a.GuidValues.Contains(diana.ObjectGuid))), GroupWithMembers(_ => { })]);
+        await _harness.ExecuteFullImportAsync("Source");
+        await _harness.ExecuteFullSyncAsync("Source");
+        Assert.That(_harness.SyncRepo.MetaverseObjects.ContainsKey(dianaMvoId), Is.False, "precondition: Diana's Metaverse Object is deleted");
+
+        await _harness.ExecuteExportAsync("Target");
+
+        Assert.That(TargetChangesNaming(dianaMvoId), Is.Empty, "changes still queued for the target naming Diana's deleted Metaverse Object");
+    }
+
+    private List<PendingExportAttributeValueChange> TargetChangesNaming(Guid metaverseObjectId)
+    {
+        var targetId = _harness.GetConnectedSystem("Target").Id;
+        var named = metaverseObjectId.ToString();
+        return _harness.SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemId == targetId)
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .Where(c => string.Equals(c.UnresolvedReferenceValue, named, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private ConnectedSystemImportObject GroupWithMembers(Action<List<string>> change)
+    {
+        var group = GenerateSourceGroups().Single();
+        change(group.Attributes.Single(a => a.Name == "member").ReferenceValues);
+        return group;
+    }
+
     #region Setup Helpers
 
     private async Task SetUpEntitlementScenarioAsync()

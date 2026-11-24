@@ -652,4 +652,7 @@
   <data name="TargetRuleForUnknownType" xml:space="preserve">
     <value>Regel für Objekttyp</value>
   </data>
+  <data name="WithdrawnReferencesToDeletedObjectsWarning" xml:space="preserve">
+    <value>{0} anstehende Verweiswerte wurden zurückgezogen, weil das Metaverse-Objekt, auf das sie verwiesen, gelöscht wurde; sie hätten nie geschrieben werden können. Ein ausstehender Export, der nichts mehr zu senden hatte, wurde abgeschlossen.</value>
+  </data>
 </root>

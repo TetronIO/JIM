@@ -345,6 +345,85 @@ public class PartialExportUnresolvedReferencesTests
         }
     }
 
+    /// <summary>
+    /// A Metaverse Object that was referenced, and has since been deleted: never seeded, so the store holds no such object,
+    /// as after a deletion.
+    /// </summary>
+    private static MetaverseObject DeletedMvo() => new() { Id = Guid.NewGuid() };
+
+    [Test]
+    public async Task Update_OnlyChangeNamesADeletedMetaverseObject_IsWithdrawnAndTheExportCompletesAsync()
+    {
+        // #3078: a member's addition queued, and the member deleted before it was exported. The addition can never be
+        // written or confirmed, so it is withdrawn rather than left to hold the group's export open for good.
+        var memberAttr = new ConnectedSystemObjectTypeAttribute { Id = 900, Name = "member", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued };
+        var group = NewProvisionedCso();
+        var export = SeedExport(group, PendingExportChangeType.Update, ReferenceChange(memberAttr, DeletedMvo(), PendingExportAttributeChangeType.Add));
+        var (connector, calls) = RecordingConnector();
+
+        var result = await RunExportAsync(connector.Object);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(calls, Is.Empty, "There was nothing to hand the connector.");
+            Assert.That(SyncRepo.PendingExports.ContainsKey(export.Id), Is.False, "Nothing is left to export, so the export is finished with.");
+            Assert.That(result.WithdrawnReferenceCount, Is.EqualTo(1));
+            Assert.That(result.UnresolvableReferenceCount, Is.Zero, "A withdrawn reference is not reported as one still waiting.");
+            Assert.That(result.DeferredCount, Is.Zero, "Nothing is deferred.");
+        }
+    }
+
+    [Test]
+    public async Task Update_DeletedMemberAmongOthers_OnlyTheDeletedMembersAdditionIsWithdrawnAsync()
+    {
+        var memberAttr = new ConnectedSystemObjectTypeAttribute { Id = 900, Name = "member", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued };
+        var alice = SeedMvo("Alice");
+        SeedTargetCso(alice, withAnchor: true);
+        var carol = SeedMvo("Carol (not provisioned)");
+        var group = NewProvisionedCso();
+        var aliceChange = ReferenceChange(memberAttr, alice, PendingExportAttributeChangeType.Add);
+        var carolChange = ReferenceChange(memberAttr, carol, PendingExportAttributeChangeType.Add);
+        var deletedChange = ReferenceChange(memberAttr, DeletedMvo(), PendingExportAttributeChangeType.Add);
+        var export = SeedExport(group, PendingExportChangeType.Update, aliceChange, carolChange, deletedChange);
+        var (connector, calls) = RecordingConnector();
+
+        var result = await RunExportAsync(connector.Object);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(calls.SelectMany(call => call).SelectMany(c => c.Changes).Select(c => c.Id), Does.Not.Contain(deletedChange.Id),
+                "The deleted member's addition is never handed to the connector.");
+            Assert.That(export.AttributeValueChanges.Select(c => c.Id), Is.EquivalentTo(new[] { aliceChange.Id, carolChange.Id }),
+                "Only the deleted member's addition is withdrawn.");
+            Assert.That(aliceChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation), "Alice is written.");
+            Assert.That(carolChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending), "Carol still exists, so her addition waits.");
+            Assert.That(export.HasUnresolvedReferences, Is.True, "Carol's addition is still owed.");
+            Assert.That(result.WithdrawnReferenceCount, Is.EqualTo(1));
+            Assert.That(result.UnresolvableReferenceCount, Is.EqualTo(1), "Carol's addition is the one reported as waiting.");
+        }
+    }
+
+    [Test]
+    public async Task Create_ManagerDeleted_WritesTheRowAndWithdrawsTheReferenceAsync()
+    {
+        var cso = NewProvisionedCso();
+        var nameChange = TextChange(DisplayNameAttr, "Report");
+        var managerChange = ReferenceChange(ManagerAttr, DeletedMvo());
+        var export = SeedExport(cso, PendingExportChangeType.Create, nameChange, managerChange);
+        var (connector, calls) = RecordingConnector();
+
+        var result = await RunExportAsync(connector.Object);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(calls, Has.Count.EqualTo(1), "The row is written.");
+            Assert.That(export.AttributeValueChanges.Select(c => c.Id), Is.EquivalentTo(new[] { nameChange.Id }), "The manager reference is withdrawn.");
+            Assert.That(export.HasUnresolvedReferences, Is.False, "Nothing is owed any more.");
+            Assert.That(result.WithdrawnReferenceCount, Is.EqualTo(1));
+            Assert.That(result.UnresolvableReferenceCount, Is.Zero);
+        }
+    }
+
     [Test]
     public async Task Create_OnlyUnresolvedChanges_WritesNothingAndSurfacesTheUnresolvableReferenceAsync()
     {
