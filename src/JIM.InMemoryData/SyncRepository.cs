@@ -2797,6 +2797,20 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(deleted);
     }
 
+    public Task<IReadOnlyList<DeletedPendingExportSummary>> DeletePendingExportsOfDeletedObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var deleted = new List<DeletedPendingExportSummary>();
+        foreach (var csoId in connectedSystemObjectIds.Distinct())
+        {
+            if (!_pendingExportsByCsoId.TryGetValue(csoId, out var peId) || !_pendingExports.TryGetValue(peId, out var pe))
+                continue;
+
+            deleted.Add(new DeletedPendingExportSummary(pe.Id, csoId, pe.ChangeType, pe.Status));
+            RemovePe(pe);
+        }
+        return Task.FromResult<IReadOnlyList<DeletedPendingExportSummary>>(deleted);
+    }
+
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
     {
         PendingExport? result = null;

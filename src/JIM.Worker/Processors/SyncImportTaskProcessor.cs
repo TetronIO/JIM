@@ -2362,10 +2362,13 @@ public partial class SyncImportTaskProcessor
             // objects, so a synchronisation on another Connected System can stage an export against one at any point
             // between imports, and that export would be sent to a target object that no longer exists. Reporting nothing
             // must not become doing nothing.
-            var deletedPeCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(batch.Select(candidate => candidate.Id).Distinct().ToList());
-            if (deletedPeCount > 0)
+            //
+            // A Delete JIM sent is confirmed by the object being gone, and the deletion item raised below records which
+            // export it confirms (#3087), as a Delta Import does for an object the Connector reports deleted.
+            var clearedExports = await _syncRepo.DeletePendingExportsOfDeletedObjectsAsync(batch.Select(candidate => candidate.Id).Distinct().ToList());
+            if (clearedExports.Count > 0)
                 Log.Information("ApplyDeletionCandidatesAsync: Cleaned up {Count} stale Pending Export(s) for {CandidateCount} obsolete CSO(s)",
-                    deletedPeCount, batch.Length);
+                    clearedExports.Count, batch.Length);
 
             // An object stays Obsolete until a synchronisation run on its own Connected System deletes it, so every
             // import in between finds it missing all over again. Only the first of those is a deletion: the rest need
@@ -2386,11 +2389,17 @@ public partial class SyncImportTaskProcessor
 
             // In the candidates' order, as each was applied when they were held whole.
             var loadedById = loaded.ToDictionary(cso => cso.Id);
+            var deletionItems = new Dictionary<Guid, (ActivityRunProfileExecutionItem Item, ConnectedSystemObject Cso)>();
             foreach (var cso in idsToMark.Where(loadedById.ContainsKey).Select(id => loadedById[id]))
             {
-                MarkDeletionDetected(cso, connectedSystemObjectsToBeUpdated);
+                deletionItems[cso.Id] = (MarkDeletionDetected(cso, connectedSystemObjectsToBeUpdated), cso);
                 markedThisRun.Add(cso.Id);
             }
+
+            // Before the batch is saved below, so each confirmation is written with its deletion item.
+            var confirmedDeletes = RecordDeletesConfirmedByObjectDeletion(clearedExports, deletionItems);
+            if (confirmedDeletes > 0)
+                Log.Information("ApplyDeletionCandidatesAsync: The deletions confirmed {ConfirmedDeletes} exported Delete(s)", confirmedDeletes);
 
             // A Full Import saves the objects it marks a batch at a time, as it saved what it read (#2521), rather than
             // holding every one it marks to the end.
@@ -2404,7 +2413,8 @@ public partial class SyncImportTaskProcessor
     /// deletion, the object marked Obsolete, and the object queued for update, which saves its status and records its
     /// change. The synchronisation that follows deletes it.
     /// </summary>
-    private void MarkDeletionDetected(ConnectedSystemObject cso, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    /// <returns>The execution item recording the deletion.</returns>
+    private ActivityRunProfileExecutionItem MarkDeletionDetected(ConnectedSystemObject cso, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         // we need to create a Run Profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
@@ -2430,6 +2440,7 @@ public partial class SyncImportTaskProcessor
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         _csoIdsQueuedForUpdate.Add(cso.Id);
         connectedSystemObjectsToBeUpdated.Add(cso);
+        return activityRunProfileExecutionItem;
     }
 
     /// <summary>
