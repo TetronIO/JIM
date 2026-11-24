@@ -85,9 +85,8 @@ The hypervisor host needs, once:
 2. **An Internal virtual switch called `Lab`** (not External, and not Private), which the domain controllers and the
    runner VM's second adapter attach to. An Internal switch gives the host an adapter of its own on the lab network
    (`10.99.0.1/24` in the examples) and keeps the lab off any physical network, so nothing outside can reach it. The host
-   gives the lab outbound access only, through Windows NAT, once:
-   `New-NetNat -Name LabNat -InternalIPInterfaceAddressPrefix 10.99.0.0/24` (Windows allows one NAT network per host, so
-   `Get-NetNat` must return nothing first). In practice only `dc-hybrid` uses it (see The hybrid forest): the other
+   gives the lab outbound access only, through a Windows NAT network (`LabNat`), which the ci-runners repository's
+   `New-LabSwitches.ps1` creates with the switch (Windows allows one NAT network per host). In practice only `dc-hybrid` uses it (see The hybrid forest): the other
    domain controllers have no DNS forwarder, so they resolve nothing outside their own forest, and they do not run
    Windows Update. The host is the only NTP-synchronised machine they can reach, so it serves NTP on that adapter (UDP 123,
    that interface only, and no SSH); and it needs a path to them for diagnostics and for
