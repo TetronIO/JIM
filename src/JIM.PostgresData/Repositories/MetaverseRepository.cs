@@ -7,6 +7,8 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
@@ -660,7 +662,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = b.Id,
             MetaverseObjectTypeId = b.Id,
             MetaverseObjectTypeName = b.Name,
-            Description = $"Object Type binding: {b.Name}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceBinding), b.Name)
         }));
 
         // 2. Import Attribute Flows (mappings whose target is this attribute), scoped to the owning rule's type.
@@ -679,9 +681,9 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = m.Id,
             SyncRuleId = m.SyncRuleId,
             SyncRuleName = m.SyncRuleName,
-            Description = m.SyncRuleName != null
-                ? $"Import Attribute Flow in Synchronisation Rule '{m.SyncRuleName}'"
-                : $"Import Attribute Flow (mapping {m.Id})"
+            DescriptionDetail = m.SyncRuleName != null
+                ? JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceImportFlowInRule), m.SyncRuleName)
+                : JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceImportFlowMapping), m.Id.ToString())
         }));
 
         // 3. Export Attribute Flow sources reading this attribute whose parent mapping survives, scoped to the type.
@@ -705,9 +707,9 @@ public partial class MetaverseRepository : IMetaverseRepository
                 Id = s.SourceId,
                 SyncRuleId = s.SyncRuleId,
                 SyncRuleName = s.SyncRuleName,
-                Description = s.SyncRuleName != null
-                    ? $"Export Attribute Flow source in Synchronisation Rule '{s.SyncRuleName}'"
-                    : $"Export Attribute Flow source (mapping source {s.SourceId})"
+                DescriptionDetail = s.SyncRuleName != null
+                    ? JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportSourceInRule), s.SyncRuleName)
+                    : JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportSourceMapping), s.SourceId.ToString())
             }));
 
         // 4. Export mappings removed as a knock-on because they would be left source-less (already type-scoped above).
@@ -721,9 +723,9 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = m.Id,
             SyncRuleId = m.SyncRuleId,
             SyncRuleName = m.SyncRuleName,
-            Description = m.SyncRuleName != null
-                ? $"Export Attribute Flow in Synchronisation Rule '{m.SyncRuleName}' (removed: it would be left with no sources)"
-                : $"Export Attribute Flow (mapping {m.Id}) removed: it would be left with no sources"
+            DescriptionDetail = m.SyncRuleName != null
+                ? JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportMappingInRuleRemoved), m.SyncRuleName)
+                : JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportMappingRemoved), m.Id.ToString())
         }));
 
         // 5. Scoping criteria evaluating this attribute. Scoped via the owning rule's criteria-group tree, at any depth
@@ -751,7 +753,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.ScopingCriterion,
             Id = id,
-            Description = $"Scoping criterion {id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceScopingCriterion), id.ToString())
         }));
 
         // 6. Object Matching Rules whose target is this attribute. Scoped to Synchronisation-Rule-owned rules targeting
@@ -771,7 +773,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = r.Id,
             SyncRuleId = r.SyncRuleId,
             SyncRuleName = r.SyncRuleName,
-            Description = $"Object Matching Rule {r.Id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceObjectMatchingRule), r.Id.ToString())
         }));
 
         // 8. Predefined Search display columns showing this attribute, scoped to searches belonging to the type.
@@ -788,7 +790,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.PredefinedSearchAttribute,
             Id = x.Id,
-            Description = $"Predefined Search column in '{x.SearchName}'"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferencePredefinedSearchColumn), x.SearchName)
         }));
 
         // 9. Predefined Search criteria filtering on this attribute, scoped to searches belonging to the type via the
@@ -815,7 +817,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.PredefinedSearchCriterion,
             Id = id,
-            Description = $"Predefined Search criterion {id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferencePredefinedSearchCriterion), id.ToString())
         }));
 
         // 10. Example Data template attributes generating values for this attribute, scoped to templates for the type.
@@ -840,7 +842,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.ExampleDataTemplateAttribute,
             Id = id,
-            Description = $"Example Data template attribute {id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExampleDataAttribute), id.ToString())
         }));
 
         // 11. Example Data template attribute dependencies. These reference the attribute globally (no per-type owning
@@ -855,7 +857,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             {
                 Kind = AttributeReferenceKind.ExampleDataTemplateAttributeDependency,
                 Id = id,
-                Description = $"Example Data template attribute dependency {id}"
+                DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExampleDataDependency), id.ToString())
             }));
 
             // 12. Service Settings SSO unique-identifier mapping. Global only: an unassign from one type must not clear
@@ -868,7 +870,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             {
                 Kind = AttributeReferenceKind.ServiceSettingsSsoIdentifier,
                 Id = id,
-                Description = "Service Settings SSO unique-identifier mapping (cleared)"
+                DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceSsoMapping))
             }));
         }
 

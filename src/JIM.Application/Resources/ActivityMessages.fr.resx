@@ -1032,4 +1032,19 @@
   <data name="WithdrawnReferencesToDeletedObjectsWarning" xml:space="preserve">
     <value>{0} valeur(s) de référence en file d’attente ont été retirées, car l’objet Metaverse auquel elles faisaient référence a été supprimé ; elles n’auraient jamais pu être écrites. Une exportation en attente qui n’avait plus rien à envoyer a été terminée.</value>
   </data>
+  <data name="MetaverseAttributeReferenceRemoved" xml:space="preserve">
+    <value>{0} supprimé, qui référençait l’attribut Metaverse « {1} »</value>
+  </data>
+  <data name="MetaverseAttributeRemoved" xml:space="preserve">
+    <value>Attribut Metaverse « {0} » supprimé</value>
+  </data>
+  <data name="MetaverseAttributeUnassigned" xml:space="preserve">
+    <value>Attribut Metaverse « {0} » retiré du type d’objet Metaverse « {1} »</value>
+  </data>
+  <data name="MetaverseReferenceRemovedScoped" xml:space="preserve">
+    <value>{0} supprimé, qui était limité au type d’objet Metaverse « {1} »</value>
+  </data>
+  <data name="MetaverseObjectTypeRemoved" xml:space="preserve">
+    <value>Type d’objet Metaverse « {0} » supprimé</value>
+  </data>
 </root>

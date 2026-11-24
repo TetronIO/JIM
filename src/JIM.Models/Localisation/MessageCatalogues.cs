@@ -19,4 +19,7 @@ public static class MessageCatalogues
 
     /// <summary>What a run says when an expression, a scoping criterion or an export rule stops an object (<c>SyncMessages.resx</c>).</summary>
     public const string Sync = "JIM.Models:SyncMessages";
+
+    /// <summary>How a Metaverse Attribute's references read in an Activity and a confirmation dialog (<c>MetaverseReferenceMessages.resx</c>).</summary>
+    public const string MetaverseReferences = "JIM.Models:MetaverseReferenceMessages";
 }

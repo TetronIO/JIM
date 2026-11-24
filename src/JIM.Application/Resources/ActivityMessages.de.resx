@@ -1030,4 +1030,19 @@
   <data name="WithdrawnReferencesToDeletedObjectsWarning" xml:space="preserve">
     <value>{0} anstehende Verweiswerte wurden zurückgezogen, weil das Metaverse-Objekt, auf das sie verwiesen, gelöscht wurde; sie hätten nie geschrieben werden können. Ein ausstehender Export, der nichts mehr zu senden hatte, wurde abgeschlossen.</value>
   </data>
+  <data name="MetaverseAttributeReferenceRemoved" xml:space="preserve">
+    <value>{0} entfernt, das auf das Metaverse-Attribut „{1}“ verwies</value>
+  </data>
+  <data name="MetaverseAttributeRemoved" xml:space="preserve">
+    <value>Metaverse-Attribut „{0}“ entfernt</value>
+  </data>
+  <data name="MetaverseAttributeUnassigned" xml:space="preserve">
+    <value>Metaverse-Attribut „{0}“ vom Metaverse-Objekttyp „{1}“ entfernt</value>
+  </data>
+  <data name="MetaverseReferenceRemovedScoped" xml:space="preserve">
+    <value>{0} entfernt, das auf den Metaverse-Objekttyp „{1}“ beschränkt war</value>
+  </data>
+  <data name="MetaverseObjectTypeRemoved" xml:space="preserve">
+    <value>Metaverse-Objekttyp „{0}“ entfernt</value>
+  </data>
 </root>

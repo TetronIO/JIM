@@ -1349,4 +1349,24 @@
     <value>{0} queued reference value(s) were withdrawn because the Metaverse Object they referred to has been deleted, so they could never be written. A Pending Export left with nothing to send was finished with.</value>
     <comment>A Warning on an export. {0}: a count.</comment>
   </data>
+  <data name="MetaverseAttributeReferenceRemoved" xml:space="preserve">
+    <value>Removed {0} referencing Metaverse Attribute '{1}'</value>
+    <comment>Child Activity summary when deleting a Metaverse Attribute removed something that referred to it. {0}: what was removed (a message), {1}: the attribute's name.</comment>
+  </data>
+  <data name="MetaverseAttributeRemoved" xml:space="preserve">
+    <value>Removed Metaverse Attribute '{0}'</value>
+    <comment>Activity summary of removing a Metaverse Attribute. {0}: the attribute's name.</comment>
+  </data>
+  <data name="MetaverseAttributeUnassigned" xml:space="preserve">
+    <value>Unassigned Metaverse Attribute '{0}' from Metaverse Object Type '{1}'</value>
+    <comment>Activity summary of unassigning a Metaverse Attribute from a Metaverse Object Type. {0}: the attribute's name, {1}: the Object Type's name.</comment>
+  </data>
+  <data name="MetaverseReferenceRemovedScoped" xml:space="preserve">
+    <value>Removed {0} scoped to Metaverse Object Type '{1}'</value>
+    <comment>Child Activity summary of something removed along with a Metaverse Object Type, or an attribute's assignment to one. {0}: what was removed (a message or a name), {1}: the Object Type's name.</comment>
+  </data>
+  <data name="MetaverseObjectTypeRemoved" xml:space="preserve">
+    <value>Removed Metaverse Object Type '{0}'</value>
+    <comment>Activity summary of removing a Metaverse Object Type. {0}: the Object Type's name.</comment>
+  </data>
 </root>

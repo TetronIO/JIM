@@ -102,7 +102,7 @@
             Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteReferencesHeadline, _impact.References.Count),
             Items = _impact.References.Select(reference => new ConsequenceItem
             {
-                Text = reference.Description,
+                Text = MessageDisplay.Show(reference.DescriptionDetail, reference.Description) ?? reference.Description,
                 Icon = Icons.Material.Filled.Link
             }).ToList()
         };
