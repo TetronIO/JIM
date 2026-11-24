@@ -128,4 +128,10 @@
   <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
     <value>it is for the Object Type that Password Synchronization sets passwords on in {0}, which this Connected System Object is not, so it could not reach it, nor any other of this person's there while this one is theirs.</value>
   </data>
+  <data name="AttributePriorityRenumbered" xml:space="preserve">
+    <value>Attribute priority numbers were renumbered by a change to Synchronization Rule '{0}'. The order in which Synchronization Rules contribute to the Metaverse Attribute is unchanged.</value>
+  </data>
+  <data name="RecallScopeHeldBack" xml:space="preserve">
+    <value>{0} Metaverse Object {1} was left as it was, with the values the Synchronization Rule contributed.</value>
+  </data>
 </root>

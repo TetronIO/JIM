@@ -232,4 +232,20 @@ public class ActivityMessageRemainingWritersTests
             "Password not set on Corporate AD: replaced by the Initial Password of a Connected System Object JIM has just provisioned there, because this change " +
             "it was set on a Connected System Object that no longer exists there, or is no longer this person's.");
     }
+
+    [Test]
+    public void ConnectedSystemServer_Texts_SayWhatTheServerAlwaysWrote_AndTranslate()
+    {
+        var undecidable = new JIM.Models.Exceptions.ScopingCriterionFailedException("Rule A", "mail", "the value is unreadable");
+        var cause = ActivityMessage.CauseOf(undecidable);
+        var id = Guid.NewGuid().ToString();
+
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.AttributePriorityRenumbered), "Rule A"),
+            "Attribute priority numbers were renumbered by a change to Synchronisation Rule 'Rule A'. " +
+            "The order in which Synchronisation Rules contribute to the Metaverse Attribute is unchanged.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.DeprovisioningScopeHeldBack), cause, id),
+            $"{undecidable.Message} It and Metaverse Object {id} were left as they were, and the Connected System is not deleted until they can be processed.");
+        AssertTranslated(ActivityMessage.Create(nameof(ActivityMessages.RecallScopeHeldBack), cause, id),
+            $"{undecidable.Message} Metaverse Object {id} was left as it was, with the values the Synchronisation Rule contributed.");
+    }
 }

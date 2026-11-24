@@ -9357,8 +9357,7 @@ public partial class ConnectedSystemServer
                 TargetOperationType = ActivityTargetOperationType.Update,
                 SyncRuleId = ruleId,
                 ParentActivityId = parentActivity.Id,
-                Message = $"Attribute priority numbers were renumbered by a change to Synchronisation Rule '{editedSyncRuleName}'. " +
-                          "The order in which Synchronisation Rules contribute to the Metaverse Attribute is unchanged."
+                MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AttributePriorityRenumbered), editedSyncRuleName)
             };
             await Application.Activities.CreateActivityWithTriadAsync(
                 childActivity, parentActivity.InitiatedByType, parentActivity.InitiatedById, parentActivity.InitiatedByName);

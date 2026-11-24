@@ -1509,4 +1509,16 @@
     <value>{0}: {1}</value>
     <comment>A reason a password change was parked, followed by what the target system said. {0}: the reason (a message), {1}: the system's own words.</comment>
   </data>
+  <data name="AttributePriorityRenumbered" xml:space="preserve">
+    <value>Attribute priority numbers were renumbered by a change to Synchronisation Rule '{0}'. The order in which Synchronisation Rules contribute to the Metaverse Attribute is unchanged.</value>
+    <comment>Child Activity of a Synchronisation Rule whose Attribute Priority numbers changed because another rule was edited. {0}: the edited rule's name.</comment>
+  </data>
+  <data name="DeprovisioningScopeHeldBack" xml:space="preserve">
+    <value>{0} It and Metaverse Object {1} were left as they were, and the Connected System is not deleted until they can be processed.</value>
+    <comment>An error on an execution item of a Connected System's deletion. {0}: why a surviving contributor's scope could not be decided (a message ending in a full stop), {1}: the Metaverse Object's id. 'It' is the Connected System Object.</comment>
+  </data>
+  <data name="RecallScopeHeldBack" xml:space="preserve">
+    <value>{0} Metaverse Object {1} was left as it was, with the values the Synchronisation Rule contributed.</value>
+    <comment>An error on an execution item of a Synchronisation Rule's deletion. {0}: why a surviving contributor's scope could not be decided (a message ending in a full stop), {1}: the Metaverse Object's id.</comment>
+  </data>
 </root>

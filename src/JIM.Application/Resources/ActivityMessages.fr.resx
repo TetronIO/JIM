@@ -1152,4 +1152,13 @@
   <data name="PasswordParkedWithTargetMessage" xml:space="preserve">
     <value>{0} : {1}</value>
   </data>
+  <data name="AttributePriorityRenumbered" xml:space="preserve">
+    <value>Les numéros de priorité des attributs ont été renumérotés à la suite d’une modification de la règle de synchronisation « {0} ». L’ordre dans lequel les règles de synchronisation contribuent à l’attribut Metaverse reste inchangé.</value>
+  </data>
+  <data name="DeprovisioningScopeHeldBack" xml:space="preserve">
+    <value>{0} Cet objet et l’objet Metaverse {1} ont été laissés en l’état, et le système connecté n’est pas supprimé tant qu’ils ne peuvent pas être traités.</value>
+  </data>
+  <data name="RecallScopeHeldBack" xml:space="preserve">
+    <value>{0} L’objet Metaverse {1} a été laissé en l’état, avec les valeurs que la règle de synchronisation a apportées.</value>
+  </data>
 </root>
