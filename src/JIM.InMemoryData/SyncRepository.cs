@@ -421,13 +421,13 @@ public partial class SyncRepository : ISyncRepository
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
-            return Task.FromResult(keysetResult);
+            return Task.FromResult(WithResolvedReferences(keysetResult));
         }
 
         var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        return Task.FromResult(BuildPagedResult(all, page, pageSize));
+        return Task.FromResult(WithResolvedReferences(BuildPagedResult(all, page, pageSize)));
     }
 
     public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
@@ -489,13 +489,13 @@ public partial class SyncRepository : ISyncRepository
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
-            return Task.FromResult(keysetResult);
+            return Task.FromResult(WithResolvedReferences(keysetResult));
         }
 
         var filtered = modified
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
+        return Task.FromResult(WithResolvedReferences(BuildPagedResult(filtered, page, pageSize)));
     }
 
     public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
@@ -1401,6 +1401,7 @@ public partial class SyncRepository : ISyncRepository
             .Where(id => _csos.ContainsKey(id))
             .Select(id => _csos[id])
             .ToList();
+        ResolveReferences(result);
         return Task.FromResult(result);
     }
 
@@ -4591,6 +4592,37 @@ public partial class SyncRepository : ISyncRepository
             CurrentPage = page,
             PageSize = pageSize
         };
+    }
+
+    private PagedResultSet<ConnectedSystemObject> WithResolvedReferences(PagedResultSet<ConnectedSystemObject> page)
+    {
+        ResolveReferences(page.Results);
+        return page;
+    }
+
+    /// <summary>
+    /// What the production page loads give each reference value (<c>PopulateReferenceValuesAsync</c>): the Metaverse
+    /// Object, Object Type and creation time of the object it names, as they stand now. Drift detection and attribute flow
+    /// read which Metaverse Object a held member stands for from these; without them every held member looks unjoined,
+    /// a group looks empty, and its target's first synchronisation adds every member again.
+    /// </summary>
+    /// <remarks>
+    /// Set afresh on every load, as a production load reads them afresh, since the store hands out the same instances
+    /// each time and the object named may have joined, left or gone since. A value naming no object is left as it is.
+    /// </remarks>
+    private void ResolveReferences(IEnumerable<ConnectedSystemObject> csos)
+    {
+        foreach (var value in csos.Where(cso => cso.AttributeValues != null).SelectMany(cso => cso.AttributeValues))
+        {
+            var referenceId = value.ReferenceValueId ?? (value.ReferenceValue is { Id: var id } && id != Guid.Empty ? id : null);
+            if (referenceId is not { } named)
+                continue;
+
+            var referenced = _csos.GetValueOrDefault(named);
+            value.ResolvedReferenceMetaverseObjectId = referenced?.MetaverseObjectId;
+            value.ResolvedReferenceTypeId = referenced == null ? null : referenced.TypeId != 0 ? referenced.TypeId : referenced.Type?.Id;
+            value.ResolvedReferenceCreated = referenced?.Created;
+        }
     }
 
     /// <summary>

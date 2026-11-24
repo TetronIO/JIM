@@ -1064,7 +1064,7 @@ public class DriftDetectionWorkflowTests
         PopulateEntitlementCsoAttributeValuesFromCapturedData(pendingExportData);
         ClearPendingExports();
 
-        Assert.That(TargetGroupCso(groupGuid).AttributeValues.Count(av => av.ReferenceValue != null), Is.EqualTo(memberNames.Length),
+        Assert.That(TargetGroupCso(groupGuid).AttributeValues.Count(av => (av.ReferenceValueId ?? av.ReferenceValue?.Id) != null), Is.EqualTo(memberNames.Length),
             "precondition: the target group holds the members it was provisioned with");
     }
 
@@ -1836,6 +1836,12 @@ public class DriftDetectionWorkflowTests
     }
 
     /// <summary>
+    /// Whether the object holds a value of the attribute naming the referenced object, by id or by navigation.
+    /// </summary>
+    private static bool HoldsReference(ConnectedSystemObject cso, int attributeId, Guid referencedCsoId) =>
+        cso.AttributeValues.Any(v => v.AttributeId == attributeId && (v.ReferenceValueId ?? v.ReferenceValue?.Id) == referencedCsoId);
+
+    /// <summary>
     /// Populates CSO attribute values from captured Pending Export data.
     /// </summary>
     private void PopulateEntitlementCsoAttributeValuesFromCapturedData(List<CapturedPendingExport> capturedData)
@@ -1860,7 +1866,9 @@ public class DriftDetectionWorkflowTests
                                 c.MetaverseObjectId == mvoId &&
                                 c.ConnectedSystemId == captured.ConnectedSystemId);
 
-                        if (referencedCso != null)
+                        // The export may already have recorded the member; holding it twice would leave a copy behind
+                        // when a test removes it "by hand".
+                        if (referencedCso != null && !HoldsReference(cso, av.AttributeId, referencedCso.Id))
                         {
                             var refAttrValue = new ConnectedSystemObjectAttributeValue
                             {
@@ -1933,7 +1941,7 @@ public class DriftDetectionWorkflowTests
                                 c.MetaverseObjectId == mvoId &&
                                 c.ConnectedSystemId == cso.ConnectedSystemId);
 
-                        if (referencedCso != null)
+                        if (referencedCso != null && !HoldsReference(cso, avc.AttributeId, referencedCso.Id))
                         {
                             // Create a reference attribute value pointing to the CSO
                             var refAttrValue = new ConnectedSystemObjectAttributeValue
@@ -2046,14 +2054,12 @@ public class DriftDetectionWorkflowTests
         }
         else
         {
-            // Remove the user from members (simulating unauthorised removal)
-            var existingMemberValue = groupCso.AttributeValues
-                .FirstOrDefault(av => av.AttributeId == memberAttribute.Id && av.ReferenceValue?.Id == userCso.Id);
-
-            if (existingMemberValue != null)
-            {
-                groupCso.AttributeValues.Remove(existingMemberValue);
-            }
+            // Remove the user from members (simulating unauthorised removal): every value naming them, however it names
+            // them, or the member is still held.
+            var removed = groupCso.AttributeValues.RemoveAll(av =>
+                av.AttributeId == memberAttribute.Id && (av.ReferenceValueId ?? av.ReferenceValue?.Id) == userCso.Id);
+            if (removed == 0)
+                throw new InvalidOperationException($"Target Group CSO {groupCso.Id} does not hold Target User CSO {userCso.Id}");
         }
 
         // Mark CSO as updated to trigger delta sync processing
