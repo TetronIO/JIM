@@ -530,6 +530,27 @@ public partial class SyncRepository : ISyncRepository
             .ToListAsync());
     }
 
+    public async Task<List<PendingExport>> GetPendingExportsAwaitingRemovalOfReferencesToAsync(int connectedSystemId,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        var ids = connectedSystemObjectIds.ToList();
+        return HideQueued(await _context.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.AttributeValueChanges.Any(avc => avc.ChangeType == PendingExportAttributeChangeType.Remove
+                          && (avc.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+                              || avc.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+                          && avc.ResolvedReferenceCsoId != null
+                          && ids.Contains(avc.ResolvedReferenceCsoId.Value)))
+            .ToListAsync());
+    }
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
 

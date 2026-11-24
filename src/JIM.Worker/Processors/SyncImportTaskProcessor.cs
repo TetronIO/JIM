@@ -1196,6 +1196,7 @@ public partial class SyncImportTaskProcessor
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         if (reconciliation != null)
         {
+            await ConfirmRemovalsOfReferencesToDeletedObjectsAsync(reconciliation);
             using (Diagnostics.Sync.StartSpan("CompletePendingExportReconciliation"))
             {
                 CompletePendingExportReconciliation(reconciliation);

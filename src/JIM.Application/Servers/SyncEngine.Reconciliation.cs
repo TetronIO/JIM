@@ -33,13 +33,17 @@ public partial class SyncEngine
     /// <param name="connectedSystemObjectIdsWithExchangeChange">The Connected System Objects that have a change on the
     /// Exchange queue in any status, or null when the caller did not look; read only for a change awaiting Exchange
     /// (see <see cref="HoldOrReleaseChangeAwaitingExchange"/>).</param>
+    /// <param name="deletedObjectIds">The Connected System Objects the import learned the target deleted, or null: an exported
+    /// removal of a reference to one is confirmed, whatever the object still holds (see
+    /// <see cref="IsRemovalOfReferenceToDeletedObject"/>).</param>
     public void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
         PendingExportReconciliationResult result,
         IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null,
         IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null,
-        IReadOnlyDictionary<int, ProbedAttributeValues>? probedValuesByAttributeId = null)
+        IReadOnlyDictionary<int, ProbedAttributeValues>? probedValuesByAttributeId = null,
+        IReadOnlySet<Guid>? deletedObjectIds = null)
     {
         if (pendingExport == null)
         {
@@ -118,9 +122,9 @@ public partial class SyncEngine
             // loaded with the object, which leave it out.
             ProbedValueLookup? probed = null;
             var isProbed = probedLookupByAttrId != null && probedLookupByAttrId.TryGetValue(attrChange.AttributeId, out probed);
-            var confirmed = isProbed
+            var confirmed = IsRemovalOfReferenceToDeletedObject(attrChange, deletedObjectIds) || (isProbed
                 ? IsAttributeChangeConfirmedOverProbe(probed!, attrChange)
-                : IsAttributeChangeConfirmedFast(attrIndexByAttrId, attrChange);
+                : IsAttributeChangeConfirmedFast(attrIndexByAttrId, attrChange));
 
             if (Log.IsEnabled(Serilog.Events.LogEventLevel.Verbose))
             {
@@ -333,6 +337,56 @@ public partial class SyncEngine
 
     private static bool IsAwaitingConfirmation(PendingExportAttributeValueChange change) =>
         change.Status is PendingExportAttributeChangeStatus.ExportedPendingConfirmation or PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+
+    /// <summary>
+    /// Whether a change is an exported removal of a reference to an object the import learned the target deleted (#3053). A
+    /// target that deletes an object drops it from everything that referred to it, and need report no change on those
+    /// objects: Microsoft Entra ID reports none on a group whose member it deleted, and JIM's own removal, sent after the
+    /// delete, finds the member already gone. Nothing can still refer to an object the target deleted, so the deletion
+    /// confirms the removal, whatever JIM still holds for the referring object.
+    /// </summary>
+    public static bool IsRemovalOfReferenceToDeletedObject(PendingExportAttributeValueChange change, IReadOnlySet<Guid>? deletedObjectIds) =>
+        deletedObjectIds is { Count: > 0 }
+        && change.ChangeType == PendingExportAttributeChangeType.Remove
+        && IsAwaitingConfirmation(change)
+        && change.ResolvedReferenceCsoId is { } target
+        && deletedObjectIds.Contains(target);
+
+    /// <summary>
+    /// Confirms only the exported removals of references to objects the target deleted (<see cref="IsRemovalOfReferenceToDeletedObject"/>),
+    /// for a Connected System Object the import did not return, so has nothing else to judge it by: its other changes are
+    /// left exactly as they are. The Pending Export is to be deleted when nothing else remains, as reconciliation deletes one.
+    /// A Parked or Executing Pending Export, or one that is not an Update, is left alone.
+    /// </summary>
+    public static void ConfirmRemovalsOfReferencesToDeletedObjects(PendingExport pendingExport, IReadOnlySet<Guid> deletedObjectIds,
+        PendingExportReconciliationResult result)
+    {
+        if (pendingExport.Status is PendingExportStatus.Parked or PendingExportStatus.Executing ||
+            pendingExport.ChangeType != PendingExportChangeType.Update)
+            return;
+
+        var confirmed = pendingExport.AttributeValueChanges.Where(change => IsRemovalOfReferenceToDeletedObject(change, deletedObjectIds)).ToList();
+        if (confirmed.Count == 0)
+            return;
+
+        result.ConfirmedChanges.AddRange(confirmed);
+        var confirmedChanges = new HashSet<PendingExportAttributeValueChange>(confirmed);
+        pendingExport.AttributeValueChanges.RemoveAll(confirmedChanges.Contains);
+
+        var hasRemainingChanges = pendingExport.AttributeValueChanges.Any(change =>
+            change.Status is PendingExportAttributeChangeStatus.Pending or PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+                or PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+        if (!hasRemainingChanges)
+        {
+            result.PendingExportDeleted = true;
+            result.PendingExportToDelete = pendingExport;
+        }
+        else
+        {
+            UpdatePendingExportStatus(pendingExport);
+            result.PendingExportToUpdate = pendingExport;
+        }
+    }
 
     /// <summary>
     /// The question for one attribute of one object, or null when any of its changes cannot be put as one (see

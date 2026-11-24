@@ -2643,6 +2643,18 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public virtual Task<List<PendingExport>> GetPendingExportsAwaitingRemovalOfReferencesToAsync(int connectedSystemId,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var targets = connectedSystemObjectIds.ToHashSet();
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.AttributeValueChanges.Any(avc => avc.ChangeType == PendingExportAttributeChangeType.Remove
+                      && avc.Status is PendingExportAttributeChangeStatus.ExportedPendingConfirmation or PendingExportAttributeChangeStatus.ExportedNotConfirmed
+                      && avc.ResolvedReferenceCsoId is { } target && targets.Contains(target)))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
     {
         var count = _pendingExportsByCs.TryGetValue(connectedSystemId, out var ids) ? ids.Count : 0;

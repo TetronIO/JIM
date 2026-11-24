@@ -257,8 +257,9 @@ public class ConfirmingImportReconciliationDatabaseTests
     /// <summary>
     /// Which objects reconciliation judges from the values the import holds, and which it reloads (#2908). Ada and Hedy were
     /// loaded whole by their page's hydration and matched there, so they are judged from memory. Alpha's members were loaded
-    /// in part, Grace was compared on two pages, and Joan and Rosalind were deleted (Joan as reported under the other Object
-    /// Type), so each is reloaded: none of them can be shown to hold what was saved.
+    /// in part and Grace was compared on two pages, so each is reloaded: neither can be shown to hold what was saved. Joan and
+    /// Rosalind were deleted (Joan as reported under the other Object Type), so their Pending Exports are cleared before
+    /// reconciliation starts (#3053) and nothing of theirs is left to reload.
     /// </summary>
     [Test]
     public async Task DeltaImport_ConfirmingWithPartialLoadsSupersessionAndDeletes_ReloadsExactlyTheObjectsNotHeldAsSavedAsync()
@@ -269,7 +270,7 @@ public class ConfirmingImportReconciliationDatabaseTests
         var reloaded = recorder.Calls.Where(c => c.Method == nameof(ISyncRepository.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync))
             .SelectMany(c => c.Ids[1]!).Select(id => _names[id]).ToList();
 
-        Assert.That(reloaded, Is.EquivalentTo(new[] { "alpha", "grace", "joan", "rosalind" }));
+        Assert.That(reloaded, Is.EquivalentTo(new[] { "alpha", "grace" }));
     }
 
     private static bool WritesItemFor(object?[] args, Guid connectedSystemObjectId) =>
@@ -306,8 +307,10 @@ public class ConfirmingImportReconciliationDatabaseTests
     }
 
     /// <summary>
-    /// Taken from reconciliation as it ran before #2908, with the Object Type correction. Joan's miss is merged onto the item
-    /// her delete raised, as the import's own item for her.
+    /// Taken from reconciliation as it ran before #2908, with the Object Type correction, and with #3053: the Pending
+    /// Exports of the two objects the Connector reported deleted are cleared, as a Full Import's deletion detection clears
+    /// those of an object it finds gone. Rosalind's exported Delete is confirmed by her deletion, where it used to wait for
+    /// ever, and Joan's Update is moot, where her item used to promise to reassert it on an object that is gone.
     /// </summary>
     private const string ExpectedDeltaSnapshot = """
         Pending Exports:
@@ -322,13 +325,10 @@ public class ConfirmingImportReconciliationDatabaseTests
           dorothy:Create on dorothy: Create Exported errors=0
             user.id#9 Add ExportedPendingConfirmation attempts=1 lastImported=-
             user.displayName#10 Add ExportedPendingConfirmation attempts=1 lastImported=-
-          joan:Update on joan: Update ExportNotConfirmed errors=0
-            user.mail#13 Update ExportedNotConfirmed attempts=2 lastImported=joan@old.example
           katherine:Update on katherine: Update Pending errors=0
             user.displayName#8 Update Pending attempts=1 lastImported=-
           mary:Update on mary: Update Exported errors=0
             user.displayName#11 Update ExportedPendingConfirmation attempts=1 lastImported=-
-          rosalind:Delete on rosalind: Delete Exported errors=0
         Connected System Objects:
           ada: Normal
           alpha: Normal
@@ -360,10 +360,8 @@ public class ConfirmingImportReconciliationDatabaseTests
           hedy: Updated error=NotSet summary=ExportConfirmed:1 snapshots=[hedy|Hedy Lamarr|user]
             outcome ExportConfirmed ordinal=0 detail=1 parent=-
             edge ExportCausedImportConfirmation reason=NotSet export=hedy:Update object=hedy display=Hedy Lamarr system=Target Directory effect=ExportConfirmed
-          joan: Deleted error=ExportNotConfirmed summary=DeletionDetected:1,ExportFailed:1 snapshots=[joan|Joan Clarke|user]
-            message: We exported a change, but did not get confirmation of it when a confirming import was performed. Details: 1 attribute(s): mail. Will attempt to reassert the change on the next export run.
+          joan: Deleted error=NotSet summary=DeletionDetected:1 snapshots=[joan|Joan Clarke|user]
             outcome DeletionDetected ordinal=0 detail=- parent=-
-            outcome ExportFailed ordinal=1 detail=1 parent=-
           rosalind: Deleted error=NotSet summary=DeletionDetected:1 snapshots=[rosalind|Rosalind Franklin|user]
             outcome DeletionDetected ordinal=0 detail=- parent=-
         Activity:
@@ -377,7 +375,7 @@ public class ConfirmingImportReconciliationDatabaseTests
           OutcomeType 1=3
           OutcomeType 3=2
           OutcomeType 4=4
-          OutcomeType 5=3
+          OutcomeType 5=2
 
         """;
 
