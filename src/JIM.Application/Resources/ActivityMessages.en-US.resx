@@ -182,4 +182,7 @@
   <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
     <value>This object was to be disabled, but the Connector that '{0}' uses cannot disable an account, so nothing was sent. Change the export Synchronization Rule's Deprovisioning Action to Delete or Disconnect.</value>
   </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>The Connector reported this change as not attempted, although the export run was not canceled.</value>
+  </data>
 </root>
