@@ -817,13 +817,10 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     private static void SetEmails(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, params string[] values)
     {
         cso.AttributeValues.RemoveAll(av => av.AttributeId == attribute.Id);
-        foreach (var value in values)
+        cso.AttributeValues.AddRange(values.Select(value => new ConnectedSystemObjectAttributeValue
         {
-            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-            {
-                Id = Guid.NewGuid(), AttributeId = attribute.Id, Attribute = attribute, StringValue = value, ConnectedSystemObject = cso
-            });
-        }
+            Id = Guid.NewGuid(), AttributeId = attribute.Id, Attribute = attribute, StringValue = value, ConnectedSystemObject = cso
+        }));
         cso.LastUpdated = DateTime.UtcNow;
     }
 

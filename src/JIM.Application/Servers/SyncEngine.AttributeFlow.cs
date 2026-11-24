@@ -1375,49 +1375,38 @@ public partial class SyncEngine
             (mvo.PendingAttributeValueAdditions.Count == 0 && mvo.PendingMergeSupplies.Count == 0))
             return;
 
-        // Pair each pending addition to a Merge attribute with a pending removal of the same value on the same attribute,
-        // then each value another contributor noted it supplies (PendingMergeSupplies) with any removal still unpaired.
-        var removalsByKey = new Dictionary<(int AttributeId, object Key), Queue<MetaverseObjectAttributeValue>>();
-        foreach (var removal in mvo.PendingAttributeValueRemovals.Where(r => r.Attribute != null && IsMerge(r.Attribute)))
-        {
-            var key = TypedValueKey(removal, removal.Attribute.Type);
-            if (key == null)
-                continue;
-            if (!removalsByKey.TryGetValue((removal.AttributeId, key), out var queue))
-                removalsByKey[(removal.AttributeId, key)] = queue = new Queue<MetaverseObjectAttributeValue>();
-            queue.Enqueue(removal);
-        }
+        // The pending removals of Merge values, queued by attribute and value, so each candidate below takes one.
+        var removalsByKey = mvo.PendingAttributeValueRemovals
+            .Where(row => row.Attribute != null && IsMerge(row.Attribute))
+            .Select(row => (Row: row, Key: TypedValueKey(row, row.Attribute.Type)))
+            .Where(entry => entry.Key != null)
+            .GroupBy(entry => (entry.Row.AttributeId, Key: entry.Key!))
+            .ToDictionary(group => group.Key, group => new Queue<MetaverseObjectAttributeValue>(group.Select(entry => entry.Row)));
 
         if (removalsByKey.Count == 0)
             return;
 
-        var collapsedRemovals = new List<MetaverseObjectAttributeValue>();
+        // Each pending addition to a Merge attribute takes a removal of the same value first, then each value a
+        // contributor noted it supplies (PendingMergeSupplies) takes any removal still unpaired. Materialised in that
+        // order, once: taking a removal dequeues it.
+        var retags = mvo.PendingAttributeValueAdditions
+            .Where(row => row.Attribute != null && IsMerge(row.Attribute))
+            .Select(row => (Source: row, IsAddition: true))
+            .Concat(mvo.PendingMergeSupplies.Where(row => row.Attribute != null).Select(row => (Source: row, IsAddition: false)))
+            .Select(candidate => (candidate.Source, candidate.IsAddition, Held: TakePendingRemoval(removalsByKey, candidate.Source)))
+            .Where(candidate => candidate.Held != null)
+            .ToList();
+
+        var collapsedRemovals = new List<MetaverseObjectAttributeValue>(retags.Count);
         var collapsedAdditions = new HashSet<MetaverseObjectAttributeValue>(ReferenceEqualityComparer.Instance);
-        foreach (var addition in mvo.PendingAttributeValueAdditions.Where(a => a.Attribute != null && IsMerge(a.Attribute)))
+        foreach (var (source, isAddition, held) in retags)
         {
-            var key = TypedValueKey(addition, addition.Attribute.Type);
-            if (key == null || !removalsByKey.TryGetValue((addition.AttributeId, key), out var queue) || queue.Count == 0)
-                continue;
-
-            var held = queue.Dequeue();
-            held.ContributedBySyncRuleId = addition.ContributedBySyncRuleId;
-            held.ContributedBySystemId = addition.ContributedBySystemId;
-            held.ContributedByKind = addition.ContributedByKind;
+            held!.ContributedBySyncRuleId = source.ContributedBySyncRuleId;
+            held.ContributedBySystemId = source.ContributedBySystemId;
+            held.ContributedByKind = source.ContributedByKind;
             collapsedRemovals.Add(held);
-            collapsedAdditions.Add(addition);
-        }
-
-        foreach (var supply in mvo.PendingMergeSupplies.Where(a => a.Attribute != null))
-        {
-            var key = TypedValueKey(supply, supply.Attribute.Type);
-            if (key == null || !removalsByKey.TryGetValue((supply.AttributeId, key), out var queue) || queue.Count == 0)
-                continue;
-
-            var held = queue.Dequeue();
-            held.ContributedBySyncRuleId = supply.ContributedBySyncRuleId;
-            held.ContributedBySystemId = supply.ContributedBySystemId;
-            held.ContributedByKind = supply.ContributedByKind;
-            collapsedRemovals.Add(held);
+            if (isAddition)
+                collapsedAdditions.Add(source);
         }
 
         if (collapsedRemovals.Count == 0)
@@ -1428,6 +1417,20 @@ public partial class SyncEngine
         mvo.HasPendingProvenanceChanges = true;
         Log.Debug("CollapseMergeRetags: re-tagged {Count} Merge value(s) to a surviving contributor on MVO {MvoId}",
             collapsedRemovals.Count, mvo.Id);
+    }
+
+    /// <summary>
+    /// Takes, from <paramref name="removalsByKey"/>, a pending removal of the value <paramref name="candidate"/> holds on
+    /// the same attribute; null when there is none left to take.
+    /// </summary>
+    private static MetaverseObjectAttributeValue? TakePendingRemoval(
+        Dictionary<(int AttributeId, object Key), Queue<MetaverseObjectAttributeValue>> removalsByKey,
+        MetaverseObjectAttributeValue candidate)
+    {
+        var key = TypedValueKey(candidate, candidate.Attribute.Type);
+        return key != null && removalsByKey.TryGetValue((candidate.AttributeId, key), out var queue) && queue.Count > 0
+            ? queue.Dequeue()
+            : null;
     }
 
     /// <summary>
@@ -1492,30 +1495,22 @@ public partial class SyncEngine
             .Where(entry => entry.IsHeld)
             .Select(entry => entry.Key), comparer);
 
-        var additions = new List<MetaverseObjectAttributeValue>();
-        HashSet<TKey>? ownKeys = null;
-        foreach (var source in sourceList)
+        // Under Merge, a supplied value another contributor already holds is noted as supplied by this one too, so it
+        // passes here rather than leaving the object should its holder withdraw it later in this pass.
+        if (IsMerge(attribute) && contributingSyncRuleId != null)
         {
-            if (held.Add(sourceKey(source)))
-            {
-                additions.Add(create(source));
-                continue;
-            }
-
-            // Under Merge, a value another contributor holds is noted as supplied by this one too, so it passes here rather
-            // than leaving the object should its holder withdraw it later in this pass.
-            if (!IsMerge(attribute) || contributingSyncRuleId == null)
-                continue;
-            ownKeys ??= new HashSet<TKey>(GetEffectiveAttributeValues(mvo, attributeId)
+            var ownKeys = new HashSet<TKey>(GetEffectiveAttributeValues(mvo, attributeId)
                 .Concat(mvo.PendingAttributeValueAdditions.Where(av => av.AttributeId == attributeId))
                 .Where(row => row.ContributedBySyncRuleId == contributingSyncRuleId)
                 .Select(row => (IsHeld: heldKey(row, out var key), Key: key))
                 .Where(entry => entry.IsHeld)
                 .Select(entry => entry.Key), comparer);
-            if (!ownKeys.Contains(sourceKey(source)))
-                mvo.PendingMergeSupplies.Add(create(source));
+            mvo.PendingMergeSupplies.AddRange(sourceList
+                .Where(source => held.Contains(sourceKey(source)) && !ownKeys.Contains(sourceKey(source)))
+                .Select(create));
         }
 
+        var additions = sourceList.Where(source => held.Add(sourceKey(source))).Select(create).ToList();
         if (additions.Count == 0)
             return;
 
