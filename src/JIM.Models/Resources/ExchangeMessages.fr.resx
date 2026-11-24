@@ -146,4 +146,73 @@
   <data name="Replaced" xml:space="preserve">
     <value>Non remis à Exchange : remplacé par un état déclaré plus récent pour cet objet, mis en file d’attente par une exportation ultérieure vers {0}.</value>
   </data>
+  <data name="FilterOneChange" xml:space="preserve">
+    <value>Une modification Exchange</value>
+  </data>
+  <data name="FilterChanges" xml:space="preserve">
+    <value>{0} modifications Exchange</value>
+  </data>
+  <data name="FilterQueue" xml:space="preserve">
+    <value>La file d’attente Exchange</value>
+  </data>
+  <data name="FilterAnyChanges" xml:space="preserve">
+    <value>Modifications Exchange</value>
+  </data>
+  <data name="FilterAnyChangesMatching" xml:space="preserve">
+    <value>Modifications Exchange correspondant à « {0} »</value>
+  </data>
+  <data name="FilterNamedChanges" xml:space="preserve">
+    <value>Modifications Exchange : {0}</value>
+  </data>
+  <data name="FilterNamedChangesMatching" xml:space="preserve">
+    <value>Modifications Exchange : {0}, correspondant à « {1} »</value>
+  </data>
+  <data name="FilterJoined" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="FilterStateQueued" xml:space="preserve">
+    <value>en file d’attente</value>
+  </data>
+  <data name="FilterStateDelivering" xml:space="preserve">
+    <value>envoi en cours</value>
+  </data>
+  <data name="FilterStateRetrying" xml:space="preserve">
+    <value>nouvelle tentative</value>
+  </data>
+  <data name="FilterStateParked" xml:space="preserve">
+    <value>suspendues</value>
+  </data>
+  <data name="FilterStateDelivered" xml:space="preserve">
+    <value>livrées</value>
+  </data>
+  <data name="FilterStateWithdrawn" xml:space="preserve">
+    <value>retirées</value>
+  </data>
+  <data name="FilterStateReplaced" xml:space="preserve">
+    <value>remplacées</value>
+  </data>
+  <data name="FilterStateRefused" xml:space="preserve">
+    <value>refusées</value>
+  </data>
+  <data name="FilterStateNotMade" xml:space="preserve">
+    <value>non effectuées</value>
+  </data>
+  <data name="FilterStateHeld" xml:space="preserve">
+    <value>en attente</value>
+  </data>
+  <data name="FilterKindObjectNotFound" xml:space="preserve">
+    <value>objet introuvable</value>
+  </data>
+  <data name="FilterKindRefused" xml:space="preserve">
+    <value>refus</value>
+  </data>
+  <data name="FilterKindInsufficientPermissions" xml:space="preserve">
+    <value>autorisations insuffisantes</value>
+  </data>
+  <data name="FilterKindAuthenticationFailed" xml:space="preserve">
+    <value>échec de l’authentification</value>
+  </data>
+  <data name="FilterKindUnreachable" xml:space="preserve">
+    <value>inaccessible</value>
+  </data>
 </root>
