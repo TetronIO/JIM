@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A Delta Import that finds an object deleted now confirms JIM's exported Delete of it and its exported removals of references to it, such as a leaver's group memberships, rather than leaving them waiting for a Full Import or, for the Delete, for ever.
+- 🐛 A queued group membership change or other reference to a Metaverse Object deleted before it was exported is now withdrawn at the next export, rather than holding its Pending Export open and being reported as awaiting provisioning on every run. (#3078)
 - 🐛 Behind an outbound proxy, the SCIM Connector now reads a service provider's certificate through the proxy, so **Fetch certificate** and a failed connection test show the certificate a TLS-inspecting proxy presents, ready to trust.
 
 ## [1.0.0] - 2026-11-20
