@@ -520,7 +520,7 @@ public class CertificateServer : ICertificateProvider
             return new ServerCertificateTrustResult
             {
                 Outcome = ServerCertificateTrustOutcome.ThumbprintMismatch,
-                Message = "A thumbprint is required. JIM will not trust whatever a server happens to be presenting."
+                Detail = ServerMessage.Create(nameof(ServerMessages.TrustThumbprintRequired))
             };
         }
 
@@ -535,9 +535,9 @@ public class CertificateServer : ICertificateProvider
             {
                 Outcome = ServerCertificateTrustOutcome.ServerUnreachable,
                 ExpectedThumbprint = expected,
-                Message = reading == null
-                    ? $"{endpoint.Host}:{endpoint.Port} could not be reached, so nothing was trusted."
-                    : $"{endpoint.Host}:{endpoint.Port} offered no certificate, so there is nothing to trust."
+                Detail = reading == null
+                    ? ServerMessage.Create(nameof(ServerMessages.TrustServerUnreachable), endpoint.Host, endpoint.Port.ToString())
+                    : ServerMessage.Create(nameof(ServerMessages.TrustServerOfferedNothing), endpoint.Host, endpoint.Port.ToString())
             };
         }
 
@@ -550,7 +550,8 @@ public class CertificateServer : ICertificateProvider
             {
                 Outcome = ServerCertificateTrustOutcome.InvalidChain,
                 ExpectedThumbprint = expected,
-                Message = reading.Diagnostic.Remediation
+                Message = reading.Diagnostic.Remediation,
+                Detail = reading.Diagnostic.RemediationDetail
             };
         }
 
@@ -572,7 +573,7 @@ public class CertificateServer : ICertificateProvider
                 Outcome = ServerCertificateTrustOutcome.ThumbprintMismatch,
                 ExpectedThumbprint = expected,
                 PresentedThumbprint = chain.Leaf.Thumbprint,
-                Message = $"{endpoint.Host} is presenting a different certificate from the one you confirmed, so nothing has been trusted. This is expected if the certificate was renewed; investigate if it was not."
+                Detail = ServerMessage.Create(nameof(ServerMessages.TrustThumbprintMismatch), endpoint.Host)
             };
         }
 
@@ -588,9 +589,9 @@ public class CertificateServer : ICertificateProvider
                 Outcome = ServerCertificateTrustOutcome.RootRequired,
                 ExpectedThumbprint = expected,
                 PresentedThumbprint = chosen.Thumbprint,
-                Message = chain.Root != null
-                    ? $"This connection to the {endpoint.ServerDescription} accepts only the root of the certificate chain, so trusting '{chosen.CommonName}' would not make it work, and nothing was trusted. Trust '{chain.Root.CommonName}' instead."
-                    : $"This connection to the {endpoint.ServerDescription} accepts only the root of the certificate chain, and JIM could not find it, so nothing was trusted. Get the root certificate from whoever runs your PKI and add it under Admin > Certificates."
+                Detail = chain.Root != null
+                    ? ServerMessage.Create(nameof(ServerMessages.TrustRootRequiredWithRoot), endpoint.ServerDescription, chosen.CommonName, chain.Root.CommonName)
+                    : ServerMessage.Create(nameof(ServerMessages.TrustRootRequiredNoRoot), endpoint.ServerDescription)
             };
         }
 
@@ -606,7 +607,7 @@ public class CertificateServer : ICertificateProvider
                 Outcome = ServerCertificateTrustOutcome.AlreadyTrusted,
                 ExpectedThumbprint = expected,
                 PresentedThumbprint = chosen.Thumbprint,
-                Message = $"'{chosen.CommonName}' is already in the JIM certificate store."
+                Detail = ServerMessage.Create(nameof(ServerMessages.TrustAlreadyInStore), chosen.CommonName)
             };
         }
 

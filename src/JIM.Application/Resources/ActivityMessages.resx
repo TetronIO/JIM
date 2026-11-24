@@ -1349,4 +1349,400 @@
     <value>{0} queued reference value(s) were withdrawn because the Metaverse Object they referred to has been deleted, so they could never be written. A Pending Export left with nothing to send was finished with.</value>
     <comment>A Warning on an export. {0}: a count.</comment>
   </data>
+  <data name="MetaverseAttributeReferenceRemoved" xml:space="preserve">
+    <value>Removed {0} referencing Metaverse Attribute '{1}'</value>
+    <comment>Child Activity summary when deleting a Metaverse Attribute removed something that referred to it. {0}: what was removed (a message), {1}: the attribute's name.</comment>
+  </data>
+  <data name="MetaverseAttributeRemoved" xml:space="preserve">
+    <value>Removed Metaverse Attribute '{0}'</value>
+    <comment>Activity summary of removing a Metaverse Attribute. {0}: the attribute's name.</comment>
+  </data>
+  <data name="MetaverseAttributeUnassigned" xml:space="preserve">
+    <value>Unassigned Metaverse Attribute '{0}' from Metaverse Object Type '{1}'</value>
+    <comment>Activity summary of unassigning a Metaverse Attribute from a Metaverse Object Type. {0}: the attribute's name, {1}: the Object Type's name.</comment>
+  </data>
+  <data name="MetaverseReferenceRemovedScoped" xml:space="preserve">
+    <value>Removed {0} scoped to Metaverse Object Type '{1}'</value>
+    <comment>Child Activity summary of something removed along with a Metaverse Object Type, or an attribute's assignment to one. {0}: what was removed (a message or a name), {1}: the Object Type's name.</comment>
+  </data>
+  <data name="MetaverseObjectTypeRemoved" xml:space="preserve">
+    <value>Removed Metaverse Object Type '{0}'</value>
+    <comment>Activity summary of removing a Metaverse Object Type. {0}: the Object Type's name.</comment>
+  </data>
+  <data name="ExportResolvingDeferred" xml:space="preserve">
+    <value>Resolving {0} deferred exports</value>
+    <comment>Progress narration while an export run resolves the references of deferred exports. {0}: how many, as plain digits.</comment>
+  </data>
+  <data name="ExportLoadingDeferred" xml:space="preserve">
+    <value>Loading deferred exports {0} to {1} of {2}</value>
+    <comment>Progress narration. {0}: first export in the chunk, {1}: last, {2}: the total, all as plain digits.</comment>
+  </data>
+  <data name="ExportWithdrewDeferredReferences" xml:space="preserve">
+    <value>Withdrew references to deleted objects from {0} deferred exports</value>
+    <comment>Progress narration. {0}: how many deferred exports, as plain digits.</comment>
+  </data>
+  <data name="ExportSavingResolvedReferences" xml:space="preserve">
+    <value>Saving resolved references for {0} deferred exports</value>
+    <comment>Progress narration. {0}: how many deferred exports, as plain digits.</comment>
+  </data>
+  <data name="ExportRecordingWaiting" xml:space="preserve">
+    <value>Recording exports that are still waiting on their references</value>
+    <comment>Progress narration of an export run.</comment>
+  </data>
+  <data name="ExportBatchFailed" xml:space="preserve">
+    <value>Batch export failed: {0}</value>
+    <comment>An error on an export item whose batch failed. {0}: the cause, which another system may word.</comment>
+  </data>
+  <data name="ExportBatchCloseFailed" xml:space="preserve">
+    <value>A batch's results were recorded, but closing its connection failed: {0}</value>
+    <comment>An error on an export item. {0}: the cause, which another system may word.</comment>
+  </data>
+  <data name="ExportBatchFinishFailed" xml:space="preserve">
+    <value>The batch's results were recorded, but JIM failed while finishing them: {0}</value>
+    <comment>An error on an export item. {0}: the cause.</comment>
+  </data>
+  <data name="ExportFailedNoReason" xml:space="preserve">
+    <value>Export failed</value>
+    <comment>What an export item says when the Connector refused it and gave no reason; it is the argument of the longer 'Export failed' messages.</comment>
+  </data>
+  <data name="CollisionRemediated" xml:space="preserve">
+    <value>{0} already holds the {1} "{2}" for another object, so JIM corrected it to "{3}".</value>
+    <comment>Collision Remediation outcome on an export item. {0}: the Connected System's name, {1}: the attribute's name, {2}: the rejected value, {3}: the value JIM issued instead.</comment>
+  </data>
+  <data name="CollisionNeedsDecision" xml:space="preserve">
+    <value>{0} rejected the {1} "{2}" because another object there already holds it, and JIM has not changed it: {3}. Allow the rename, retry once the conflict is resolved in {0}, or leave it.</value>
+    <comment>Collision Remediation error on an export item whose Generated Value needs a decision. {0}: the Connected System's name, {1}: the attribute's name, {2}: the rejected value, {3}: why JIM did not change it (a message, with no full stop).</comment>
+  </data>
+  <data name="CollisionWhyLimitReached" xml:space="preserve">
+    <value>it has already been corrected {0} times, so JIM has stopped correcting it</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: how many corrections, as plain digits. No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionWhyAnchored" xml:space="preserve">
+    <value>{0} has already accepted {1} for this object, so changing it would rename an account already in use</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: a Connected System's name, {1}: what it accepted (a message such as 'it' or 'the X built from it'). No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionWhyCannotTell" xml:space="preserve">
+    <value>JIM cannot tell whether {0} already holds {1}, because {0} has not completed a Full Import since its connector space was cleared</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: a Connected System's name, {1}: what it may hold (a message such as 'it' or 'the X built from it'). No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionWhyNoValue" xml:space="preserve">
+    <value>no other value could be found for it: {0}</value>
+    <comment>The reason inside 'CollisionNeedsDecision'. {0}: why value generation failed (a message). No capital, no full stop.</comment>
+  </data>
+  <data name="CollisionItself" xml:space="preserve">
+    <value>it</value>
+    <comment>What a Connected System has accepted or may hold, inside 'CollisionWhyAnchored' and 'CollisionWhyCannotTell': the value itself. Lower case; it is the object of 'accepted' and 'holds', so German takes the accusative.</comment>
+  </data>
+  <data name="CollisionBuiltFromIt" xml:space="preserve">
+    <value>the {0} built from it</value>
+    <comment>What a Connected System has accepted or may hold, inside 'CollisionWhyAnchored' and 'CollisionWhyCannotTell': a value built from the generated one. {0}: the built value's name.</comment>
+  </data>
+  <data name="InitialPasswordCarried" xml:space="preserve">
+    <value>Initial password not queued for {0}: a password change already waiting for this person there will be this Connected System Object's first password instead, keeping its own password and expiry. Its delivery applies this Synchronisation Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires, except where an export has written those itself.</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="InitialPasswordCarriedParked" xml:space="preserve">
+    <value>{0} It had been parked ({1}), and is due again now that the Connected System Object exists.</value>
+    <comment>Follows 'InitialPasswordCarried'. {0}: that message, {1}: why the password change had been parked (a message). 'It' is the waiting password change.</comment>
+  </data>
+  <data name="InitialPasswordCarriedDelivering" xml:space="preserve">
+    <value>{0} It was being delivered as the Connected System Object was created, and is delivered again with these settings.</value>
+    <comment>Follows 'InitialPasswordCarried'. {0}: that message. 'It' is the waiting password change.</comment>
+  </data>
+  <data name="InitialPasswordCarriedWaiting" xml:space="preserve">
+    <value>{0} It was waiting for the Connected System Object to exist, and is due now.</value>
+    <comment>Follows 'InitialPasswordCarried'. {0}: that message. 'It' is the waiting password change.</comment>
+  </data>
+  <data name="InitialPasswordQueued" xml:space="preserve">
+    <value>Initial password queued for delivery to {0}.</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="InitialPasswordQueuedReplacing" xml:space="preserve">
+    <value>Initial password queued for delivery to {0}, in place of a password change for this person that was waiting there: {1}</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name, {1}: why the waiting change was replaced (a message ending in a full stop).</comment>
+  </data>
+  <data name="PasswordNotSetReplaced" xml:space="preserve">
+    <value>Password not set on {0}: replaced by the Initial Password of a Connected System Object JIM has just provisioned there, because this change {1}</value>
+    <comment>Activity text of export staging. {0}: the Connected System's name, {1}: why the waiting change was replaced, as a message that continues the sentence (English: it starts 'it ...' and ends in a full stop, so this change 'it is held ...'). French and German put the reason after 'Motif :' and 'Grund:' as a sentence of its own.</comment>
+  </data>
+  <data name="PasswordReplacedHeld" xml:space="preserve">
+    <value>it is held while Password Synchronisation is switched off for {0}, so it had not reached it, and a Connected System Object's first password is delivered whatever the pause.</value>
+    <comment>Why a waiting password change was replaced. Starts lower case in English and ends in a full stop; it follows a colon in 'InitialPasswordQueuedReplacing' and completes the sentence 'because this change ...' in 'PasswordNotSetReplaced'. {0}: the Connected System's name. The translations are sentences of their own that read after a colon.</comment>
+  </data>
+  <data name="PasswordReplacedAccountGone" xml:space="preserve">
+    <value>it was set on a Connected System Object that no longer exists there, or is no longer this person's.</value>
+    <comment>Why a waiting password change was replaced. See 'PasswordReplacedHeld' for the shape.</comment>
+  </data>
+  <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
+    <value>it is for the Object Type that Password Synchronisation sets passwords on in {0}, which this Connected System Object is not, so it could not reach it, nor any other of this person's there while this one is theirs.</value>
+    <comment>Why a waiting password change was replaced. See 'PasswordReplacedHeld' for the shape. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="PasswordReplacedStoppedTrying" xml:space="preserve">
+    <value>JIM had stopped trying to deliver it ({0}).</value>
+    <comment>Why a waiting password change was replaced. See 'PasswordReplacedHeld' for the shape. {0}: why it had been parked (a message).</comment>
+  </data>
+  <data name="PasswordParkedPolicy" xml:space="preserve">
+    <value>the password did not meet the system's password policy</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedConfiguration" xml:space="preserve">
+    <value>a configuration problem stopped it being set</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedUnsupported" xml:space="preserve">
+    <value>the system cannot set a password on it</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedObjectMissing" xml:space="preserve">
+    <value>the Connected System Object did not exist yet</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedUnreachable" xml:space="preserve">
+    <value>the system could not be reached</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedUnrecorded" xml:space="preserve">
+    <value>for a reason JIM did not record</value>
+    <comment>Why a password change was parked.</comment>
+  </data>
+  <data name="PasswordParkedWithTargetMessage" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>A reason a password change was parked, followed by what the target system said. {0}: the reason (a message), {1}: the system's own words.</comment>
+  </data>
+  <data name="AttributePriorityRenumbered" xml:space="preserve">
+    <value>Attribute priority numbers were renumbered by a change to Synchronisation Rule '{0}'. The order in which Synchronisation Rules contribute to the Metaverse Attribute is unchanged.</value>
+    <comment>Child Activity of a Synchronisation Rule whose Attribute Priority numbers changed because another rule was edited. {0}: the edited rule's name.</comment>
+  </data>
+  <data name="DeprovisioningScopeHeldBack" xml:space="preserve">
+    <value>{0} It and Metaverse Object {1} were left as they were, and the Connected System is not deleted until they can be processed.</value>
+    <comment>An error on an execution item of a Connected System's deletion. {0}: why a surviving contributor's scope could not be decided (a message ending in a full stop), {1}: the Metaverse Object's id. 'It' is the Connected System Object.</comment>
+  </data>
+  <data name="RecallScopeHeldBack" xml:space="preserve">
+    <value>{0} Metaverse Object {1} was left as it was, with the values the Synchronisation Rule contributed.</value>
+    <comment>An error on an execution item of a Synchronisation Rule's deletion. {0}: why a surviving contributor's scope could not be decided (a message ending in a full stop), {1}: the Metaverse Object's id.</comment>
+  </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM holds this object as a '{0}', and this Full Import allows Object Type changes, but it could not retire the '{0}' object: it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronisation Rule still manages). The new '{1}' object has not been created, and the '{0}' object has been left as it is, so nothing is deprovisioned. Bring the '{0}' object into the Full Import's scope, or disable the Synchronisation Rules bound to its Object Type, then run the Full Import again.</value>
+    <comment>An error on an item of a Full Import that allows Object Type changes, whose old object could not be retired. {0}: the Object Type JIM holds the object as, {1}: the Object Type it arrived as.</comment>
+  </data>
+  <data name="ExportedCreateNotConfirmed" xml:space="preserve">
+    <value>The Create export succeeded, but this import read every object and did not report this one back. The Create will be retried on the next export.</value>
+    <comment>An error on an import item whose earlier Create export was not seen coming back.</comment>
+  </data>
+  <data name="ImportDeletionWithoutObjectType" xml:space="preserve">
+    <value>The Connector reported a deletion without its Object Type, and its External ID does not tell JIM which object was deleted: this Connector's External IDs can name different objects in different Object Types. Nothing was deleted; run a Full Import, which detects deletions by absence.</value>
+    <comment>An error on an import item.</comment>
+  </data>
+  <data name="ImportObjectTypeNotFound" xml:space="preserve">
+    <value>PerformImportAsync: Couldn't find valid Connected System ({0}) object type for imported object type: {1}</value>
+    <comment>An error on an import item. The English begins with the name of the code that raised it, which the translations leave out. {0}: the Connected System's id, as plain digits, {1}: the Object Type name the Connector gave.</comment>
+  </data>
+  <data name="ImportObjectTypeChangeRefused" xml:space="preserve">
+    <value>JIM holds this object as a '{0}', but the Connector now returns it as a '{1}' (External ID '{2}'). It has not been imported, and {3}. If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM will retire the '{0}' object and import a new '{1}' one. If it has not, review the Object Types selected on the Connected System.</value>
+    <comment>An error on an import item whose Object Type changed. {0}: the Object Type JIM holds, {1}: the one it arrived as, {2}: the External ID, {3}: one of the two clauses ImportKeptHeldObsolete and ImportKeptHeldNothingDeprovisioned. 'Allow Object Type Changes' is the name of a Run Profile option.</comment>
+  </data>
+  <data name="ImportKeptHeldObsolete" xml:space="preserve">
+    <value>the existing '{0}' object, which an earlier import marked obsolete, has been left as it is</value>
+    <comment>A clause inside ImportObjectTypeChangeRefused. Lower case, no full stop.</comment>
+  </data>
+  <data name="ImportKeptHeldNothingDeprovisioned" xml:space="preserve">
+    <value>the existing '{0}' object has been left as it is, so nothing is deprovisioned</value>
+    <comment>A clause inside ImportObjectTypeChangeRefused. Lower case, no full stop.</comment>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System: {1}. The referenced object is out of scope for every Synchronisation Rule into this system, or has not been provisioned yet. Everything else on this export was written; the reference is retried on the deferred cadence and written when the object appears.</value>
+    <comment>Error or note on an export item that refers to an object the target does not hold. {0}: how many, as plain digits, {1}: the list of references (a message or text).</comment>
+  </data>
+  <data name="UnresolvedReferencesAndMore" xml:space="preserve">
+    <value>{0}; and {1} more</value>
+    <comment>The end of a list of unresolved references. {0}: the first few references, {1}: how many more, as plain digits.</comment>
+  </data>
+  <data name="ProvisioningMatchFailed" xml:space="preserve">
+    <value>Before provisioning to '{0}': {1}</value>
+    <comment>An error when export matching could not be worked out. {0}: the Connected System's name, {1}: why.</comment>
+  </data>
+  <data name="ProvisioningAmbiguity" xml:space="preserve">
+    <value>This Metaverse Object matches {0} Connected System Objects in '{1}', so {2}. A Metaverse Object can join only one Connected System Object in each Connected System: correct the data, or the Object Matching Rule, so that its values identify one.</value>
+    <comment>An error when export matching found several objects. {0}: how many, as plain digits, {1}: the Connected System's name, {2}: one of ProvisioningOutcomeWasNot and ProvisioningOutcomeWouldNot (starts lower case, no full stop).</comment>
+  </data>
+  <data name="ProvisioningAmbiguityOnRule" xml:space="preserve">
+    <value>This Metaverse Object matches {0} Connected System Objects in '{1}' on {2} ({3}), so {4}. A Metaverse Object can join only one Connected System Object in each Connected System: correct the data, or the Object Matching Rule, so that its values identify one.</value>
+    <comment>As ProvisioningAmbiguity, where the Object Matching Rule is known. {2}: a description of the rule's comparison, in English (for example 'Employee ID equals employeeNumber'), {3}: the matched values (quoted, comma separated), {4}: the outcome.</comment>
+  </data>
+  <data name="ProvisioningAmbiguityMoreValues" xml:space="preserve">
+    <value>and {0} more</value>
+    <comment>The last item of a list of matched values. {0}: how many more, as plain digits.</comment>
+  </data>
+  <data name="ProvisioningOutcomeWasNot" xml:space="preserve">
+    <value>it was neither joined to one nor provisioned</value>
+    <comment>The outcome inside ProvisioningAmbiguity. Lower case, no full stop. The German is a main clause with the verb first, because it follows 'daher gilt:'.</comment>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronisation would neither join it to one nor provision it</value>
+    <comment>The outcome inside ProvisioningAmbiguity, when a preview describes what a synchronisation would do. Lower case, no full stop.</comment>
+  </data>
+  <data name="PasswordSetInitial" xml:space="preserve">
+    <value>Initial password set on {0}</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. The start of a sentence the delivery text completes; no full stop.</comment>
+  </data>
+  <data name="PasswordSetStandInApplies" xml:space="preserve">
+    <value>Password set on {0} as this Connected System Object's first password, in place of its Initial Password</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. No full stop.</comment>
+  </data>
+  <data name="PasswordSetStandInNoLongerSet" xml:space="preserve">
+    <value>Password set on {0} as this Connected System Object's first password. The Synchronisation Rule that provisioned it no longer sets an Initial Password, or has been deleted, so its settings for enabling the Connected System Object and for whether its password never expires were not applied</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. No full stop.</comment>
+  </data>
+  <data name="PasswordSetStandInOtherAccount" xml:space="preserve">
+    <value>Password set on {0}. It was also to be the first password of a Connected System Object there that is no longer this person's, so that Initial Password's settings for enabling the Connected System Object and for whether its password never expires were not applied to this one</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. No full stop.</comment>
+  </data>
+  <data name="PasswordSetPlain" xml:space="preserve">
+    <value>Password set on {0}</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. No full stop.</comment>
+  </data>
+  <data name="PasswordSetSentence" xml:space="preserve">
+    <value>Password set on {0}.</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. With a full stop; what a delivery says when it has nothing more to add.</comment>
+  </data>
+  <data name="PasswordDeliveryEnableLeftToFlow" xml:space="preserve">
+    <value>{0}. The account's enabled state was left to its Attribute Flow, which sets it, so the Initial Password's "Enable the Connected System Object once the password is set" did not apply.</value>
+    <comment>Activity text of a password delivery. {0}: what was set (a message, no full stop). The quoted words name a Synchronisation Rule's Initial Password option.</comment>
+  </data>
+  <data name="PasswordDeliveryEnableCompletesWithheld" xml:space="preserve">
+    <value>{0}, and the account enabled as its Attribute Flow asks: JIM held the enable back until the account had a password.</value>
+    <comment>Activity text of a password delivery. {0}: what was set (a message, no full stop).</comment>
+  </data>
+  <data name="PasswordDeliveryEnabledAsAsked" xml:space="preserve">
+    <value>{0}, and the Connected System Object enabled as the Synchronisation Rule's Initial Password asks.</value>
+    <comment>Activity text of a password delivery. {0}: what was set (a message, no full stop).</comment>
+  </data>
+  <data name="PasswordDeliveryEnableAsksOnly" xml:space="preserve">
+    <value>{0}. The Synchronisation Rule's Initial Password asks for the Connected System Object to be enabled.</value>
+    <comment>Activity text of a password delivery. {0}: what was set (a message, no full stop).</comment>
+  </data>
+  <data name="PasswordDeliveryEnableNotAsked" xml:space="preserve">
+    <value>{0}. The Synchronisation Rule's Initial Password does not enable it, so it was left as it was created.</value>
+    <comment>Activity text of a password delivery. {0}: what was set (a message, no full stop).</comment>
+  </data>
+  <data name="PasswordDeliveryPlain" xml:space="preserve">
+    <value>{0}.</value>
+    <comment>Activity text of a password delivery. {0}: what was set (a message, no full stop). Keep the full stop.</comment>
+  </data>
+  <data name="PasswordNotSet" xml:space="preserve">
+    <value>Password not set on {0}: {1}. {2}.</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name, {1}: why (the target's own words, or a reason from PasswordReasonUnknown or the failure's name), {2}: what happens next (PasswordRetryParked or PasswordRetryAgain, no full stop).</comment>
+  </data>
+  <data name="PasswordRetryParked" xml:space="preserve">
+    <value>JIM has stopped trying; retry it once the cause is fixed</value>
+    <comment>Activity text of a password delivery. Inside PasswordNotSet. No full stop.</comment>
+  </data>
+  <data name="PasswordRetryAgain" xml:space="preserve">
+    <value>JIM will try again</value>
+    <comment>Activity text of a password delivery. Inside PasswordNotSet. No full stop.</comment>
+  </data>
+  <data name="PasswordReasonUnknown" xml:space="preserve">
+    <value>an unknown reason</value>
+    <comment>Activity text of a password delivery. Inside PasswordNotSet, where the target gave no reason.</comment>
+  </data>
+  <data name="PasswordWithdrawnAccountGone" xml:space="preserve">
+    <value>Initial password no longer needed: the account it was for no longer exists in {0}, or is no longer joined to this person.</value>
+    <comment>Activity text of an Initial Password withdrawn from the queue. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="PasswordWithdrawnRuleOff" xml:space="preserve">
+    <value>Initial password no longer needed: the Synchronisation Rule that provisioned this account no longer sets one, or has been deleted.</value>
+    <comment>Activity text of an Initial Password withdrawn from the queue.</comment>
+  </data>
+  <data name="PasswordCaveatBase" xml:space="preserve">
+    <value>Not everything asked for could be applied.</value>
+    <comment>Activity text of a password delivery. A delivery set the password but not everything asked of it.</comment>
+  </data>
+  <data name="PasswordCaveatRequireChange" xml:space="preserve">
+    <value>Not everything asked for could be applied: a change is required at the next sign-in.</value>
+    <comment>Activity text of a password delivery. What the account does instead.</comment>
+  </data>
+  <data name="PasswordCaveatExpiresByPolicy" xml:space="preserve">
+    <value>Not everything asked for could be applied: the password expires according to {0}'s own password policy.</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name.</comment>
+  </data>
+  <data name="PasswordCaveatNeverExpires" xml:space="preserve">
+    <value>Not everything asked for could be applied: the password never expires.</value>
+    <comment>Activity text of a password delivery. What the account does instead.</comment>
+  </data>
+  <data name="PasswordCaveatWarningWithheld" xml:space="preserve">
+    <value>[the Connected System's warning is withheld because it contained the password]</value>
+    <comment>Activity text of a password delivery. Stands where the target system's own warning would be. Keep the square brackets.</comment>
+  </data>
+  <data name="PasswordCaveatOwnerLeftToExport" xml:space="preserve">
+    <value>"Password never expires" was left to the export that writes userAccountControl, which keeps it set; set it in that Attribute Flow only where passwords should never expire, or choose another expiry for the Initial Password.</value>
+    <comment>Activity text of a password delivery. 'Password never expires' names an account option (the userAccountControl flag).</comment>
+  </data>
+  <data name="PasswordCaveatOwnerAsAccountHas" xml:space="preserve">
+    <value>A password set on every Connected System leaves "Password never expires" as each account has it.</value>
+    <comment>Activity text of a password delivery. 'Password never expires' names an account option.</comment>
+  </data>
+  <data name="PasswordCaveatSharedStatic" xml:space="preserve">
+    <value>Every account given this Synchronisation Rule's Static Initial Password therefore keeps that one shared password, which never expires.</value>
+    <comment>Activity text of a password delivery. Follows PasswordCaveatOwnerLeftToExport or PasswordCaveatOwnerAsAccountHas.</comment>
+  </data>
+  <data name="PasswordPutBackWithheldEnable" xml:space="preserve">
+    <value>"Password never expires" was changed on this account, but the export JIM held until the account had a password still carries the Attribute Flow's userAccountControl, and writes it back, "Password never expires" and all, once it is released.</value>
+    <comment>Activity text of a password delivery. Why an administrator's change will not last.</comment>
+  </data>
+  <data name="PasswordPutBackEnforced" xml:space="preserve">
+    <value>"Password never expires" was changed on this account, but the Synchronisation Rule {0} writes its userAccountControl with Enforce State on, so the next synchronisation puts the Attribute Flow's value back, and with it whether the password never expires; while that value keeps "Password never expires" set, Active Directory does not ask for a change at the next sign-in.</value>
+    <comment>Activity text of a password delivery. {0}: the Synchronisation Rule's name.</comment>
+  </data>
+  <data name="PasswordNoteLeftToExportSet" xml:space="preserve">
+    <value>"Password never expires" was left to the export that writes userAccountControl, which sets it, so the password never expires.</value>
+    <comment>Activity text of a password delivery. Information, not a warning.</comment>
+  </data>
+  <data name="PasswordNoteLeftSet" xml:space="preserve">
+    <value>"Password never expires" was left as the account has it, which is set, so the password never expires.</value>
+    <comment>Activity text of a password delivery. Information, not a warning.</comment>
+  </data>
+  <data name="PasswordNoteLeftToExportOff" xml:space="preserve">
+    <value>"Password never expires" was left to the export that writes userAccountControl, which leaves it off, so the password expires according to {0}'s own password policy. To have these passwords never expire, set Password never expires (65536) in the Attribute Flow that writes userAccountControl.</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. Information, not a warning.</comment>
+  </data>
+  <data name="PasswordNoteEverySystemOff" xml:space="preserve">
+    <value>A password set on every Connected System leaves "Password never expires" as each account has it, so the Never expires asked for was not applied; the password expires according to {0}'s own password policy.</value>
+    <comment>Activity text of a password delivery. {0}: the Connected System's name. Information, not a warning.</comment>
+  </data>
+  <data name="PasswordQueueRetryOne" xml:space="preserve">
+    <value>{0} queued password change will be attempted again.</value>
+    <comment>Activity text of an administrator's retry over the password queue. {0}: how many, as plain digits. The singular form.</comment>
+  </data>
+  <data name="PasswordQueueRetryOther" xml:space="preserve">
+    <value>{0} queued password changes will be attempted again.</value>
+    <comment>Activity text of an administrator's retry over the password queue. {0}: how many, as plain digits. The plural form.</comment>
+  </data>
+  <data name="PasswordQueueCancelOne" xml:space="preserve">
+    <value>{0} queued password change will not be delivered.</value>
+    <comment>Activity text of an administrator's cancel over the password queue. {0}: how many, as plain digits. The singular form.</comment>
+  </data>
+  <data name="PasswordQueueCancelOther" xml:space="preserve">
+    <value>{0} queued password changes will not be delivered.</value>
+    <comment>Activity text of an administrator's cancel over the password queue. {0}: how many, as plain digits. The plural form.</comment>
+  </data>
+  <data name="PasswordFilterOneChange" xml:space="preserve">
+    <value>One password change</value>
+    <comment>The target of an administrator's action over the password queue, naming one change.</comment>
+  </data>
+  <data name="PasswordFilterChanges" xml:space="preserve">
+    <value>{0} password changes</value>
+    <comment>The target of an administrator's action over the password queue. {0}: how many changes, or the status and failure names that were chosen.</comment>
+  </data>
+  <data name="PasswordFilterWholeQueue" xml:space="preserve">
+    <value>The Password Synchronisation queue</value>
+    <comment>The target of an administrator's action over the whole password queue.</comment>
+  </data>
+  <data name="ExchangeRetryFailed" xml:space="preserve">
+    <value>The retry did not complete: {0}</value>
+    <comment>The error on the Activity of an administrator's retry over the Exchange queue. {0}: the cause, which another system may word.</comment>
+  </data>
+  <data name="ExportNotConfirmedByImport" xml:space="preserve">
+    <value>We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {0} attribute(s): {1}. Will attempt to reassert the change on the next export run.</value>
+    <comment>An error on an item of a confirming import. {0}: how many attributes, as plain digits, {1}: their names, comma separated, with '(x2)' after a name that changed twice.</comment>
+  </data>
 </root>

@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Core.DTOs;
 
 /// <summary>
@@ -27,6 +30,25 @@ public class AttributeReference
     /// A human-readable description of the reference, for audit messages and the confirmation dialog.
     /// </summary>
     public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// <see cref="Description"/> as a message the portal renders in the viewer's language; setting it also sets
+    /// <see cref="Description"/> to its British English. Not part of the REST response, which keeps reading the English.
+    /// Null for a reference described by English only.
+    /// </summary>
+    [JsonIgnore]
+    public JimMessage? DescriptionDetail
+    {
+        get => _descriptionDetail;
+        set
+        {
+            _descriptionDetail = value;
+            if (value != null)
+                Description = value.ToEnglish();
+        }
+    }
+
+    private JimMessage? _descriptionDetail;
 
     /// <summary>
     /// The owning Synchronisation Rule id, when the reference belongs to one (mappings, sources, scoping criteria,

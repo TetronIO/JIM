@@ -1032,4 +1032,301 @@
   <data name="WithdrawnReferencesToDeletedObjectsWarning" xml:space="preserve">
     <value>{0} valeur(s) de référence en file d’attente ont été retirées, car l’objet Metaverse auquel elles faisaient référence a été supprimé ; elles n’auraient jamais pu être écrites. Une exportation en attente qui n’avait plus rien à envoyer a été terminée.</value>
   </data>
+  <data name="MetaverseAttributeReferenceRemoved" xml:space="preserve">
+    <value>{0} supprimé, qui référençait l’attribut Metaverse « {1} »</value>
+  </data>
+  <data name="MetaverseAttributeRemoved" xml:space="preserve">
+    <value>Attribut Metaverse « {0} » supprimé</value>
+  </data>
+  <data name="MetaverseAttributeUnassigned" xml:space="preserve">
+    <value>Attribut Metaverse « {0} » retiré du type d’objet Metaverse « {1} »</value>
+  </data>
+  <data name="MetaverseReferenceRemovedScoped" xml:space="preserve">
+    <value>{0} supprimé, qui était limité au type d’objet Metaverse « {1} »</value>
+  </data>
+  <data name="MetaverseObjectTypeRemoved" xml:space="preserve">
+    <value>Type d’objet Metaverse « {0} » supprimé</value>
+  </data>
+  <data name="ExportResolvingDeferred" xml:space="preserve">
+    <value>Résolution de {0} exportations différées</value>
+  </data>
+  <data name="ExportLoadingDeferred" xml:space="preserve">
+    <value>Chargement des exportations différées {0} à {1} sur {2}</value>
+  </data>
+  <data name="ExportWithdrewDeferredReferences" xml:space="preserve">
+    <value>Références à des objets supprimés retirées de {0} exportations différées</value>
+  </data>
+  <data name="ExportSavingResolvedReferences" xml:space="preserve">
+    <value>Enregistrement des références résolues pour {0} exportations différées</value>
+  </data>
+  <data name="ExportRecordingWaiting" xml:space="preserve">
+    <value>Enregistrement des exportations qui attendent encore leurs références</value>
+  </data>
+  <data name="ExportBatchFailed" xml:space="preserve">
+    <value>Échec de l’exportation du lot : {0}</value>
+  </data>
+  <data name="ExportBatchCloseFailed" xml:space="preserve">
+    <value>Les résultats d’un lot ont été enregistrés, mais la fermeture de sa connexion a échoué : {0}</value>
+  </data>
+  <data name="ExportBatchFinishFailed" xml:space="preserve">
+    <value>Les résultats du lot ont été enregistrés, mais JIM a échoué lors de leur finalisation : {0}</value>
+  </data>
+  <data name="ExportFailedNoReason" xml:space="preserve">
+    <value>Échec de l’exportation</value>
+  </data>
+  <data name="CollisionRemediated" xml:space="preserve">
+    <value>{0} contient déjà la valeur « {2} » de l’attribut {1} pour un autre objet ; JIM l’a donc corrigée en « {3} ».</value>
+  </data>
+  <data name="CollisionNeedsDecision" xml:space="preserve">
+    <value>{0} a rejeté la valeur « {2} » de l’attribut {1}, car un autre objet la contient déjà, et JIM ne l’a pas modifiée : {3}. Autorisez le changement de nom, réessayez une fois le conflit résolu dans {0}, ou laissez-le en l’état.</value>
+  </data>
+  <data name="CollisionWhyLimitReached" xml:space="preserve">
+    <value>elle a déjà été corrigée {0} fois ; JIM a donc cessé de la corriger</value>
+  </data>
+  <data name="CollisionWhyAnchored" xml:space="preserve">
+    <value>{0} a déjà accepté {1} pour cet objet ; le modifier reviendrait donc à renommer un compte déjà utilisé</value>
+  </data>
+  <data name="CollisionWhyCannotTell" xml:space="preserve">
+    <value>JIM ne peut pas savoir si {0} contient déjà {1}, car {0} n’a pas terminé d’importation complète depuis que son espace connecteur a été vidé</value>
+  </data>
+  <data name="CollisionWhyNoValue" xml:space="preserve">
+    <value>aucune autre valeur n’a pu être trouvée pour elle : {0}</value>
+  </data>
+  <data name="CollisionItself" xml:space="preserve">
+    <value>cette valeur</value>
+  </data>
+  <data name="CollisionBuiltFromIt" xml:space="preserve">
+    <value>la valeur {0} construite à partir de celle-ci</value>
+  </data>
+  <data name="InitialPasswordCarried" xml:space="preserve">
+    <value>Mot de passe initial non mis en file d’attente pour {0} : une modification de mot de passe déjà en attente pour cette personne sera à la place le premier mot de passe de cet objet de système connecté, en conservant son propre mot de passe et son expiration. Sa remise applique les paramètres de mot de passe initial de cette règle de synchronisation pour l’activation de l’objet de système connecté et pour savoir si son mot de passe n’expire jamais, sauf si une exportation les a elle-même écrits.</value>
+  </data>
+  <data name="InitialPasswordCarriedParked" xml:space="preserve">
+    <value>{0} Elle avait été mise en suspens ({1}) et est de nouveau due maintenant que l’objet de système connecté existe.</value>
+  </data>
+  <data name="InitialPasswordCarriedDelivering" xml:space="preserve">
+    <value>{0} Elle était en cours de remise lors de la création de l’objet de système connecté et est remise de nouveau avec ces paramètres.</value>
+  </data>
+  <data name="InitialPasswordCarriedWaiting" xml:space="preserve">
+    <value>{0} Elle attendait que l’objet de système connecté existe et est due maintenant.</value>
+  </data>
+  <data name="InitialPasswordQueued" xml:space="preserve">
+    <value>Mot de passe initial mis en file d’attente pour remise à {0}.</value>
+  </data>
+  <data name="InitialPasswordQueuedReplacing" xml:space="preserve">
+    <value>Mot de passe initial mis en file d’attente pour remise à {0}, à la place d’une modification de mot de passe de cette personne qui y était en attente : {1}</value>
+  </data>
+  <data name="PasswordNotSetReplaced" xml:space="preserve">
+    <value>Mot de passe non défini sur {0} : remplacé par le mot de passe initial d’un objet de système connecté que JIM vient d’y provisionner. Motif : {1}</value>
+  </data>
+  <data name="PasswordReplacedHeld" xml:space="preserve">
+    <value>elle est retenue tant que la synchronisation des mots de passe est désactivée pour {0} ; elle ne l’avait donc pas atteint, et le premier mot de passe d’un objet de système connecté est remis quelle que soit la suspension.</value>
+  </data>
+  <data name="PasswordReplacedAccountGone" xml:space="preserve">
+    <value>elle a été définie sur un objet de système connecté qui n’existe plus à cet endroit ou qui n’appartient plus à cette personne.</value>
+  </data>
+  <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
+    <value>elle concerne le type d’objet sur lequel la synchronisation des mots de passe définit les mots de passe dans {0}, ce que n’est pas cet objet de système connecté ; elle ne pouvait donc pas l’atteindre, ni aucun autre objet de cette personne à cet endroit tant que celui-ci est le sien.</value>
+  </data>
+  <data name="PasswordReplacedStoppedTrying" xml:space="preserve">
+    <value>JIM avait cessé d’essayer de la remettre ({0}).</value>
+  </data>
+  <data name="PasswordParkedPolicy" xml:space="preserve">
+    <value>le mot de passe ne respectait pas la stratégie de mots de passe du système</value>
+  </data>
+  <data name="PasswordParkedConfiguration" xml:space="preserve">
+    <value>un problème de configuration a empêché de le définir</value>
+  </data>
+  <data name="PasswordParkedUnsupported" xml:space="preserve">
+    <value>le système ne peut pas y définir de mot de passe</value>
+  </data>
+  <data name="PasswordParkedObjectMissing" xml:space="preserve">
+    <value>l’objet de système connecté n’existait pas encore</value>
+  </data>
+  <data name="PasswordParkedUnreachable" xml:space="preserve">
+    <value>le système était injoignable</value>
+  </data>
+  <data name="PasswordParkedUnrecorded" xml:space="preserve">
+    <value>pour une raison que JIM n’a pas enregistrée</value>
+  </data>
+  <data name="PasswordParkedWithTargetMessage" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="AttributePriorityRenumbered" xml:space="preserve">
+    <value>Les numéros de priorité des attributs ont été renumérotés à la suite d’une modification de la règle de synchronisation « {0} ». L’ordre dans lequel les règles de synchronisation contribuent à l’attribut Metaverse reste inchangé.</value>
+  </data>
+  <data name="DeprovisioningScopeHeldBack" xml:space="preserve">
+    <value>{0} Cet objet et l’objet Metaverse {1} ont été laissés en l’état, et le système connecté n’est pas supprimé tant qu’ils ne peuvent pas être traités.</value>
+  </data>
+  <data name="RecallScopeHeldBack" xml:space="preserve">
+    <value>{0} L’objet Metaverse {1} a été laissé en l’état, avec les valeurs que la règle de synchronisation a apportées.</value>
+  </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM conserve cet objet en tant que « {0} », et cette importation complète autorise les changements de type d’objet, mais elle n’a pas pu retirer l’objet « {0} » : il se trouve en dehors de ce que couvre la détection des suppressions de l’importation complète (une partition que ce profil d’exécution n’importe pas, ou un type d’objet désélectionné qu’une règle de synchronisation activée gère encore). Le nouvel objet « {1} » n’a pas été créé et l’objet « {0} » a été laissé en l’état ; aucun déprovisionnement n’a donc lieu. Placez l’objet « {0} » dans le périmètre de l’importation complète, ou désactivez les règles de synchronisation liées à son type d’objet, puis relancez l’importation complète.</value>
+  </data>
+  <data name="ExportedCreateNotConfirmed" xml:space="preserve">
+    <value>L’exportation de création a réussi, mais cette importation a lu tous les objets sans renvoyer celui-ci. La création sera retentée lors de la prochaine exportation.</value>
+  </data>
+  <data name="ImportDeletionWithoutObjectType" xml:space="preserve">
+    <value>Le connecteur a signalé une suppression sans son type d’objet, et son identifiant externe ne permet pas à JIM de savoir quel objet a été supprimé : les identifiants externes de ce connecteur peuvent désigner des objets différents dans des types d’objet différents. Rien n’a été supprimé ; lancez une importation complète, qui détecte les suppressions par absence.</value>
+  </data>
+  <data name="ImportObjectTypeNotFound" xml:space="preserve">
+    <value>Aucun type d’objet valide n’a été trouvé dans le système connecté ({0}) pour le type d’objet importé : {1}</value>
+  </data>
+  <data name="ImportObjectTypeChangeRefused" xml:space="preserve">
+    <value>JIM conserve cet objet en tant que « {0} », mais le connecteur le renvoie désormais en tant que « {1} » (identifiant externe « {2} »). Il n’a pas été importé, et {3}. Si le type de l’objet a réellement changé, lancez une importation complète avec l’option « Autoriser les changements de type d’objet » activée sur son profil d’exécution : JIM retirera l’objet « {0} » et importera un nouvel objet « {1} ». Sinon, vérifiez les types d’objet sélectionnés sur le système connecté.</value>
+  </data>
+  <data name="ImportKeptHeldObsolete" xml:space="preserve">
+    <value>l’objet « {0} » existant, qu’une importation précédente a marqué comme obsolète, a été laissé en l’état</value>
+  </data>
+  <data name="ImportKeptHeldNothingDeprovisioned" xml:space="preserve">
+    <value>l’objet « {0} » existant a été laissé en l’état ; aucun déprovisionnement n’a donc lieu</value>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} valeur(s) de référence n’ont pas pu être écrites, car l’objet Metaverse référencé n’a pas d’objet de système connecté dans ce système connecté : {1}. L’objet référencé est hors du périmètre de toutes les règles de synchronisation vers ce système, ou n’a pas encore été provisionné. Tout le reste de cette exportation a été écrit ; la référence est retentée selon la cadence différée et écrite dès que l’objet apparaît.</value>
+  </data>
+  <data name="UnresolvedReferencesAndMore" xml:space="preserve">
+    <value>{0} ; et {1} de plus</value>
+  </data>
+  <data name="ProvisioningMatchFailed" xml:space="preserve">
+    <value>Avant le provisionnement vers « {0} » : {1}</value>
+  </data>
+  <data name="ProvisioningAmbiguity" xml:space="preserve">
+    <value>Cet objet Metaverse correspond à {0} objets de système connecté dans « {1} » ; {2}. Un objet Metaverse ne peut être joint qu’à un seul objet de système connecté dans chaque système connecté : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ProvisioningAmbiguityOnRule" xml:space="preserve">
+    <value>Cet objet Metaverse correspond à {0} objets de système connecté dans « {1} » selon {2} ({3}) ; {4}. Un objet Metaverse ne peut être joint qu’à un seul objet de système connecté dans chaque système connecté : corrigez les données, ou la règle de correspondance d’objets, afin que ses valeurs en identifient un seul.</value>
+  </data>
+  <data name="ProvisioningAmbiguityMoreValues" xml:space="preserve">
+    <value>et {0} de plus</value>
+  </data>
+  <data name="ProvisioningOutcomeWasNot" xml:space="preserve">
+    <value>il n’a été ni joint à l’un d’eux ni provisionné</value>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>une synchronisation ne le joindrait ni à l’un d’eux ni ne le provisionnerait</value>
+  </data>
+  <data name="PasswordSetInitial" xml:space="preserve">
+    <value>Mot de passe initial défini sur {0}</value>
+  </data>
+  <data name="PasswordSetStandInApplies" xml:space="preserve">
+    <value>Mot de passe défini sur {0} en tant que premier mot de passe de cet objet de système connecté, à la place de son mot de passe initial</value>
+  </data>
+  <data name="PasswordSetStandInNoLongerSet" xml:space="preserve">
+    <value>Mot de passe défini sur {0} en tant que premier mot de passe de cet objet de système connecté. La règle de synchronisation qui l’a provisionné ne définit plus de mot de passe initial, ou a été supprimée ; ses paramètres d’activation de l’objet de système connecté et d’expiration du mot de passe n’ont donc pas été appliqués</value>
+  </data>
+  <data name="PasswordSetStandInOtherAccount" xml:space="preserve">
+    <value>Mot de passe défini sur {0}. Il devait aussi être le premier mot de passe d’un objet de système connecté qui s’y trouve et n’appartient plus à cette personne ; les paramètres de ce mot de passe initial pour l’activation de l’objet de système connecté et pour l’expiration du mot de passe n’ont donc pas été appliqués à celui-ci</value>
+  </data>
+  <data name="PasswordSetPlain" xml:space="preserve">
+    <value>Mot de passe défini sur {0}</value>
+  </data>
+  <data name="PasswordSetSentence" xml:space="preserve">
+    <value>Mot de passe défini sur {0}.</value>
+  </data>
+  <data name="PasswordDeliveryEnableLeftToFlow" xml:space="preserve">
+    <value>{0}. L’état activé du compte a été laissé à son flux d’attributs, qui le définit ; le paramètre « Activer l’objet de système connecté une fois le mot de passe défini » du mot de passe initial ne s’est donc pas appliqué.</value>
+  </data>
+  <data name="PasswordDeliveryEnableCompletesWithheld" xml:space="preserve">
+    <value>{0}, et le compte a été activé comme le demande son flux d’attributs : JIM a retenu l’activation jusqu’à ce que le compte ait un mot de passe.</value>
+  </data>
+  <data name="PasswordDeliveryEnabledAsAsked" xml:space="preserve">
+    <value>{0}, et l’objet de système connecté a été activé comme le demande le mot de passe initial de la règle de synchronisation.</value>
+  </data>
+  <data name="PasswordDeliveryEnableAsksOnly" xml:space="preserve">
+    <value>{0}. Le mot de passe initial de la règle de synchronisation demande que l’objet de système connecté soit activé.</value>
+  </data>
+  <data name="PasswordDeliveryEnableNotAsked" xml:space="preserve">
+    <value>{0}. Le mot de passe initial de la règle de synchronisation ne l’active pas ; il a donc été laissé tel qu’il a été créé.</value>
+  </data>
+  <data name="PasswordDeliveryPlain" xml:space="preserve">
+    <value>{0}.</value>
+  </data>
+  <data name="PasswordNotSet" xml:space="preserve">
+    <value>Mot de passe non défini sur {0} : {1}. {2}.</value>
+  </data>
+  <data name="PasswordRetryParked" xml:space="preserve">
+    <value>JIM a cessé d’essayer ; relancez l’opération une fois la cause corrigée</value>
+  </data>
+  <data name="PasswordRetryAgain" xml:space="preserve">
+    <value>JIM réessaiera</value>
+  </data>
+  <data name="PasswordReasonUnknown" xml:space="preserve">
+    <value>une raison inconnue</value>
+  </data>
+  <data name="PasswordWithdrawnAccountGone" xml:space="preserve">
+    <value>Mot de passe initial devenu inutile : le compte auquel il était destiné n’existe plus dans {0} ou n’est plus joint à cette personne.</value>
+  </data>
+  <data name="PasswordWithdrawnRuleOff" xml:space="preserve">
+    <value>Mot de passe initial devenu inutile : la règle de synchronisation qui a provisionné ce compte n’en définit plus, ou a été supprimée.</value>
+  </data>
+  <data name="PasswordCaveatBase" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué.</value>
+  </data>
+  <data name="PasswordCaveatRequireChange" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué : une modification est requise à la prochaine connexion.</value>
+  </data>
+  <data name="PasswordCaveatExpiresByPolicy" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué : le mot de passe expire selon la propre stratégie de mots de passe de {0}.</value>
+  </data>
+  <data name="PasswordCaveatNeverExpires" xml:space="preserve">
+    <value>Tout ce qui était demandé n’a pas pu être appliqué : le mot de passe n’expire jamais.</value>
+  </data>
+  <data name="PasswordCaveatWarningWithheld" xml:space="preserve">
+    <value>[l’avertissement du système connecté est masqué, car il contenait le mot de passe]</value>
+  </data>
+  <data name="PasswordCaveatOwnerLeftToExport" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé à l’exportation qui écrit userAccountControl, laquelle le maintient activé ; ne l’activez dans ce flux d’attributs que lorsque les mots de passe ne doivent jamais expirer, ou choisissez une autre expiration pour le mot de passe initial.</value>
+  </data>
+  <data name="PasswordCaveatOwnerAsAccountHas" xml:space="preserve">
+    <value>Un mot de passe défini sur chaque système connecté laisse « Le mot de passe n’expire jamais » tel que chaque compte l’a.</value>
+  </data>
+  <data name="PasswordCaveatSharedStatic" xml:space="preserve">
+    <value>Chaque compte auquel a été attribué le mot de passe initial statique de cette règle de synchronisation conserve donc ce mot de passe unique et partagé, qui n’expire jamais.</value>
+  </data>
+  <data name="PasswordPutBackWithheldEnable" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été modifié sur ce compte, mais l’exportation que JIM a retenue jusqu’à ce que le compte ait un mot de passe porte encore le userAccountControl du flux d’attributs et le réécrira, avec « Le mot de passe n’expire jamais », une fois libérée.</value>
+  </data>
+  <data name="PasswordPutBackEnforced" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été modifié sur ce compte, mais la règle de synchronisation {0} écrit son userAccountControl avec l’option Appliquer l’état activée ; la prochaine synchronisation rétablira donc la valeur du flux d’attributs, et avec elle le fait que le mot de passe n’expire jamais ; tant que cette valeur maintient « Le mot de passe n’expire jamais », Active Directory ne demande pas de modification à la prochaine connexion.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportSet" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé à l’exportation qui écrit userAccountControl, laquelle l’active ; le mot de passe n’expire donc jamais.</value>
+  </data>
+  <data name="PasswordNoteLeftSet" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé tel que le compte l’a, c’est-à-dire activé ; le mot de passe n’expire donc jamais.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportOff" xml:space="preserve">
+    <value>« Le mot de passe n’expire jamais » a été laissé à l’exportation qui écrit userAccountControl, laquelle le laisse désactivé ; le mot de passe expire donc selon la propre stratégie de mots de passe de {0}. Pour que ces mots de passe n’expirent jamais, activez « Le mot de passe n’expire jamais » (65536) dans le flux d’attributs qui écrit userAccountControl.</value>
+  </data>
+  <data name="PasswordNoteEverySystemOff" xml:space="preserve">
+    <value>Un mot de passe défini sur chaque système connecté laisse « Le mot de passe n’expire jamais » tel que chaque compte l’a ; l’option « N’expire jamais » demandée n’a donc pas été appliquée ; le mot de passe expire selon la propre stratégie de mots de passe de {0}.</value>
+  </data>
+  <data name="PasswordQueueRetryOne" xml:space="preserve">
+    <value>{0} modification de mot de passe en file d’attente sera retentée.</value>
+  </data>
+  <data name="PasswordQueueRetryOther" xml:space="preserve">
+    <value>{0} modifications de mot de passe en file d’attente seront retentées.</value>
+  </data>
+  <data name="PasswordQueueCancelOne" xml:space="preserve">
+    <value>{0} modification de mot de passe en file d’attente ne sera pas remise.</value>
+  </data>
+  <data name="PasswordQueueCancelOther" xml:space="preserve">
+    <value>{0} modifications de mot de passe en file d’attente ne seront pas remises.</value>
+  </data>
+  <data name="PasswordFilterOneChange" xml:space="preserve">
+    <value>Une modification de mot de passe</value>
+  </data>
+  <data name="PasswordFilterChanges" xml:space="preserve">
+    <value>{0} modifications de mot de passe</value>
+  </data>
+  <data name="PasswordFilterWholeQueue" xml:space="preserve">
+    <value>La file d’attente de synchronisation des mots de passe</value>
+  </data>
+  <data name="ExchangeRetryFailed" xml:space="preserve">
+    <value>La nouvelle tentative n’a pas abouti : {0}</value>
+  </data>
+  <data name="ExportNotConfirmedByImport" xml:space="preserve">
+    <value>Nous avons exporté une modification, mais nous n’en avons pas reçu la confirmation lors d’une importation de confirmation. Détails : {0} attribut(s) : {1}. Une nouvelle tentative d’application de la modification aura lieu lors de la prochaine exécution d’exportation.</value>
+  </data>
 </root>

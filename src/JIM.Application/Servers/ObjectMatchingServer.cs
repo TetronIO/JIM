@@ -10,6 +10,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -658,14 +659,15 @@ public class ObjectMatchingServer
     /// <param name="ambiguity">The ambiguous match.</param>
     /// <param name="connectedSystemName">The target Connected System's name.</param>
     /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
-    public static string DescribeProvisioningAmbiguity(MultipleMatchesException ambiguity, string connectedSystemName, bool previewing = false)
+    public static JimMessage DescribeProvisioningAmbiguity(MultipleMatchesException ambiguity, string connectedSystemName, bool previewing = false)
     {
-        var outcome = previewing
-            ? "a synchronisation would neither join it to one nor provision it"
-            : "it was neither joined to one nor provisioned";
-        return $"This Metaverse Object matches {CountOf(ambiguity)} Connected System Objects in '{connectedSystemName}'" +
-               $"{DescribeMatchedOn(ambiguity)}, so {outcome}. A Metaverse Object can join only one Connected System Object in " +
-               "each Connected System: correct the data, or the Object Matching Rule, so that its values identify one.";
+        const int maxValuesShown = 10;
+        var values = ambiguity.MatchValues
+            .Take(maxValuesShown)
+            .Select(value => $"\"{Convert.ToString(value, CultureInfo.InvariantCulture)}\"")
+            .ToList();
+        var more = Math.Max(0, ambiguity.MatchValues.Count - maxValuesShown);
+        return ActivityMessage.ProvisioningAmbiguity(CountOf(ambiguity), connectedSystemName, ambiguity.Rule?.DescribeComparison(), values, more, previewing);
     }
 
     private static int CountOf(MultipleMatchesException ambiguity) =>

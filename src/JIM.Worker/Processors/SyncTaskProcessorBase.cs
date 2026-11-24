@@ -4582,7 +4582,10 @@ public abstract class SyncTaskProcessorBase
     {
         var rpei = _activity.PrepareRunProfileExecutionItem();
         rpei.ErrorType = error.ErrorType;
-        rpei.ErrorMessage = error.Message;
+        if (error.MessageDetail is { } errorDetail)
+            rpei.ErrorMessageDetail = errorDetail;
+        else
+            rpei.ErrorMessage = error.Message;
         rpei.MetaverseObjectId = mvo.Id;
         rpei.DisplayNameSnapshot = mvo.NameOrId;
         rpei.ObjectTypeSnapshot = mvo.Type?.Name;

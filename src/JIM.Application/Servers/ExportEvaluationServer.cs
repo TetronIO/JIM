@@ -4,6 +4,7 @@
 using System.Globalization;
 using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
 using JIM.Application.Interfaces;
 using JIM.Application.Staging;
 using JIM.Application.UniqueValues;
@@ -4143,6 +4144,9 @@ public class ExportEvaluationServer
     {
         var ambiguity = matchingFailure as MultipleMatchesException;
         var systemName = exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(CultureInfo.InvariantCulture);
+        var detail = ambiguity == null
+            ? ActivityMessage.ProvisioningMatchFailed(systemName, ActivityMessage.CauseOf(matchingFailure))
+            : ObjectMatchingServer.DescribeProvisioningAmbiguity(ambiguity, systemName, previewing);
         return new ProvisioningMatchError
         {
             MetaverseObjectId = mvo.Id,
@@ -4152,9 +4156,8 @@ public class ExportEvaluationServer
             ErrorType = ambiguity == null
                 ? ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed
                 : ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch,
-            Message = ambiguity == null
-                ? $"Before provisioning to '{systemName}': {matchingFailure.Message}"
-                : ObjectMatchingServer.DescribeProvisioningAmbiguity(ambiguity, systemName, previewing),
+            Message = detail.ToEnglish(),
+            MessageDetail = detail,
             Candidates = ambiguity?.Candidates ?? []
         };
     }
