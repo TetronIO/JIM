@@ -350,6 +350,32 @@ public class GroupMembershipSyncTests
         Console.WriteLine("=== Test 2 Complete: Membership changes successfully synced to Target ===");
     }
 
+    /// <summary>
+    /// Once the group's members are confirmed in the target, the target's first synchronisation finds every member held
+    /// and stages nothing. Drift detection reads which Metaverse Object each held member stands for from the page load;
+    /// a load that leaves it out makes the group look empty, and every member is added again.
+    /// </summary>
+    [Test]
+    public async Task TargetDeltaSync_AfterMembersConfirmed_StagesNoDriftCorrectionAsync()
+    {
+        await SetUpEntitlementScenarioAsync();
+        await PerformInitialSyncAsync();
+
+        var targetSync = await _harness.ExecuteDeltaSyncAsync("Target");
+
+        var targetId = _harness.GetConnectedSystem("Target").Id;
+        var driftCorrections = _harness.SyncRepo.Rpeis.Values
+            .Where(i => i.ActivityId == targetSync.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection)
+            .Select(i => i.DisplayNameSnapshot)
+            .ToList();
+        var staged = _harness.SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == targetId).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(driftCorrections, Is.Empty, "Objects the target's first synchronisation called drifted");
+            Assert.That(staged, Is.Empty, "Pending Exports staged by a synchronisation with nothing to change");
+        }
+    }
+
     #region Setup Helpers
 
     private async Task SetUpEntitlementScenarioAsync()
