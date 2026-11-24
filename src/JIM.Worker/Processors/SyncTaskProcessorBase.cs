@@ -2740,7 +2740,8 @@ public abstract class SyncTaskProcessorBase
                 {
                     try
                     {
-                        generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
+                        using (Diagnostics.Sync.StartSpan("WithdrawalReElection"))
+                            generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
                     }
                     catch (ScopingCriterionFailedException)
                     {
