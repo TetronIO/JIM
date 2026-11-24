@@ -478,7 +478,7 @@ public static class CausalityModelBuilder
             SystemName = systemName,
             Badge = GetBadge(outcome.OutcomeType),
             DetailCount = outcome.DetailCount,
-            DetailMessage = usesIdChannel ? parsedDetail.PlainMessage : outcome.DetailMessage,
+            DetailMessage = usesIdChannel ? parsedDetail.PlainMessage : OutcomeDetailLocaliser.Localise(outcome.OutcomeType, outcome.DetailMessage),
             ObjectMatchingRuleDescription = outcome.ObjectMatchingRuleDescriptionSnapshot,
             MatchedValue = outcome.MatchedValue,
             JoinMatchDetail = DescribeJoinMatch(outcome.MatchedValue, outcome.ObjectMatchingRuleDescriptionSnapshot, isSpeculative: false),
