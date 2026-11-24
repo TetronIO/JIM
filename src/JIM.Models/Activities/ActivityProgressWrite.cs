@@ -9,6 +9,10 @@ namespace JIM.Models.Activities;
 /// </summary>
 /// <param name="ActivityId">The Activity the progress belongs to.</param>
 /// <param name="Message">The Activity's message.</param>
+/// <param name="MessageDetailJson">
+/// The message as a localisable message, as JSON, written in the same statement as <paramref name="Message"/> so the two never
+/// disagree (#3039); null where the message is English only, which clears any earlier one.
+/// </param>
 /// <param name="ObjectsProcessed">The Activity's count of objects processed.</param>
 /// <param name="ObjectsToProcess">The Activity's count of objects to process.</param>
 /// <param name="Phases">
@@ -20,4 +24,5 @@ public sealed record ActivityProgressWrite(
     string? Message,
     int ObjectsProcessed,
     int ObjectsToProcess,
-    IReadOnlyList<ActivityPhase> Phases);
+    IReadOnlyList<ActivityPhase> Phases,
+    string? MessageDetailJson = null);

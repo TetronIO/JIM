@@ -16,4 +16,7 @@ public static class MessageCatalogues
     public const string ScopingCriteria = "JIM.Models:ScopingCriteriaMessages";
 
     public const string SyncRule = "JIM.Models:SyncRuleMessages";
+
+    /// <summary>What a run says when an expression, a scoping criterion or an export rule stops an object (<c>SyncMessages.resx</c>).</summary>
+    public const string Sync = "JIM.Models:SyncMessages";
 }

@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using System.Globalization;
 using JIM.Application.UniqueValues;
 using JIM.Models.Interfaces;
@@ -90,19 +93,22 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
     /// per distinct caveat the system's probes answered with, in the order the systems were first probed. Empty when
     /// every probe answered in full, or when nothing was issued without one.
     /// </summary>
-    public IReadOnlyList<string> GetRunWarnings() =>
+    public IReadOnlyList<string> GetRunWarnings() => GetRunWarningMessages().Select(m => m.ToEnglish()).ToList();
+
+    /// <summary><see cref="GetRunWarnings"/> as messages the portal shows in the reader's language (#3039).</summary>
+    public IReadOnlyList<JimMessage> GetRunWarningMessages() =>
         _systems.Values
             .SelectMany(s => UndeterminedWarnings(s).Concat(s.Caveats.Select(caveat =>
-                $"JIM's probe of {s.Name} for values already in use was incomplete. {caveat}.")))
+                ActivityMessage.Create(nameof(ActivityMessages.ProbeIncomplete), s.Name, caveat))))
             .ToList();
 
-    private static IEnumerable<string> UndeterminedWarnings(SystemState system)
+    private static IEnumerable<JimMessage> UndeterminedWarnings(SystemState system)
     {
         if (system.UndeterminedReason == null || system.ValuesChosenWithoutProbe == 0)
             yield break;
 
-        yield return string.Create(CultureInfo.InvariantCulture,
-            $"JIM couldn't probe {system.Name} for values already in use. {system.UndeterminedReason}. JIM chose {system.ValuesChosenWithoutProbe} {(system.ValuesChosenWithoutProbe == 1 ? "value" : "values")} using its own records only.");
+        yield return ActivityMessage.Counted(nameof(ActivityMessages.ProbeUndeterminedOne), system.ValuesChosenWithoutProbe,
+            system.Name, system.UndeterminedReason, ActivityMessage.Plain(system.ValuesChosenWithoutProbe));
     }
 
     /// <summary>

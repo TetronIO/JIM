@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using JIM.Models.Localisation;
 using JIM.Models.Operations;
 
 namespace JIM.Application.Services;
@@ -58,12 +59,7 @@ public static class MemoryPressure
     /// run's own memory has been released by the time it is recorded, so the figures say what was left beside it), and
     /// the remedy.
     /// </summary>
-    public static string OutOfMemoryText(MemoryReading reading)
-    {
-        var figures = Describe(reading, "this service");
-        return "This run ran out of memory and stopped" + (figures.Length > 0 ? $" (now {figures})" : string.Empty) +
-               ". In a container with a memory limit, JIM can run out at about 75% of that limit. Give JIM more memory, or run less at once, then run it again.";
-    }
+    public static string OutOfMemoryText(MemoryReading reading) => Localisation.ActivityMessage.OutOfMemory(reading).ToEnglish();
 
     /// <summary>A share as a whole percentage: "92%".</summary>
     public static string Percent(double share) => $"{(int)Math.Round(share * 100)}%";

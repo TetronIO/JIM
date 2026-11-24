@@ -3,7 +3,10 @@
 
 using System.Collections.Concurrent;
 using System.Globalization;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Data.Repositories;
+using JIM.Models.Localisation;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -1361,6 +1364,7 @@ public sealed class UniqueValueGenerationServer
     {
         private readonly string?[] _lastGate = new string?[requests.Count];
         private readonly string?[] _lastForm = new string?[requests.Count];
+        private readonly JimMessage?[] _lastFormDetail = new JimMessage?[requests.Count];
         private readonly List<string>?[] _skipped = new List<string>?[requests.Count];
 
         /// <summary>
@@ -1370,6 +1374,7 @@ public sealed class UniqueValueGenerationServer
         {
             _lastGate[i] = gate;
             _lastForm[i] = null;
+            _lastFormDetail[i] = null;
         }
 
         /// <summary>
@@ -1380,6 +1385,8 @@ public sealed class UniqueValueGenerationServer
             var builtFrom = $"{check.Name} (built from {requests[i].AttributeName})";
             _lastGate[i] = gate;
             _lastForm[i] = $"its {builtFrom}, \"{check.Value}\",";
+            _lastFormDetail[i] = ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueFormFragment), check.Name,
+                requests[i].AttributeName, check.Value ?? string.Empty);
             (_skipped[i] ??= []).Add($"{candidate}: {builtFrom} is already held by {gate}");
         }
 
@@ -1398,9 +1405,17 @@ public sealed class UniqueValueGenerationServer
                   $"the last candidate, \"{candidateText}\", is already held by {gateText}."
                 : $"No free value was found for {request.AttributeName} after {request.Generation.AttemptLimit} attempts; " +
                   $"the last candidate, \"{candidateText}\", was passed over because {_lastForm[i]} is already held by {gateText}.";
+            MessageArgument candidateArgument = lastCandidate ?? (MessageArgument)ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueNoCandidate));
+            MessageArgument gateArgument = _lastGate[i] ?? (MessageArgument)ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueAnotherObject));
+            var detail = _lastFormDetail[i] == null
+                ? ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueExhausted), request.AttributeName,
+                    ActivityMessage.Plain(request.Generation.AttemptLimit), candidateArgument, gateArgument)
+                : ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueExhaustedForm), request.AttributeName,
+                    ActivityMessage.Plain(request.Generation.AttemptLimit), candidateArgument, _lastFormDetail[i]!, gateArgument);
             return new GenerationOutcome(request, GenerationOutcomeKind.Exhausted, null, null, null, message)
             {
-                SkippedCandidates = SkippedCandidates(i)
+                SkippedCandidates = SkippedCandidates(i),
+                FailureDetail = detail.ToEnglish() == message ? detail : null
             };
         }
     }
@@ -1595,7 +1610,10 @@ public sealed class UniqueValueGenerationServer
 
     private static GenerationOutcome WidthExceeded(GenerationRequest request, string candidate, int fixedWidth) =>
         new(request, GenerationOutcomeKind.WidthExceeded, null, null, null,
-            $"The next value for {request.AttributeName} would be \"{candidate}\", which no longer fits the configured fixed width of {fixedWidth} digits.");
+            $"The next value for {request.AttributeName} would be \"{candidate}\", which no longer fits the configured fixed width of {fixedWidth} digits.")
+        {
+            FailureDetail = ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueWidthExceeded), request.AttributeName, candidate, ActivityMessage.Plain(fixedWidth))
+        };
 
     // ---- Shared helpers ----
 

@@ -4,6 +4,7 @@
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Log = Serilog.Log;
@@ -106,14 +107,20 @@ public sealed class ActivityPhaseReporter
     /// The message to show while the phase runs. Omit it to use the phase's declared name, which is
     /// the right choice whenever the step's name already says everything there is to say.
     /// </param>
-    public Task EnterAsync(string phaseKey, string? message = null) => EnterCoreAsync(phaseKey, message);
+    public Task EnterAsync(string phaseKey, string? message = null) => EnterCoreAsync(phaseKey, message, null);
+
+    /// <summary>
+    /// Enters a step with narration the portal shows in the reader's language (#3039); the Activity stores the message
+    /// beside its British English.
+    /// </summary>
+    public Task EnterAsync(string phaseKey, JimMessage message) => EnterCoreAsync(phaseKey, message.ToEnglish(), message);
 
     /// <summary>
     /// Moves the run to one of the Connector's declared phases, which shows as the step running
     /// inside the JIM phase that called the Connector.
     /// </summary>
     public Task EnterConnectorPhaseAsync(string connectorPhaseKey, string? message = null) =>
-        EnterCoreAsync(ActivityPhase.QualifyConnectorKey(connectorPhaseKey), message);
+        EnterCoreAsync(ActivityPhase.QualifyConnectorKey(connectorPhaseKey), message, null);
 
     /// <summary>
     /// Finishes whichever step the Connector was running, leaving the JIM step that called it
@@ -254,7 +261,7 @@ public sealed class ActivityPhaseReporter
                 : async (phaseKey, message) => await EnterConnectorPhaseAsync(phaseKey, message),
             logger: _logger);
 
-    private async Task EnterCoreAsync(string phaseKey, string? message)
+    private async Task EnterCoreAsync(string phaseKey, string? message, JimMessage? detail)
     {
         if (_phases == null || _syncRepo == null || _activity == null)
             return;
@@ -280,7 +287,10 @@ public sealed class ActivityPhaseReporter
 
         if (throttle != null)
         {
-            await throttle.ReportAsync(string.IsNullOrWhiteSpace(text) ? null : text);
+            if (detail != null)
+                await throttle.ReportAsync(detail);
+            else
+                await throttle.ReportAsync(string.IsNullOrWhiteSpace(text) ? null : text);
             return;
         }
 
@@ -288,7 +298,9 @@ public sealed class ActivityPhaseReporter
             await PersistAsync(changed, "recording a phase transition");
 
         if (!string.IsNullOrWhiteSpace(text))
-            await GuardAsync(() => _syncRepo.UpdateActivityMessageAsync(_activity, text), "updating the Activity message");
+            await GuardAsync(() => detail != null
+                ? _syncRepo.UpdateActivityMessageAsync(_activity, detail)
+                : _syncRepo.UpdateActivityMessageAsync(_activity, text), "updating the Activity message");
     }
 
     private static ActivityPhase CopyOf(ActivityPhase phase) => new()

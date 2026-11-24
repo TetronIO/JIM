@@ -250,7 +250,7 @@ public class PasswordSynchronisationServer
         var owedFirstPassword = outcomes.Where(o => notQueuedSystems.Contains(o.ConnectedSystemId)).Select(o => o.ConnectedSystemName).ToList();
         outcomes = outcomes.Where(o => !notQueuedSystems.Contains(o.ConnectedSystemId)).ToList();
 
-        activity.Message = DescribeQueueOutcome(outcomes, request.Origin, owedFirstPassword);
+        activity.MessageDetail = DescribeQueueOutcomeMessage(outcomes, request.Origin, owedFirstPassword);
         await _completeActivity(activity);
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation. The systems are
@@ -381,39 +381,43 @@ public class PasswordSynchronisationServer
     /// there and the account it would reach is still owed its first password, which wins (#2160).
     /// </param>
     internal static string DescribeQueueOutcome(IReadOnlyList<PasswordQueueTargetOutcome> outcomes, PendingPasswordChangeOrigin origin,
+        IReadOnlyList<string>? owedFirstPassword = null) =>
+        DescribeQueueOutcomeMessage(outcomes, origin, owedFirstPassword).ToEnglish();
+
+    /// <summary><see cref="DescribeQueueOutcome"/> as a message the portal shows in the reader's language (#3039).</summary>
+    internal static JimMessage DescribeQueueOutcomeMessage(IReadOnlyList<PasswordQueueTargetOutcome> outcomes, PendingPasswordChangeOrigin origin,
         IReadOnlyList<string>? owedFirstPassword = null)
     {
         if (origin == PendingPasswordChangeOrigin.Explicit)
         {
-            return $"Password set requested for {outcomes.Count} account{(outcomes.Count == 1 ? string.Empty : "s")}: " +
-                   string.Join(", ", outcomes.Select(o => o.ConnectedSystemName)) + ".";
+            return ActivityMessage.Counted(nameof(ActivityMessages.QueueExplicitOne), outcomes.Count,
+                ActivityMessage.Plain(outcomes.Count), string.Join(", ", outcomes.Select(o => o.ConnectedSystemName)));
         }
 
         var notQueued = owedFirstPassword is { Count: > 0 }
-            ? $"Not queued for {string.Join(", ", owedFirstPassword)}: Password Synchronisation is switched off there, and the Connected System " +
-              "Object this change would reach is still owed its first password, which JIM delivers instead."
+            ? ActivityMessage.Create(nameof(ActivityMessages.QueueNotQueued), string.Join(", ", owedFirstPassword))
             : null;
 
         if (outcomes.Count == 0)
-            return notQueued ?? "No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere.";
+            return notQueued ?? ActivityMessage.Create(nameof(ActivityMessages.QueueNone));
 
-        return notQueued == null ? DescribeQueuedPropagation(outcomes) : $"{DescribeQueuedPropagation(outcomes)} {notQueued}";
+        var queued = DescribeQueuedPropagation(outcomes);
+        return notQueued == null ? queued : ActivityMessage.Spaced(queued, notQueued);
     }
 
     /// <summary>
     /// Where a propagated change was queued, and where it is held until Password Synchronisation is switched on.
     /// </summary>
-    private static string DescribeQueuedPropagation(IReadOnlyList<PasswordQueueTargetOutcome> outcomes)
+    private static JimMessage DescribeQueuedPropagation(IReadOnlyList<PasswordQueueTargetOutcome> outcomes)
     {
-        var message = $"Password change queued for {outcomes.Count} Connected System{(outcomes.Count == 1 ? string.Empty : "s")}: " +
-                      string.Join(", ", outcomes.Select(o => o.ConnectedSystemName)) + ".";
+        var message = ActivityMessage.Counted(nameof(ActivityMessages.QueueQueuedOne), outcomes.Count,
+            ActivityMessage.Plain(outcomes.Count), string.Join(", ", outcomes.Select(o => o.ConnectedSystemName)));
 
         var held = outcomes.Where(o => !o.Enabled).Select(o => o.ConnectedSystemName).ToList();
         if (held.Count == 0)
             return message;
 
-        return message + $" Held until Password Synchronisation is enabled on {string.Join(", ", held)}" +
-               $"; the change{(outcomes.Count == 1 ? string.Empty : "s")} will be delivered then, or expire first.";
+        return ActivityMessage.Spaced(message, ActivityMessage.Counted(nameof(ActivityMessages.QueueHeldOne), outcomes.Count, string.Join(", ", held)));
     }
 
     /// <summary>

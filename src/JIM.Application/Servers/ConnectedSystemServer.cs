@@ -4880,7 +4880,7 @@ public partial class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
             ParentActivityId = parentActivity?.Id,
-            Message = $"Auto-selecting {createdContainerExternalIds.Count} container(s) created during export"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AutoSelectingContainers), ActivityMessage.Plain(createdContainerExternalIds.Count))
         };
 
         if (initiatedByApiKey != null)
@@ -5003,7 +5003,7 @@ public partial class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
             ParentActivityId = parentActivity?.Id,
-            Message = $"Auto-selecting {createdContainerExternalIds.Count} container(s) created during export"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AutoSelectingContainers), ActivityMessage.Plain(createdContainerExternalIds.Count))
         };
 
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
@@ -5724,6 +5724,7 @@ public partial class ConnectedSystemServer
         // Activity, which only has room for one message: a hierarchy that both failed to enumerate and failed to
         // count used to report whichever happened to run last.
         var warnings = new List<string>();
+        var noPartitionsWarning = false;
 
         // Counted against the same directory state that produced the hierarchy, and before the merge, because the
         // Connector answers in terms of its own partitions. Applied after the merge, when JIM's own Containers
@@ -5734,7 +5735,8 @@ public partial class ConnectedSystemServer
             // Zero partitions almost always means the connector could not enumerate them (connection,
             // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
             // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-            warnings.Add("The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.");
+            warnings.Add(ActivityMessage.Create(nameof(ActivityMessages.HierarchyNoPartitions)).ToEnglish());
+            noPartitionsWarning = true;
         }
 
         // A partition whose count was cut short has its figures discarded, so say so. Blank counts otherwise look
@@ -5747,7 +5749,12 @@ public partial class ConnectedSystemServer
             warnings.Add(incompleteCounts);
 
         if (warnings.Count > 0)
-            activity.WarningMessage = string.Join(" ", warnings);
+        {
+            // The sentence JIM words itself is stored as a message; what the Connector said of its own counts stays English.
+            activity.WarningMessageDetail = ActivityMessage.Spaced(warnings.Select(w => noPartitionsWarning && w == ActivityMessage.Create(nameof(ActivityMessages.HierarchyNoPartitions)).ToEnglish()
+                ? ActivityMessage.Create(nameof(ActivityMessages.HierarchyNoPartitions))
+                : ActivityMessage.Create(nameof(ActivityMessages.Verbatim), w)));
+        }
 
         // Merge discovered partitions with existing ones, preserving user selections
         var result = MergeHierarchy(connectedSystem, partitions);
@@ -6131,7 +6138,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = objectType.ConnectedSystemId,
-            Message = $"Update object type: {objectType.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateObjectType), objectType.Name)
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -6168,7 +6175,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
-            Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateAttribute), attribute.ConnectedSystemObjectType?.Name ?? string.Empty, attribute.Name)
         };
         var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
             ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
@@ -6202,7 +6209,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = objectType.ConnectedSystemId,
-            Message = $"Update object type: {objectType.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateObjectType), objectType.Name)
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -6230,7 +6237,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
-            Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.UpdateAttribute), attribute.ConnectedSystemObjectType?.Name ?? string.Empty, attribute.Name)
         };
         var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
             ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
@@ -6371,7 +6378,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
-            Message = $"Bulk update of {attributeUpdates.Count} attribute(s) on {objectType.Name}",
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.BulkUpdateAttributes), ActivityMessage.Plain(attributeUpdates.Count), objectType.Name),
             ObjectsToProcess = attributeUpdates.Count
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -6451,7 +6458,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
-            Message = $"Bulk update of {attributeUpdates.Count} attribute(s) on {objectType.Name}",
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.BulkUpdateAttributes), ActivityMessage.Plain(attributeUpdates.Count), objectType.Name),
             ObjectsToProcess = attributeUpdates.Count
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);

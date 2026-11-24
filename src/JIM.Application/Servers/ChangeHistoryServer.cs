@@ -402,7 +402,7 @@ public class ChangeHistoryServer
             Id = TimeOrderedIds.New(),
             TargetType = ActivityTargetType.HistoryRetentionCleanup,
             TargetOperationType = ActivityTargetOperationType.Delete,
-            Message = "Change history and activity retention cleanup"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RetentionRunning))
         };
     }
 

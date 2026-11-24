@@ -654,4 +654,379 @@
   <data name="TargetRuleForUnknownType" xml:space="preserve">
     <value>Règle pour le type d’objet</value>
   </data>
+  <data name="ImportOrphanedItem" xml:space="preserve">
+    <value>Erreur interne : un élément d’exécution a été créé pour l’importation (ExtId={0}), mais l’objet de système connecté n’a pas été enregistré. Référence à l’objet existante={1}. Cela indique un défaut dans la couche de persistance.</value>
+  </data>
+  <data name="ImportDuplicateAttributes" xml:space="preserve">
+    <value>L’objet importé comporte un ou plusieurs attributs en double : {0}. Supprimez les doublons et réessayez.</value>
+  </data>
+  <data name="ImportDuplicateExternalIdAcrossPages" xml:space="preserve">
+    <value>Identifiant externe en double « {0} » détecté entre les pages d’importation. Un objet portant cet identifiant externe a déjà été renvoyé sur une page précédente ; cette copie a donc été rejetée. Cela peut indiquer un problème de pagination du serveur d’annuaire.</value>
+  </data>
+  <data name="ImportDuplicateExternalIdInBatch" xml:space="preserve">
+    <value>Identifiant externe en double « {0} » détecté dans le même lot d’importation. Tous les objets portant cet identifiant externe ont été rejetés. Corrigez les données sources pour garantir l’unicité des identifiants externes.</value>
+  </data>
+  <data name="ImportCsoCreationFailed" xml:space="preserve">
+    <value>Échec de la création de l’objet de système connecté pour l’objet importé d’identifiant externe « {0} ». Aucune erreur précise n’a été enregistrée.</value>
+  </data>
+  <data name="ImportHashVerificationFailed" xml:space="preserve">
+    <value>Mode de vérification : l’empreinte de contenu d’importation stockée pour l’objet de système connecté {0} correspondait à l’empreinte entrante, mais la comparaison exhaustive a trouvé {1} valeur(s) d’attribut modifiée(s). Ignorer l’objet sur la seule base de l’empreinte aurait fait manquer cette modification.</value>
+  </data>
+  <data name="ImportUnexpectedAttribute" xml:space="preserve">
+    <value>L’attribut « {0} » de l’objet importé n’était pas attendu.</value>
+  </data>
+  <data name="ExportScopingFailed" xml:space="preserve">
+    <value>{0} Rien n’a été exporté pour l’objet Metaverse {1}.</value>
+  </data>
+  <data name="FailureInContext" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="ContextSyncRunUnhandled" xml:space="preserve">
+    <value>Exception non gérée pendant l’exécution de la synchronisation</value>
+  </data>
+  <data name="ContextMemoryGuard" xml:space="preserve">
+    <value>Arrêté par la protection mémoire du Worker</value>
+  </data>
+  <data name="ContextCompleteFailed" xml:space="preserve">
+    <value>Échec de la finalisation de l’activité après l’exécution de la synchronisation</value>
+  </data>
+  <data name="MemoryFiguresByWorker" xml:space="preserve">
+    <value>{0} sur {1} utilisés, dont {2} par le Worker</value>
+  </data>
+  <data name="MemoryFiguresByThisService" xml:space="preserve">
+    <value>{0} sur {1} utilisés, dont {2} par ce service</value>
+  </data>
+  <data name="MemoryRemedy" xml:space="preserve">
+    <value>À {0}, le Worker arrête les traitements en cours plutôt que d’être arrêté en cours de route ; donnez plus de mémoire à JIM, ou exécutez moins de traitements à la fois.</value>
+  </data>
+  <data name="MemoryWarning" xml:space="preserve">
+    <value>La mémoire était faible pendant cette exécution : {0}. {1}</value>
+  </data>
+  <data name="MemoryStop" xml:space="preserve">
+    <value>Le Worker a arrêté cette exécution car sa mémoire était presque épuisée : {0}. S’il avait continué, le système d’exploitation aurait arrêté le Worker en cours de route. Donnez plus de mémoire à JIM, ou exécutez moins de traitements à la fois, puis relancez l’exécution.</value>
+  </data>
+  <data name="MemoryAbort" xml:space="preserve">
+    <value>Le Worker a arrêté cette exécution et s’est redémarré car sa mémoire était presque épuisée ({0}) et que l’exécution ne s’est pas arrêtée à sa demande. S’il avait continué, le système d’exploitation aurait arrêté le Worker sans avertissement. Donnez plus de mémoire à JIM, ou exécutez moins de traitements à la fois, puis relancez l’exécution.</value>
+  </data>
+  <data name="OutOfMemory" xml:space="preserve">
+    <value>Cette exécution a manqué de mémoire et s’est arrêtée. Dans un conteneur avec une limite de mémoire, JIM peut manquer de mémoire à environ 75 % de cette limite. Donnez plus de mémoire à JIM, ou exécutez moins de traitements à la fois, puis relancez l’exécution.</value>
+  </data>
+  <data name="OutOfMemoryWithFigures" xml:space="preserve">
+    <value>Cette exécution a manqué de mémoire et s’est arrêtée (actuellement {0}). Dans un conteneur avec une limite de mémoire, JIM peut manquer de mémoire à environ 75 % de cette limite. Donnez plus de mémoire à JIM, ou exécutez moins de traitements à la fois, puis relancez l’exécution.</value>
+  </data>
+  <data name="LikelyOutOfMemory" xml:space="preserve">
+    <value>Le Worker a très probablement manqué de mémoire : lors de son dernier rapport, {0}. Donnez plus de mémoire à JIM, ou exécutez moins de traitements à la fois, puis relancez l’exécution.</value>
+  </data>
+  <data name="UnknownValue" xml:space="preserve">
+    <value>(inconnu)</value>
+  </data>
+  <data name="NoneValue" xml:space="preserve">
+    <value>(aucune)</value>
+  </data>
+  <data name="ExprFlowFailed" xml:space="preserve">
+    <value>L’évaluation de l’expression a échoué{0} pour le flux vers l’attribut « {1} »{2} : {3}. Expression : {4}</value>
+  </data>
+  <data name="ExprFlowSubject" xml:space="preserve">
+    <value> pour l’objet Metaverse {0}</value>
+  </data>
+  <data name="ExprFlowDerived" xml:space="preserve">
+    <value> (dérivé par la règle de synchronisation « {0} »)</value>
+  </data>
+  <data name="DriftNotChecked" xml:space="preserve">
+    <value>La détection de dérive n’a pas pu vérifier cet objet ; aucune correction n’a donc été préparée. {0}</value>
+  </data>
+  <data name="ExportMissingInput" xml:space="preserve">
+    <value>{0} Aucune exportation en attente n’a été générée pour l’objet Metaverse {1} sur « {2} ». Fournissez la valeur manquante, gérez son absence dans l’expression, ou modifiez le comportement en cas d’entrée manquante du flux d’attributs.</value>
+  </data>
+  <data name="AfTargetExport" xml:space="preserve">
+    <value>« {0} » sur « {1} »</value>
+  </data>
+  <data name="AfTargetImport" xml:space="preserve">
+    <value>« {0} »</value>
+  </data>
+  <data name="AfTargetImportDerived" xml:space="preserve">
+    <value>« {0} » (dérivé par la règle de synchronisation « {1} »)</value>
+  </data>
+  <data name="AfOutcomeExport" xml:space="preserve">
+    <value>aucune exportation en attente n’a été générée pour cet attribut</value>
+  </data>
+  <data name="AfOutcomeImport" xml:space="preserve">
+    <value>aucune valeur n’a été propagée pour cet attribut</value>
+  </data>
+  <data name="AfMissingInput" xml:space="preserve">
+    <value>L’expression pour l’attribut cible {0} n’a pas été évaluée car cet objet n’a aucune valeur pour {1}, donc {2} ; les autres attributs de l’objet n’ont pas été affectés. Le comportement en cas d’entrée manquante est défini sur « Faire échouer ce mappage » sur ce flux d’attributs. Fournissez la valeur manquante, gérez son absence dans l’expression, ou modifiez le comportement en cas d’entrée manquante du flux d’attributs.</value>
+  </data>
+  <data name="AfGeneratedBaseNotSingle" xml:space="preserve">
+    <value>L’expression de base de la valeur générée ciblant {0} a renvoyé plusieurs valeurs, donc {1} ; les autres attributs de l’objet n’ont pas été affectés. L’expression de base d’une valeur générée doit produire une seule valeur texte, et non un tableau : « {2} ».</value>
+  </data>
+  <data name="AfNotConvertible" xml:space="preserve">
+    <value>L’expression pour l’attribut cible {0} a renvoyé « {1} », qu’un attribut de type {2} ne peut pas contenir, donc {3} ; l’attribut conserve sa valeur actuelle et les autres attributs de l’objet n’ont pas été affectés. Modifiez l’expression pour qu’elle renvoie une valeur de type {2} : « {4} ».</value>
+  </data>
+  <data name="AfMultiValuedNamed" xml:space="preserve">
+    <value>« {0} » comporte {1} valeurs mais l’attribut cible {2} est monovalué, donc {3} ; l’attribut conserve sa valeur actuelle et les autres attributs de l’objet n’ont pas été affectés. Utilisez Where, Join (jointure), Count, Min ou Max dans l’expression pour indiquer quelle valeur retenir, ou associez-le à un attribut multivalué : « {4} ».</value>
+  </data>
+  <data name="AfMultiValued" xml:space="preserve">
+    <value>L’expression pour l’attribut cible {0} a renvoyé {1} valeurs mais l’attribut est monovalué, donc {2} ; l’attribut conserve sa valeur actuelle et les autres attributs de l’objet n’ont pas été affectés. Modifiez l’expression pour qu’elle renvoie une seule valeur, ou associez-la à un attribut multivalué : « {3} ».</value>
+  </data>
+  <data name="AfDatesCollapse" xml:space="preserve">
+    <value>{0}, mais l’attribut cible {1} conserve les dates à {2}, de sorte que certaines deviennent la même date ; {3} valeurs distinctes sont donc envoyées. L’attribut et les autres attributs de l’objet sont tout de même exportés. Si les dates doivent rester distinctes, espacez-les davantage que la résolution du système connecté, ou vérifiez la résolution de date de l’attribut dans l’onglet Schéma du système connecté.</value>
+  </data>
+  <data name="AfDatesNamed" xml:space="preserve">
+    <value>« {0} » contient {1} dates</value>
+  </data>
+  <data name="AfDatesExpression" xml:space="preserve">
+    <value>L’expression pour l’attribut cible {0} a renvoyé {1} dates</value>
+  </data>
+  <data name="AfResolutionTenMicroseconds" xml:space="preserve">
+    <value>dix microsecondes</value>
+  </data>
+  <data name="AfResolutionHundredMicroseconds" xml:space="preserve">
+    <value>cent microsecondes</value>
+  </data>
+  <data name="AfResolutionMillisecond" xml:space="preserve">
+    <value>la milliseconde</value>
+  </data>
+  <data name="AfResolutionTenMilliseconds" xml:space="preserve">
+    <value>dix millisecondes</value>
+  </data>
+  <data name="AfResolutionHundredMilliseconds" xml:space="preserve">
+    <value>cent millisecondes</value>
+  </data>
+  <data name="AfResolutionSecond" xml:space="preserve">
+    <value>la seconde</value>
+  </data>
+  <data name="AfResolutionMinute" xml:space="preserve">
+    <value>la minute</value>
+  </data>
+  <data name="AfResolutionDay" xml:space="preserve">
+    <value>le jour</value>
+  </data>
+  <data name="AfResolutionMicrosecond" xml:space="preserve">
+    <value>la microseconde</value>
+  </data>
+  <data name="AfCredential" xml:space="preserve">
+    <value>L’attribut cible {0} contient des informations d’identification ; JIM ne l’exporte donc jamais par un flux d’attributs et {1} ; les autres attributs de l’objet n’ont pas été affectés. Supprimez le flux d’attributs qui le cible. JIM ne remet les mots de passe que par la synchronisation des mots de passe, sur les systèmes connectés dont le connecteur la prend en charge.</value>
+  </data>
+  <data name="AfMultiToSingle" xml:space="preserve">
+    <value>{0} comporte {1} valeurs mais l’attribut cible {2} est monovalué, donc {3}. Associez-le à un attribut multivalué, réduisez la source à une seule valeur, ou utilisez une expression pour sélectionner une valeur.</value>
+  </data>
+  <data name="AfSourceExport" xml:space="preserve">
+    <value>Attribut source Metaverse multivalué « {0} »</value>
+  </data>
+  <data name="AfSourceImport" xml:space="preserve">
+    <value>Attribut source multivalué « {0} »</value>
+  </data>
+  <data name="GeneratedValueLostRace" xml:space="preserve">
+    <value>La valeur générée de {0}, « {1} », a été attribuée à un autre objet au même moment que celui-ci ; elle sera régénérée à la prochaine synchronisation de cet objet.</value>
+  </data>
+  <data name="GeneratedValueExhausted" xml:space="preserve">
+    <value>Aucune valeur libre n’a été trouvée pour {0} après {1} tentatives ; le dernier candidat, « {2} », est déjà détenu par {3}.</value>
+  </data>
+  <data name="GeneratedValueExhaustedForm" xml:space="preserve">
+    <value>Aucune valeur libre n’a été trouvée pour {0} après {1} tentatives ; le dernier candidat, « {2} », a été écarté car {3} est déjà détenu par {4}.</value>
+  </data>
+  <data name="GeneratedValueFormFragment" xml:space="preserve">
+    <value>sa valeur {0} (construite à partir de {1}), « {2} »,</value>
+  </data>
+  <data name="GeneratedValueNoCandidate" xml:space="preserve">
+    <value>(aucun candidat n’a été essayé)</value>
+  </data>
+  <data name="GeneratedValueAnotherObject" xml:space="preserve">
+    <value>un autre objet</value>
+  </data>
+  <data name="GeneratedValueWidthExceeded" xml:space="preserve">
+    <value>La prochaine valeur pour {0} serait « {1} », qui ne tient plus dans la largeur fixe configurée de {2} chiffres.</value>
+  </data>
+  <data name="ProgressSavingChanges" xml:space="preserve">
+    <value>Enregistrement des modifications</value>
+  </data>
+  <data name="ProgressCreatingCsos" xml:space="preserve">
+    <value>Création des objets de système connecté</value>
+  </data>
+  <data name="ProgressUpdatingCsos" xml:space="preserve">
+    <value>Mise à jour des objets de système connecté</value>
+  </data>
+  <data name="ProgressLoadingBatch" xml:space="preserve">
+    <value>Chargement du lot {0} sur {1} ({2} objets au total)</value>
+  </data>
+  <data name="ProgressProcessingImported" xml:space="preserve">
+    <value>Traitement des objets importés</value>
+  </data>
+  <data name="ProgressImportingFromFile" xml:space="preserve">
+    <value>Importation des objets depuis le fichier</value>
+  </data>
+  <data name="ProgressImportingFromSystem" xml:space="preserve">
+    <value>Importation des objets depuis le système connecté</value>
+  </data>
+  <data name="ProgressImportingFromSystemPage" xml:space="preserve">
+    <value>Importation des objets depuis le système connecté (page {0})</value>
+  </data>
+  <data name="ProgressReadingPage" xml:space="preserve">
+    <value>Lecture de la page {0}</value>
+  </data>
+  <data name="ProgressRecordingResults" xml:space="preserve">
+    <value>Enregistrement des résultats</value>
+  </data>
+  <data name="ProgressExporting" xml:space="preserve">
+    <value>Exportation de {0} modifications</value>
+  </data>
+  <data name="ProgressPreparingDeltaSync" xml:space="preserve">
+    <value>Préparation de la synchronisation delta</value>
+  </data>
+  <data name="ProgressProcessingModifiedCsos" xml:space="preserve">
+    <value>Traitement des objets de système connecté modifiés</value>
+  </data>
+  <data name="ProbeUndeterminedOne" xml:space="preserve">
+    <value>JIM n’a pas pu sonder {0} pour détecter les valeurs déjà utilisées. {1}. JIM a choisi {2} valeur en s’appuyant uniquement sur ses propres enregistrements.</value>
+  </data>
+  <data name="ProbeUndeterminedOther" xml:space="preserve">
+    <value>JIM n’a pas pu sonder {0} pour détecter les valeurs déjà utilisées. {1}. JIM a choisi {2} valeurs en s’appuyant uniquement sur ses propres enregistrements.</value>
+  </data>
+  <data name="ProbeIncomplete" xml:space="preserve">
+    <value>La vérification effectuée par JIM sur {0} pour détecter les valeurs déjà utilisées était incomplète. {1}.</value>
+  </data>
+  <data name="ScimLatestRejection" xml:space="preserve">
+    <value>Dernier rejet : {0}</value>
+  </data>
+  <data name="ScimRequestsFrom" xml:space="preserve">
+    <value>Requêtes SCIM de « {0} »</value>
+  </data>
+  <data name="HierarchyNoPartitions" xml:space="preserve">
+    <value>L’actualisation de la hiérarchie n’a récupéré aucune partition du système connecté ; la hiérarchie existante a donc été laissée inchangée. Cela indique généralement un problème de connexion, d’authentification ou de périmètre plutôt qu’un annuaire vide ; vérifiez les paramètres et la connectivité du système connecté, puis réessayez.</value>
+  </data>
+  <data name="QueueExplicitOne" xml:space="preserve">
+    <value>Définition du mot de passe demandée pour {0} compte : {1}.</value>
+  </data>
+  <data name="QueueExplicitOther" xml:space="preserve">
+    <value>Définition du mot de passe demandée pour {0} comptes : {1}.</value>
+  </data>
+  <data name="QueueNotQueued" xml:space="preserve">
+    <value>Non mis en file d’attente pour {0} : la synchronisation des mots de passe y est désactivée, et l’objet de système connecté que cette modification atteindrait attend encore son premier mot de passe, que JIM remet à la place.</value>
+  </data>
+  <data name="QueueNone" xml:space="preserve">
+    <value>Aucun système connecté n’est configuré pour la synchronisation des mots de passe ; ce mot de passe n’a donc été mis en file d’attente pour livraison nulle part.</value>
+  </data>
+  <data name="QueueQueuedOne" xml:space="preserve">
+    <value>Modification du mot de passe mise en file d’attente pour {0} système connecté : {1}.</value>
+  </data>
+  <data name="QueueQueuedOther" xml:space="preserve">
+    <value>Modification du mot de passe mise en file d’attente pour {0} systèmes connectés : {1}.</value>
+  </data>
+  <data name="QueueHeldOne" xml:space="preserve">
+    <value>En attente jusqu’à l’activation de la synchronisation des mots de passe sur {0} ; la modification sera livrée alors, ou expirera avant.</value>
+  </data>
+  <data name="QueueHeldOther" xml:space="preserve">
+    <value>En attente jusqu’à l’activation de la synchronisation des mots de passe sur {0} ; les modifications seront livrées alors, ou expireront avant.</value>
+  </data>
+  <data name="ExchangeRetryNothingSingle" xml:space="preserve">
+    <value>Rien n’a été relancé : la modification n’est plus en suspens ni en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeRetryNothingMany" xml:space="preserve">
+    <value>Rien n’a été relancé : aucune des modifications n’est plus en suspens ni en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeRetryNothingMatched" xml:space="preserve">
+    <value>Rien n’a été relancé : aucune modification Exchange en file d’attente correspondante n’était en suspens ou en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeRetriedOne" xml:space="preserve">
+    <value>1 modification Exchange en file d’attente sera retentée.</value>
+  </data>
+  <data name="ExchangeRetriedOther" xml:space="preserve">
+    <value>{0} modifications Exchange en file d’attente seront retentées.</value>
+  </data>
+  <data name="ExchangeRetryRecord" xml:space="preserve">
+    <value>Relancé ; JIM va le retenter sous peu.</value>
+  </data>
+  <data name="ServiceSettingUpdatedFromEnvironment" xml:space="preserve">
+    <value>Paramètre de service intégré « {0} » mis à jour à partir de la configuration d’environnement</value>
+  </data>
+  <data name="SeedingApplying" xml:space="preserve">
+    <value>Application de la configuration intégrée</value>
+  </data>
+  <data name="AuthCreatingInitialAdmin" xml:space="preserve">
+    <value>Création de l’utilisateur administrateur initial à la première connexion</value>
+  </data>
+  <data name="AuthAssigningAdminRole" xml:space="preserve">
+    <value>Attribution du rôle {0} à l’administrateur initial</value>
+  </data>
+  <data name="SearchUpdating" xml:space="preserve">
+    <value>Mise à jour de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchAddingGroup" xml:space="preserve">
+    <value>Ajout d’un groupe de critères à la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchUpdatingGroup" xml:space="preserve">
+    <value>Mise à jour d’un groupe de critères de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchDeletingGroup" xml:space="preserve">
+    <value>Suppression d’un groupe de critères de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchAddingCriterion" xml:space="preserve">
+    <value>Ajout d’un critère à la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchUpdatingCriterion" xml:space="preserve">
+    <value>Mise à jour d’un critère de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="SearchDeletingCriterion" xml:space="preserve">
+    <value>Suppression d’un critère de la recherche prédéfinie « {0} »</value>
+  </data>
+  <data name="RoleCreating" xml:space="preserve">
+    <value>Création du rôle « {0} »</value>
+  </data>
+  <data name="RoleAddingMember" xml:space="preserve">
+    <value>Ajout de « {0} » au rôle « {1} »</value>
+  </data>
+  <data name="RoleRemovingMember" xml:space="preserve">
+    <value>Retrait de « {0} » du rôle « {1} »</value>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>Création de la clé d’API « {0} »</value>
+  </data>
+  <data name="ApiKeyUpdating" xml:space="preserve">
+    <value>Mise à jour de la clé d’API « {0} »</value>
+  </data>
+  <data name="ApiKeyDeleting" xml:space="preserve">
+    <value>Suppression de la clé d’API « {0} »</value>
+  </data>
+  <data name="CertAddingUploaded" xml:space="preserve">
+    <value>Ajout d’un certificat de confiance à partir de données téléversées</value>
+  </data>
+  <data name="CertAddingFromFile" xml:space="preserve">
+    <value>Ajout d’un certificat de confiance à partir du chemin de fichier : {0}</value>
+  </data>
+  <data name="CertUpdating" xml:space="preserve">
+    <value>Mise à jour du certificat de confiance « {0} »</value>
+  </data>
+  <data name="CertDeleting" xml:space="preserve">
+    <value>Suppression du certificat de confiance « {0} »</value>
+  </data>
+  <data name="ExportPreparing" xml:space="preserve">
+    <value>Préparation des exportations</value>
+  </data>
+  <data name="ExportCompletedSummary" xml:space="preserve">
+    <value>Exportation terminée : {0} réussie(s), {1} en échec, {2} différée(s)</value>
+  </data>
+  <data name="ExportExecuting" xml:space="preserve">
+    <value>Exportation en cours</value>
+  </data>
+  <data name="ExportExecutingDeferred" xml:space="preserve">
+    <value>Exportation différée en cours</value>
+  </data>
+  <data name="ExportToFile" xml:space="preserve">
+    <value>Exportation de {0} modifications vers un fichier</value>
+  </data>
+  <data name="RetentionRunning" xml:space="preserve">
+    <value>Nettoyage de la conservation de l’historique des modifications et des activités</value>
+  </data>
+  <data name="AutoSelectingContainers" xml:space="preserve">
+    <value>Sélection automatique de {0} conteneur(s) créé(s) pendant l’exportation</value>
+  </data>
+  <data name="UpdateObjectType" xml:space="preserve">
+    <value>Mise à jour du type d’objet : {0}</value>
+  </data>
+  <data name="UpdateAttribute" xml:space="preserve">
+    <value>Mise à jour de l’attribut : {0}.{1}</value>
+  </data>
+  <data name="BulkUpdateAttributes" xml:space="preserve">
+    <value>Mise à jour en bloc de {0} attribut(s) sur {1}</value>
+  </data>
 </root>

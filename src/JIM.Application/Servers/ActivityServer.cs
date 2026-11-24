@@ -407,13 +407,16 @@ public partial class ActivityServer
     public async Task FailActivityWithErrorAsync(Activity activity, Exception exception)
     {
         var now = DateTime.UtcNow;
-        activity.ErrorMessage = RanOutOfMemory(exception)
-            ? MemoryPressure.OutOfMemoryText(new HostMemoryProbe().Read())
-            : GetFullExceptionMessage(exception);
-        if (!RanOutOfMemory(exception))
-            StoreErrorDetail(activity, exception, activity.ErrorMessage);
+        if (RanOutOfMemory(exception))
+        {
+            activity.ErrorMessageDetail = ActivityMessage.OutOfMemory(new HostMemoryProbe().Read());
+        }
         else
-            activity.ErrorMessageDetailJson = null;
+        {
+            activity.ErrorMessage = GetFullExceptionMessage(exception);
+            StoreErrorDetail(activity, exception, activity.ErrorMessage);
+        }
+
         activity.ErrorDetail = ActivityErrorDetail.TryDescribe(exception);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
@@ -446,13 +449,7 @@ public partial class ActivityServer
     /// Builds a complete error message by unwrapping inner exceptions.
     /// Many exceptions (e.g. DbUpdateException) have generic messages with details in InnerException.
     /// </summary>
-    private static string GetFullExceptionMessage(Exception exception)
-    {
-        if (exception.InnerException == null)
-            return exception.Message;
-
-        return $"{exception.Message} --> {GetFullExceptionMessage(exception.InnerException)}";
-    }
+    private static string GetFullExceptionMessage(Exception exception) => ActivityMessage.ChainText(exception);
 
     /// <summary>
     /// Stores, beside the English already on the Activity, the message an exception carries so the portal can show the
@@ -470,26 +467,7 @@ public partial class ActivityServer
             activity.ErrorMessageDetailJson = null;
     }
 
-    /// <summary>
-    /// The exception's message with its causes (the chain <see cref="GetFullExceptionMessage"/> writes), where any link
-    /// in the chain carries a message of its own; null when none does, which leaves the English alone.
-    /// </summary>
-    private static JimMessage? DescribeFailure(Exception exception)
-    {
-        var own = exception.DetailOf();
-        if (exception.InnerException is null)
-            return own;
-
-        var cause = DescribeFailure(exception.InnerException);
-        if (own is null && cause is null)
-            return null;
-
-        return JimMessage.Create(
-            ApplicationMessageCatalogues.Activities,
-            nameof(ActivityMessages.FailureWithCause),
-            own is not null && own.ToEnglish() == exception.Message ? own : (MessageArgument)exception.Message,
-            cause ?? (MessageArgument)GetFullExceptionMessage(exception.InnerException));
-    }
+    private static JimMessage? DescribeFailure(Exception exception) => ActivityMessage.DescribeFailure(exception);
 
     public async Task CancelActivityAsync(Activity activity)
     {

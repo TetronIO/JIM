@@ -4,9 +4,13 @@
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using JIM.Application.Diagnostics;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Exceptions;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Utilities;
 using Activity = JIM.Models.Activities.Activity;
 using Serilog;
@@ -217,13 +221,13 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
     {
         var outcome = SynchronisationHistoryNextPageOutcome.Written;
         Exception? nextPageFailure = null;
-        string? detail = null;
+        MessageArgument? detail = null;
 
         var dependency = batch.FindDependencyOn(failedBatch);
         if (dependency != null)
         {
             outcome = SynchronisationHistoryNextPageOutcome.NotWrittenDependsOnFailedPage;
-            detail = $"{dependency} of page {failedBatch.Page}";
+            detail = JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.HistoryDependencyOfPage), dependency, failedBatch.Page.ToString());
         }
         else
         {
@@ -242,11 +246,12 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
                 nextPageFailure = write.IsCanceled
                     ? new OperationCanceledException("The synchronisation history write was cancelled.")
                     : write.Exception!.InnerExceptions.Count == 1 ? write.Exception.InnerExceptions[0] : write.Exception;
-                detail = nextPageFailure.Message;
+                detail = ActivityMessage.CauseOf(nextPageFailure);
             }
         }
 
-        var message = failure.Message + " " + SynchronisationHistoryPersistenceException.BuildNextPageMessage(batch.Page, batch.TotalPages, outcome, detail);
+        var message = ActivityMessage.Spaced(failure.Detail ?? ActivityMessage.Create(nameof(ActivityMessages.Verbatim), failure.Message),
+            SynchronisationHistoryPersistenceException.DescribeNextPage(batch.Page, batch.TotalPages, outcome, detail));
         _failure = new SynchronisationHistoryPersistenceException(message, failure.InnerException!, failure.Page, failure.TotalPages,
             failure.ConnectedSystemName, batch.Page, outcome, nextPageFailure);
 
@@ -369,7 +374,7 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
             return drained;
 
         var warning = _failure.Message;
-        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+        ActivityMessage.AddWarning(_activity, _failure.Detail ?? ActivityMessage.Create(nameof(ActivityMessages.Verbatim), warning));
         Log.Error(_failure.InnerException, "SynchronisationHistoryWriter: {Message} The run is failing for another reason, which is the error reported: {Primary}",
             warning, LogSanitiser.Sanitise(primary.Message));
         return drained;
@@ -448,7 +453,7 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
             : write.Exception!.InnerExceptions.Count == 1 ? write.Exception.InnerExceptions[0] : write.Exception;
         _failedBatch = batch;
         _failure = new SynchronisationHistoryPersistenceException(
-            SynchronisationHistoryPersistenceException.BuildMessage(batch.Page, batch.TotalPages, _connectedSystemName),
+            SynchronisationHistoryPersistenceException.Describe(batch.Page, batch.TotalPages, _connectedSystemName),
             cause, batch.Page, batch.TotalPages, _connectedSystemName);
         Log.Error(cause, "SynchronisationHistoryWriter: {Message}", _failure.Message);
         return cause;
