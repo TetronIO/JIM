@@ -31,6 +31,7 @@
       <ProjectReference Include="..\..\src\JIM.Application\JIM.Application.csproj" />
       <ProjectReference Include="..\..\src\JIM.Connectors\JIM.Connectors.csproj" />
     <ProjectReference Include="..\JIM.TestScimServiceProvider\JIM.TestScimServiceProvider.csproj" />
+    <ProjectReference Include="..\JIM.TestGraphService\JIM.TestGraphService.csproj" />
       <ProjectReference Include="..\..\src\JIM.InMemoryData\JIM.InMemoryData.csproj" />
       <ProjectReference Include="..\..\src\JIM.PostgresData\JIM.PostgresData.csproj" />
       <ProjectReference Include="..\..\src\JIM.Worker\JIM.Worker.csproj" />
@@ -41,6 +42,11 @@
       <None Update="TestData\Csv\*.csv">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The simulated Microsoft Entra ID tenant and its tokens, shared with the stand-in Graph service. -->
+        <Using Include="JIM.TestGraphService" />
     </ItemGroup>
 
 </Project>
