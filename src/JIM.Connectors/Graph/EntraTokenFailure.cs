@@ -47,16 +47,18 @@ internal static partial class EntraTokenFailure
 
     /// <summary>
     /// The refusals Entra ID gives while it is still applying a credential added moments ago, and how long JIM waits
-    /// before each fresh token request. A run waits up to three minutes in all: Entra ID has been seen refusing a
-    /// certificate for over a minute and a half after accepting it elsewhere, and a scheduled run that waits beats one
-    /// that fails. The connection test waits half a minute, because an administrator is waiting on the form, and its
-    /// message already says to try again shortly.
+    /// before each fresh token request. A run waits up to ten minutes in all: Entra ID has been seen refusing a
+    /// certificate on every request from three to six minutes after it was uploaded, having accepted it in between, and a
+    /// scheduled run that waits beats one that fails. A certificate that is simply wrong is refused the same way, so it
+    /// too takes the ten minutes to fail, with a warning at every wait. The connection test waits half a minute, because
+    /// an administrator is waiting on the form, and its message already says to try again shortly.
     /// </summary>
     internal static OAuthStillBeingAppliedRetry StillBeingAppliedRetryFor(GraphClientPurpose purpose) =>
         purpose == GraphClientPurpose.ConnectionTest ? ConnectionTestRetry : RunRetry;
 
     private static readonly OAuthStillBeingAppliedRetry RunRetry = new(IsStillBeingApplied,
-        [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60)]);
+        [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60),
+         TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(180)]);
 
     private static readonly OAuthStillBeingAppliedRetry ConnectionTestRetry = new(IsStillBeingApplied,
         [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15)]);

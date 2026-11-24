@@ -31,13 +31,22 @@ public class EntraTokenFailureTests
     }
 
     [Test]
-    public void StillBeingAppliedRetryFor_Run_KeepsAskingForSeveralMinutes()
+    public void StillBeingAppliedRetryFor_Run_KeepsAskingForTenMinutes()
     {
-        // Entra ID has been seen refusing a certificate for over a minute and a half after accepting it elsewhere; an
-        // unattended run waits that out rather than failing.
+        // Entra ID has been seen refusing a certificate on every request from three to six minutes after it was uploaded,
+        // having accepted it in between (#3053); an unattended run waits that out rather than failing.
         var total = EntraTokenFailure.StillBeingAppliedRetryFor(GraphClientPurpose.Run).Delays.Aggregate(TimeSpan.Zero, (sum, d) => sum + d);
 
-        Assert.That(total, Is.GreaterThanOrEqualTo(TimeSpan.FromMinutes(2)));
+        Assert.That(total, Is.GreaterThanOrEqualTo(TimeSpan.FromMinutes(10)));
+    }
+
+    [Test]
+    public void StillBeingAppliedRetryFor_Run_NeverWaitsMoreThanThreeMinutesBetweenRequests()
+    {
+        // Each wait ends in a fresh request, and the server that refused may be the only one yet to apply the credential.
+        var delays = EntraTokenFailure.StillBeingAppliedRetryFor(GraphClientPurpose.Run).Delays;
+
+        Assert.That(delays, Has.All.LessThanOrEqualTo(TimeSpan.FromMinutes(3)));
     }
 
     [Test]
