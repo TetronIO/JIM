@@ -37,7 +37,7 @@
             {
                 @foreach (var value in Provenance.CurrentValues)
                 {
-                    <div>
+                    <div class="@(CanRemoveValues ? "jim-inspector-removable-value" : null)">
                         @if (string.IsNullOrEmpty(value.DisplayValue))
                         {
                             <EmptyValue />
@@ -51,6 +51,14 @@
                         else
                         {
                             @value.DisplayValue
+                        }
+                        @if (CanRemoveValues)
+                        {
+                            @* An Accumulate value is kept until someone removes it (#3059); the host confirms first. *@
+                            <MudTooltip Text="@MetaverseText.MaiRemoveValue" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" aria-label="@MetaverseText.MaiRemoveValue"
+                                               data-testid="jim-mvo-inspector-remove-value" OnClick="@(() => OnRemoveValue.InvokeAsync(value))" />
+                            </MudTooltip>
                         }
                     </div>
                 }
@@ -174,7 +182,12 @@
                         <span class="jim-inspector-candidate">
                             @if (source.CandidateValues.Count > 0)
                             {
-                                @string.Join(", ", source.CandidateValues)
+                                @* Each value its own inline code: joined with commas, a value holding a comma or a space
+                                   could not be told from two. *@
+                                @foreach (var candidate in source.CandidateValues)
+                                {
+                                    <code class="jim-code-inline">@candidate</code>
+                                }
                             }
                             else
                             {
@@ -214,7 +227,7 @@
                 {
                     var generatedEvent = GeneratedValueHistoryDisplay.EventFor(entry);
                     <li class="jim-inspector-rail-@entry.Kind.ToString().ToLowerInvariant()" data-generated-event="@generatedEvent">
-                        <div>
+                        <div class="jim-inspector-rail-head">
                             @* A generated value's two events worth naming (#242, release 4) read as what they were. *@
                             @if (generatedEvent == GeneratedValueHistoryEvent.Corrected)
                             {
@@ -228,13 +241,11 @@
                             {
                                 <MudChip T="string" Variant="Variant.Text" Color="@HistoryKindColour(entry.Kind)" Class="ma-0">@entry.Kind</MudChip>
                             }
-                            <span class="jim-text-code">
-                                @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { @entry.Value }
-                            </span>
+                            @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { <code class="jim-code-inline">@entry.Value</code> }
                         </div>
                         @if (entry.Kind == AttributeHistoryChangeKind.Set && !string.IsNullOrEmpty(entry.PreviousValue))
                         {
-                            <div class="jim-text-code jim-inspector-previous">@entry.PreviousValue</div>
+                            <div class="jim-inspector-previous"><code class="jim-code-inline">@entry.PreviousValue</code></div>
                         }
                         <div class="jim-inspector-meta">
                             <MudTooltip Text="@entry.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -246,7 +257,13 @@
                                 <span>·</span>
                                 <MudLink Href="@activityHref">@(entry.Change.ActivityDescription ?? MetaverseText.MaiActivityFallback)</MudLink>
                             }
-                            @if (!string.IsNullOrEmpty(entry.SyncRuleName))
+                            @if (MadeByAPerson(entry.Change))
+                            {
+                                @* A person's change outside synchronisation (a removal by hand, #3059) is theirs, not the
+                                   rule that once contributed the value. *@
+                                <span>· @entry.Change.InitiatedByName</span>
+                            }
+                            else if (!string.IsNullOrEmpty(entry.SyncRuleName))
                             {
                                 <span>· @entry.SyncRuleName</span>
                             }
@@ -304,6 +321,15 @@
     [Parameter]
     public string? CausalityExplorerHref { get; set; }
 
+    /// <summary>
+    /// Raised with a value of an Accumulate attribute (#3059) when its remove button is pressed; the host confirms and
+    /// removes it. Unset where the reader may not remove values, which offers no button.
+    /// </summary>
+    [Parameter]
+    public EventCallback<ProvenanceValue> OnRemoveValue { get; set; }
+
+    private bool CanRemoveValues => OnRemoveValue.HasDelegate && Provenance.ContributionMode == AttributeContributionMode.Accumulate;
+
     private ProvenanceConnectedSystemObject? ContributingConnectedSystemObject => Provenance.ContributingConnectedSystemObject;
 
     private string? CsoHref => ContributingConnectedSystemObject == null
@@ -334,6 +360,12 @@
             return $"/activity/{change.ActivityId.Value}";
         return null;
     }
+
+    /// <summary>A change a person made outside any synchronisation, naming them.</summary>
+    private static bool MadeByAPerson(ProvenanceChange change) =>
+        change.ActivityRunProfileExecutionItemId == null &&
+        change.ChangeInitiatorType == MetaverseObjectChangeInitiatorType.User &&
+        !string.IsNullOrEmpty(change.InitiatedByName);
 
     private static string StateLabel(AttributeSourceState state) => state switch
     {

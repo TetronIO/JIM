@@ -63,7 +63,7 @@ function Set-JIMMetaverseAttribute {
         Standard Mappings are guidance only and never affect synchronisation.
 
     .PARAMETER Force
-        Confirms changing an Accumulate attribute to another mode. At each Metaverse Object's next synchronisation, the
+        Confirms changing an Accumulate attribute to another mode; the confirmation and -WhatIf state how many Metaverse Objects would lose values. At each Metaverse Object's next synchronisation, the
         values Accumulate kept that no contributor supplies any more are removed, and exports remove them from target
         systems, so JIM refuses the change without it. Has no other effect.
 
@@ -95,7 +95,8 @@ function Set-JIMMetaverseAttribute {
         Set-JIMMetaverseAttribute -Id 42 -ContributionMode Priority -Force -ChangeReason "Audit log retired"
 
         Returns an Accumulate attribute to Priority. At each Metaverse Object's next synchronisation, the values no
-        contributor supplies any more are removed. Run it with -WhatIf first to check which attribute it changes.
+        contributor supplies any more are removed. Run it with -WhatIf first: it states how many Metaverse Objects would
+        lose values.
 
     .EXAMPLE
         Set-JIMMetaverseAttribute -Id 42 -StandardMappings @(@{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' })
@@ -211,7 +212,23 @@ function Set-JIMMetaverseAttribute {
 
         $displayName = if ($Name) { $Name } elseif ($InputObject -and $InputObject.name) { $InputObject.name } else { $attrId }
 
-        if (-not $PSCmdlet.ShouldProcess($displayName, "Update Metaverse Attribute")) {
+        # A change of contribution mode states what it does to the values Metaverse Objects hold (#3059), in the
+        # confirmation and under -WhatIf alike.
+        $action = "Update Metaverse Attribute"
+        $impactText = $null
+        if ($PSBoundParameters.ContainsKey('ContributionMode')) {
+            try {
+                $impact = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId/contribution-mode-impact?mode=$ContributionMode"
+            }
+            catch {
+                Write-Error "Failed to read the impact of changing the contribution mode of Metaverse Attribute ${displayName}: $_"
+                return
+            }
+            $impactText = Get-JIMContributionModeImpactText -Impact $impact
+            if ($impactText) { $action += ". $impactText" }
+        }
+
+        if (-not $PSCmdlet.ShouldProcess($displayName, $action)) {
             return
         }
 
@@ -223,7 +240,7 @@ function Set-JIMMetaverseAttribute {
             if ($currentAttribute.contributionMode -eq 'Accumulate') {
                 if (-not $Force) {
                     Write-Error ("Changing '$($currentAttribute.name)' from Accumulate to $ContributionMode removes, at each Metaverse Object's next " +
-                        "synchronisation, the values that no contributor supplies any more. Run the command again with -Force to make this change.")
+                        "synchronisation, the values that no contributor supplies any more. $(if ($impactText) { "$impactText " })Run the command again with -Force to make this change.")
                     return
                 }
                 $confirmLeavingAccumulate = $true

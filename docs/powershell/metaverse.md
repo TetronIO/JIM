@@ -1,13 +1,13 @@
 ---
 title: Metaverse
-description: "The cmdlets that find and read Metaverse Objects, explain where their values and connections come from, and list those pending deletion."
+description: "The cmdlets that find and read Metaverse Objects, explain where their values and connections come from, remove kept values, and list pending deletions."
 type: reference
 audience: automation-author
 ---
 
 # Metaverse
 
-The Metaverse is the central identity store in JIM. These cmdlets find and read Metaverse Objects, explain where each value and connection comes from, and review the Metaverse Objects pending deletion. A Metaverse Object's password is set with the [Password Synchronisation](password-synchronisation.md#set-jimmetaverseobjectpassword) cmdlets, and the values JIM generated for it are listed with the [Generated Values](generated-values.md) cmdlets. The Metaverse schema is managed with the [Metaverse Object Type](metaverse-object-types.md) and [Metaverse Attribute](metaverse-attributes.md) cmdlets.
+The Metaverse is the central identity store in JIM. These cmdlets find and read Metaverse Objects, explain where each value and connection comes from, remove values an Accumulate attribute has kept, and review the Metaverse Objects pending deletion. A Metaverse Object's password is set with the [Password Synchronisation](password-synchronisation.md#set-jimmetaverseobjectpassword) cmdlets, and the values JIM generated for it are listed with the [Generated Values](generated-values.md) cmdlets. The Metaverse schema is managed with the [Metaverse Object Type](metaverse-object-types.md) and [Metaverse Attribute](metaverse-attributes.md) cmdlets.
 
 ```jim-diagram
 archetype: map
@@ -464,6 +464,51 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
 ```
 
 ---
+
+## :material-playlist-remove: Remove-JIMMetaverseObjectAttributeValue
+
+Removes values an [Accumulate](../concepts/attribute-priority.md#removing-values-an-accumulate-attribute-has-kept) attribute has kept, such as entries for deleted accounts. A value a Synchronisation Rule still supplies is refused, naming the rule. The removal is all or nothing and recorded under an Activity.
+
+<!-- BEGIN GENERATED: Remove-JIMMetaverseObjectAttributeValue -->
+### Syntax
+
+```powershell
+# ByAttributeName (default)
+Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId <guid> -AttributeName <string> [-Value <string[]>] [-ValueId <guid[]>] [-Force] [-WhatIf] [-Confirm]
+
+# ByAttributeId
+Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId <guid> -AttributeId <int> [-Value <string[]>] [-ValueId <guid[]>] [-Force] [-WhatIf] [-Confirm]
+```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `MetaverseObjectId` | `guid` | Yes |  | The ID of the Metaverse Object. |
+| `AttributeName` | `string` | Yes (ByAttributeName) |  | The name of the attribute in Accumulate mode. |
+| `AttributeId` | `int` | Yes (ByAttributeId) |  | The ID of the attribute in Accumulate mode. |
+| `Value` | `string[]` | No |  | The values to remove, by their text: text exactly as held, including case; numbers in invariant form; dates as ISO 8601; a Guid in its hyphenated form; True or False. |
+| `ValueId` | `guid[]` | No |  | The values to remove, by the value id shown on each of the Metaverse Object's attribute values. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
+
+### Output
+
+The values removed and the Activity recording the removal.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ActivityId` | `guid` | The Activity recording the removal. |
+| `RemovedValues` | `string[]` | The values removed, as text. |
+| `Removed` | `object[]` | The removed values, each with the Synchronisation Rule and Connected System that contributed it, as JIM held it. Each has `Id`, `Value`, `ContributedBySyncRuleId` and `ContributedBySystemId`. |
+<!-- END GENERATED: Remove-JIMMetaverseObjectAttributeValue -->
+
+### Examples
+
+```powershell title="Remove one kept entry from an audit log"
+Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId 'b5e1c1a2-3f4d-4e5f-8a9b-0c1d2e3f4a5b' -AttributeName 'Account Audit Log' -Value 'AD|S-1-5-21-1004|sAMAccountName=jsmith'
+```
 
 ## :material-delete-clock-outline: Get-JIMPendingDeletion
 

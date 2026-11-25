@@ -429,4 +429,32 @@
     <value>'{0}' is already in the JIM certificate store.</value>
     <comment>Result of trusting a server certificate. {0}: the certificate's common name.</comment>
   </data>
+  <data name="AccumulatedValueRemovalNotAccumulate" xml:space="preserve">
+    <value>Only values of an attribute in Accumulate mode can be removed by hand; '{0}' is in {1} mode.</value>
+    <comment>{0} attribute name, {1} its contribution mode</comment>
+  </data>
+  <data name="AccumulatedValueRemovalNothingNamed" xml:space="preserve">
+    <value>Name at least one value of '{0}' to remove.</value>
+    <comment>{0} attribute name</comment>
+  </data>
+  <data name="AccumulatedValueRemovalNotHeld" xml:space="preserve">
+    <value>The Metaverse Object holds no value '{0}' for '{1}'. Nothing was removed.</value>
+    <comment>{0} the value or value id named, {1} attribute name</comment>
+  </data>
+  <data name="AccumulatedValueRemovalSupplied" xml:space="preserve">
+    <value>'{0}' is still supplied by the Synchronisation Rule '{1}' from the Connected System '{2}', so its next synchronisation would add it back. Change the value at its source, or take the object out of the rule's scope, first. Nothing was removed.</value>
+    <comment>{0} value, {1} Synchronisation Rule name, {2} Connected System name</comment>
+  </data>
+  <data name="AccumulatedValueRemovalUndecidable" xml:space="preserve">
+    <value>JIM cannot tell whether the Synchronisation Rule '{0}' from the Connected System '{1}' still supplies these values, so nothing was removed: {2}</value>
+    <comment>{0} Synchronisation Rule name, {1} Connected System name, {2} the reason</comment>
+  </data>
+  <data name="AccumulatedValuesRemovedOne" xml:space="preserve">
+    <value>Removed {0} value from '{1}'.</value>
+    <comment>{0} count, {1} attribute name</comment>
+  </data>
+  <data name="AccumulatedValuesRemovedOther" xml:space="preserve">
+    <value>Removed {0} values from '{1}'.</value>
+    <comment>{0} count, {1} attribute name</comment>
+  </data>
 </root>

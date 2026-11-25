@@ -1473,6 +1473,21 @@ a.jim-system-rule-chip-part:focus-visible {
     overflow-wrap: anywhere;
 }
 
+/* The impact report under a contribution mode notice (#3059): one line per effect, a caption gap below the notice. */
+.jim-impact-lines {
+    margin-block: var(--jim-space-caption) 0;
+    padding-inline-start: 20px;
+}
+
+/* A value of an Accumulate attribute, with its remove button after it (#3059). The button sits at the row's end so a
+   column of them lines up, and the value keeps the room to wrap. */
+.jim-inspector-removable-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 /* The origin as labelled rows rather than one wrapping sentence: every fact lines up, and each chip keeps its own
    line instead of breaking mid-phrase. */
 /* The label column is exactly as wide as its longest label, so the values (pills, mostly) get the rest. A fixed
@@ -1597,9 +1612,19 @@ a.jim-system-rule-chip-part:focus-visible {
 
 .jim-inspector-candidate {
     grid-column: 2;
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
     font-size: 0.8125rem;
     overflow-wrap: anywhere;
+}
+
+/* A history entry's first line: the change chip, then the value, a field gap's worth of space between them. */
+.jim-inspector-rail-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
 }
 
 /* History on a rail: one dot per change, coloured by what the change did. */
@@ -1732,6 +1757,14 @@ a.jim-system-rule-chip-part:focus-visible {
     .jim-code-inline {
         background-color: var(--jim-code-inline-bg, rgba(110, 118, 129, 0.4));
     }
+}
+
+/* Inline code on a filled coloured surface (a snackbar): the grey tint all but vanishes on a saturated fill, leaving
+   only the pill's padding, which reads as a stray gap. A translucent white tint keeps the value's edges visible on any
+   severity colour, with the surface's own text colour. */
+.mud-snackbar .jim-code-inline {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: inherit;
 }
 
 /* Higher-contrast inline code, for use on dimmed/secondary helper text over a low-contrast surface

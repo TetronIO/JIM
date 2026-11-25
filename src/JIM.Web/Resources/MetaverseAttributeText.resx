@@ -47,8 +47,8 @@
     <comment>Title of the confirmation dialog. {0} is the attribute's name.</comment>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Changing '{0}' to {1} removes, at each Metaverse Object's next synchronisation, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
-    <comment>Body of the confirmation dialog. {0} is the attribute's name; Priority is the mode name.</comment>
+    <value>Changing {0} to {1} removes, at each Metaverse Object's next synchronisation, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
+    <comment>{0} attribute name, rendered as inline code so no quotes; {1} the contribution mode</comment>
   </data>
   <data name="LeaveAccumulateConfirm" xml:space="preserve">
     <value>Stop accumulating</value>
@@ -89,5 +89,41 @@
   </data>
   <data name="NullIsValueMergeTooltip" xml:space="preserve">
     <value>"Null is a value" has no effect on a Merge attribute: every contributor adds its values, so there is no winner for a missing value to override.</value>
+  </data>
+  <data name="ImpactLosingOne" xml:space="preserve">
+    <value>At least {0} Metaverse Object will lose values at its next synchronisation.</value>
+    <comment>{0} count</comment>
+  </data>
+  <data name="ImpactLosingOther" xml:space="preserve">
+    <value>At least {0} Metaverse Objects will lose values at their next synchronisation.</value>
+    <comment>{0} count</comment>
+  </data>
+  <data name="ImpactLosingWithValuesOne" xml:space="preserve">
+    <value>At least {0} Metaverse Object will lose values at its next synchronisation, among them {1} values no contributor supplies any more.</value>
+    <comment>{0} object count, {1} value count</comment>
+  </data>
+  <data name="ImpactLosingWithValuesOther" xml:space="preserve">
+    <value>At least {0} Metaverse Objects will lose values at their next synchronisation, among them {1} values no contributor supplies any more.</value>
+    <comment>{0} object count, {1} value count</comment>
+  </data>
+  <data name="ImpactKeepingOneOne" xml:space="preserve">
+    <value>{0} Metaverse Object holds values from several contributors and will keep only the highest-priority one's.</value>
+    <comment>{0} count</comment>
+  </data>
+  <data name="ImpactKeepingOneOther" xml:space="preserve">
+    <value>{0} Metaverse Objects hold values from several contributors and will keep only the highest-priority one's.</value>
+    <comment>{0} count</comment>
+  </data>
+  <data name="ImpactGainingOne" xml:space="preserve">
+    <value>{0} Metaverse Object will gain values from contributors it holds no values from today.</value>
+    <comment>{0} count</comment>
+  </data>
+  <data name="ImpactGainingOther" xml:space="preserve">
+    <value>{0} Metaverse Objects will gain values from contributors they hold no values from today.</value>
+    <comment>{0} count</comment>
+  </data>
+  <data name="ImpactNone" xml:space="preserve">
+    <value>No Metaverse Object's values change.</value>
+    <comment>Shown when a change of contribution mode moves no value</comment>
   </data>
 </root>

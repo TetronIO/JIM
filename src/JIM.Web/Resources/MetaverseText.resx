@@ -2374,4 +2374,24 @@
     <value>Passwords tab of Operations</value>
     <comment>Link text in the alert, to the queue on the Operations page.</comment>
   </data>
+  <data name="MaiRemoveValue" xml:space="preserve">
+    <value>Remove value</value>
+    <comment>Button beside a value of an Accumulate attribute</comment>
+  </data>
+  <data name="TvRemoveValueTitle" xml:space="preserve">
+    <value>Remove value?</value>
+    <comment>Confirmation title</comment>
+  </data>
+  <data name="TvRemoveValueQuestion" xml:space="preserve">
+    <value>Remove {0} from {1}? Accumulate keeps every value its contributors have supplied, so it is kept until someone removes it. The removal is recorded on this object's change history and reaches the Connected Systems {1} is exported to at their next synchronisation.</value>
+    <comment>{0} value and {1} attribute name, each rendered as inline code, so no quotes</comment>
+  </data>
+  <data name="TvRemoveValueConfirm" xml:space="preserve">
+    <value>Remove</value>
+    <comment>Confirm button</comment>
+  </data>
+  <data name="TvValueRemoved" xml:space="preserve">
+    <value>Removed {0} from {1}.</value>
+    <comment>{0} value and {1} attribute name, each rendered as inline code, so no quotes</comment>
+  </data>
 </root>

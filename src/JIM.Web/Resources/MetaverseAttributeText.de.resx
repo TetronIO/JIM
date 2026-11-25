@@ -39,7 +39,7 @@
     <value>Akkumulieren von Werten in „{0}“ beenden?</value>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Wenn Sie „{0}“ auf „{1}“ umstellen, werden bei der nächsten Synchronisierung jedes Metaverse-Objekts die Werte entfernt, die kein Beitragender mehr liefert, und Exporte entfernen sie anschließend aus den Zielsystemen. Sie können nicht wiederhergestellt werden.</value>
+    <value>Wenn Sie {0} auf „{1}“ umstellen, werden bei der nächsten Synchronisierung jedes Metaverse-Objekts die Werte entfernt, die kein Beitragender mehr liefert, und Exporte entfernen sie anschließend aus den Zielsystemen. Sie können nicht wiederhergestellt werden.</value>
   </data>
   <data name="LeaveAccumulateConfirm" xml:space="preserve">
     <value>Akkumulieren beenden</value>
@@ -73,5 +73,32 @@
   </data>
   <data name="NullIsValueMergeTooltip" xml:space="preserve">
     <value>„Null ist ein Wert“ hat bei einem Attribut im Modus „Zusammenführen“ keine Wirkung: Jeder Beitragende fügt seine Werte hinzu, daher gibt es keinen Gewinner, den ein fehlender Wert überschreiben könnte.</value>
+  </data>
+  <data name="ImpactLosingOne" xml:space="preserve">
+    <value>Mindestens {0} Metaverse-Objekt verliert bei seiner nächsten Synchronisierung Werte.</value>
+  </data>
+  <data name="ImpactLosingOther" xml:space="preserve">
+    <value>Mindestens {0} Metaverse-Objekte verlieren bei ihrer nächsten Synchronisierung Werte.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOne" xml:space="preserve">
+    <value>Mindestens {0} Metaverse-Objekt verliert bei seiner nächsten Synchronisierung Werte, darunter {1} Werte, die kein Beitragender mehr liefert.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOther" xml:space="preserve">
+    <value>Mindestens {0} Metaverse-Objekte verlieren bei ihrer nächsten Synchronisierung Werte, darunter {1} Werte, die kein Beitragender mehr liefert.</value>
+  </data>
+  <data name="ImpactKeepingOneOne" xml:space="preserve">
+    <value>{0} Metaverse-Objekt enthält Werte mehrerer Beitragender und behält nur die des Beitragenden mit der höchsten Priorität.</value>
+  </data>
+  <data name="ImpactKeepingOneOther" xml:space="preserve">
+    <value>{0} Metaverse-Objekte enthalten Werte mehrerer Beitragender und behalten nur die des Beitragenden mit der höchsten Priorität.</value>
+  </data>
+  <data name="ImpactGainingOne" xml:space="preserve">
+    <value>{0} Metaverse-Objekt erhält Werte von Beitragenden, von denen es heute keine Werte enthält.</value>
+  </data>
+  <data name="ImpactGainingOther" xml:space="preserve">
+    <value>{0} Metaverse-Objekte erhalten Werte von Beitragenden, von denen sie heute keine Werte enthalten.</value>
+  </data>
+  <data name="ImpactNone" xml:space="preserve">
+    <value>Die Werte keines Metaverse-Objekts ändern sich.</value>
   </data>
 </root>

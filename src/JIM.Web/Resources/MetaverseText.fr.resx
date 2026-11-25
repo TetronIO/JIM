@@ -1784,4 +1784,19 @@
   <data name="SpdPasswordsTabOperations" xml:space="preserve">
     <value>l’onglet Mots de passe des Opérations</value>
   </data>
+  <data name="MaiRemoveValue" xml:space="preserve">
+    <value>Supprimer la valeur</value>
+  </data>
+  <data name="TvRemoveValueTitle" xml:space="preserve">
+    <value>Supprimer la valeur ?</value>
+  </data>
+  <data name="TvRemoveValueQuestion" xml:space="preserve">
+    <value>Supprimer {0} de {1} ? Le mode Accumuler conserve chaque valeur fournie par ses contributeurs, jusqu’à ce que quelqu’un la supprime. La suppression est consignée dans l’historique des modifications de cet objet et atteint les systèmes connectés vers lesquels {1} est exporté lors de leur prochaine synchronisation.</value>
+  </data>
+  <data name="TvRemoveValueConfirm" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="TvValueRemoved" xml:space="preserve">
+    <value>{0} a été supprimé de {1}.</value>
+  </data>
 </root>

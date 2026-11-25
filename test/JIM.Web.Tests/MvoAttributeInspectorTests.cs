@@ -326,4 +326,84 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
             Assert.That(notOffered.FindAll("[data-testid='jim-mvo-inspector-explore-causality']"), Is.Empty);
         }
     }
+
+    /// <summary>
+    /// #3059, Phase 3: each value of an Accumulate attribute offers its removal, when the host allows it (an
+    /// Administrator); the click hands the value to the host, which confirms and removes it.
+    /// </summary>
+    [Test]
+    public async Task RemoveValue_AccumulateAttributeAndHostAllows_OffersRemovalOfEachValueAsync()
+    {
+        var provenance = BuildProvenance();
+        provenance.ContributionMode = AttributeContributionMode.Accumulate;
+        provenance.AttributePlurality = AttributePlurality.MultiValued;
+        provenance.CurrentValues[0].Id = Guid.NewGuid();
+        ProvenanceValue? removed = null;
+
+        var cut = Render<MvoAttributeInspector>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.OnRemoveValue, (ProvenanceValue value) => removed = value));
+        await cut.Find("[data-testid='jim-mvo-inspector-remove-value']").ClickAsync(new());
+
+        Assert.That(removed, Is.SameAs(provenance.CurrentValues[0]));
+    }
+
+    [Test]
+    public void RemoveValue_PriorityAttribute_OffersNoRemoval()
+    {
+        var cut = Render<MvoAttributeInspector>(p => p
+            .Add(c => c.Provenance, BuildProvenance())
+            .Add(c => c.OnRemoveValue, (ProvenanceValue _) => { }));
+
+        Assert.That(cut.FindAll("[data-testid='jim-mvo-inspector-remove-value']"), Is.Empty);
+    }
+
+    [Test]
+    public void RemoveValue_HostDoesNotAllow_OffersNoRemoval()
+    {
+        var provenance = BuildProvenance();
+        provenance.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var cut = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        Assert.That(cut.FindAll("[data-testid='jim-mvo-inspector-remove-value']"), Is.Empty);
+    }
+
+    /// <summary>
+    /// #3059, Phase 3: a value a person removed by hand reads as removed by them, not by the Synchronisation Rule that
+    /// once contributed it, and links the Activity the removal made.
+    /// </summary>
+    [Test]
+    public void History_ValueRemovedByAPerson_NamesThePersonAndLinksTheActivity()
+    {
+        var activityId = Guid.NewGuid();
+        var provenance = BuildProvenance(history:
+        [
+            new AttributeHistoryEntry
+            {
+                Kind = AttributeHistoryChangeKind.Removed,
+                Value = "+44 20 7946 9999",
+                SyncRuleId = 5,
+                SyncRuleName = "HR Import",
+                Change = new ProvenanceChange
+                {
+                    ChangeTime = DateTime.UtcNow,
+                    ActivityId = activityId,
+                    ActivityDescription = "Direct edit",
+                    InitiatedByName = "Priya Shah",
+                    ChangeInitiatorType = MetaverseObjectChangeInitiatorType.User
+                }
+            }
+        ]);
+
+        var cut = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        var entry = cut.Find(".jim-inspector-rail-removed");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.TextContent, Does.Contain("Priya Shah"));
+            Assert.That(entry.TextContent, Does.Not.Contain("HR Import"));
+            Assert.That(entry.QuerySelector($"a[href='/activity/{activityId}']"), Is.Not.Null);
+        }
+    }
 }

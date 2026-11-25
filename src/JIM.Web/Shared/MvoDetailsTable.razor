@@ -174,7 +174,7 @@
                 else if (SelectedAttributeProvenance != null)
                 {
                     <MvoAttributeInspector Provenance="SelectedAttributeProvenance" OnClose="OnCloseInspector" OnOpenInTimeline="OnOpenInTimeline"
-                                           CausalityExplorerHref="@CausalityExplorerHref" />
+                                           CausalityExplorerHref="@CausalityExplorerHref" OnRemoveValue="OnRemoveAttributeValue" />
                 }
             </div>
         }
@@ -303,6 +303,13 @@
 
     [Parameter]
     public EventCallback OnOpenInTimeline { get; set; }
+
+    /// <summary>
+    /// Removes a value of an Accumulate attribute from the inspector (#3059); unset where the reader may not, which
+    /// offers no remove button.
+    /// </summary>
+    [Parameter]
+    public EventCallback<ProvenanceValue> OnRemoveAttributeValue { get; set; }
 
     /// <summary>
     /// The Causality Explorer's address for this object, offered from the toolbar and the attribute inspector; null

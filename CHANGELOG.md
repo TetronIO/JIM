@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ A multi-valued Metaverse attribute can **Accumulate** values from every Connected System and keep them after the accounts that supplied them are deleted, for audit records such as every account a person has held. (#3059)
 - ✨ A multi-valued Metaverse attribute can **Merge** values from every Connected System, keeping each value while any system still supplies it, so a person's email addresses stay in step with every source; the Data Flow view names each attribute's contribution mode. (#3059)
+- ✨ Values an **Accumulate** attribute has kept can be removed from the portal's Inspect view, `Remove-JIMMetaverseObjectAttributeValue` or the REST API; JIM refuses a value a Synchronisation Rule still supplies and names the rule, and records the removal as yours. (#3059)
+- ✨ Before an attribute's contribution mode is changed, the portal, `Set-JIMMetaverseAttribute -WhatIf` and the REST API report how many Metaverse Objects would lose or gain values. (#3059)
 - ✨ JIM can reach the internet through an outbound proxy, as the Microsoft Entra ID Connector may need: the installer asks for one, and the standard `HTTPS_PROXY` and `NO_PROXY` settings work on Docker and Podman alike. (#3051)
 
 ### Changed

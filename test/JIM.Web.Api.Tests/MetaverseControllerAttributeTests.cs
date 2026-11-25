@@ -91,6 +91,7 @@ public class MetaverseControllerAttributeTests
         _mv.Setup(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Returns(Task.CompletedTask);
         _mv.Setup(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Returns(Task.CompletedTask);
         _mv.Setup(r => r.AddAttributeObjectTypeBindingAsync(It.IsAny<int>(), It.IsAny<int>())).Returns(Task.CompletedTask);
+        _mv.Setup(r => r.GetContributionModeImpactCountsAsync(It.IsAny<int>())).ReturnsAsync(new ContributionModeImpactCounts(0, 0, 0, 0, 0));
     }
 
     [TearDown]
@@ -333,6 +334,60 @@ public class MetaverseControllerAttributeTests
         var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
         Assert.That(error.Message, Does.Contain(nameof(UpdateMetaverseAttributeRequest.ConfirmLeavingAccumulate)));
         _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    /// <summary>
+    /// PRD Scenario 7 (#3059): the refusal states how many objects will lose values.
+    /// </summary>
+    [Test]
+    public async Task UpdateAttributeAsync_LeavingAccumulateWithoutConfirmation_StatesHowManyObjectsLoseValuesAsync()
+    {
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+        _mv.Setup(r => r.GetContributionModeImpactCountsAsync(1)).ReturnsAsync(new ContributionModeImpactCounts(3_000, 1_200, 0, 1_200, 0));
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { ContributionMode = AttributeContributionMode.Merge });
+
+        var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Does.Contain("1,200 Metaverse Object(s) will lose values"));
+    }
+
+    [Test]
+    public async Task GetAttributeContributionModeImpactAsync_LeavingAccumulate_ReturnsTheImpactAsync()
+    {
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+        _mv.Setup(r => r.GetContributionModeImpactCountsAsync(1)).ReturnsAsync(new ContributionModeImpactCounts(3_000, 1_200, 0, 1_200, 0));
+
+        var result = await _controller.GetAttributeContributionModeImpactAsync(1, AttributeContributionMode.Merge);
+
+        var impact = (ContributionModeImpactDto)((OkObjectResult)result).Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.ObjectsLosingValues, Is.EqualTo(1_200));
+            Assert.That(impact.ValuesNoLongerSupplied, Is.EqualTo(3_000));
+            Assert.That(impact.RequiresConfirmation, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetAttributeContributionModeImpactAsync_ModeTheAttributeCannotUse_ReturnsBadRequestAsync()
+    {
+        Attr(1, "jobTitle");
+
+        var result = await _controller.GetAttributeContributionModeImpactAsync(1, AttributeContributionMode.Merge);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task GetAttributeContributionModeImpactAsync_NoSuchAttribute_ReturnsNotFoundAsync()
+    {
+        var result = await _controller.GetAttributeContributionModeImpactAsync(99, AttributeContributionMode.Merge);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
     }
 
     [Test]

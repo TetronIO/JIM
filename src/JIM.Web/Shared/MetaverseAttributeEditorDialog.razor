@@ -4,6 +4,8 @@
 @using JIM.Models.Staging
 @using JIM.Utilities
 @using JIM.Web.Services
+@using JIM.Web.Models
+@using JIM.Application.Exceptions
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -62,7 +64,7 @@
                     </MudSelect>
 
                     @* ─── Contribution mode (#3059) ─── *@
-                    <MudSelect @bind-Value="_contributionMode" T="AttributeContributionMode" Label="@MetaverseAttributeText.ContributionModeLabel"
+                    <MudSelect @bind-Value="_contributionMode" @bind-Value:after="OnContributionModeChangedAsync" T="AttributeContributionMode" Label="@MetaverseAttributeText.ContributionModeLabel"
                                Variant="Variant.Outlined" Disabled="@ReadOnly" HelperText="@ContributionModeHelperText()">
                         <MudSelectItem Value="AttributeContributionMode.Priority">@MetaverseAttributeText.ContributionModePriority</MudSelectItem>
                         <MudSelectItem Value="AttributeContributionMode.Accumulate"
@@ -74,15 +76,15 @@
                     {
                         @if (AttributeContributionModeRules.CanRemoveValues(_originalContributionMode, _contributionMode))
                         {
-                            <MudAlert Severity="Severity.Warning">@MetaverseAttributeText.LeaveAccumulateNotice</MudAlert>
+                            <MudAlert Severity="Severity.Warning">@MetaverseAttributeText.LeaveAccumulateNotice @ImpactLines()</MudAlert>
                         }
                         else if (_contributionMode == AttributeContributionMode.Accumulate)
                         {
-                            <MudAlert Severity="Severity.Info">@MetaverseAttributeText.AccumulateNotice</MudAlert>
+                            <MudAlert Severity="Severity.Info">@MetaverseAttributeText.AccumulateNotice @ImpactLines()</MudAlert>
                         }
                         else if (_contributionMode == AttributeContributionMode.Merge)
                         {
-                            <MudAlert Severity="Severity.Info">@MetaverseAttributeText.MergeNotice</MudAlert>
+                            <MudAlert Severity="Severity.Info">@MetaverseAttributeText.MergeNotice @ImpactLines()</MudAlert>
                         }
                     }
                 }
@@ -263,6 +265,10 @@
     private AttributeRenderingHint _originalRenderingHint;
     private AttributeContributionMode _originalContributionMode;
 
+    // What the chosen contribution mode would do to the values Metaverse Objects hold (#3059); null until read, and for a
+    // new attribute, which holds no values.
+    private ContributionModeImpact? _impact;
+
     private IList<MetaverseObjectType> _objectTypes = new List<MetaverseObjectType>();
 
     // Working copies of the attribute's Standard Mappings; mutations stay in memory until the dialog saves.
@@ -331,7 +337,49 @@
     private void OnPluralityChanged()
     {
         _contributionMode = AttributeContributionModeRules.Constrain(_contributionMode, _type, _plurality);
+        _impact = null;
     }
+
+    /// <summary>
+    /// Reads what the chosen contribution mode would do to the values Metaverse Objects hold (#3059), for the notice under
+    /// the selector and the confirmation. Read only when the mode alone changes: a change of type or plurality in the
+    /// same edit has its own consequences, which the save's checks cover.
+    /// </summary>
+    private async Task OnContributionModeChangedAsync()
+    {
+        _impact = null;
+        if (!_isEdit || Attribute == null || _contributionMode == _originalContributionMode ||
+            _type != _originalType || _plurality != _originalPlurality)
+            return;
+
+        var requested = _contributionMode;
+        using var jim = JimFactory.Create();
+        try
+        {
+            var impact = await jim.Metaverse.GetContributionModeImpactAsync(Attribute.Id, requested);
+            if (_contributionMode == requested)
+                _impact = impact;
+        }
+        catch (UnsupportedContributionModeException)
+        {
+            // The selector offers only modes the attribute can use; nothing to report if one slipped through.
+        }
+    }
+
+    private RenderFragment ImpactLines() => builder =>
+    {
+        if (_impact == null)
+            return;
+        builder.OpenElement(0, "ul");
+        builder.AddAttribute(1, "class", "jim-impact-lines");
+        foreach (var line in ContributionModeImpactText.Lines(_impact))
+        {
+            builder.OpenElement(2, "li");
+            builder.AddContent(3, line);
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
 
     private string ContributionModeHelperText() => _type == AttributeDataType.Reference
         ? MetaverseAttributeText.ContributionModeReferenceHelper
@@ -694,12 +742,23 @@
         _ => MetaverseAttributeText.ContributionModePriority
     };
 
+    /// <summary>
+    /// The warning, naming the attribute as inline code, followed by the impact report's lines.
+    /// </summary>
+    private MarkupString LeaveAccumulateWarningMarkup(string name)
+    {
+        var warning = string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateWarning,
+            InlineCode.Markup(name), System.Net.WebUtility.HtmlEncode(ContributionModeName(_contributionMode)));
+        var impact = (_impact == null ? [] : ContributionModeImpactText.Lines(_impact)).Select(System.Net.WebUtility.HtmlEncode);
+        return (MarkupString)string.Join(" ", new[] { warning }.Concat(impact));
+    }
+
     private async Task<bool> ConfirmLeavingAccumulateAsync()
     {
         var name = _originalName;
         var parameters = new DialogParameters<ConsequenceConfirmationDialog>
         {
-            { x => x.IrreversibleWarning, string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateWarning, name, ContributionModeName(_contributionMode)) },
+            { x => x.IrreversibleWarningMarkup, LeaveAccumulateWarningMarkup(name) },
             { x => x.ConfirmationPhrase, name },
             { x => x.ConfirmButtonText, MetaverseAttributeText.LeaveAccumulateConfirm },
             { x => x.ConfirmButtonColour, Color.Error }

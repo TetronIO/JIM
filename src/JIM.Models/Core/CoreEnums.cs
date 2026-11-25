@@ -484,3 +484,26 @@ public enum AttributeContributionMode
     /// </summary>
     Merge = 2
 }
+
+/// <summary>
+/// What became of a request to remove values from an Accumulate attribute by hand (#3059).
+/// </summary>
+public enum AttributeValueRemovalOutcome
+{
+    /// <summary>The values were removed, and the removal recorded.</summary>
+    Removed = 0,
+
+    /// <summary>The attribute is not in Accumulate mode, or is not one of the object's; nothing was removed.</summary>
+    NotAccumulate = 1,
+
+    /// <summary>A named value is not held by the object, or no value was named; nothing was removed.</summary>
+    ValueNotHeld = 2,
+
+    /// <summary>A Synchronisation Rule still supplies a named value, so the next synchronisation would add it back;
+    /// nothing was removed.</summary>
+    SuppliedByContributor = 3,
+
+    /// <summary>Whether a Synchronisation Rule still supplies a named value cannot be decided (its scope or an expression
+    /// could not be evaluated); nothing was removed.</summary>
+    SupplyUndecidable = 4
+}

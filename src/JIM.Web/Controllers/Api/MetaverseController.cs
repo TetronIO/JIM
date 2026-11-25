@@ -705,9 +705,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             AttributeContributionModeRules.CanRemoveValues(attribute.ContributionMode, requestedMode) &&
             !request.ConfirmLeavingAccumulate)
         {
+            var impact = await _application.Metaverse.GetContributionModeImpactAsync(id, requestedMode);
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"Changing '{attribute.Name}' from Accumulate to {requestedMode} removes, at each Metaverse Object's next synchronisation, " +
-                $"the values that no contributor supplies any more, and exports remove them from target systems. " +
+                $"the values that no contributor supplies any more, and exports remove them from target systems: at least " +
+                $"{impact?.ObjectsLosingValues ?? 0:N0} Metaverse Object(s) will lose values. " +
                 $"Set {nameof(UpdateMetaverseAttributeRequest.ConfirmLeavingAccumulate)} to true to make this change."));
         }
 
@@ -781,6 +783,47 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
         return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Preview the impact of changing an attribute's contribution mode
+    /// </summary>
+    /// <remarks>
+    /// What changing the attribute to the given contribution mode would do to the values Metaverse Objects hold, as each
+    /// is next synchronised. Nothing is changed. Leaving Accumulate removes the values no contributor supplies any more,
+    /// and must be confirmed when the change is made (`confirmLeavingAccumulate`); moving to Priority keeps only the
+    /// highest-priority contributor's values; moving from Priority to Accumulate or Merge adds the values of contributors
+    /// the objects do not hold values from yet.
+    ///
+    /// The counts are read from what JIM holds now, without evaluating any Attribute Flow, so where values would be
+    /// removed they are a floor: a value a joined contributor no longer supplies because it changed at its source is not
+    /// counted until that contributor is next synchronised.
+    /// </remarks>
+    /// <param name="id">The attribute.</param>
+    /// <param name="mode">The contribution mode being considered.</param>
+    /// <response code="200">The impact.</response>
+    /// <response code="400">The attribute's data type or plurality cannot use the mode.</response>
+    /// <response code="404">No such attribute.</response>
+    [HttpGet("attributes/{id:int}/contribution-mode-impact", Name = "GetAttributeContributionModeImpact")]
+    [ProducesResponseType(typeof(ContributionModeImpactDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeContributionModeImpactAsync(int id, [FromQuery] AttributeContributionMode mode)
+    {
+        ContributionModeImpact? impact;
+        try
+        {
+            impact = await _application.Metaverse.GetContributionModeImpactAsync(id, mode);
+        }
+        catch (UnsupportedContributionModeException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+
+        return impact == null
+            ? NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."))
+            : Ok(ContributionModeImpactDto.FromModel(impact));
     }
 
     /// <summary>
@@ -1852,6 +1895,60 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id}, or attribute {attributeId}, not found."));
 
         return Ok(MetaverseAttributeProvenanceDto.FromModel(provenance));
+    }
+
+    /// <summary>
+    /// Remove values from an attribute in Accumulate mode
+    /// </summary>
+    /// <remarks>
+    /// Removes values an attribute in Accumulate mode has kept on a Metaverse Object, such as entries for accounts that
+    /// no longer exist. Name the values by their value ids, by their text, or both. The removal is all or nothing.
+    ///
+    /// A value a Synchronisation Rule still supplies is refused with `409 Conflict`, naming the rule and its Connected
+    /// System: that rule's next synchronisation would only add the value back. Change the value at its source, or take
+    /// the object out of the rule's scope, first. The same answer is given when JIM cannot tell whether a rule still
+    /// supplies the value, because its scope or an expression cannot be evaluated.
+    ///
+    /// The removal is recorded on the object's change history as yours, under an Activity named by `activityId`, and
+    /// reaches the Connected Systems the attribute is exported to at their next synchronisation.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <param name="attributeId">The attribute in Accumulate mode.</param>
+    /// <param name="request">The values to remove.</param>
+    /// <response code="200">The values were removed.</response>
+    /// <response code="400">The attribute is not in Accumulate mode, no value was named, or a named value is not held.</response>
+    /// <response code="401">The caller could not be identified.</response>
+    /// <response code="404">No such Metaverse Object.</response>
+    /// <response code="409">A Synchronisation Rule still supplies a named value, or JIM cannot tell whether it does; nothing was removed.</response>
+    [HttpDelete("objects/{id:guid}/attributes/{attributeId:int}/values", Name = "RemoveObjectAttributeValues")]
+    [ProducesResponseType(typeof(RemoveMetaverseObjectAttributeValuesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RemoveObjectAttributeValuesAsync(Guid id, int attributeId, [FromBody] RemoveMetaverseObjectAttributeValuesRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (initiatedBy == null && apiKey == null)
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);
+        if (metaverseObject == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object {id} was not found."));
+
+        var result = await _application.Metaverse.RemoveAccumulatedValuesAsync(metaverseObject, attributeId,
+            request.ValueIds ?? [], request.Values ?? [], apiKey == null ? initiatedBy : null, apiKey);
+
+        return result.Outcome switch
+        {
+            AttributeValueRemovalOutcome.Removed => Ok(RemoveMetaverseObjectAttributeValuesResponse.FromResult(result)),
+            AttributeValueRemovalOutcome.SuppliedByContributor or AttributeValueRemovalOutcome.SupplyUndecidable =>
+                Conflict(ApiErrorResponse.Conflict(result.Refusal!.ToString())),
+            _ => BadRequest(ApiErrorResponse.BadRequest(result.Refusal!.ToString()))
+        };
     }
 
     /// <summary>
