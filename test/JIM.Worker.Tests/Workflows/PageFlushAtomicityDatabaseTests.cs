@@ -105,6 +105,43 @@ public class PageFlushAtomicityDatabaseTests
     }
 
     /// <summary>
+    /// With every bulk write forced onto parallel connections, as a large page's are, a page that fails at its very last
+    /// step leaves nothing: the Metaverse Objects it created ahead of its transaction are removed, the Pending Exports it
+    /// staged on other connections and made live in its transaction are Incomplete again and removed, and the next run
+    /// projects, provisions and stages each object once.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_ParallelWritesAndThePageFailsAtItsLastStep_LeavesNothingAndTheNextRunIsWholeAsync()
+    {
+        await SeedConfigurationAsync(provisionToDirectory: true);
+        await CreateHrObjectsAsync(1);
+        await RunSynchronisationAsync(ConnectedSystemRunType.FullSynchronisation, forceParallelWrites: true);
+        await CreateHrObjectsAsync(2, 3);
+
+        Assert.That(async () => await RunSynchronisationAsync(ConnectedSystemRunType.DeltaSynchronisation, forceParallelWrites: true,
+                wrap: (repository, context) => FailBefore(repository, context, nameof(ISyncRepository.PublishMetaverseObjectsAsync))),
+            Throws.Exception, "precondition: the run stopped at its page's last step");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync(), Is.EqualTo(new Counts(Mvos: 1, DirectoryObjects: 1, PendingExports: 1)),
+                "nothing of the failed page is left");
+            Assert.That(await CountUnpublishedAsync(), Is.Zero, "no unpublished record either");
+            Assert.That(await CountIncompletePendingExportsAsync(), Is.Zero, "nor any Pending Export it staged");
+        }
+
+        await RunSynchronisationAsync(ConnectedSystemRunType.DeltaSynchronisation, forceParallelWrites: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync(), Is.EqualTo(new Counts(Mvos: 3, DirectoryObjects: 3, PendingExports: 3)),
+                "the next run projects, provisions and stages each object once");
+            Assert.That(await CountDirectoryObjectsWithoutAPendingExportAsync(), Is.Zero, "every provisioned account has its export");
+            Assert.That(await CountUnpublishedAsync(), Is.Zero, "every projected object was published");
+            Assert.That(await CountIncompletePendingExportsAsync(), Is.Zero, "and every staged export made live");
+        }
+    }
+
+    /// <summary>
     /// A page writes its new Metaverse Objects across parallel connections before it opens the transaction that writes
     /// everything else, so a page that fails after that leaves them committed and joined to nothing. The page removes them
     /// as it fails, and the next run projects each object once.
@@ -233,6 +270,13 @@ public class PageFlushAtomicityDatabaseTests
             await ctx.MetaverseObjects.AsNoTracking().CountAsync(),
             await ctx.ConnectedSystemObjects.AsNoTracking().CountAsync(c => c.ConnectedSystemId == _directorySystemId),
             await ctx.PendingExports.AsNoTracking().CountAsync(pe => pe.ConnectedSystemId == _directorySystemId));
+    }
+
+    /// <summary>Staged exports never made live, which the model's query filter hides from every other count.</summary>
+    private async Task<int> CountIncompletePendingExportsAsync()
+    {
+        await using var ctx = NewContext();
+        return await ctx.PendingExports.IgnoreQueryFilters().AsNoTracking().CountAsync(pe => pe.Status == PendingExportStatus.Incomplete);
     }
 
     private async Task<int> CountUnpublishedAsync()
@@ -476,10 +520,19 @@ public class PageFlushAtomicityDatabaseTests
     /// test can make a write fail on the run's own connection wherever in the flush it is issued.
     /// </summary>
     private async Task<Activity> RunSynchronisationAsync(ConnectedSystemRunType runType, Func<ISyncRepository, JimDbContext, ISyncRepository>? wrap = null,
-        bool assertNoErrors = true)
+        bool assertNoErrors = true, bool forceParallelWrites = false)
     {
         await using var ctx = NewContext(trackAll: true);
         var repository = new PostgresDataRepository(ctx);
+        if (forceParallelWrites)
+        {
+            // Every bulk write across parallel connections however few its rows, as a large page's are.
+            var parallel = (JIM.PostgresData.Repositories.SyncRepository)repository.Sync;
+            parallel.ConnectionStringForParallelWrites = _connectionString;
+            parallel.WriteParallelismOverride = 4;
+            parallel.ParallelWriteRowThreshold = 0;
+            parallel.ParallelWriteRowsPerConnection = 1;
+        }
         var syncRepository = wrap?.Invoke(repository.Sync, ctx) ?? repository.Sync;
         using var jim = new JimApplication(repository, syncRepository: syncRepository);
         var system = await jim.ConnectedSystems.GetConnectedSystemAsync(_systemId, withChangeTracking: true)

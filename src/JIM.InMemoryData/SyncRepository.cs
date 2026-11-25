@@ -4798,6 +4798,9 @@ public partial class SyncRepository : ISyncRepository
     // No transaction, so no savepoint: a step's writes land as they are made, as they always have here.
     public Task<ISyncRepositorySavepoint?> CreateSavepointAsync() => Task.FromResult<ISyncRepositorySavepoint?>(null);
 
+    // Nothing is staged across connections here: every write lands as it is made.
+    public Task<int> RemovePendingExportsStagedForTransactionAsync() => Task.FromResult(0);
+
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
 

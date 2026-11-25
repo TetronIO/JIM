@@ -78,6 +78,16 @@ public partial class SyncRepository : ISyncRepository
             callerHoldsTransaction: _context.Database.CurrentTransaction != null, ParallelWriteRowThreshold, ParallelWriteRowsPerConnection);
 
     /// <summary>
+    /// The connections a Pending Export create of <paramref name="rowCount"/> rows stages across while the caller holds a
+    /// transaction (#2848): what <see cref="ConnectionsForWrite"/> would give it with no transaction open. Only that writer
+    /// may ask: it stages rows no reader sees and nothing else holds, and makes them live in the caller's transaction (see
+    /// <see cref="CreatePendingExportsAsync"/>), which no other writer does.
+    /// </summary>
+    private int ConnectionsForStagingBesideCallerTransaction(int rowCount)
+        => ParallelBatchWriter.ConnectionsForWrite(rowCount, WriteParallelism, ConnectionStringForParallelWrites,
+            callerHoldsTransaction: false, ParallelWriteRowThreshold, ParallelWriteRowsPerConnection);
+
+    /// <summary>
     /// Whether a bulk write of <paramref name="rowCount"/> rows goes across parallel connections (#2872): whether
     /// <see cref="ConnectionsForWrite"/> gives it more than one.
     /// </summary>

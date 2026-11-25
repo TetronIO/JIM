@@ -1215,6 +1215,28 @@ public abstract class SyncTaskProcessorBase
             if (!committed)
                 await RemovePageUnpublishedMetaverseObjectsAsync();
             _pageUnpublishedMvoIds.Clear();
+            await RemovePageStagedPendingExportsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Removes the Pending Exports the page staged across parallel connections that its transaction did not make live
+    /// (#2848): all of them when it rolled back, and only any whose staging failed when it committed. They are Incomplete,
+    /// so no reader sees them meanwhile. A removal that fails is logged and left to the Worker's next start, which removes
+    /// every Incomplete export, so it never hides the failure that stopped the page.
+    /// </summary>
+    private async Task RemovePageStagedPendingExportsAsync()
+    {
+        try
+        {
+            var removed = await _syncRepo.RemovePendingExportsStagedForTransactionAsync();
+            if (removed > 0)
+                Log.Information("RemovePageStagedPendingExportsAsync: Removed {Count} Pending Export(s) the page staged and never made live", removed);
+        }
+        catch (DbException ex)
+        {
+            Log.Error(ex, "RemovePageStagedPendingExportsAsync: Could not remove the Pending Exports the page staged and never made live; " +
+                "the Worker removes them when it next starts");
         }
     }
 

@@ -2623,6 +2623,14 @@ public interface ISyncRepository
     /// </summary>
     Task<ISyncRepositorySavepoint?> CreateSavepointAsync();
 
+    /// <summary>
+    /// Removes the Pending Exports this repository staged across parallel connections for a transaction it held, that the
+    /// transaction did not make live (#2848): all of them once it has rolled back, and any whose staging failed once it has
+    /// committed. A synchronisation page calls it when its transaction has ended, whichever way. Returns the number removed;
+    /// 0 where nothing was staged that way (the in-memory test repository never stages).
+    /// </summary>
+    Task<int> RemovePendingExportsStagedForTransactionAsync();
+
     #endregion
 
     #region Generated Values (#242)

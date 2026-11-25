@@ -161,6 +161,16 @@ public class PendingExport
     public bool InitialPasswordFollows { get; set; }
 
     /// <summary>
+    /// Whether this export keeps the id of the queued export it replaces, which the same synchronisation page deleted
+    /// moments earlier (#2100 keeps the id so earlier runs' outcomes still find the change queued). A page writes its
+    /// exports across parallel connections while its own transaction is open (#2848); a row under a deleted row's id can
+    /// only be written on the connection that deleted it, since another would wait on that transaction for good, so an
+    /// export carrying this is written on the transaction's own connection. Transient: never persisted.
+    /// </summary>
+    [NotMapped]
+    public bool ReusesReplacedExportId { get; set; }
+
+    /// <summary>
     /// The Run Profile Execution Item of the synchronisation that staged this export, so the export run that
     /// later carries it out can say what caused it (#1223).
     /// <para>
