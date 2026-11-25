@@ -1749,6 +1749,14 @@ a.jim-system-rule-chip-part:focus-visible {
     }
 }
 
+/* Inline code on a filled coloured surface (a snackbar): the grey tint all but vanishes on a saturated fill, leaving
+   only the pill's padding, which reads as a stray gap. A translucent white tint keeps the value's edges visible on any
+   severity colour, with the surface's own text colour. */
+.mud-snackbar .jim-code-inline {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: inherit;
+}
+
 /* Higher-contrast inline code, for use on dimmed/secondary helper text over a low-contrast surface
    (e.g. the Attribute Priority explainer on the grey expander backdrop), where the default translucent
    background and inherited secondary colour wash out. Theme-aware via MudBlazor palette variables. */

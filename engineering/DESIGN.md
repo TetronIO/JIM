@@ -352,6 +352,8 @@ Metaverse text-chips render as a 16% tint of `primary` over the surface, with `p
 
 A value or name placed into a sentence (an attribute value, an attribute or object name, a column, a setting) is shown as inline code: the `jim-code-inline` pill, in IBM Plex Mono on a light tint. The pill marks where the value starts and ends, so the sentence puts no quotes around it; a value can itself contain quotes, spaces or punctuation, and quotes around it make it ambiguous. This covers confirmation dialogs, snackbars and explanatory text. It does not cover a value in an input, a table cell of its own or an attribute display, which show the value plainly (monospace where it is code-like, `jim-text-code`).
 
+On a filled coloured surface (a snackbar) the pill takes a translucent white tint and the surface's text colour, so its edges stay visible on every severity colour.
+
 In the portal, compose such a message with `InlineCode.Format(template, values...)` (`src/JIM.Web/Localisation/InlineCode.cs`), which encodes each value and returns markup for a dialog's `MarkupMessage` or a snackbar; never hand-write the `<code>` element. The text's placeholders carry no quotes, in every language. A dialog title cannot hold markup, so a name in a title keeps its quotes. Messages the application layer produces for the REST API and PowerShell are plain text, so they keep theirs too.
 
 ### Cards
