@@ -196,7 +196,7 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 - **The coverage record starts empty.** It fills as objects are evaluated after the upgrade; an account without a record is treated as never covered, so nothing is recalled from it until a rule has been recorded covering it.
 - Released migrations are append-only; the new setting and the coverage record arrive in a new migration.
 - No new third-party dependencies.
-- British English, Title Case product nouns, no em dashes, in every surface and document.
+- English text is written in British English with Title Case product nouns; every new portal string ships with its en-US, French and German entries per `engineering/LOCALISATION.md`, using the glossary's word for each term. No em dashes in any language.
 - Air-gapped: nothing here needs connectivity.
 
 ## Affected Areas

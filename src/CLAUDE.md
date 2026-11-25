@@ -36,7 +36,7 @@ This rule overrides any instinct to "minimise change" or "stay tightly scoped" w
 - YOU MUST use async/await for all I/O operations (method suffix: `Async`)
 - YOU MUST use constructor injection for all dependencies
 - YOU MUST test method signature: `[Test] public async Task TestNameAsync()`
-- **CRITICAL: Use British English (en-GB) for ALL text:**
+- **CRITICAL: British English (en-GB) is the source language for all text** (code, comments, docs, logs, API and PowerShell output, and the portal's English resources). Portal translations follow their own language's conventions instead; see `engineering/LOCALISATION.md`:
   - Code: "authorisation" not "authorization", "synchronisation" not "synchronization", "colour" not "color"
   - Comments: "behaviour" not "behavior", "centre" not "center", "licence" not "license" (noun)
   - Documentation: "organise" not "organize", "analyse" not "analyze", "programme" not "program" (unless referring to computer programs)
@@ -44,7 +44,7 @@ This rule overrides any instinct to "minimise change" or "stay tightly scoped" w
   - Units: Metric only (metres, litres, kilograms, kilometres) - never use imperial units
   - Date/Time: Always use UTC for storage and internal operations; display in user's local time zone where appropriate
   - Exceptions: Technical terms, proper nouns, third-party library names, URLs
-- **NEVER use em dashes (`—`)** in documentation, comments, or UI text. Use traditional separators instead:
+- **NEVER use em dashes (`—`)** in documentation, comments, or UI text, in any language. Use traditional separators instead:
   - In sentences: semicolons, commas, or colons (e.g. "JIM takes a different approach; it deploys..." not "JIM takes a different approach — it deploys...")
   - In bullet points: colons to separate a label from its description (e.g. "Attribute Writeback: Keep HR systems current" not "Attribute Writeback — Keep HR systems current")
   - In parenthetical asides: commas or parentheses
@@ -53,6 +53,7 @@ This rule overrides any instinct to "minimise change" or "stay tightly scoped" w
   - **Never abbreviate "Synchronisation Rule" to "Sync Rule"** in user-facing text, documentation, or comments; always write it in full. (The `SyncRule` code identifier / type name is unaffected; this rule is about prose and UI text only.)
   - Applies to UI labels, headings, `MudText` prose, snackbar/dialog/validation messages, and Markdown docs. Example: "shared by every Synchronisation Rule that targets this system", not "...every synchronisation rule..."
   - Lowercase only when referring to a generic concept rather than the named entity (e.g. "object matching" as an activity), or in code identifiers and variable names
+  - This is an English rule. A translation uses the glossary's word for each term (`engineering/localisation/glossary.json`) with that language's capitalisation; French and German write them as ordinary nouns
 
 **Copyright Headers (MANDATORY on all new files):**
 Every new source file MUST include a copyright header as the very first content.
