@@ -470,6 +470,38 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
 Removes values an attribute in [Accumulate](../concepts/attribute-priority.md#accumulating-values-from-every-contributor) mode has kept on a Metaverse Object, such as entries for accounts that no longer exist. A value a Synchronisation Rule still supplies is refused, naming the rule: its next synchronisation would add the value back. The removal is all or nothing, is recorded on the object's change history under an Activity, and reaches the systems the attribute is exported to at their next synchronisation.
 
 <!-- BEGIN GENERATED: Remove-JIMMetaverseObjectAttributeValue -->
+### Syntax
+
+```powershell
+# ByAttributeName (default)
+Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId <guid> -AttributeName <string> [-Value <string[]>] [-ValueId <guid[]>] [-Force] [-WhatIf] [-Confirm]
+
+# ByAttributeId
+Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId <guid> -AttributeId <int> [-Value <string[]>] [-ValueId <guid[]>] [-Force] [-WhatIf] [-Confirm]
+```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `MetaverseObjectId` | `guid` | Yes |  | The ID of the Metaverse Object. |
+| `AttributeName` | `string` | Yes (ByAttributeName) |  | The name of the attribute in Accumulate mode. |
+| `AttributeId` | `int` | Yes (ByAttributeId) |  | The ID of the attribute in Accumulate mode. |
+| `Value` | `string[]` | No |  | The values to remove, by their text: text exactly as held, including case; numbers in invariant form; dates as ISO 8601; a Guid in its hyphenated form; True or False. |
+| `ValueId` | `guid[]` | No |  | The values to remove, by the value id shown on each of the Metaverse Object's attribute values. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
+
+### Output
+
+The values removed and the Activity recording the removal.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ActivityId` | `guid` | The Activity recording the removal. |
+| `RemovedValues` | `string[]` | The values removed, as text. |
+| `Removed` | `object[]` | The removed values, each with the Synchronisation Rule and Connected System that contributed it, as JIM held it. Each has `Id`, `Value`, `ContributedBySyncRuleId` and `ContributedBySystemId`. |
 <!-- END GENERATED: Remove-JIMMetaverseObjectAttributeValue -->
 
 ### Examples
