@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Staging;
+using JIM.Models.Localisation;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -41,6 +43,41 @@ public class ClassMembershipValidatorTests
             Assert.That(result.ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet),
                 "a deliberate, administrator-actionable refusal must not be classified as a general error: " +
                 "downstream that reads as an unhandled JIM defect and fails the whole Activity");
+        }
+    }
+
+    [Test]
+    public void Check_OneRequiredAttributeMissing_StoresTheRefusalAsAMessageWithTheEnglishItHad()
+    {
+        var connectedSystem = ConnectedSystemWith(RequiredPosixAttributes("uidNumber", "gidNumber"));
+        var pendingExport = PendingExportAdding("posixAccount", writing: ("uidNumber", "5001"));
+
+        var result = ClassMembershipValidator.Check(pendingExport, connectedSystem)!;
+
+        var french = CultureInfo.GetCultureInfo("fr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ErrorMessage, Is.EqualTo(
+                "Cannot add the class(es) 'posixAccount' to this object: 'Yellowstone' requires gidNumber, and this export neither writes it " +
+                "nor finds a value already on the object. Add an Attribute Flow for the missing attribute(s), or withdraw the auxiliary class " +
+                "selection that brought the class in."));
+            Assert.That(MessageRenderer.Render(result.ErrorMessageDetail!, french, french), Does.StartWith("Impossible d’ajouter la ou les classes « posixAccount »"));
+        }
+    }
+
+    [Test]
+    public void Check_SeveralRequiredAttributesMissing_SaysThemInEnglishAndPluralInGerman()
+    {
+        var connectedSystem = ConnectedSystemWith(RequiredPosixAttributes("uidNumber", "gidNumber"));
+        var pendingExport = PendingExportAdding("posixAccount");
+
+        var result = ClassMembershipValidator.Check(pendingExport, connectedSystem)!;
+
+        var german = CultureInfo.GetCultureInfo("de");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ErrorMessage, Does.Contain("requires gidNumber, uidNumber, and this export neither writes them nor finds"));
+            Assert.That(MessageRenderer.Render(result.ErrorMessageDetail!, german, german), Does.Contain("erfordert gidNumber, uidNumber, und dieser Export schreibt sie nicht"));
         }
     }
 

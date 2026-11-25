@@ -1,10 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Servers;
 using JIM.Application.Staging;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Worker.Tests.Connectors;
@@ -56,6 +58,30 @@ public class SingleValuedAttributeChangeValidatorTests
             Change(mail, PendingExportAttributeChangeType.Add, "c@example.com")));
 
         Assert.That(refusal?.ErrorMessage, Does.Contain("'mail', 'title'"));
+    }
+
+    [Test]
+    public void Check_ContradictedAttributes_StoresTheRefusalAsAMessageWithTheEnglishItHad()
+    {
+        var title = Attribute(42, "title", AttributePlurality.SingleValued);
+        var mail = Attribute(40, "mail", AttributePlurality.SingleValued);
+
+        var refusal = SingleValuedAttributeChangeValidator.Check(PendingExportWith(
+            Change(title, PendingExportAttributeChangeType.Update, "Engineer"),
+            Change(title, PendingExportAttributeChangeType.Update, "Architect"),
+            Change(mail, PendingExportAttributeChangeType.Update, "b@example.com"),
+            Change(mail, PendingExportAttributeChangeType.Remove, "a@example.com")))!;
+
+        var french = CultureInfo.GetCultureInfo("fr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refusal.ErrorMessage, Is.EqualTo(
+                "This export carries more than one change for the single-valued attribute(s) 'mail', 'title', so it does not say which value " +
+                "the object should hold, and JIM has not sent it. A single-valued attribute is exported as one change carrying the value it " +
+                "should hold; check whether more than one Attribute Flow writes to the attribute."));
+            Assert.That(MessageRenderer.Render(refusal.ErrorMessageDetail!, french, french),
+                Does.StartWith("Cette exportation contient plus d’une modification pour les attributs monovalués « mail », « title »"));
+        }
     }
 
     [Test]
