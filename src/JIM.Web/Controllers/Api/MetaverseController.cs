@@ -1855,6 +1855,60 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Remove values from an attribute in Accumulate mode
+    /// </summary>
+    /// <remarks>
+    /// Removes values an attribute in Accumulate mode has kept on a Metaverse Object, such as entries for accounts that
+    /// no longer exist. Name the values by their value ids, by their text, or both. The removal is all or nothing.
+    ///
+    /// A value a Synchronisation Rule still supplies is refused with `409 Conflict`, naming the rule and its Connected
+    /// System: that rule's next synchronisation would only add the value back. Change the value at its source, or take
+    /// the object out of the rule's scope, first. The same answer is given when JIM cannot tell whether a rule still
+    /// supplies the value, because its scope or an expression cannot be evaluated.
+    ///
+    /// The removal is recorded on the object's change history as yours, under an Activity named by `activityId`, and
+    /// reaches the Connected Systems the attribute is exported to at their next synchronisation.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <param name="attributeId">The attribute in Accumulate mode.</param>
+    /// <param name="request">The values to remove.</param>
+    /// <response code="200">The values were removed.</response>
+    /// <response code="400">The attribute is not in Accumulate mode, no value was named, or a named value is not held.</response>
+    /// <response code="401">The caller could not be identified.</response>
+    /// <response code="404">No such Metaverse Object.</response>
+    /// <response code="409">A Synchronisation Rule still supplies a named value, or JIM cannot tell whether it does; nothing was removed.</response>
+    [HttpDelete("objects/{id:guid}/attributes/{attributeId:int}/values", Name = "RemoveObjectAttributeValues")]
+    [ProducesResponseType(typeof(RemoveMetaverseObjectAttributeValuesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RemoveObjectAttributeValuesAsync(Guid id, int attributeId, [FromBody] RemoveMetaverseObjectAttributeValuesRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (initiatedBy == null && apiKey == null)
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);
+        if (metaverseObject == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object {id} was not found."));
+
+        var result = await _application.Metaverse.RemoveAccumulatedValuesAsync(metaverseObject, attributeId,
+            request.ValueIds ?? [], request.Values ?? [], apiKey == null ? initiatedBy : null, apiKey);
+
+        return result.Outcome switch
+        {
+            AttributeValueRemovalOutcome.Removed => Ok(RemoveMetaverseObjectAttributeValuesResponse.FromResult(result)),
+            AttributeValueRemovalOutcome.SuppliedByContributor or AttributeValueRemovalOutcome.SupplyUndecidable =>
+                Conflict(ApiErrorResponse.Conflict(result.Refusal!.ToString())),
+            _ => BadRequest(ApiErrorResponse.BadRequest(result.Refusal!.ToString()))
+        };
+    }
+
+    /// <summary>
     /// List the generated values a Metaverse Object holds
     /// </summary>
     /// <remarks>

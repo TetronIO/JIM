@@ -204,6 +204,7 @@
         'Get-JIMMetaverseAttributeDeletionPreview',
         'Add-JIMMetaverseObjectTypeAttribute',
         'Remove-JIMMetaverseObjectTypeAttribute',
+        'Remove-JIMMetaverseObjectAttributeValue',
         'Get-JIMMetaverseAttributePriority',
         'Set-JIMMetaverseAttributePriority',
         'Move-JIMMetaverseAttributePriority',

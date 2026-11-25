@@ -37,7 +37,7 @@
             {
                 @foreach (var value in Provenance.CurrentValues)
                 {
-                    <div>
+                    <div class="@(CanRemoveValues ? "jim-inspector-removable-value" : null)">
                         @if (string.IsNullOrEmpty(value.DisplayValue))
                         {
                             <EmptyValue />
@@ -51,6 +51,14 @@
                         else
                         {
                             @value.DisplayValue
+                        }
+                        @if (CanRemoveValues)
+                        {
+                            @* An Accumulate value is kept until someone removes it (#3059); the host confirms first. *@
+                            <MudTooltip Text="@MetaverseText.MaiRemoveValue" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" aria-label="@MetaverseText.MaiRemoveValue"
+                                               data-testid="jim-mvo-inspector-remove-value" OnClick="@(() => OnRemoveValue.InvokeAsync(value))" />
+                            </MudTooltip>
                         }
                     </div>
                 }
@@ -303,6 +311,15 @@
     /// </summary>
     [Parameter]
     public string? CausalityExplorerHref { get; set; }
+
+    /// <summary>
+    /// Raised with a value of an Accumulate attribute (#3059) when its remove button is pressed; the host confirms and
+    /// removes it. Unset where the reader may not remove values, which offers no button.
+    /// </summary>
+    [Parameter]
+    public EventCallback<ProvenanceValue> OnRemoveValue { get; set; }
+
+    private bool CanRemoveValues => OnRemoveValue.HasDelegate && Provenance.ContributionMode == AttributeContributionMode.Accumulate;
 
     private ProvenanceConnectedSystemObject? ContributingConnectedSystemObject => Provenance.ContributingConnectedSystemObject;
 

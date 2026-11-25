@@ -2318,6 +2318,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             .Take(cap)
             .Select(av => new
             {
+                av.Id,
                 av.StringValue,
                 av.IntValue,
                 av.LongValue,
@@ -2342,6 +2343,7 @@ public partial class MetaverseRepository : IMetaverseRepository
 
         var values = rows.Select(r => new ProvenanceValue
         {
+            Id = r.Id,
             DisplayValue = FormatTypedValueForDisplay(
                 r.StringValue, r.IntValue, r.LongValue, r.DecimalValue, r.DateTimeValue, r.GuidValue, r.BoolValue,
                 r.ByteLength, r.ReferenceDisplayName, r.ReferenceValueId),

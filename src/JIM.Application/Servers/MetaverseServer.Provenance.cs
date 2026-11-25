@@ -102,6 +102,7 @@ public partial class MetaverseServer
             AttributeName = attribute.Name,
             AttributeType = attribute.Type,
             AttributePlurality = attribute.AttributePlurality,
+            ContributionMode = attribute.ContributionMode,
             CurrentValues = currentValues,
             CurrentValueTotalCount = currentValueTotalCount
         };
