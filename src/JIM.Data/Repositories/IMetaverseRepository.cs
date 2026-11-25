@@ -296,6 +296,12 @@ public interface IMetaverseRepository
     /// <param name="valueIds">The value rows to delete; each must belong to the object.</param>
     public Task RemoveMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject, IReadOnlyCollection<Guid> valueIds);
 
+    /// <summary>
+    /// Counts, in one set-based read, what the Metaverse Objects holding an attribute's values look like today, from
+    /// which the impact of any change of the attribute's contribution mode is read (#3059).
+    /// </summary>
+    public Task<ContributionModeImpactCounts> GetContributionModeImpactCountsAsync(int attributeId);
+
     public Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     /// <summary>

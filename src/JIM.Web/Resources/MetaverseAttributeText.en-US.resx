@@ -38,4 +38,16 @@
   <data name="PriorityListMergeNotice" xml:space="preserve">
     <value>This attribute uses the Merge contribution mode: every Synchronization Rule below adds its values and none is preferred, so there is no order to set, and "Null is a value" has no effect.</value>
   </data>
+  <data name="ImpactLosingOne" xml:space="preserve">
+    <value>At least {0} Metaverse Object will lose values at its next synchronization.</value>
+  </data>
+  <data name="ImpactLosingOther" xml:space="preserve">
+    <value>At least {0} Metaverse Objects will lose values at their next synchronization.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOne" xml:space="preserve">
+    <value>At least {0} Metaverse Object will lose values at its next synchronization, among them {1} values no contributor supplies any more.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOther" xml:space="preserve">
+    <value>At least {0} Metaverse Objects will lose values at their next synchronization, among them {1} values no contributor supplies any more.</value>
+  </data>
 </root>

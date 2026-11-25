@@ -1473,6 +1473,12 @@ a.jim-system-rule-chip-part:focus-visible {
     overflow-wrap: anywhere;
 }
 
+/* The impact report under a contribution mode notice (#3059): one line per effect, a caption gap below the notice. */
+.jim-impact-lines {
+    margin-block: var(--jim-space-caption) 0;
+    padding-inline-start: 20px;
+}
+
 /* A value of an Accumulate attribute, with its remove button after it (#3059). The button sits at the row's end so a
    column of them lines up, and the value keeps the room to wrap. */
 .jim-inspector-removable-value {

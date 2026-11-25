@@ -74,4 +74,31 @@
   <data name="NullIsValueMergeTooltip" xml:space="preserve">
     <value>« Null est une valeur » est sans effet sur un attribut en mode « Fusionner » : chaque contributeur ajoute ses valeurs, il n’y a donc pas de gagnant qu’une valeur absente pourrait remplacer.</value>
   </data>
+  <data name="ImpactLosingOne" xml:space="preserve">
+    <value>Au moins {0} objet Metaverse perdra des valeurs lors de sa prochaine synchronisation.</value>
+  </data>
+  <data name="ImpactLosingOther" xml:space="preserve">
+    <value>Au moins {0} objets Metaverse perdront des valeurs lors de leur prochaine synchronisation.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOne" xml:space="preserve">
+    <value>Au moins {0} objet Metaverse perdra des valeurs lors de sa prochaine synchronisation, dont {1} valeurs qu’aucun contributeur ne fournit plus.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOther" xml:space="preserve">
+    <value>Au moins {0} objets Metaverse perdront des valeurs lors de leur prochaine synchronisation, dont {1} valeurs qu’aucun contributeur ne fournit plus.</value>
+  </data>
+  <data name="ImpactKeepingOneOne" xml:space="preserve">
+    <value>{0} objet Metaverse contient des valeurs de plusieurs contributeurs et ne conservera que celles du contributeur le plus prioritaire.</value>
+  </data>
+  <data name="ImpactKeepingOneOther" xml:space="preserve">
+    <value>{0} objets Metaverse contiennent des valeurs de plusieurs contributeurs et ne conserveront que celles du contributeur le plus prioritaire.</value>
+  </data>
+  <data name="ImpactGainingOne" xml:space="preserve">
+    <value>{0} objet Metaverse recevra des valeurs de contributeurs dont il ne contient aucune valeur aujourd’hui.</value>
+  </data>
+  <data name="ImpactGainingOther" xml:space="preserve">
+    <value>{0} objets Metaverse recevront des valeurs de contributeurs dont ils ne contiennent aucune valeur aujourd’hui.</value>
+  </data>
+  <data name="ImpactNone" xml:space="preserve">
+    <value>Aucune valeur d’objet Metaverse ne change.</value>
+  </data>
 </root>

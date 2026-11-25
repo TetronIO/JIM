@@ -705,9 +705,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             AttributeContributionModeRules.CanRemoveValues(attribute.ContributionMode, requestedMode) &&
             !request.ConfirmLeavingAccumulate)
         {
+            var impact = await _application.Metaverse.GetContributionModeImpactAsync(id, requestedMode);
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"Changing '{attribute.Name}' from Accumulate to {requestedMode} removes, at each Metaverse Object's next synchronisation, " +
-                $"the values that no contributor supplies any more, and exports remove them from target systems. " +
+                $"the values that no contributor supplies any more, and exports remove them from target systems: at least " +
+                $"{impact?.ObjectsLosingValues ?? 0:N0} Metaverse Object(s) will lose values. " +
                 $"Set {nameof(UpdateMetaverseAttributeRequest.ConfirmLeavingAccumulate)} to true to make this change."));
         }
 
@@ -781,6 +783,47 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
         return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Preview the impact of changing an attribute's contribution mode
+    /// </summary>
+    /// <remarks>
+    /// What changing the attribute to the given contribution mode would do to the values Metaverse Objects hold, as each
+    /// is next synchronised. Nothing is changed. Leaving Accumulate removes the values no contributor supplies any more,
+    /// and must be confirmed when the change is made (`confirmLeavingAccumulate`); moving to Priority keeps only the
+    /// highest-priority contributor's values; moving from Priority to Accumulate or Merge adds the values of contributors
+    /// the objects do not hold values from yet.
+    ///
+    /// The counts are read from what JIM holds now, without evaluating any Attribute Flow, so where values would be
+    /// removed they are a floor: a value a joined contributor no longer supplies because it changed at its source is not
+    /// counted until that contributor is next synchronised.
+    /// </remarks>
+    /// <param name="id">The attribute.</param>
+    /// <param name="mode">The contribution mode being considered.</param>
+    /// <response code="200">The impact.</response>
+    /// <response code="400">The attribute's data type or plurality cannot use the mode.</response>
+    /// <response code="404">No such attribute.</response>
+    [HttpGet("attributes/{id:int}/contribution-mode-impact", Name = "GetAttributeContributionModeImpact")]
+    [ProducesResponseType(typeof(ContributionModeImpactDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeContributionModeImpactAsync(int id, [FromQuery] AttributeContributionMode mode)
+    {
+        ContributionModeImpact? impact;
+        try
+        {
+            impact = await _application.Metaverse.GetContributionModeImpactAsync(id, mode);
+        }
+        catch (UnsupportedContributionModeException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+
+        return impact == null
+            ? NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."))
+            : Ok(ContributionModeImpactDto.FromModel(impact));
     }
 
     /// <summary>

@@ -2659,6 +2659,68 @@ public partial class MetaverseRepository : IMetaverseRepository
             await ownTransaction.CommitAsync();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A contributor is an enabled import rule that flows into the attribute, whose Connected System has a non-obsolete
+    /// object of the rule's type joined to the Metaverse Object. A value is "no longer supplied" when its recorded rule
+    /// is not such a contributor for its object (deleted, disabled, no longer flowing into the attribute, or its
+    /// system's object gone). Values set outside synchronisation (a sign-in claim, JIM itself, a person) are left out:
+    /// no contribution mode affects them. Raw SQL, since the read is one statement over three large tables.
+    /// </remarks>
+    public async Task<ContributionModeImpactCounts> GetContributionModeImpactCountsAsync(int attributeId)
+    {
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"WITH contributors AS (
+                  SELECT DISTINCT c.""MetaverseObjectId"" AS mvo_id, r.""Id"" AS rule_id
+                  FROM ""SyncRules"" r
+                  JOIN ""SyncRuleMappings"" m ON m.""SyncRuleId"" = r.""Id"" AND m.""TargetMetaverseAttributeId"" = @attributeId
+                  JOIN ""ConnectedSystemObjects"" c ON c.""ConnectedSystemId"" = r.""ConnectedSystemId"" AND c.""TypeId"" = r.""ConnectedSystemObjectTypeId""
+                  JOIN ""MetaverseObjects"" mo ON mo.""Id"" = c.""MetaverseObjectId"" AND mo.""TypeId"" = r.""MetaverseObjectTypeId""
+                  WHERE r.""Direction"" = @import AND r.""Enabled"" AND c.""Status"" <> @obsolete
+              ),
+              vals AS (
+                  SELECT v.""MetaverseObjectId"" AS mvo_id, v.""ContributedBySyncRuleId"" AS rule_id,
+                         NOT EXISTS (SELECT 1 FROM contributors k
+                                     WHERE k.mvo_id = v.""MetaverseObjectId"" AND k.rule_id = v.""ContributedBySyncRuleId"") AS stale
+                  FROM ""MetaverseObjectAttributeValues"" v
+                  WHERE v.""AttributeId"" = @attributeId AND NOT v.""NullValue""
+                    AND (v.""ContributedByKind"" IS NULL OR v.""ContributedByKind"" = @syncRuleKind)
+              ),
+              per_object AS (
+                  SELECT mvo_id,
+                         COUNT(*) FILTER (WHERE stale) AS stale_values,
+                         COUNT(DISTINCT rule_id) FILTER (WHERE NOT stale) AS live_rules
+                  FROM vals GROUP BY mvo_id
+              ),
+              joined AS (SELECT mvo_id, COUNT(*) AS joined_rules FROM contributors GROUP BY mvo_id)
+              SELECT
+                  COALESCE((SELECT SUM(stale_values) FROM per_object), 0)::int,
+                  (SELECT COUNT(*) FROM per_object WHERE stale_values > 0)::int,
+                  (SELECT COUNT(*) FROM per_object WHERE live_rules >= 2)::int,
+                  (SELECT COUNT(*) FROM per_object WHERE stale_values > 0 OR live_rules >= 2)::int,
+                  (SELECT COUNT(*) FROM joined j LEFT JOIN per_object p ON p.mvo_id = j.mvo_id
+                   WHERE j.joined_rules >= 2 AND COALESCE(p.live_rules, 0) < j.joined_rules)::int";
+        AddParameter("attributeId", attributeId);
+        AddParameter("import", (int)SyncRuleDirection.Import);
+        AddParameter("obsolete", (int)ConnectedSystemObjectStatus.Obsolete);
+        AddParameter("syncRuleKind", (int)ValueContributorKind.SynchronisationRule);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return new ContributionModeImpactCounts(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+
+        void AddParameter(string name, int value)
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
+    }
+
     /// <summary>
     /// Marks the change records the portal carries on <see cref="MetaverseObject.Changes"/> for insertion, naming the
     /// object by its id. The carrier is not a relationship (#2669), so neither <c>Update</c> nor <c>Add</c> reaches the
