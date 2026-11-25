@@ -4065,6 +4065,32 @@ userPassword: Test@123!
                 throw "Reordering the contributors of an Accumulate attribute was accepted; JIM must refuse it."
             }
             $accumulateNotes += "a reorder of its contributors was refused"
+
+            # PRD Scenario 6 (#3059, Phase 3): an administrator removes a kept entry by hand. The entry from the deleted
+            # Primary account goes; the Secondary entry, which Secondary still supplies, is refused, naming its rule.
+            $suppliedRefused = $false
+            try {
+                Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId $henryMvo.id -AttributeName $auditLogName `
+                    -Value "Secondary|S14-7|title=Engineer (Secondary)" -Force -ErrorAction Stop | Out-Null
+            }
+            catch {
+                if ("$_" -notmatch [regex]::Escape($secondaryImportRule.name)) { throw }
+                $suppliedRefused = $true
+            }
+            if (-not $suppliedRefused) {
+                throw "Removing an entry Secondary still supplies was accepted; JIM must refuse it, naming the rule."
+            }
+
+            $removal = Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId $henryMvo.id -AttributeName $auditLogName `
+                -Value "Primary|S14-7|title=Engineer (Primary)" -Force -ErrorAction Stop
+            if (-not $removal.activityId) {
+                throw "The removal returned no Activity."
+            }
+            Assert-ActivitySuccess -ActivityId $removal.activityId -Name "Removal of a kept Account Audit Log entry"
+            Assert-MvoAttributeValue -MvoId $henryMvo.id -AttributeName $auditLogName `
+                -ExpectedValues @("Primary|S14-7|title=Lead Engineer (Primary)", "Secondary|S14-7|title=Engineer (Secondary)") `
+                -Name "Henry's Account Audit Log (the removed entry is gone; the others stay)"
+            $accumulateNotes += "removing a kept entry by hand worked, and removing one Secondary still supplies was refused naming its rule"
         }
         catch {
             $accumulateSuccess = $false

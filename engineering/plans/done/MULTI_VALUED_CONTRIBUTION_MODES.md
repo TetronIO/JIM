@@ -1,10 +1,10 @@
 # Contribution Modes for Multi-Valued Metaverse Attributes: Implementation Plan
 
-- **Status:** Doing (Phase 1 complete; Phase 2 underway)
+- **Status:** Done
 - **Issue:** [#3059](https://github.com/TetronIO/JIM/issues/3059)
-- **PRD:** [`PRD_MULTI_VALUED_CONTRIBUTION_MODES.md`](../../prd/doing/PRD_MULTI_VALUED_CONTRIBUTION_MODES.md)
+- **PRD:** [`PRD_MULTI_VALUED_CONTRIBUTION_MODES.md`](../../prd/done/PRD_MULTI_VALUED_CONTRIBUTION_MODES.md)
 - **Related Issues:** #91 (attribute priority), #3064 (per-Attribute Flow recall), #1570 (grace-period freeze), #2472 (value contributor kinds), #614 (internal Metaverse Object management)
-- **Last Updated:** 2026-11-23
+- **Last Updated:** 2026-11-25
 
 ## Overview
 
@@ -141,7 +141,7 @@ Configuration change history: the mode is a field on `MetaverseAttribute`, which
 7. Runtime check in the sandbox stack: two connected systems feeding one Accumulate attribute; delete the source account; confirm the values survive and provenance reads correctly.
 8. Integration: a new scenario (or a step added to the attribute priority scenario) covering PRD Scenarios 1 to 3. Search `test/integration` for readers of the Metaverse attribute and priority response shapes, and update them.
 
-### Phase 2: Merge
+### Phase 2: Merge ✅
 
 1. Red tests: PRD Scenarios 4 and 5; re-tag on contributor exit; re-tag on value change when another contributor holds the value; removal when no contributor holds it; an undecidable contributor fails the object; no Pending Export is staged for a re-tag; the export-side guards still see one row per value.
 2. Extract the per-contributor evaluation from `ContributorReElectionService`.
@@ -171,12 +171,19 @@ Performance (step 4), measured by `MergeContributionModeBenchmarkDatabaseTests` 
   - An object the prediction misses is read singly, as before, so the prediction affects cost only, never results.
 - Batching the whole page instead was measured and rejected: a 500-object read to serve about 25 re-elections made churn slower, not faster.
 
-### Phase 3: manual removal and impact report
+### Phase 3: manual removal and impact report ✅
 
 1. Application method `MetaverseServer.RemoveAccumulatedValuesAsync`: refuses non-Accumulate attributes, and refuses values a live contributor supplies (naming it, using the Phase 2 evaluation). Records a `ValueContributorKind.Person` change record and an Activity.
 2. Impact calculation: a raw SQL count of objects whose values would be added or removed under the target mode. Leaving Accumulate counts rows whose tagged contributor no longer supplies them (approximated set-based: rows whose rule is deleted or whose system's object is not joined). Leaving Accumulate requires confirmation.
 3. Surfaces, docs and changelog. PRD Scenarios 6 and 7 as tests.
 4. In the PR that closes #3059: move the PRD and this plan to `done/`.
+
+As built:
+
+- **Removal** is `MetaverseServer.RemoveAccumulatedValuesAsync`. The live-contributor check runs each enabled import rule's flows into the attribute, for every non-obsolete Connected System Object joined to the object and in the rule's scope, through `SyncEngine.ProcessMapping` on a scratch object holding nothing: Accumulate adds every supplied value there, so the scratch object's additions are exactly what the rule supplies. This is stronger than the value's tag (Accumulate keeps the first contributor's tag while another rule may supply the same value now). An undecidable scope or a failing expression refuses the removal.
+- It writes through the same staging as any edit outside synchronisation (`StageEditOutsideSynchronisationAsync`, extracted from `UpdateMetaverseObjectAsync`), so the change record, scope review flag and unsynchronised changes record are identical. The repository write (`RemoveMetaverseObjectAttributeValuesAsync`) deletes the rows, writes the object's columns under its `xmin` guard and adds the change record in one transaction, with no EF graph walk.
+- The change record is the person's or API key's (`InitiatedByType`), under an Activity (Metaverse Object, Update). No value is created, so `ValueContributorKind.Person` is still unproduced; #614 remains its producer.
+- **Impact** is one raw SQL statement, `GetContributionModeImpactCountsAsync`, counting values no longer supplied (the recorded rule is not an enabled, joined contributor for that object), objects with several live contributors, and objects with more joined contributors than they hold values from. `ContributionModeImpact.From` picks the counts each transition reports. Values set outside synchronisation are left out.
 
 ## Dependencies
 

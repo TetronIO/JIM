@@ -60,7 +60,25 @@ A multi-valued attribute set to the **Accumulate** contribution mode takes value
 
 Accumulate needs a multi-valued attribute of any data type except Reference. A reference is removed with the Metaverse Object it points to, so it cannot be kept; to keep a history of references, record each one as text in a separate attribute instead (for example `"manager=" + cs["manager"]`).
 
-A change of mode takes effect at each Metaverse Object's next synchronisation. Changing an Accumulate attribute back to Priority lets that synchronisation remove every value that no contributor supplies any more, and exports then remove them from target systems, so every surface asks you to confirm it: the portal by typing the attribute's name, the REST API with `confirmLeavingAccumulate`, and PowerShell with `-Force`.
+### Removing values an Accumulate attribute has kept
+
+Synchronisation never removes an Accumulate value, so an administrator removes one that is no longer wanted, such as an entry for a test account:
+
+- **In the portal**, open the Metaverse Object's **Inspect** view, select the attribute, and choose **Remove value** beside the value in the inspector.
+- **In PowerShell**, `Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId <id> -AttributeName 'Account Audit Log' -Value '<value>'`.
+- **Through the REST API**, `DELETE /api/v1/metaverse/objects/{id}/attributes/{attributeId}/values`, naming the values by `valueIds` or `values`.
+
+JIM refuses to remove a value a Synchronisation Rule still supplies, and names the rule and its Connected System: that rule's next synchronisation would only add the value back. Change the value at its source, or take the object out of the rule's scope, first. It decides this by running each enabled import rule's Attribute Flows for the Connected System Objects joined to the Metaverse Object, as synchronisation would, so a value tagged with a deleted account is removable while another system still holding the same value is not. When a rule's scope or an expression cannot be evaluated, the removal is refused rather than guessed.
+
+A removal is all or nothing. It is recorded on the Metaverse Object's change history as the administrator's, under an Activity of its own, and reaches the Connected Systems the attribute is exported to at their next synchronisation.
+
+### Changing the mode
+
+A change of mode takes effect at each Metaverse Object's next synchronisation. Before it is saved, every surface reports what it would do: how many Metaverse Objects would lose values, how many values no contributor supplies any more, how many hold several contributors' values and would keep only the highest-priority one's (moving to Priority), and how many would gain values from contributors they hold none from yet (moving from Priority). The portal shows this under the mode selector, the REST API answers `GET /api/v1/metaverse/attributes/{id}/contribution-mode-impact?mode=`, and `Set-JIMMetaverseAttribute` states it in its confirmation and under `-WhatIf`.
+
+The report is read from what JIM holds, without running any Attribute Flow, so where values would be removed it is a floor: a value a joined contributor no longer supplies because it changed at its source is counted only once that contributor is next synchronised.
+
+Changing an Accumulate attribute back to Priority lets that synchronisation remove every value that no contributor supplies any more, and exports then remove them from target systems, so every surface asks you to confirm it: the portal by typing the attribute's name, the REST API with `confirmLeavingAccumulate`, and PowerShell with `-Force`.
 
 ## :material-set-merge: Merging values from every contributor
 
