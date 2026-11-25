@@ -1,6 +1,6 @@
 ---
 title: Metaverse
-description: "The cmdlets that find and read Metaverse Objects, explain where their values and connections come from, remove values an Accumulate attribute has kept, and list those pending deletion."
+description: "The cmdlets that find and read Metaverse Objects, explain where their values and connections come from, remove kept values, and list pending deletions."
 type: reference
 audience: automation-author
 ---
@@ -467,7 +467,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
 
 ## :material-playlist-remove: Remove-JIMMetaverseObjectAttributeValue
 
-Removes values an attribute in [Accumulate](../concepts/attribute-priority.md#accumulating-values-from-every-contributor) mode has kept on a Metaverse Object, such as entries for accounts that no longer exist. A value a Synchronisation Rule still supplies is refused, naming the rule: its next synchronisation would add the value back. The removal is all or nothing, is recorded on the object's change history under an Activity, and reaches the systems the attribute is exported to at their next synchronisation.
+Removes values an [Accumulate](../concepts/attribute-priority.md#removing-values-an-accumulate-attribute-has-kept) attribute has kept, such as entries for deleted accounts. A value a Synchronisation Rule still supplies is refused, naming the rule. The removal is all or nothing and recorded under an Activity.
 
 <!-- BEGIN GENERATED: Remove-JIMMetaverseObjectAttributeValue -->
 ### Syntax
@@ -508,10 +508,6 @@ The values removed and the Activity recording the removal.
 
 ```powershell title="Remove one kept entry from an audit log"
 Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId 'b5e1c1a2-3f4d-4e5f-8a9b-0c1d2e3f4a5b' -AttributeName 'Account Audit Log' -Value 'AD|S-1-5-21-1004|sAMAccountName=jsmith'
-```
-
-```powershell title="Check what would be removed first"
-Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId 'b5e1c1a2-3f4d-4e5f-8a9b-0c1d2e3f4a5b' -AttributeName 'Account Audit Log' -Value 'AD|S-1-5-21-1004|sAMAccountName=jsmith' -WhatIf
 ```
 
 ## :material-delete-clock-outline: Get-JIMPendingDeletion
