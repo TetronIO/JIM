@@ -912,10 +912,13 @@
             return;
 
         var attributeName = provenance.AttributeName;
-        var confirmed = await DialogService.ShowMessageBoxAsync(
-            MetaverseText.TvRemoveValueTitle,
-            string.Format(CultureInfo.CurrentCulture, MetaverseText.TvRemoveValueQuestion, value.DisplayValue, attributeName),
-            yesText: MetaverseText.TvRemoveValueConfirm, cancelText: CommonText.Cancel);
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = MetaverseText.TvRemoveValueTitle,
+            MarkupMessage = InlineCode.Format(MetaverseText.TvRemoveValueQuestion, value.DisplayValue, attributeName),
+            YesText = MetaverseText.TvRemoveValueConfirm,
+            CancelText = CommonText.Cancel
+        });
         if (confirmed != true)
             return;
 
@@ -935,7 +938,7 @@
             return;
         }
 
-        Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.TvValueRemoved, value.DisplayValue, attributeName), Severity.Success);
+        Snackbar.Add(InlineCode.Format(MetaverseText.TvValueRemoved, value.DisplayValue, attributeName), Severity.Success);
         MetaverseObject.AttributeValues.RemoveAll(av => av.Id == value.Id);
         state.ProvenanceLoaded = false;
         await EnsureProvenanceLoadedAsync();

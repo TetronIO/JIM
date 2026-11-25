@@ -1789,12 +1789,12 @@
     <value>Wert entfernen?</value>
   </data>
   <data name="TvRemoveValueQuestion" xml:space="preserve">
-    <value>„{0}“ aus {1} entfernen? „Akkumulieren“ behält jeden Wert, den seine Beitragenden geliefert haben, bis jemand ihn entfernt. Das Entfernen wird im Änderungsverlauf dieses Objekts festgehalten und erreicht die verbundenen Systeme, in die {1} exportiert wird, bei deren nächster Synchronisierung.</value>
+    <value>{0} aus {1} entfernen? „Akkumulieren“ behält jeden Wert, den seine Beitragenden geliefert haben, bis jemand ihn entfernt. Das Entfernen wird im Änderungsverlauf dieses Objekts festgehalten und erreicht die verbundenen Systeme, in die {1} exportiert wird, bei deren nächster Synchronisierung.</value>
   </data>
   <data name="TvRemoveValueConfirm" xml:space="preserve">
     <value>Entfernen</value>
   </data>
   <data name="TvValueRemoved" xml:space="preserve">
-    <value>„{0}“ wurde aus {1} entfernt.</value>
+    <value>{0} wurde aus {1} entfernt.</value>
   </data>
 </root>

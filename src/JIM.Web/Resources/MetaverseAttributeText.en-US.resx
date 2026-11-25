@@ -24,7 +24,7 @@
     <value>At each Metaverse Object's next synchronization, the values this attribute kept that no contributor supplies any more are removed, and exports remove them from target systems.</value>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Changing '{0}' to {1} removes, at each Metaverse Object's next synchronization, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
+    <value>Changing {0} to {1} removes, at each Metaverse Object's next synchronization, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
   </data>
   <data name="PriorityListAccumulateNotice" xml:space="preserve">
     <value>This attribute uses the Accumulate contribution mode: every Synchronization Rule below adds its values and none is preferred, so there is no order to set, and "Null is a value" has no effect.</value>

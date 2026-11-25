@@ -39,7 +39,7 @@
     <value>Arrêter d’accumuler les valeurs de « {0} » ?</value>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Passer « {0} » en « {1} » retire, lors de la prochaine synchronisation de chaque objet Metaverse, les valeurs qu’aucun contributeur ne fournit plus, puis les exportations les retirent des systèmes cibles. Elles ne peuvent pas être récupérées.</value>
+    <value>Passer {0} en « {1} » retire, lors de la prochaine synchronisation de chaque objet Metaverse, les valeurs qu’aucun contributeur ne fournit plus, puis les exportations les retirent des systèmes cibles. Elles ne peuvent pas être récupérées.</value>
   </data>
   <data name="LeaveAccumulateConfirm" xml:space="preserve">
     <value>Arrêter d’accumuler</value>

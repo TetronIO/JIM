@@ -56,10 +56,10 @@
                     @* answer state it here so the dialog opens with the consequence rather than with a table.    *@
                     @LeadingContent
 
-                    @if (!string.IsNullOrEmpty(IrreversibleWarning))
+                    @if (!string.IsNullOrEmpty(IrreversibleWarning) || IrreversibleWarningMarkup != null)
                     {
                         <MudAlert Severity="Severity.Error">
-                            @IrreversibleWarning
+                            @(IrreversibleWarningMarkup ?? (MarkupString)System.Net.WebUtility.HtmlEncode(IrreversibleWarning))
                         </MudAlert>
                     }
 
@@ -224,6 +224,13 @@
     /// </summary>
     [Parameter]
     public string? IrreversibleWarning { get; set; }
+
+    /// <summary>
+    /// The irreversible warning as markup, in place of <see cref="IrreversibleWarning"/>, for a warning naming a value
+    /// as inline code (<c>InlineCode.Format</c>, which encodes it).
+    /// </summary>
+    [Parameter]
+    public MarkupString? IrreversibleWarningMarkup { get; set; }
 
     /// <summary>
     /// Reassurance shown when nothing blocks the change, for example that no object data is at risk.

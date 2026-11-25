@@ -144,6 +144,6 @@
     <value>A schema refresh while it is off reports the Exchange attributes as removed: apply it plainly to keep them, or the Synchronization Rules that declare recipients stop.</value>
   </data>
   <data name="TvRemoveValueQuestion" xml:space="preserve">
-    <value>Remove '{0}' from {1}? Accumulate keeps every value its contributors have supplied, so it is kept until someone removes it. The removal is recorded on this object's change history and reaches the Connected Systems {1} is exported to at their next synchronization.</value>
+    <value>Remove {0} from {1}? Accumulate keeps every value its contributors have supplied, so it is kept until someone removes it. The removal is recorded on this object's change history and reaches the Connected Systems {1} is exported to at their next synchronization.</value>
   </data>
 </root>

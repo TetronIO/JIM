@@ -742,13 +742,23 @@
         _ => MetaverseAttributeText.ContributionModePriority
     };
 
+    /// <summary>
+    /// The warning, naming the attribute as inline code, followed by the impact report's lines.
+    /// </summary>
+    private MarkupString LeaveAccumulateWarningMarkup(string name)
+    {
+        var warning = string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateWarning,
+            InlineCode.Markup(name), System.Net.WebUtility.HtmlEncode(ContributionModeName(_contributionMode)));
+        var impact = (_impact == null ? [] : ContributionModeImpactText.Lines(_impact)).Select(System.Net.WebUtility.HtmlEncode);
+        return (MarkupString)string.Join(" ", new[] { warning }.Concat(impact));
+    }
+
     private async Task<bool> ConfirmLeavingAccumulateAsync()
     {
         var name = _originalName;
         var parameters = new DialogParameters<ConsequenceConfirmationDialog>
         {
-            { x => x.IrreversibleWarning, string.Join(" ", new[] { string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateWarning, name, ContributionModeName(_contributionMode)) }
-                .Concat(_impact == null ? [] : ContributionModeImpactText.Lines(_impact))) },
+            { x => x.IrreversibleWarningMarkup, LeaveAccumulateWarningMarkup(name) },
             { x => x.ConfirmationPhrase, name },
             { x => x.ConfirmButtonText, MetaverseAttributeText.LeaveAccumulateConfirm },
             { x => x.ConfirmButtonColour, Color.Error }

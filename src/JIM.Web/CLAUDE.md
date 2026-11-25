@@ -328,6 +328,10 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 
 The four surfaces showing Boolean attribute values (the Connector Space table, and the Metaverse Object detail's Form, Tabs and Table views) each carried their own copy of this markup, and the copies had already drifted: three rendered icon-plus-label at `Size.Small`, the fourth rendered a default-size icon and no label at all. The component is what stops them drifting again; `BooleanValueTests` pins the icons, the colours, the labels and the default icon size.
 
+## Values in sentences
+
+**A value or name placed into a sentence of portal text is inline code, composed with `InlineCode.Format(template, values...)`, and its placeholder carries no quotes.** The design rule and its scope are in `engineering/DESIGN.md` > Values and names in running text. The helper encodes each value (the message renders as markup, and values come from directories and administrators), so never hand-write `<code class="jim-code-inline">`. Older components still do; migrate them when you touch them.
+
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
 - This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI

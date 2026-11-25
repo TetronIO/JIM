@@ -39,7 +39,7 @@
     <value>Akkumulieren von Werten in „{0}“ beenden?</value>
   </data>
   <data name="LeaveAccumulateWarning" xml:space="preserve">
-    <value>Wenn Sie „{0}“ auf „{1}“ umstellen, werden bei der nächsten Synchronisierung jedes Metaverse-Objekts die Werte entfernt, die kein Beitragender mehr liefert, und Exporte entfernen sie anschließend aus den Zielsystemen. Sie können nicht wiederhergestellt werden.</value>
+    <value>Wenn Sie {0} auf „{1}“ umstellen, werden bei der nächsten Synchronisierung jedes Metaverse-Objekts die Werte entfernt, die kein Beitragender mehr liefert, und Exporte entfernen sie anschließend aus den Zielsystemen. Sie können nicht wiederhergestellt werden.</value>
   </data>
   <data name="LeaveAccumulateConfirm" xml:space="preserve">
     <value>Akkumulieren beenden</value>
