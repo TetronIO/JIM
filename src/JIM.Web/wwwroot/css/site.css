@@ -1612,9 +1612,19 @@ a.jim-system-rule-chip-part:focus-visible {
 
 .jim-inspector-candidate {
     grid-column: 2;
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
     font-size: 0.8125rem;
     overflow-wrap: anywhere;
+}
+
+/* A history entry's first line: the change chip, then the value, a field gap's worth of space between them. */
+.jim-inspector-rail-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
 }
 
 /* History on a rail: one dot per change, coloured by what the change did. */

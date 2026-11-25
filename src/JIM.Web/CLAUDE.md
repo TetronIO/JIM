@@ -330,7 +330,7 @@ The four surfaces showing Boolean attribute values (the Connector Space table, a
 
 ## Values in sentences
 
-**A value or name placed into a sentence of portal text is inline code, composed with `InlineCode.Format(template, values...)`, and its placeholder carries no quotes.** The design rule and its scope are in `engineering/DESIGN.md` > Values and names in running text. The helper encodes each value (the message renders as markup, and values come from directories and administrators), so never hand-write `<code class="jim-code-inline">`. Older components still do; migrate them when you touch them.
+**A value or name placed into a sentence of portal text is inline code, composed with `InlineCode.Format(template, values...)`, and its placeholder carries no quotes.** The design rule and its scope are in `engineering/DESIGN.md` > Values and names in running text. The helper encodes each value (the message renders as markup, and values come from directories and administrators), so never build `<code class="jim-code-inline">` into a markup string by hand. Older components still do; migrate them when you touch them. In Razor markup the element is fine as it is, since Razor encodes the value.
 
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components

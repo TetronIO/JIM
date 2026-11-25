@@ -182,7 +182,12 @@
                         <span class="jim-inspector-candidate">
                             @if (source.CandidateValues.Count > 0)
                             {
-                                @string.Join(", ", source.CandidateValues)
+                                @* Each value its own inline code: joined with commas, a value holding a comma or a space
+                                   could not be told from two. *@
+                                @foreach (var candidate in source.CandidateValues)
+                                {
+                                    <code class="jim-code-inline">@candidate</code>
+                                }
                             }
                             else
                             {
@@ -222,7 +227,7 @@
                 {
                     var generatedEvent = GeneratedValueHistoryDisplay.EventFor(entry);
                     <li class="jim-inspector-rail-@entry.Kind.ToString().ToLowerInvariant()" data-generated-event="@generatedEvent">
-                        <div>
+                        <div class="jim-inspector-rail-head">
                             @* A generated value's two events worth naming (#242, release 4) read as what they were. *@
                             @if (generatedEvent == GeneratedValueHistoryEvent.Corrected)
                             {
