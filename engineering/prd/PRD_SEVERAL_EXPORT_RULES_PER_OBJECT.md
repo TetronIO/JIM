@@ -38,7 +38,6 @@ The decisions below were made in the design review of 2026-11-24, one topic at a
 - **Several rules contributing values to one multi-valued attribute** (for example two rules each adding group memberships). This is a clash in this PRD. Combining values with per-value ownership is in scope of #2827, alongside the inbound design in [PRD_MULTI_VALUED_CONTRIBUTION_MODES](PRD_MULTI_VALUED_CONTRIBUTION_MODES.md).
 - **Several accounts per Metaverse Object in one Connected System.** A Metaverse Object still holds at most one Connected System Object per Connected System; rules targeting different Connected System Object Types in one system remain the #1331 / #2824 conflict.
 - **Changing what a lone export rule does.** Where only one export rule covers an account, every behaviour is exactly as today.
-- **A general "recall arbitrary exported values" tool.**
 
 ## User Stories
 
