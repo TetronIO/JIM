@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
@@ -70,10 +71,7 @@ public static class ClassMembershipValidator
             return null;
 
         var classes = string.Join(", ", classesBeingAdded.OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
-        var message = $"Cannot add the class(es) '{classes}' to this object: '{connectedSystem.Name}' requires " +
-                      $"{string.Join(", ", missing)}, and this export neither writes {(missing.Count == 1 ? "it" : "them")} " +
-                      "nor finds a value already on the object. Add an Attribute Flow for the missing attribute(s), or " +
-                      "withdraw the auxiliary class selection that brought the class in.";
+        var message = ActivityMessage.ExportClassRequirementsNotMet(classes, connectedSystem.Name, missing);
 
         // A dedicated error type, not General: downstream the general bucket reads as an unhandled JIM
         // defect and fails the whole Activity, and this refusal is configuration for an administrator to

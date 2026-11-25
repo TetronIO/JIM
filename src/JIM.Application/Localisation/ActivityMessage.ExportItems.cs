@@ -36,6 +36,22 @@ public static partial class ActivityMessage
             ? Create(nameof(ActivityMessages.ExportDisableUnsupportedUnnamed), connectedSystemName)
             : Create(nameof(ActivityMessages.ExportDisableUnsupported), connectorName, connectedSystemName);
 
+    /// <summary>A name quoted inside a sentence, in each language's quotation marks.</summary>
+    public static JimMessage QuotedName(string name) => Create(nameof(ActivityMessages.QuotedName), name);
+
+    /// <summary>
+    /// An export refused because the classes it adds require attributes it neither writes nor finds on the object (#3094).
+    /// </summary>
+    /// <param name="classes">The classes being added, comma-separated, as written.</param>
+    /// <param name="missing">The missing attributes' names, in the order to name them.</param>
+    public static JimMessage ExportClassRequirementsNotMet(string classes, string connectedSystemName, IReadOnlyList<string> missing) =>
+        Counted(nameof(ActivityMessages.ExportClassRequirementsNotMetOne), missing.Count, classes, connectedSystemName, string.Join(", ", missing));
+
+    /// <summary>An export refused because it carries more than one change for single-valued attributes (#3094).</summary>
+    /// <param name="attributes">The contradicted attributes' names, in the order to name them.</param>
+    public static JimMessage ExportSingleValuedContradicted(IReadOnlyList<string> attributes) =>
+        Counted(nameof(ActivityMessages.ExportSingleValuedContradictedOne), attributes.Count, Listed(attributes.Select(QuotedName))!);
+
     /// <summary>An export run failed; <paramref name="cause"/> is another system's words or JIM's own message.</summary>
     public static JimMessage ExportRunFailed(MessageArgument cause) => Create(nameof(ActivityMessages.ExportFailed), cause);
 

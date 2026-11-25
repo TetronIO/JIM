@@ -1837,4 +1837,24 @@
     <value>This object was to be disabled, but the Connector that '{0}' uses cannot disable an account, so nothing was sent. Change the export Synchronisation Rule's Deprovisioning Action to Delete or Disconnect.</value>
     <comment>As ExportDisableUnsupported, where the Connected System's Connector Definition is not loaded. {0}: the Connected System's name.</comment>
   </data>
+  <data name="QuotedName" xml:space="preserve">
+    <value>'{0}'</value>
+    <comment>A name quoted inside a sentence, such as an attribute name. {0}: the name, as written.</comment>
+  </data>
+  <data name="ExportClassRequirementsNotMetOne" xml:space="preserve">
+    <value>Cannot add the class(es) '{0}' to this object: '{1}' requires {2}, and this export neither writes it nor finds a value already on the object. Add an Attribute Flow for the missing attribute(s), or withdraw the auxiliary class selection that brought the class in.</value>
+    <comment>An export refused before it was sent, one required attribute missing. {0}: the classes being added, comma-separated, as written; {1}: the Connected System's name; {2}: the missing attribute's name.</comment>
+  </data>
+  <data name="ExportClassRequirementsNotMetOther" xml:space="preserve">
+    <value>Cannot add the class(es) '{0}' to this object: '{1}' requires {2}, and this export neither writes them nor finds a value already on the object. Add an Attribute Flow for the missing attribute(s), or withdraw the auxiliary class selection that brought the class in.</value>
+    <comment>An export refused before it was sent, several required attributes missing. {0}: the classes being added, comma-separated, as written; {1}: the Connected System's name; {2}: the missing attributes' names, comma-separated.</comment>
+  </data>
+  <data name="ExportSingleValuedContradictedOne" xml:space="preserve">
+    <value>This export carries more than one change for the single-valued attribute(s) {0}, so it does not say which value the object should hold, and JIM has not sent it. A single-valued attribute is exported as one change carrying the value it should hold; check whether more than one Attribute Flow writes to the attribute.</value>
+    <comment>An export refused before it was sent. {0}: the attribute's name, quoted (QuotedName).</comment>
+  </data>
+  <data name="ExportSingleValuedContradictedOther" xml:space="preserve">
+    <value>This export carries more than one change for the single-valued attribute(s) {0}, so it does not say which value the object should hold, and JIM has not sent it. A single-valued attribute is exported as one change carrying the value it should hold; check whether more than one Attribute Flow writes to the attribute.</value>
+    <comment>An export refused before it was sent. {0}: the attributes' names, each quoted (QuotedName), comma-separated.</comment>
+  </data>
 </root>

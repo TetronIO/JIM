@@ -1398,4 +1398,19 @@
   <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
     <value>Cet objet devait être désactivé, mais le connecteur qu’utilise « {0} » ne peut pas désactiver un compte ; rien n’a donc été envoyé. Remplacez l’action de déprovisionnement de la règle de synchronisation d’exportation par Supprimer ou Déconnecter.</value>
   </data>
+  <data name="QuotedName" xml:space="preserve">
+    <value>« {0} »</value>
+  </data>
+  <data name="ExportClassRequirementsNotMetOne" xml:space="preserve">
+    <value>Impossible d’ajouter la ou les classes « {0} » à cet objet : « {1} » exige {2}, et cette exportation ne l’écrit pas et ne trouve aucune valeur déjà présente sur l’objet. Ajoutez un flux d’attributs pour l’attribut manquant, ou retirez la sélection de classe auxiliaire qui a apporté la classe.</value>
+  </data>
+  <data name="ExportClassRequirementsNotMetOther" xml:space="preserve">
+    <value>Impossible d’ajouter la ou les classes « {0} » à cet objet : « {1} » exige {2}, et cette exportation ne les écrit pas et ne trouve aucune valeur déjà présente sur l’objet. Ajoutez un flux d’attributs pour les attributs manquants, ou retirez la sélection de classe auxiliaire qui a apporté la classe.</value>
+  </data>
+  <data name="ExportSingleValuedContradictedOne" xml:space="preserve">
+    <value>Cette exportation contient plus d’une modification pour l’attribut monovalué {0} ; elle n’indique donc pas quelle valeur l’objet doit contenir, et JIM ne l’a pas envoyée. Un attribut monovalué est exporté sous la forme d’une seule modification contenant la valeur qu’il doit contenir ; vérifiez si plusieurs flux d’attributs écrivent dans cet attribut.</value>
+  </data>
+  <data name="ExportSingleValuedContradictedOther" xml:space="preserve">
+    <value>Cette exportation contient plus d’une modification pour les attributs monovalués {0} ; elle n’indique donc pas quelle valeur l’objet doit contenir, et JIM ne l’a pas envoyée. Un attribut monovalué est exporté sous la forme d’une seule modification contenant la valeur qu’il doit contenir ; vérifiez si plusieurs flux d’attributs écrivent dans ces attributs.</value>
+  </data>
 </root>

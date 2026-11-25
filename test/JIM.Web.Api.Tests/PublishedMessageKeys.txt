@@ -105,6 +105,7 @@ ActivityMessages.ExportBatchFailed
 ActivityMessages.ExportBatchFinishFailed
 ActivityMessages.ExportCancelled
 ActivityMessages.ExportCancelledBeforeStart
+ActivityMessages.ExportClassRequirementsNotMet
 ActivityMessages.ExportComplete
 ActivityMessages.ExportCompleteWithPartial
 ActivityMessages.ExportCompletedSummary
@@ -125,6 +126,7 @@ ActivityMessages.ExportRecordingWaiting
 ActivityMessages.ExportResolvingDeferred
 ActivityMessages.ExportSavingResolvedReferences
 ActivityMessages.ExportScopingFailed
+ActivityMessages.ExportSingleValuedContradicted
 ActivityMessages.ExportToFile
 ActivityMessages.ExportUnrecorded
 ActivityMessages.ExportWithdrawn
@@ -325,6 +327,7 @@ ActivityMessages.QueueHeld
 ActivityMessages.QueueNone
 ActivityMessages.QueueNotQueued
 ActivityMessages.QueueQueued
+ActivityMessages.QuotedName
 ActivityMessages.RecallScopeHeldBack
 ActivityMessages.RemedyEnable
 ActivityMessages.RemedyEnableChoosingPartition

@@ -1396,4 +1396,19 @@
   <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
     <value>Dieses Objekt sollte deaktiviert werden, aber der von „{0}“ verwendete Connector kann kein Konto deaktivieren, daher wurde nichts gesendet. Ändern Sie die Deprovisionierungsaktion der Exportsynchronisierungsregel in „Löschen“ oder „Trennen“.</value>
   </data>
+  <data name="QuotedName" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="ExportClassRequirementsNotMetOne" xml:space="preserve">
+    <value>Die Klasse(n) „{0}“ kann diesem Objekt nicht hinzugefügt werden: „{1}“ erfordert {2}, und dieser Export schreibt es nicht und findet auch keinen Wert, der bereits auf dem Objekt vorhanden ist. Fügen Sie einen Attributfluss für das fehlende Attribut hinzu, oder entfernen Sie die Auswahl der Hilfsklasse, durch die die Klasse hinzugefügt wurde.</value>
+  </data>
+  <data name="ExportClassRequirementsNotMetOther" xml:space="preserve">
+    <value>Die Klasse(n) „{0}“ kann diesem Objekt nicht hinzugefügt werden: „{1}“ erfordert {2}, und dieser Export schreibt sie nicht und findet auch keine Werte, die bereits auf dem Objekt vorhanden sind. Fügen Sie einen Attributfluss für die fehlenden Attribute hinzu, oder entfernen Sie die Auswahl der Hilfsklasse, durch die die Klasse hinzugefügt wurde.</value>
+  </data>
+  <data name="ExportSingleValuedContradictedOne" xml:space="preserve">
+    <value>Dieser Export enthält mehr als eine Änderung für das einwertige Attribut {0}, daher gibt er nicht an, welchen Wert das Objekt haben soll, und JIM hat ihn nicht gesendet. Ein einwertiges Attribut wird als eine einzige Änderung exportiert, die den Wert enthält, den es haben soll; prüfen Sie, ob mehr als ein Attributfluss in das Attribut schreibt.</value>
+  </data>
+  <data name="ExportSingleValuedContradictedOther" xml:space="preserve">
+    <value>Dieser Export enthält mehr als eine Änderung für die einwertigen Attribute {0}, daher gibt er nicht an, welchen Wert das Objekt haben soll, und JIM hat ihn nicht gesendet. Ein einwertiges Attribut wird als eine einzige Änderung exportiert, die den Wert enthält, den es haben soll; prüfen Sie, ob mehr als ein Attributfluss in diese Attribute schreibt.</value>
+  </data>
 </root>
