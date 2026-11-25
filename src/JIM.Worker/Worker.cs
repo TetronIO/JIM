@@ -161,6 +161,16 @@ public class Worker : BackgroundService
             var incompleteCount = await mainLoopJim.ExportExecution.RemoveIncompletePendingExportsAsync();
             if (incompleteCount > 0)
                 Log.Warning("ExecuteAsync: Removed {Count} Pending Export(s) left unfinished by a previous crash", incompleteCount);
+
+            // Remove Metaverse Objects a synchronisation page projected and never published because the Worker stopped
+            // mid-page (#2848). Left in place, nothing is joined to them, and the next run projects their sources again.
+            var unpublished = await mainLoopJim.Metaverse.RemoveUnpublishedMetaverseObjectsAsync();
+            if (unpublished.RemovedIds.Count > 0)
+                Log.Warning("ExecuteAsync: Removed {Count} Metaverse Object(s) a synchronisation projected and never published before a previous crash",
+                    unpublished.RemovedIds.Count);
+            if (unpublished.KeptJoinedIds.Count > 0)
+                Log.Warning("ExecuteAsync: Kept {Count} unpublished Metaverse Object(s) another synchronisation joined; their sources will be projected again: {MvoIds}",
+                    unpublished.KeptJoinedIds.Count, unpublished.KeptJoinedIds.Take(20));
         });
 
         // The same liveness as the health-check heartbeat file, written to the database for administrators: the

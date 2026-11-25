@@ -115,6 +115,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<GeneratedValueAssignment> GeneratedValueAssignments { get; set; } = null!;
     public virtual DbSet<RetiredGeneratedValue> RetiredGeneratedValues { get; set; } = null!;
     public virtual DbSet<GeneratedValueRevisionPending> GeneratedValueRevisionsPending { get; set; } = null!;
+    public virtual DbSet<UnpublishedMetaverseObject> UnpublishedMetaverseObjects { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
     public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
@@ -2128,6 +2129,18 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<GeneratedValueRevisionPending>()
             .HasIndex(r => r.Created)
             .HasDatabaseName("IX_GeneratedValueRevisionsPending_Created");
+
+        // UnpublishedMetaverseObject (#2848): a Metaverse Object a synchronisation page projected, written with the object
+        // before the page's transaction opens and deleted by that transaction once the object's join is written. Keyed by
+        // the object, one record each; cascades with it, since an object that is gone has nothing left to publish.
+        modelBuilder.Entity<UnpublishedMetaverseObject>()
+            .HasKey(u => u.MetaverseObjectId);
+
+        modelBuilder.Entity<UnpublishedMetaverseObject>()
+            .HasOne(u => u.MetaverseObject)
+            .WithMany()
+            .HasForeignKey(u => u.MetaverseObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     /// <summary>

@@ -467,6 +467,101 @@ public partial class SyncRepository : ISyncRepository
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 
+    public Task CreateUnpublishedMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects, Guid activityId)
+        => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList(), activityId);
+
+    public async Task PublishMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return;
+
+        // On the context's connection, so inside the page's transaction: the records go when the joins commit.
+        await _context.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""UnpublishedMetaverseObjects"" WHERE ""MetaverseObjectId"" = ANY({0})", metaverseObjectIds.ToArray());
+    }
+
+    public async Task<UnpublishedMetaverseObjectRemoval> RemoveUnpublishedMetaverseObjectsAsync(IReadOnlyCollection<Guid>? metaverseObjectIds = null)
+    {
+        if (_context.Database.CurrentTransaction != null)
+            throw new InvalidOperationException(
+                "RemoveUnpublishedMetaverseObjectsAsync runs in a transaction of its own; it must be called once the page's transaction has rolled back.");
+        if (metaverseObjectIds is { Count: 0 })
+            return UnpublishedMetaverseObjectRemoval.None;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        // The records to settle, locked so two removals never settle the same one. All of them at the Worker's start; a
+        // failed page's otherwise.
+        var unpublished = new List<Guid>();
+        await using (var select = new NpgsqlCommand(
+            metaverseObjectIds == null
+                ? @"SELECT ""MetaverseObjectId"" FROM ""UnpublishedMetaverseObjects"" FOR UPDATE"
+                : @"SELECT ""MetaverseObjectId"" FROM ""UnpublishedMetaverseObjects"" WHERE ""MetaverseObjectId"" = ANY(@ids) FOR UPDATE",
+            connection, transaction))
+        {
+            if (metaverseObjectIds != null)
+                select.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = metaverseObjectIds.ToArray() });
+            await using var reader = await select.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                unpublished.Add(reader.GetGuid(0));
+        }
+
+        if (unpublished.Count == 0)
+        {
+            await transaction.CommitAsync();
+            return UnpublishedMetaverseObjectRemoval.None;
+        }
+
+        // Of those, the objects nothing is joined to, locked against a join being written to them meanwhile (a join's
+        // foreign key check takes a key-share lock on the object, which waits for this one).
+        var orphaned = new List<Guid>();
+        await using (var select = new NpgsqlCommand(
+            @"SELECT m.""Id"" FROM ""MetaverseObjects"" m
+              WHERE m.""Id"" = ANY(@ids)
+                AND NOT EXISTS (SELECT 1 FROM ""ConnectedSystemObjects"" c WHERE c.""MetaverseObjectId"" = m.""Id"")
+              FOR UPDATE OF m",
+            connection, transaction))
+        {
+            select.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = unpublished.ToArray() });
+            await using var reader = await select.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                orphaned.Add(reader.GetGuid(0));
+        }
+
+        if (orphaned.Count > 0)
+        {
+            // Their values first, and any value that refers to one of them (a group created on the same page naming a
+            // member), whose foreign key would otherwise refuse the delete. Then the objects; their records and anything
+            // else that hangs off them go by cascade.
+            await using var deleteValues = new NpgsqlCommand(
+                @"DELETE FROM ""MetaverseObjectAttributeValues"" WHERE ""MetaverseObjectId"" = ANY(@ids) OR ""ReferenceValueId"" = ANY(@ids)",
+                connection, transaction);
+            deleteValues.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = orphaned.ToArray() });
+            await deleteValues.ExecuteNonQueryAsync();
+
+            await using var deleteObjects = new NpgsqlCommand(
+                @"DELETE FROM ""MetaverseObjects"" WHERE ""Id"" = ANY(@ids)", connection, transaction);
+            deleteObjects.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = orphaned.ToArray() });
+            await deleteObjects.ExecuteNonQueryAsync();
+        }
+
+        // The objects something joined meanwhile are kept, as ordinary Metaverse Objects from now on.
+        var orphanedSet = orphaned.ToHashSet();
+        var kept = unpublished.Where(id => !orphanedSet.Contains(id)).ToList();
+        if (kept.Count > 0)
+        {
+            await using var deleteRecords = new NpgsqlCommand(
+                @"DELETE FROM ""UnpublishedMetaverseObjects"" WHERE ""MetaverseObjectId"" = ANY(@ids)", connection, transaction);
+            deleteRecords.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = kept.ToArray() });
+            await deleteRecords.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+        return new UnpublishedMetaverseObjectRemoval(orphaned, kept);
+    }
+
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => UpdateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 

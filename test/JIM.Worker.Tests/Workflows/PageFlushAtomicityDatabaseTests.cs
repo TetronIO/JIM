@@ -100,6 +100,63 @@ public class PageFlushAtomicityDatabaseTests
             Assert.That(await CountAsync(), Is.EqualTo(new Counts(Mvos: 2, DirectoryObjects: 2, PendingExports: 2)),
                 "the next run projects the second object once, provisions its account and stages its export");
             Assert.That(await CountDirectoryObjectsWithoutAPendingExportAsync(), Is.Zero, "every provisioned account has its export");
+            Assert.That(await CountUnpublishedAsync(), Is.Zero, "every projected object was published with its page");
+        }
+    }
+
+    /// <summary>
+    /// A page writes its new Metaverse Objects across parallel connections before it opens the transaction that writes
+    /// everything else, so a page that fails after that leaves them committed and joined to nothing. The page removes them
+    /// as it fails, and the next run projects each object once.
+    /// </summary>
+    [Test]
+    public async Task FullSync_PageFailsAfterItsMetaverseObjectsAreCreated_RemovesThemAndTheNextRunProjectsOnceAsync()
+    {
+        await SeedConfigurationAsync(provisionToDirectory: false);
+        await CreateHrObjectsAsync(1, 2);
+
+        Assert.That(async () => await RunSynchronisationAsync(ConnectedSystemRunType.FullSynchronisation,
+                wrap: (repository, context) => FailBefore(repository, context, nameof(ISyncRepository.UpdateConnectedSystemObjectJoinStatesAsync))),
+            Throws.Exception, "precondition: the run stopped inside its page flush");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((await CountAsync()).Mvos, Is.Zero, "the failed page's Metaverse Objects are removed");
+            Assert.That(await CountUnpublishedAsync(), Is.Zero, "and their unpublished records with them");
+        }
+
+        await RunSynchronisationAsync(ConnectedSystemRunType.FullSynchronisation);
+
+        Assert.That((await CountAsync()).Mvos, Is.EqualTo(2), "the next run projects each object once");
+    }
+
+    /// <summary>
+    /// A Worker that stops mid-page cannot remove what the page projected, so the Worker removes it when it next starts:
+    /// every object still recorded as unpublished that nothing is joined to. An unpublished object something has joined
+    /// since is kept, and an unjoined object that was never unpublished (one whose last connector left under a Manual
+    /// Deletion Rule) is left alone.
+    /// </summary>
+    [Test]
+    public async Task RemoveUnpublishedMetaverseObjects_AtWorkerStart_RemovesOnlyUnpublishedObjectsNothingIsJoinedToAsync()
+    {
+        await SeedConfigurationAsync(provisionToDirectory: false);
+        var joinedIds = await ArrangeJoinedPeopleAsync(1);
+        var joined = joinedIds[0];
+        var orphan = await CreateBareMetaverseObjectAsync(unpublished: true);
+        var neverUnpublished = await CreateBareMetaverseObjectAsync(unpublished: false);
+        await RecordAsUnpublishedAsync(joined);
+
+        UnpublishedMetaverseObjectRemoval removal;
+        await using (var ctx = NewContext())
+            removal = await new PostgresDataRepository(ctx).Sync.RemoveUnpublishedMetaverseObjectsAsync();
+
+        await using var read = NewContext();
+        var remaining = await read.MetaverseObjects.AsNoTracking().Select(m => m.Id).ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(removal.RemovedIds, Is.EqualTo(new[] { orphan }), "the unjoined unpublished object is removed");
+            Assert.That(removal.KeptJoinedIds, Is.EqualTo(new[] { joined }), "the joined one is kept");
+            Assert.That(remaining, Is.EquivalentTo(new[] { joined, neverUnpublished }), "nothing else is touched");
+            Assert.That(await CountUnpublishedAsync(), Is.Zero, "every record is settled");
         }
     }
 
@@ -176,6 +233,34 @@ public class PageFlushAtomicityDatabaseTests
             await ctx.MetaverseObjects.AsNoTracking().CountAsync(),
             await ctx.ConnectedSystemObjects.AsNoTracking().CountAsync(c => c.ConnectedSystemId == _directorySystemId),
             await ctx.PendingExports.AsNoTracking().CountAsync(pe => pe.ConnectedSystemId == _directorySystemId));
+    }
+
+    private async Task<int> CountUnpublishedAsync()
+    {
+        await using var ctx = NewContext();
+        return await ctx.UnpublishedMetaverseObjects.AsNoTracking().CountAsync();
+    }
+
+    /// <summary>A Person Metaverse Object with no values and nothing joined, recorded as unpublished when asked.</summary>
+    private async Task<Guid> CreateBareMetaverseObjectAsync(bool unpublished)
+    {
+        await using var ctx = NewContext(trackAll: true);
+        var type = await ctx.MetaverseObjectTypes.SingleAsync(t => t.Name == "Person");
+        var mvo = new MetaverseObject { Type = type, Created = DateTime.UtcNow };
+        var sync = new PostgresDataRepository(ctx).Sync;
+        if (unpublished)
+            await sync.CreateUnpublishedMetaverseObjectsAsync([mvo], Guid.NewGuid());
+        else
+            await sync.CreateMetaverseObjectsAsync([mvo]);
+        return mvo.Id;
+    }
+
+    private async Task RecordAsUnpublishedAsync(Guid metaverseObjectId)
+    {
+        await using var ctx = NewContext();
+        ctx.UnpublishedMetaverseObjects.Add(new UnpublishedMetaverseObject
+            { MetaverseObjectId = metaverseObjectId, ActivityId = Guid.NewGuid(), Created = DateTime.UtcNow });
+        await ctx.SaveChangesAsync();
     }
 
     private async Task<int> CountDeprovisionQueuedOutcomesAsync(Activity activity)

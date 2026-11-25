@@ -1732,6 +1732,14 @@ public partial class MetaverseServer
     }
 
     /// <summary>
+    /// Removes every Metaverse Object a synchronisation page projected and never published (#2848): at the Worker's start,
+    /// nothing is synchronising, so each one still recorded as unpublished was left by a Worker that stopped mid-page. See
+    /// <see cref="ISyncRepository.RemoveUnpublishedMetaverseObjectsAsync"/>.
+    /// </summary>
+    public Task<UnpublishedMetaverseObjectRemoval> RemoveUnpublishedMetaverseObjectsAsync()
+        => Application.SyncRepo.RemoveUnpublishedMetaverseObjectsAsync();
+
+    /// <summary>
     /// Updates multiple Metaverse Objects in a single batch operation.
     /// This is more efficient than calling UpdateMetaverseObjectAsync for each object.
     /// </summary>
