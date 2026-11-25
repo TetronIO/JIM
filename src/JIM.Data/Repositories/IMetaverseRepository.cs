@@ -287,6 +287,15 @@ public interface IMetaverseRepository
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
+    /// <summary>
+    /// Deletes the named attribute value rows of a Metaverse Object, and in the same transaction saves the object's own
+    /// columns (its scope review flag, its unsynchronised changes, its cached name) and the change records it carries
+    /// (#3059). Writes the object's columns only, never its graph, so it is safe for an object loaded on another context.
+    /// </summary>
+    /// <param name="metaverseObject">The object, with the values already taken off <see cref="MetaverseObject.AttributeValues"/>.</param>
+    /// <param name="valueIds">The value rows to delete; each must belong to the object.</param>
+    public Task RemoveMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject, IReadOnlyCollection<Guid> valueIds);
+
     public Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     /// <summary>

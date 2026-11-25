@@ -380,4 +380,25 @@
   <data name="TrustAlreadyInStore" xml:space="preserve">
     <value>« {0} » figure déjà dans le magasin de certificats de JIM.</value>
   </data>
+  <data name="AccumulatedValueRemovalNotAccumulate" xml:space="preserve">
+    <value>Seules les valeurs d’un attribut en mode « Accumuler » peuvent être supprimées manuellement ; « {0} » est en mode {1}.</value>
+  </data>
+  <data name="AccumulatedValueRemovalNothingNamed" xml:space="preserve">
+    <value>Indiquez au moins une valeur de « {0} » à supprimer.</value>
+  </data>
+  <data name="AccumulatedValueRemovalNotHeld" xml:space="preserve">
+    <value>L’objet Metaverse ne contient aucune valeur « {0} » pour « {1} ». Rien n’a été supprimé.</value>
+  </data>
+  <data name="AccumulatedValueRemovalSupplied" xml:space="preserve">
+    <value>« {0} » est toujours fourni par la règle de synchronisation « {1} » du système connecté « {2} » : sa prochaine synchronisation l’ajouterait de nouveau. Modifiez d’abord la valeur à sa source, ou retirez l’objet du périmètre de la règle. Rien n’a été supprimé.</value>
+  </data>
+  <data name="AccumulatedValueRemovalUndecidable" xml:space="preserve">
+    <value>JIM ne peut pas déterminer si la règle de synchronisation « {0} » du système connecté « {1} » fournit encore ces valeurs ; rien n’a donc été supprimé : {2}</value>
+  </data>
+  <data name="AccumulatedValuesRemovedOne" xml:space="preserve">
+    <value>{0} valeur supprimée de « {1} ».</value>
+  </data>
+  <data name="AccumulatedValuesRemovedOther" xml:space="preserve">
+    <value>{0} valeurs supprimées de « {1} ».</value>
+  </data>
 </root>

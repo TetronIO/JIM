@@ -2613,6 +2613,50 @@ public partial class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The object's columns are written by a statement guarded by the row version it was read with, not by an EF save of
+    /// the object: the object comes from another context (the portal loads in one scope and saves in another), and an
+    /// <c>Update</c> would walk its graph. A synchronisation that changed the object since it was read makes the guard
+    /// match nothing, and the whole removal is undone with a <see cref="DbUpdateConcurrencyException"/>.
+    /// </remarks>
+    public async Task RemoveMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject, IReadOnlyCollection<Guid> valueIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObject);
+        ArgumentNullException.ThrowIfNull(valueIds);
+
+        await using var ownTransaction = Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null;
+
+        var metaverseObjectId = metaverseObject.Id;
+        var ids = valueIds.ToList();
+        var deleted = await Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == metaverseObjectId && ids.Contains(av.Id))
+            .ExecuteDeleteAsync();
+        if (deleted != ids.Count)
+        {
+            throw new DbUpdateConcurrencyException(
+                $"Metaverse Object {metaverseObjectId} no longer holds {ids.Count - deleted} of the {ids.Count} value(s) to remove; it changed since it was read.");
+        }
+
+        var rowVersion = metaverseObject.xmin;
+        var updated = await Repository.Database.MetaverseObjects
+            .Where(m => m.Id == metaverseObjectId && m.xmin == rowVersion)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(m => m.ScopeReviewPending, metaverseObject.ScopeReviewPending)
+                .SetProperty(m => m.UnsynchronisedChangesJson, metaverseObject.UnsynchronisedChangesJson)
+                .SetProperty(m => m.CachedDisplayName, metaverseObject.CachedDisplayName));
+        if (updated != 1)
+            throw new DbUpdateConcurrencyException($"Metaverse Object {metaverseObjectId} changed since it was read.");
+
+        AddCarriedChangeRecords(metaverseObject, newOnly: true);
+        await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
+    }
+
     /// <summary>
     /// Marks the change records the portal carries on <see cref="MetaverseObject.Changes"/> for insertion, naming the
     /// object by its id. The carrier is not a relationship (#2669), so neither <c>Update</c> nor <c>Add</c> reaches the
