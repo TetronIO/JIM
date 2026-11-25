@@ -3516,7 +3516,10 @@ public partial class MetaverseRepository : IMetaverseRepository
             : string.Empty;
         var comparison = valueType switch
         {
-            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = ANY(@values)",
+            // The lower-case condition changes no result (an exact match matches in lower case too); it is there so that
+            // whichever text index the planner takes, the values drive the seek (see BuildMatchValueBatchLookupSql).
+            AttributeDataType.Text when caseSensitive =>
+                @"av.""StringValue"" = ANY(@values) AND lower(av.""StringValue"") = ANY(ARRAY(SELECT lower(v) FROM unnest(@values) AS v))",
             AttributeDataType.Text => @"av.""StringValue"" IS NOT NULL",
             AttributeDataType.Number => @"av.""IntValue"" = ANY(@values)",
             AttributeDataType.LongNumber => @"av.""LongValue"" = ANY(@values)",
@@ -3615,6 +3618,14 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// against index probes for the 5,000 values sought). A probe per value costs the same whatever the table holds.
     /// </para>
     /// <para>
+    /// Respecting case, the comparison carries a redundant <c>lower()</c> condition beside the exact one. Either text
+    /// index can serve the lookup (both lead with the attribute), and with statistics taken while the table was empty
+    /// the planner costs them the same. Given the lower-case index, the exact comparison alone could seek on nothing but
+    /// the attribute and read every value it holds once per value sought (70 seconds for a page of 5,000 values against
+    /// 200,000). With both conditions, whichever index it takes seeks on the value. The extra condition changes no
+    /// result: an exact match matches in lower case too.
+    /// </para>
+    /// <para>
     /// Decimal is the exception, and stays a join: no index serves <c>"DecimalValue"</c>, so a probe per value would
     /// read the attribute once per value, where one hash of it per page is the least a lookup can read.
     /// </para>
@@ -3623,7 +3634,7 @@ public partial class MetaverseRepository : IMetaverseRepository
     {
         var comparison = valueType switch
         {
-            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = sought.value",
+            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = sought.value AND lower(av.""StringValue"") = lower(sought.value)",
             AttributeDataType.Text => @"lower(av.""StringValue"") = lower(sought.value) AND av.""StringValue"" IS NOT NULL",
             AttributeDataType.Number => @"av.""IntValue"" = sought.value",
             AttributeDataType.LongNumber => @"av.""LongValue"" = sought.value",
