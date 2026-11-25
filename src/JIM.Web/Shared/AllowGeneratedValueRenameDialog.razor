@@ -145,7 +145,7 @@
         CultureInfo.CurrentCulture,
         GeneratedValueText.RenameIntro,
         Encode(decision.RejectedByConnectedSystemName ?? GeneratedValueText.RenameRejectedFallback),
-        $"<code class=\"jim-code-inline\">{Encode(decision.Value)}</code>",
+        InlineCode.Markup(decision.Value),
         AnchorClause(decision),
         RenameClause(decision)));
 

@@ -115,7 +115,7 @@
                 <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-inline-alert mt-3" data-testid="jim-sql-anchor-suggestion">
                     <div class="jim-sql-inline-alert-body">
                         <span class="jim-sql-inline-alert-text">
-                            @((MarkupString)string.Format(CultureInfo.CurrentCulture, SqlText.PrimaryKeyAnchorSuggestion, string.Join(", ", PrimaryKeyAnchor.Select(Code))))
+                            @((MarkupString)string.Format(CultureInfo.CurrentCulture, SqlText.PrimaryKeyAnchorSuggestion, string.Join(", ", PrimaryKeyAnchor.Select(InlineCode.Markup))))
                         </span>
                         <span class="jim-sql-inline-alert-actions">
                             <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="UsePrimaryKeyAsync">@SqlText.UsePrimaryKey</AlertButton>
@@ -496,10 +496,6 @@
         var values = (text ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return values.Length == 0 ? null : [.. values];
     }
-
-    /// <summary>A name as inline code, HTML-encoded: the editor names columns this way in running text.</summary>
-    private static string Code(string? text) =>
-        $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(text)}</code>";
 
     private static Color ChipColour(SqlObjectTypeSummaryChipKind kind) => kind switch
     {

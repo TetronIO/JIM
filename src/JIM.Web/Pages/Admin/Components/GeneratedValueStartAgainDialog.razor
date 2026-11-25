@@ -1,5 +1,4 @@
 @using System.Globalization
-@using System.Net
 @using JIM.Application
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
@@ -112,11 +111,10 @@
     /// "Counter returns to X from Y", with both numbers set in code elements. Built as markup from encoded parts, since
     /// the numbers are formatted for display rather than typed by the administrator.
     /// </summary>
-    private MarkupString CounterLine(long currentNext) => new(string.Format(
-        CultureInfo.CurrentCulture,
+    private MarkupString CounterLine(long currentNext) => InlineCode.Format(
         GeneratedValueText.StartAgainCounterLine,
-        $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(ConfiguredStartFormatted)}</code>",
-        $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(GeneratedValuePreviewHelpers.FormatSequenceIdentifier(currentNext, FixedWidth))}</code>"));
+        ConfiguredStartFormatted,
+        GeneratedValuePreviewHelpers.FormatSequenceIdentifier(currentNext, FixedWidth));
 
     private Task ViewRetiredValuesAsync() =>
         RetiredGeneratedValuesDialog.ShowAsync(
