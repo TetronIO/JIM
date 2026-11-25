@@ -138,23 +138,14 @@ public partial class MetaverseServer
         if (valueIds.Count == 0 && values.Count == 0)
             return ([], ServerMessage.Create(nameof(ServerMessages.AccumulatedValueRemovalNothingNamed), attribute.Name));
 
-        var named = new List<MetaverseObjectAttributeValue>();
-        foreach (var valueId in valueIds)
-        {
-            var value = held.SingleOrDefault(av => av.Id == valueId);
-            if (value == null)
-                return ([], ServerMessage.Create(nameof(ServerMessages.AccumulatedValueRemovalNotHeld), valueId.ToString(), attribute.Name));
-            named.Add(value);
-        }
+        // The first name matching no held value refuses the whole request.
+        var unheld = valueIds.Where(id => held.All(av => av.Id != id)).Select(id => id.ToString())
+            .Concat(values.Where(text => !held.Any(av => MetaverseAttributeValueText.Names(text, av))))
+            .FirstOrDefault();
+        if (unheld != null)
+            return ([], ServerMessage.Create(nameof(ServerMessages.AccumulatedValueRemovalNotHeld), unheld, attribute.Name));
 
-        foreach (var text in values)
-        {
-            var value = held.FirstOrDefault(av => MetaverseAttributeValueText.Names(text, av));
-            if (value == null)
-                return ([], ServerMessage.Create(nameof(ServerMessages.AccumulatedValueRemovalNotHeld), text, attribute.Name));
-            named.Add(value);
-        }
-
+        var named = held.Where(av => valueIds.Contains(av.Id) || values.Any(text => MetaverseAttributeValueText.Names(text, av)));
         return (named.Distinct().ToList(), null);
     }
 
@@ -186,12 +177,11 @@ public partial class MetaverseServer
         var joined = (await Application.SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObject.Id))
             .Where(cso => cso.Status != ConnectedSystemObjectStatus.Obsolete)
             .ToList();
-        foreach (var joinedObject in joined)
+        var joinedWithRules = joined
+            .Select(cso => (Object: cso, Rules: rules.Where(r => r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId).ToList()))
+            .Where(pair => pair.Rules.Count > 0);
+        foreach (var (joinedObject, joinedRules) in joinedWithRules)
         {
-            var joinedRules = rules.Where(r => r.ConnectedSystemId == joinedObject.ConnectedSystemId && r.ConnectedSystemObjectTypeId == joinedObject.TypeId).ToList();
-            if (joinedRules.Count == 0)
-                continue;
-
             var cso = await Application.SyncRepo.GetConnectedSystemObjectWithAttributeValuesAsync(joinedObject.ConnectedSystemId, joinedObject.Id) ?? joinedObject;
             if (!objectTypesBySystem.TryGetValue(cso.ConnectedSystemId, out var objectTypes))
                 objectTypesBySystem[cso.ConnectedSystemId] = objectTypes = await Application.Repository.ConnectedSystems.GetObjectTypesAsync(cso.ConnectedSystemId);
