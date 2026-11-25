@@ -1631,6 +1631,13 @@ public interface ISyncRepository
     Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Deletes the Pending Exports of the given objects, as <see cref="DeletePendingExportsByConnectedSystemObjectIdsAsync"/>
+    /// does, and returns each one as it stood. An import that finds objects deleted in the target uses it to clear their
+    /// exports and to know which of those exports the deletion confirms (#3087), in the one statement that deletes them.
+    /// </summary>
+    Task<IReadOnlyList<DeletedPendingExportSummary>> DeletePendingExportsOfDeletedObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Deletes Connected System Objects by id, without requiring a tracked entity graph.
     /// <para>
     /// Used for a successful Delete export against a Connected System Object whose provisioning was never
