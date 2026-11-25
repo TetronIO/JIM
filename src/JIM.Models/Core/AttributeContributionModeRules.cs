@@ -11,7 +11,8 @@ namespace JIM.Models.Core;
 /// Only Priority is meaningful for a single-valued attribute, which only ever holds one value. Accumulate is refused for a
 /// Reference attribute because a reference is deleted with the Metaverse Object it points to (#1019), which would break
 /// Accumulate's promise that values are kept; a text attribute recording the source's identifier for the reference is the
-/// supported alternative.
+/// supported alternative. Merge is refused for Reference attributes too, until reference recall and Merge are shown to
+/// combine cleanly; allowing it later is additive.
 /// </remarks>
 public static class AttributeContributionModeRules
 {
@@ -21,7 +22,8 @@ public static class AttributeContributionModeRules
     public static bool IsPermitted(AttributeContributionMode mode, AttributeDataType type, AttributePlurality plurality) => mode switch
     {
         AttributeContributionMode.Priority => true,
-        AttributeContributionMode.Accumulate => plurality == AttributePlurality.MultiValued && type != AttributeDataType.Reference,
+        AttributeContributionMode.Accumulate or AttributeContributionMode.Merge =>
+            plurality == AttributePlurality.MultiValued && type != AttributeDataType.Reference,
         _ => false
     };
 

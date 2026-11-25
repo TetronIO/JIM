@@ -2026,4 +2026,7 @@
     <value>Run Profiles target a removed partition</value>
     <comment>Dialog title.</comment>
   </data>
+  <data name="DataFlowPriorityTooltipNoOrder" xml:space="preserve">
+    <value>This Metaverse Attribute uses the {0} contribution mode: every Synchronisation Rule that contributes to it adds its values, so the priority order is not used.</value>
+  </data>
 </root>

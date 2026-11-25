@@ -23,8 +23,9 @@ function New-JIMMetaverseAttribute {
     .PARAMETER ContributionMode
         How the values of several import Synchronisation Rules are combined. Priority (JIM's default when this is not
         given) takes the values from the highest-priority contributor. Accumulate adds every value any contributor
-        supplies and never removes one through synchronisation; JIM refuses it for a single-valued or a Reference
-        attribute.
+        supplies and never removes one through synchronisation. Merge also adds every contributor's values, and removes
+        a value once no contributor supplies it any more. JIM refuses Accumulate and Merge for a single-valued or a
+        Reference attribute.
 
     .PARAMETER ObjectTypeIds
         The IDs of the Metaverse Object Types to bind the attribute to. It can also be bound later, with
@@ -58,6 +59,12 @@ function New-JIMMetaverseAttribute {
         that supplied them are deleted.
 
     .EXAMPLE
+        New-JIMMetaverseAttribute -Name "Email Addresses" -Type Text -AttributePlurality MultiValued -ContributionMode Merge
+
+        Creates an attribute that holds every address any Connected System supplies, and drops an address once no
+        Connected System supplies it any more.
+
+    .EXAMPLE
         New-JIMMetaverseAttribute -Name "Department" -Type Text -ObjectTypeIds 1,2
 
         Creates an attribute and associates it with object types 1 and 2.
@@ -83,7 +90,7 @@ function New-JIMMetaverseAttribute {
         [string]$AttributePlurality = 'SingleValued',
 
         [Parameter()]
-        [ValidateSet('Priority', 'Accumulate')]
+        [ValidateSet('Priority', 'Accumulate', 'Merge')]
         [string]$ContributionMode,
 
         [Parameter()]

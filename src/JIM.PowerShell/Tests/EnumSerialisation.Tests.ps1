@@ -244,6 +244,19 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
             }
         }
 
+        It 'Sends the Merge contribution mode as its string name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseAttribute -Name 'Email Addresses' -Type Text -AttributePlurality MultiValued -ContributionMode Merge -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Method -eq 'POST' -and $Body.contributionMode -is [string] -and $Body.contributionMode -eq 'Merge'
+                }
+            }
+        }
+
         It 'Leaves contributionMode out of the request when -ContributionMode is not given, so JIM applies Priority' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

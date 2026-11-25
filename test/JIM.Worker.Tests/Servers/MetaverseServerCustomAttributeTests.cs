@@ -659,6 +659,33 @@ public class MetaverseServerCustomAttributeTests
     }
 
     [Test]
+    public void CreateMetaverseAttributeAsync_MultiValuedReferenceMerge_ThrowsWithoutTheAccumulateAdviceAsync()
+    {
+        var attribute = new MetaverseAttribute { Name = "members", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued, ContributionMode = AttributeContributionMode.Merge };
+
+        var ex = Assert.ThrowsAsync<UnsupportedContributionModeException>(
+            () => _jim.Metaverse.CreateMetaverseAttributeAsync(attribute, TestUtilities.GetInitiatedBy()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.ContributionMode, Is.EqualTo(AttributeContributionMode.Merge));
+            Assert.That(ex.Message, Does.Not.Contain("history"), "the text-history advice is for Accumulate, not Merge");
+        }
+        _metaverseRepo.Verify(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateMetaverseAttributeAsync_MultiValuedTextMerge_CreatesAsync()
+    {
+        var attribute = new MetaverseAttribute { Name = "emailAddresses", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued, ContributionMode = AttributeContributionMode.Merge };
+        _metaverseRepo.Setup(r => r.CreateMetaverseAttributeAsync(attribute)).Returns(Task.CompletedTask);
+
+        await _jim.Metaverse.CreateMetaverseAttributeAsync(attribute, TestUtilities.GetInitiatedBy());
+
+        _metaverseRepo.Verify(r => r.CreateMetaverseAttributeAsync(attribute), Times.Once);
+    }
+
+    [Test]
     public async Task CreateMetaverseAttributeAsync_MultiValuedTextAccumulate_CreatesAsync()
     {
         var attribute = new MetaverseAttribute { Name = "accountAuditLog", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued, ContributionMode = AttributeContributionMode.Accumulate };

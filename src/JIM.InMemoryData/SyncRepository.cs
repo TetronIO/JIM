@@ -4048,6 +4048,21 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public virtual async Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int excludeConnectedSystemId, int maxValuesPerMetaverseObject)
+    {
+        var result = new Dictionary<Guid, List<ConnectedSystemObject>>();
+        foreach (var metaverseObjectId in metaverseObjectIds.Distinct())
+        {
+            var joined = (await GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
+                .Where(cso => cso.ConnectedSystemId != excludeConnectedSystemId)
+                .ToList();
+            if (joined.Sum(cso => cso.AttributeValues.Count) <= maxValuesPerMetaverseObject)
+                result[metaverseObjectId] = joined;
+        }
+        return result;
+    }
+
     // In-memory objects carry their full attribute value lists; the Postgres implementation's
     // lean include shape (external ID attribute values only) cannot be modelled here (see the
     // EF in-memory caveat in test/CLAUDE.md).

@@ -397,6 +397,10 @@
     <value>The {0} contribution mode is not available for a {1} attribute.</value>
     <comment>{0} is the contribution mode; {1} is a data type.</comment>
   </data>
+  <data name="ContributionModeMergeNotForReference" xml:space="preserve">
+    <value>The Merge contribution mode is not available for Reference attributes. Use the Priority contribution mode for a Reference attribute.</value>
+    <comment>Refusal when an administrator chooses Merge for a Reference attribute.</comment>
+  </data>
   <data name="TrustThumbprintRequired" xml:space="preserve">
     <value>A thumbprint is required. JIM will not trust whatever a server happens to be presenting.</value>
     <comment>Refusal when trusting a server certificate without the confirmed thumbprint.</comment>

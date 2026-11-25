@@ -1117,6 +1117,8 @@ public partial class MetaverseServer
 
         var detail = plurality != AttributePlurality.MultiValued
             ? ServerMessage.Create(nameof(ServerMessages.ContributionModeNeedsMultiValued), mode.ToString())
+            : type == AttributeDataType.Reference && mode == AttributeContributionMode.Merge
+                ? ServerMessage.Create(nameof(ServerMessages.ContributionModeMergeNotForReference))
             : type == AttributeDataType.Reference
                 ? ServerMessage.Create(nameof(ServerMessages.ContributionModeNotForReference), mode.ToString())
                 : ServerMessage.Create(nameof(ServerMessages.ContributionModeUnsupported), mode.ToString(), type.ToString());

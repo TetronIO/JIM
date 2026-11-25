@@ -34,7 +34,9 @@ public class CreateMetaverseAttributeRequest
     /// <summary>
     /// How the values of several import Synchronisation Rules are combined. Defaults to <c>Priority</c>, where the
     /// highest-priority contributor supplies the values. <c>Accumulate</c> adds every value any contributor supplies and
-    /// never removes one through synchronisation; it is refused for a single-valued or a Reference attribute.
+    /// never removes one through synchronisation. <c>Merge</c> also adds every contributor's values, and removes a value
+    /// once no contributor supplies it. <c>Accumulate</c> and <c>Merge</c> are refused for a single-valued or a
+    /// Reference attribute.
     /// </summary>
     public AttributeContributionMode ContributionMode { get; set; } = AttributeContributionMode.Priority;
 
@@ -71,8 +73,8 @@ public class UpdateMetaverseAttributeRequest
     public AttributeRenderingHint? RenderingHint { get; set; }
 
     /// <summary>
-    /// The new contribution mode. Omitted (or null) leaves it unchanged. <c>Accumulate</c> is refused for a
-    /// single-valued or a Reference attribute. The change applies to each Metaverse Object at its next synchronisation.
+    /// The new contribution mode. Omitted (or null) leaves it unchanged. <c>Accumulate</c> and <c>Merge</c> are refused
+    /// for a single-valued or a Reference attribute. The change applies to each Metaverse Object at its next synchronisation.
     /// </summary>
     public AttributeContributionMode? ContributionMode { get; set; }
 

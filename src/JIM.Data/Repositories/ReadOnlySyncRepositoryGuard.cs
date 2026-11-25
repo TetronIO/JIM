@@ -443,6 +443,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
         => _inner.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
 
+    public Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int excludeConnectedSystemId, int maxValuesPerMetaverseObject)
+        => _inner.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, excludeConnectedSystemId, maxValuesPerMetaverseObject);
+
     public Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsForMvoDeletionAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
         => _inner.GetConnectedSystemObjectsForMvoDeletionAsync(metaverseObjectIds);
 

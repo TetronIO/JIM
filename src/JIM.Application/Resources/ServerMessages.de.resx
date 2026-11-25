@@ -354,6 +354,9 @@
   <data name="ContributionModeUnsupported" xml:space="preserve">
     <value>Der Beitragsmodus {0} ist für ein Attribut vom Typ {1} nicht verfügbar.</value>
   </data>
+  <data name="ContributionModeMergeNotForReference" xml:space="preserve">
+    <value>Der Beitragsmodus „Zusammenführen“ ist für Referenzattribute nicht verfügbar. Verwenden Sie für ein Referenzattribut den Beitragsmodus „Priorität“.</value>
+  </data>
   <data name="TrustThumbprintRequired" xml:space="preserve">
     <value>Ein Fingerabdruck ist erforderlich. JIM vertraut nicht einfach dem, was ein Server gerade vorlegt.</value>
   </data>

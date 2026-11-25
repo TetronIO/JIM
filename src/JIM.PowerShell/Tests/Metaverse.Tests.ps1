@@ -716,6 +716,30 @@ Describe 'Set-JIMMetaverseAttribute' {
             }
         }
 
+        It 'Refuses to leave Accumulate for Merge without -Force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -ContributionMode Merge -Confirm:$false -ErrorAction Stop } | Should -Throw '*-Force*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+
+        It 'Moves from Merge to Accumulate without -Force, since nothing is removed' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Email Addresses'; contributionMode = 'Merge' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Accumulate -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Body.contributionMode -eq 'Accumulate' -and -not $Body.ContainsKey('confirmLeavingAccumulate')
+                }
+            }
+        }
+
         It 'Does not confirm anything when the attribute is not in Accumulate' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

@@ -87,6 +87,11 @@ public abstract class SyncTaskProcessorBase
     // its lifetime, which must track the EF change tracker's exactly.
     protected readonly MetaverseObjectPageIdentityMap _mvoIdentityMap = new();
 
+    // Contributor re-election's read of a Metaverse Object's joined Connected System Objects, batched a page at a time
+    // once a page has several to re-elect (#3059). Started per page by BeginReElectionPage, alongside the change
+    // tracker's lifetime, since the objects it holds are tracked.
+    private readonly ReElectionSurvivorLookup _reElectionSurvivors;
+
     // Batch collections for deferred MVO persistence and export evaluation
     protected readonly List<MetaverseObject> _pendingMvoCreates = [];
     protected readonly List<MetaverseObject> _pendingMvoUpdates = [];
@@ -617,6 +622,12 @@ public abstract class SyncTaskProcessorBase
         _syncEngine = syncEngine;
         _syncServer = syncServer;
         _syncRepo = syncRepository;
+        // The bulk read leaves out this system's own objects, which re-election never takes a survivor from (the leaver's
+        // whole system is excluded), and any object whose others hold more than the value budget, which is read singly.
+        _reElectionSurvivors = new ReElectionSurvivorLookup(
+            syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync,
+            metaverseObjectIds => syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+                metaverseObjectIds, connectedSystem.Id, ReElectionSurvivorLookup.MaxValuesPerObjectInBatch));
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _activity = activity;
@@ -1983,6 +1994,7 @@ public abstract class SyncTaskProcessorBase
 
         mvo.PendingAttributeValueAdditions.Clear();
         mvo.PendingAttributeValueRemovals.Clear();
+        mvo.PendingMergeSupplies.Clear();
     }
 
     /// <summary>
@@ -2710,6 +2722,11 @@ public abstract class SyncTaskProcessorBase
             if (_attributePriorityContext != null)
                 _syncEngine.RecallOrphanedContributions(connectedSystemObject, _attributePriorityContext);
 
+            // A Merge value (#3059) one of this object's rules withdrew while another of its rules supplies it passes to
+            // that rule now, whichever order they flowed in; the withdrawal re-election below cannot, since it looks only
+            // beyond this object's Connected System.
+            SyncEngine.CollapseMergeRetags(connectedSystemObject.MetaverseObject);
+
             // Withdrawal re-election (#91): an authoritative source withdrawing a value in place hands the
             // attribute to the next contributor in the same run, rather than leaving it blank until the survivor's
             // system next synchronises. Explicit "Null is a value" assertions write a marker into the additions, so
@@ -2723,15 +2740,19 @@ public abstract class SyncTaskProcessorBase
                     connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions,
                     connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals);
 
+                // A Merge attribute (#3059) is re-elected on any withdrawal, not only a clear: a value this object stopped
+                // supplying stays, credited to its survivor, while another Connected System still supplies it.
                 var withdrawnValues = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals
-                    .Where(av => clearedAttributeIds.Contains(av.AttributeId))
+                    .Where(av => clearedAttributeIds.Contains(av.AttributeId) ||
+                                 av.Attribute?.ContributionMode == AttributeContributionMode.Merge)
                     .ToList();
 
                 if (withdrawnValues.Count > 0)
                 {
                     try
                     {
-                        generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
+                        using (Diagnostics.Sync.StartSpan("WithdrawalReElection"))
+                            generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
                     }
                     catch (ScopingCriterionFailedException)
                     {
@@ -7917,6 +7938,20 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Starts a synchronisation page for contributor re-election's joined-object reads (#3059): the objects of the page
+    /// predicted to withdraw a Merge value (<see cref="SyncEngine.MayWithdrawMergeValues"/>) have their joined objects read
+    /// in one query when the first of them is re-elected. Call it once the page and its Metaverse Objects are loaded.
+    /// </summary>
+    protected void BeginReElectionPage(IEnumerable<ConnectedSystemObject> page, IReadOnlyCollection<SyncRule> activeSyncRules)
+    {
+        var importRules = activeSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.ConnectedSystemId == _connectedSystem.Id).ToList();
+        _reElectionSurvivors.BeginPage(page
+            .Where(cso => cso.MetaverseObject != null
+                          && SyncEngine.MayWithdrawMergeValues(cso, importRules.Where(rule => rule.ConnectedSystemObjectTypeId == cso.TypeId)))
+            .Select(cso => cso.MetaverseObject!.Id));
+    }
+
+    /// <summary>
     /// Next-contributor recall fallback (#91, Phase 2c): when a winning contributor's Connected System Object is
     /// obsoleted, or a still-joined winner withdraws its value in place without asserting null, re-elect any
     /// still-joined lower-priority contributor for the affected attributes so the attribute is handed to the next
@@ -7966,7 +8001,8 @@ public abstract class SyncTaskProcessorBase
                 : ContributorReElectionService.AnsweringFrom(survivorScopeAnswers, _syncServer.IsCsoInScopeForImportRule),
             _objectTypes,
             _expressionEvaluator,
-            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo));
+            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo),
+            readJoinedObjects: _reElectionSurvivors.GetAsync);
     }
 
     /// <summary>

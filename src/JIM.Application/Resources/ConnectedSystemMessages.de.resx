@@ -330,4 +330,7 @@
   <data name="PriorityNotUsedUnderAccumulate" xml:space="preserve">
     <value>Das Metaverse-Attribut „{0}“ verwendet den Beitragsmodus „Akkumulieren“: Jeder Beitragende fügt seine Werte hinzu, und die Prioritätsreihenfolge wird nicht verwendet. Stellen Sie den Beitragsmodus des Attributs auf „Priorität“, um seine Beitragenden zu ordnen.</value>
   </data>
+  <data name="PriorityNotUsedUnderMerge" xml:space="preserve">
+    <value>Das Metaverse-Attribut „{0}“ verwendet den Beitragsmodus „Zusammenführen“: Jeder Beitragende fügt seine Werte hinzu, und die Prioritätsreihenfolge wird nicht verwendet. Stellen Sie den Beitragsmodus des Attributs auf „Priorität“, um seine Beitragenden zu ordnen.</value>
+  </data>
 </root>

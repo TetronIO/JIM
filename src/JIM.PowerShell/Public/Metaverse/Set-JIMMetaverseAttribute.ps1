@@ -42,8 +42,9 @@ function Set-JIMMetaverseAttribute {
     .PARAMETER ContributionMode
         How the values of several import Synchronisation Rules are combined. Priority takes the values from the
         highest-priority contributor. Accumulate adds every value any contributor supplies and never removes one
-        through synchronisation; JIM refuses it for a single-valued or a Reference attribute. The change applies to
-        each Metaverse Object at its next synchronisation.
+        through synchronisation. Merge also adds every contributor's values, and removes a value once no contributor
+        supplies it any more. JIM refuses Accumulate and Merge for a single-valued or a Reference attribute. The change
+        applies to each Metaverse Object at its next synchronisation.
 
     .PARAMETER Type
         A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses a type change while
@@ -136,7 +137,7 @@ function Set-JIMMetaverseAttribute {
         [string]$RenderingHint,
 
         [Parameter()]
-        [ValidateSet('Priority', 'Accumulate')]
+        [ValidateSet('Priority', 'Accumulate', 'Merge')]
         [string]$ContributionMode,
 
         [Parameter()]

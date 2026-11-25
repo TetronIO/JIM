@@ -332,4 +332,7 @@
   <data name="PriorityNotUsedUnderAccumulate" xml:space="preserve">
     <value>L’attribut Metaverse « {0} » utilise le mode de contribution « Accumuler » : chaque contributeur ajoute ses valeurs et l’ordre de priorité n’est pas utilisé. Choisissez le mode de contribution « Priorité » pour ordonner ses contributeurs.</value>
   </data>
+  <data name="PriorityNotUsedUnderMerge" xml:space="preserve">
+    <value>L’attribut Metaverse « {0} » utilise le mode de contribution « Fusionner » : chaque contributeur ajoute ses valeurs et l’ordre de priorité n’est pas utilisé. Choisissez le mode de contribution « Priorité » pour ordonner ses contributeurs.</value>
+  </data>
 </root>
