@@ -354,7 +354,7 @@ A value or name placed into a sentence (an attribute value, an attribute or obje
 
 On a filled coloured surface (a snackbar) the pill takes a translucent white tint and the surface's text colour, so its edges stay visible on every severity colour.
 
-A list of values shown inline (the values each source supplies, in the attribute inspector) puts each in its own pill rather than joining them with commas, since a value can hold a comma or a space.
+A list of values shown inline (the values each source supplies, in the attribute inspector) puts each in its own pill rather than joining them with commas, since a value can hold a comma or a space. The attribute inspector's history does the same for each change's value, beside its chip. An object's current values, one to a line, stay plain.
 
 In the portal, compose such a message with `InlineCode.Format(template, values...)` (`src/JIM.Web/Localisation/InlineCode.cs`), which encodes each value and returns markup for a dialog's `MarkupMessage` or a snackbar; never build the `<code>` element into a markup string by hand. In Razor markup, `<code class="jim-code-inline">@value</code>` is fine, since Razor encodes the value. The text's placeholders carry no quotes, in every language. A dialog title cannot hold markup, so a name in a title keeps its quotes. Messages the application layer produces for the REST API and PowerShell are plain text, so they keep theirs too.
 

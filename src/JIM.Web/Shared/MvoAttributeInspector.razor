@@ -241,13 +241,11 @@
                             {
                                 <MudChip T="string" Variant="Variant.Text" Color="@HistoryKindColour(entry.Kind)" Class="ma-0">@entry.Kind</MudChip>
                             }
-                            <span class="jim-text-code">
-                                @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { @entry.Value }
-                            </span>
+                            @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { <code class="jim-code-inline">@entry.Value</code> }
                         </div>
                         @if (entry.Kind == AttributeHistoryChangeKind.Set && !string.IsNullOrEmpty(entry.PreviousValue))
                         {
-                            <div class="jim-text-code jim-inspector-previous">@entry.PreviousValue</div>
+                            <div class="jim-inspector-previous"><code class="jim-code-inline">@entry.PreviousValue</code></div>
                         }
                         <div class="jim-inspector-meta">
                             <MudTooltip Text="@entry.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
