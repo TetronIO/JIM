@@ -2820,7 +2820,7 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.AmbiguousMatch,
-                    Detail = ObjectMatchingServer.DescribeAmbiguity(ex, previewing: true),
+                    LocalisedDetail = ObjectMatchingServer.DescribeAmbiguityMessage(ex, previewing: true),
                     ConnectedSystemId = cso.ConnectedSystemId,
                     MatchCandidates = [.. ex.Candidates]
                 });
@@ -2848,7 +2848,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.AmbiguousMatch,
-                Detail = disagreement.Message,
+                LocalisedDetail = disagreement.MessageDetail,
                 ConnectedSystemId = cso.ConnectedSystemId,
                 MatchCandidates = [.. disagreement.Candidates]
             });

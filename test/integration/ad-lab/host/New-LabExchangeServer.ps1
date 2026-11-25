@@ -74,7 +74,7 @@
     Prefix length of the subnet.
 
 .PARAMETER Gateway
-    Default gateway: the host's address on the Lab switch, which leads nowhere by design.
+    Default gateway: the host's address on the Lab switch, which NATs outbound traffic.
 
 .PARAMETER ComputerName
     The server's host name. Default ex1.

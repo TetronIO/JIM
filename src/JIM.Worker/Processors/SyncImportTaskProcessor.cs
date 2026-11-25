@@ -2095,11 +2095,7 @@ public partial class SyncImportTaskProcessor
         item.SyncOutcomes.Clear();
         item.ObjectTypeSnapshot = arrivingTypeName;
         item.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
-        item.ErrorMessage =
-            $"JIM holds this object as a '{heldTypeName}', and this Full Import allows Object Type changes, but it could not retire the '{heldTypeName}' object: " +
-            "it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronisation Rule still manages). " +
-            $"The new '{arrivingTypeName}' object has not been created, and the '{heldTypeName}' object has been left as it is, so nothing is deprovisioned. " +
-            $"Bring the '{heldTypeName}' object into the Full Import's scope, or disable the Synchronisation Rules bound to its Object Type, then run the Full Import again.";
+        item.ErrorMessageDetail = ActivityMessage.ImportObjectTypeChangeWithdrawn(heldTypeName, arrivingTypeName);
 
         Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: Object Type change for External ID '{ExternalId}' withdrawn: held CSO {CsoId} of type '{HeldObjectType}' was not retired by deletion detection, so the replacement of type '{ObjectType}' is not created.",
             LogSanitiser.Sanitise(item.ExternalIdSnapshot), change.Held.Primary.Entry.CsoId,
@@ -2551,8 +2547,7 @@ public partial class SyncImportTaskProcessor
                 ConnectedSystemObjectId = cso.Id,
                 ObjectChangeType = ObjectChangeType.Updated,
                 ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                ErrorMessage = "The Create export succeeded, but this import read every object and did not report this one back. " +
-                    "The Create will be retried on the next export."
+                ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportedCreateNotConfirmed))
             };
             executionItem.SnapshotCsoDisplayFields(cso);
 
@@ -3808,9 +3803,9 @@ public partial class SyncImportTaskProcessor
                 if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
-                    activityRunProfileExecutionItem.ErrorMessage = importObject.ChangeType == ObjectChangeType.Deleted && string.IsNullOrEmpty(importObject.ObjectType)
-                        ? "The Connector reported a deletion without its Object Type, and its External ID does not tell JIM which object was deleted: this Connector's External IDs can name different objects in different Object Types. Nothing was deleted; run a Full Import, which detects deletions by absence."
-                        : $"PerformImportAsync: Couldn't find valid Connected System ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                    activityRunProfileExecutionItem.ErrorMessageDetail = importObject.ChangeType == ObjectChangeType.Deleted && string.IsNullOrEmpty(importObject.ObjectType)
+                        ? ActivityMessage.Create(nameof(ActivityMessages.ImportDeletionWithoutObjectType))
+                        : ActivityMessage.ImportObjectTypeNotFound(_connectedSystem.Id, importObject.ObjectType);
                     continue;
                 }
 
@@ -4307,7 +4302,7 @@ public partial class SyncImportTaskProcessor
             {
                 // log the unhandled exception to the Run Profile execution item, so admins can see the error via a client.
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-                activityRunProfileExecutionItem.ErrorMessage = e.Message;
+                ActivityMessage.SetError(activityRunProfileExecutionItem, e);
                 activityRunProfileExecutionItem.ErrorStackTrace = e.StackTrace;
 
                 // still perform system logging.
@@ -5347,17 +5342,11 @@ public partial class SyncImportTaskProcessor
 
         // An object an earlier import already marked obsolete is disconnected by the next synchronisation whatever this
         // run does, so saying nothing is deprovisioned would be untrue for it.
-        var keptClause = primary.Entry.Status == ConnectedSystemObjectStatus.Obsolete
-            ? $"the existing '{heldTypeName}' object, which an earlier import marked obsolete, has been left as it is"
-            : $"the existing '{heldTypeName}' object has been left as it is, so nothing is deprovisioned";
 
         activityRunProfileExecutionItem.ObjectTypeSnapshot = arrivingTypeName;
         activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
-        activityRunProfileExecutionItem.ErrorMessage =
-            $"JIM holds this object as a '{heldTypeName}', but the Connector now returns it as a '{arrivingTypeName}' (External ID '{activityRunProfileExecutionItem.ExternalIdSnapshot}'). " +
-            $"It has not been imported, and {keptClause}. " +
-            $"If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM will retire the '{heldTypeName}' object and import a new '{arrivingTypeName}' one. " +
-            "If it has not, review the Object Types selected on the Connected System.";
+        activityRunProfileExecutionItem.ErrorMessageDetail = ActivityMessage.ImportObjectTypeChangeRefused(
+            heldTypeName, arrivingTypeName, activityRunProfileExecutionItem.ExternalIdSnapshot, primary.Entry.Status == ConnectedSystemObjectStatus.Obsolete);
 
         Log.Warning("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' but arrived as type '{ObjectType}'. Refusing the Object Type change and keeping the held object.",
             LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), primary.Entry.CsoId,

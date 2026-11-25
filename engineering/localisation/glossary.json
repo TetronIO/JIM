@@ -343,6 +343,13 @@
       "en-US": "\\bSafeguards?\\b",
       "de": "Schutzmaßnahme",
       "fr": "garde-fous?"
+    },
+    {
+      "term": "mail-enabled group",
+      "en-GB": "[Mm]ail-enabled groups?",
+      "en-US": "[Mm]ail-enabled groups?",
+      "de": "E-Mail-aktiviert\\w* Gruppe",
+      "fr": "groupes? à extension messagerie"
     }
   ]
 }

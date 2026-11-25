@@ -357,4 +357,25 @@
   <data name="ContributionModeMergeNotForReference" xml:space="preserve">
     <value>Der Beitragsmodus „Zusammenführen“ ist für Referenzattribute nicht verfügbar. Verwenden Sie für ein Referenzattribut den Beitragsmodus „Priorität“.</value>
   </data>
+  <data name="TrustThumbprintRequired" xml:space="preserve">
+    <value>Ein Fingerabdruck ist erforderlich. JIM vertraut nicht einfach dem, was ein Server gerade vorlegt.</value>
+  </data>
+  <data name="TrustServerUnreachable" xml:space="preserve">
+    <value>{0}:{1} war nicht erreichbar, daher wurde nichts als vertrauenswürdig eingestuft.</value>
+  </data>
+  <data name="TrustServerOfferedNothing" xml:space="preserve">
+    <value>{0}:{1} hat kein Zertifikat vorgelegt, daher gibt es nichts, dem vertraut werden könnte.</value>
+  </data>
+  <data name="TrustThumbprintMismatch" xml:space="preserve">
+    <value>{0} legt ein anderes Zertifikat vor als das von Ihnen bestätigte, daher wurde nichts als vertrauenswürdig eingestuft. Das ist zu erwarten, wenn das Zertifikat erneuert wurde; andernfalls sollten Sie der Ursache nachgehen.</value>
+  </data>
+  <data name="TrustRootRequiredWithRoot" xml:space="preserve">
+    <value>Diese Verbindung zum {0} akzeptiert nur das Stammzertifikat der Zertifikatskette, daher würde das Vertrauen in „{1}“ sie nicht zum Laufen bringen, und es wurde nichts als vertrauenswürdig eingestuft. Vertrauen Sie stattdessen „{2}“.</value>
+  </data>
+  <data name="TrustRootRequiredNoRoot" xml:space="preserve">
+    <value>Diese Verbindung zum {0} akzeptiert nur das Stammzertifikat der Zertifikatskette, und JIM konnte es nicht finden, daher wurde nichts als vertrauenswürdig eingestuft. Beschaffen Sie das Stammzertifikat von den Betreibern Ihrer PKI und fügen Sie es unter Admin &gt; Zertifikate hinzu.</value>
+  </data>
+  <data name="TrustAlreadyInStore" xml:space="preserve">
+    <value>„{0}“ befindet sich bereits im Zertifikatspeicher von JIM.</value>
+  </data>
 </root>

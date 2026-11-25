@@ -739,7 +739,8 @@ public partial class SyncRepository
                    so."OutcomeType", so."TargetEntityId", so."TargetEntityDescription",
                    so."DetailCount", so."DetailMessage", so."Ordinal", so."ConnectedSystemObjectChangeId",
                    so."SyncRuleId", so."SyncRuleName", so."StagedChangeType",
-                   so."ObjectMatchingRuleId", so."ObjectMatchingRuleDescriptionSnapshot", so."MatchedValue"
+                   so."ObjectMatchingRuleId", so."ObjectMatchingRuleDescriptionSnapshot", so."MatchedValue",
+                   so."DetailMessageDetailJson"
             FROM "ActivityRunProfileExecutionItemSyncOutcomes" so
             INNER JOIN "ActivityRunProfileExecutionItems" rpei
                 ON rpei."Id" = so."ActivityRunProfileExecutionItemId"
@@ -813,7 +814,8 @@ public partial class SyncRepository
                 StagedChangeType = reader.IsDBNull(12) ? null : (PendingExportChangeType)reader.GetInt32(12),
                 ObjectMatchingRuleId = reader.IsDBNull(13) ? null : reader.GetInt32(13),
                 ObjectMatchingRuleDescriptionSnapshot = reader.IsDBNull(14) ? null : reader.GetString(14),
-                MatchedValue = reader.IsDBNull(15) ? null : reader.GetString(15)
+                MatchedValue = reader.IsDBNull(15) ? null : reader.GetString(15),
+                DetailMessageDetailJson = reader.IsDBNull(16) ? null : reader.GetString(16)
             });
         }
 
@@ -1401,6 +1403,7 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)outcome.ObjectMatchingRuleId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.ObjectMatchingRuleDescriptionSnapshot ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 15}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.MatchedValue ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 16}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.DetailMessageDetailJson ?? DBNull.Value });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -1574,6 +1577,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (outcome.MatchedValue is not null)
                 await writer.WriteAsync(outcome.MatchedValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (outcome.DetailMessageDetailJson is not null)
+                await writer.WriteAsync(outcome.DetailMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
         }

@@ -359,4 +359,25 @@
   <data name="ContributionModeMergeNotForReference" xml:space="preserve">
     <value>Le mode de contribution « Fusionner » n’est pas disponible pour les attributs de référence. Utilisez le mode de contribution « Priorité » pour un attribut de référence.</value>
   </data>
+  <data name="TrustThumbprintRequired" xml:space="preserve">
+    <value>Une empreinte est requise. JIM ne fera pas confiance à un certificat simplement parce qu’un serveur le présente.</value>
+  </data>
+  <data name="TrustServerUnreachable" xml:space="preserve">
+    <value>{0}:{1} est injoignable ; aucun certificat n’a donc été approuvé.</value>
+  </data>
+  <data name="TrustServerOfferedNothing" xml:space="preserve">
+    <value>{0}:{1} n’a présenté aucun certificat ; il n’y a donc rien à approuver.</value>
+  </data>
+  <data name="TrustThumbprintMismatch" xml:space="preserve">
+    <value>{0} présente un certificat différent de celui que vous avez confirmé ; aucun certificat n’a donc été approuvé. Cela est normal si le certificat a été renouvelé ; sinon, recherchez la cause.</value>
+  </data>
+  <data name="TrustRootRequiredWithRoot" xml:space="preserve">
+    <value>Cette connexion au {0} n’accepte que la racine de la chaîne de certificats ; approuver « {1} » ne la ferait donc pas fonctionner, et rien n’a été approuvé. Approuvez plutôt « {2} ».</value>
+  </data>
+  <data name="TrustRootRequiredNoRoot" xml:space="preserve">
+    <value>Cette connexion au {0} n’accepte que la racine de la chaîne de certificats, et JIM n’a pas pu la trouver ; rien n’a donc été approuvé. Obtenez le certificat racine auprès de l’équipe qui gère votre PKI et ajoutez-le sous Admin &gt; Certificats.</value>
+  </data>
+  <data name="TrustAlreadyInStore" xml:space="preserve">
+    <value>« {0} » figure déjà dans le magasin de certificats de JIM.</value>
+  </data>
 </root>

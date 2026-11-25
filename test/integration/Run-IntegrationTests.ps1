@@ -1432,7 +1432,8 @@ $templateIrrelevantScenarioNumbers = @(
     29,  # JIM provisioning its own SCIM endpoint - its own small HR CSV; the question is the round trip, not the population
     33,  # Initial Administrator Provisioning - two header-only files of its own; there is no population to size
     36,  # Entra ID as a target - its own 24 people in a real tenant, sized to put one group over Graph's 20 members on a create
-    37   # Entra ID as a source - seven people and six groups the harness seeds in a real tenant, each shaped by what it proves
+    37,  # Entra ID as a source - seven people and six groups the harness seeds in a real tenant, each shaped by what it proves
+    38   # Hybrid and Source of Authority - three people and two groups in the hybrid forest, each shaped by what it proves
 )
 
 function Test-TemplateRelevant {

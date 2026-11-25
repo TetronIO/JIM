@@ -123,6 +123,77 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
+    /// Claims values a caller has built itself (#1789): each one is checked through the same reservation set and record
+    /// gates a generated value passes (claimed by another run, the retired values register, held by a Metaverse Object,
+    /// held by a live generated value assignment), case-insensitively, and claimed in <paramref name="options"/>'s
+    /// reservation set under its <see cref="UniqueValueResolveOptions.ReservationOwnerId"/> if it is free. Returns one
+    /// answer per claim, in order: true when the value is now the caller's, false when it is taken and the caller must
+    /// try another. When the same value appears more than once in one call, only the first is claimed.
+    /// <para>
+    /// Example data is the caller: its patterns and Example Data Sets decide what a value looks like, and only the
+    /// question "is it taken?" is asked here, so there is one answer to that question across JIM. No assignment is
+    /// recorded, because no Synchronisation Rule mapping owns the value; the value is held by the Metaverse Object the
+    /// caller saves it on, where the Metaverse gate finds it from then on. The caller releases its claims
+    /// (<see cref="UniqueValueReservationSet.ReleaseAll"/>) once those objects are saved. The connector space gate does
+    /// not apply: nothing flows these values to a Connected System yet.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<bool>> ClaimValuesAsync(IReadOnlyList<UniqueValueClaim> claims, UniqueValueResolveOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(claims);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (claims.Count == 0)
+            return [];
+
+        // The gates are written over generation requests, so each claim is expressed as one. The settings are transient
+        // and never saved: "never reuse" on, so the retired values register applies, exactly as it does for every
+        // Sequence and for every generated mapping left at its default.
+        var settings = new SyncRuleMappingGeneration { NeverReuse = true };
+        var requests = claims.Select(claim => new GenerationRequest
+        {
+            Mode = GeneratedValueMode.Import,
+            MetaverseAttributeId = claim.MetaverseAttributeId,
+            Generation = settings,
+            TargetType = claim.TargetType,
+            AttributeName = claim.AttributeName,
+            BaseValue = claim.Value
+        }).ToList();
+
+        var candidates = new Dictionary<int, (string Text, long? Numeric)>(claims.Count);
+        for (var i = 0; i < claims.Count; i++)
+        {
+            if (requests[i].TargetType is AttributeDataType.Number or AttributeDataType.LongNumber && !claims[i].NumericValue.HasValue)
+                throw new ArgumentException($"The claim for {claims[i].AttributeName} is for a number attribute but carries no numeric value.", nameof(claims));
+
+            candidates[i] = (claims[i].Value, claims[i].NumericValue);
+        }
+
+        var noForms = new Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>>();
+        var rejections = new CandidateRejections(requests);
+        var claimedThisCall = new HashSet<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)>();
+        var ownerId = options.ReservationOwnerId;
+
+        var survivors = FilterReservationGate([.. Enumerable.Range(0, claims.Count)], requests, candidates, noForms, options, ownerId, claimedThisCall, rejections);
+        if (survivors.Count > 0)
+            survivors = await FilterRetiredGateAsync(survivors, requests, candidates, rejections);
+        if (survivors.Count > 0)
+            survivors = await FilterValueGateAsync(survivors, requests, candidates, noForms, rejections);
+        if (survivors.Count > 0)
+            survivors = await FilterOtherAssignmentsGateAsync(survivors, requests, candidates, noForms, rejections);
+
+        // Claimed in order, so where one value appears twice the first claim wins and the second finds it taken.
+        var claimed = new bool[claims.Count];
+        foreach (var i in survivors)
+        {
+            var keys = ReservationKeysOf(requests[i], candidates[i].Text.ToLowerInvariant(), null);
+            claimed[i] = options.Reservations.TryReserveAll(ownerId, keys);
+        }
+
+        return claimed;
+    }
+
+    /// <summary>
     /// Loads the live assignments for the given objects into <paramref name="options"/>'s run-scoped cache, in
     /// one query per mode, so that <see cref="ResolveAsync"/> calls made for these objects later in the same
     /// run answer the sticky check from the cache rather than querying again. Callers use this ahead of a page

@@ -479,15 +479,23 @@ public class SyncExportTaskProcessor
                 // A rejected generated value that could not safely be corrected (#242, release 4): named for the
                 // decision it waits on, not as a failed export, and worded in full by the export server.
                 executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
-                executionItem.ErrorMessage = exportItem.GeneratedValueCollision.Message;
+                if (exportItem.GeneratedValueCollision.MessageDetail is { } collisionDetail)
+                    executionItem.ErrorMessageDetail = collisionDetail;
+                else
+                    executionItem.ErrorMessage = exportItem.GeneratedValueCollision.Message;
             }
             else if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
                 executionItem.ErrorType = ToExecutionItemErrorType(exportItem.ErrorType);
+
+                // JIM's own wording is stored as the message it is; another system's words stay the text they are.
+                MessageArgument cause = exportItem.ErrorMessageDetail is { } causeDetail ? causeDetail : exportItem.ErrorMessage;
                 if (exportItem.ErrorCount > 1)
-                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailedAfterAttempts), ActivityMessage.Plain(exportItem.ErrorCount), exportItem.ErrorMessage);
+                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailedAfterAttempts), ActivityMessage.Plain(exportItem.ErrorCount), cause);
                 else if (exportItem.ErrorCount == 1)
-                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailed), exportItem.ErrorMessage);
+                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailed), cause);
+                else if (exportItem.ErrorMessageDetail is { } detail)
+                    executionItem.ErrorMessageDetail = detail;
                 else
                     executionItem.ErrorMessage = exportItem.ErrorMessage;
             }
@@ -499,7 +507,10 @@ public class SyncExportTaskProcessor
                 // Activity with a warning. Only raised under Error handling; see
                 // ExportExecutionServer.BuildUnresolvedReferenceNotes.
                 executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
+                if (exportItem.UnresolvedReferenceMessageDetail is { } unresolvedDetail)
+                    executionItem.ErrorMessageDetail = unresolvedDetail;
+                else
+                    executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
             }
 
             // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
@@ -511,6 +522,12 @@ public class SyncExportTaskProcessor
                 exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated,
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null,
                     detailMessage: exportItem.GeneratedValueCollision!.Message);
+
+                // The sentence is JIM's own, so it is stored as the message it was written from as well, for the portal
+                // to show in the viewer's language (#3094); the English above stays what the REST API returns.
+                if (exportItem.GeneratedValueCollision.MessageDetail is { } remediatedDetail
+                    && remediatedDetail.ToEnglish() == exportOutcome.DetailMessage)
+                    exportOutcome.DetailMessageDetail = remediatedDetail;
             }
             else if (!stillQueued && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {

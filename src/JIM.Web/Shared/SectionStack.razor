@@ -1,0 +1,19 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The blocks of a page, tab or panel, one section gap (24px) apart (engineering/DESIGN.md > Layout > Spacing, #3095).
+   Children carry no vertical margins of their own: any they bring are neutralised, so the gap is the design system's
+   and never a page's. Follow a block with <SectionCaption> for helper text that describes it. *@
+<div class="jim-section-stack @Class">
+    @ChildContent
+</div>
+
+@code {
+    /// <summary>The blocks, top to bottom.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Classes for the stack itself, for horizontal or outer geometry only; never a vertical gap.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+}

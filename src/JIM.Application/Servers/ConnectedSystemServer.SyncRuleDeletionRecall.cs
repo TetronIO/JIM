@@ -262,7 +262,7 @@ public partial class ConnectedSystemServer
                         mvo, recalledValues, recallScope, priorityContext, Application.SyncRepo, IsSurvivorInScope,
                         survivorScopeAnswers) is { } undecidable)
                 {
-                    executionItems.Add(BuildHeldBackExecutionItem(mvo, undecidable.Message));
+                    executionItems.Add(BuildHeldBackExecutionItem(mvo, undecidable));
                     result.MetaverseObjectsHeldBack++;
                     Log.Warning("RecallSyncRuleContributedValuesAsync: MVO {MvoId} held back; a surviving contributor's scope could not be decided: {Message}",
                         mvo.Id, LogSanitiser.Sanitise(undecidable.Message));
@@ -433,11 +433,11 @@ public partial class ConnectedSystemServer
     /// Builds the per-object Run Profile Execution Item for an object the recall left as it was because a surviving
     /// contributor's scope could not be decided (#2336): a ScopingCriterionFailed error naming the criterion.
     /// </summary>
-    private static ActivityRunProfileExecutionItem BuildHeldBackExecutionItem(MetaverseObject mvo, string undecidable) => new()
+    private static ActivityRunProfileExecutionItem BuildHeldBackExecutionItem(MetaverseObject mvo, ScopingCriterionFailedException undecidable) => new()
     {
         Id = TimeOrderedIds.New(),
         ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
-        ErrorMessage = $"{undecidable} Metaverse Object {mvo.Id} was left as it was, with the values the Synchronisation Rule contributed.",
+        ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.RecallScopeHeldBack), ActivityMessage.CauseOf(undecidable), mvo.Id.ToString()),
         DisplayNameSnapshot = mvo.NameOrId,
         ObjectTypeSnapshot = mvo.Type?.Name
     };

@@ -129,7 +129,7 @@ public class SystemServer
             TargetType = ActivityTargetType.System,
             TargetOperationType = ActivityTargetOperationType.Reset,
             TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetFactoryReset)),
-            Message = result.BuildResetMessage(includeAdministrators)
+            MessageDetail = result.BuildResetMessageDetail(includeAdministrators)
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         // Mark it complete immediately: the reset is a point-in-time event, and leaving it InProgress

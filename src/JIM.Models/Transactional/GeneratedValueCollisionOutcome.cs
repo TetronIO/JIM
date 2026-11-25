@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Transactional;
@@ -36,6 +37,12 @@ public sealed class GeneratedValueCollisionOutcome
     /// needed, the correction otherwise.
     /// </summary>
     public required string Message { get; init; }
+
+    /// <summary>
+    /// <see cref="Message"/> as a message the portal shows in the reader's language (#3084); its English is exactly
+    /// <see cref="Message"/>. Null for an outcome built without one.
+    /// </summary>
+    public JimMessage? MessageDetail { get; init; }
 
     /// <summary>
     /// The id the export's Run Profile Execution Item takes: recorded on the assignment (and, for a remediation in import

@@ -4603,7 +4603,10 @@ public abstract class SyncTaskProcessorBase
     {
         var rpei = _activity.PrepareRunProfileExecutionItem();
         rpei.ErrorType = error.ErrorType;
-        rpei.ErrorMessage = error.Message;
+        if (error.MessageDetail is { } errorDetail)
+            rpei.ErrorMessageDetail = errorDetail;
+        else
+            rpei.ErrorMessage = error.Message;
         rpei.MetaverseObjectId = mvo.Id;
         rpei.DisplayNameSnapshot = mvo.NameOrId;
         rpei.ObjectTypeSnapshot = mvo.Type?.Name;
@@ -7369,7 +7372,7 @@ public abstract class SyncTaskProcessorBase
         // Rules that find different Metaverse Objects: JIM never chooses between them, so nothing is joined or projected.
         var disagreement = ObjectMatchingServer.DescribeImportRuleDisagreement(matches);
         if (disagreement != null)
-            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.Message)
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.MessageDetail)
             {
                 MatchCandidates = disagreement.Candidates
             };
@@ -7475,7 +7478,7 @@ public abstract class SyncTaskProcessorBase
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {
             // The candidates are recorded with the item, so the message describes the collision rather than listing ids.
-            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguity(ex))
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguityMessage(ex))
             {
                 MatchCandidates = ex.Candidates
             };

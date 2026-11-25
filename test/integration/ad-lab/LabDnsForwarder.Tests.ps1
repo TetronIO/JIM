@@ -8,7 +8,7 @@
     Pester tests for the optional DNS forwarder of the domain controller build scripts.
 
 .DESCRIPTION
-    The lab network has no uplink, so a domain controller has nothing to forward DNS to. -DnsForwarder is therefore
+    The reverted domain controllers resolve nothing outside their own forest (only dc-hybrid forwards). -DnsForwarder is therefore
     optional in host/New-LabDomainController.ps1 and guest/Initialize-LabDomainController.ps1, and the shared module
     accepts its absence (see LabDomainController.Tests.ps1). Both scripts are Windows-only and cannot run in CI, so this
     checks their parameter blocks and the host's settings hashtable with the PowerShell parser, and lifts the small pure

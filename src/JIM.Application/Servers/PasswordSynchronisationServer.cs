@@ -992,7 +992,7 @@ public class PasswordSynchronisationServer
     /// that writes userAccountControl with Enforce State on, which puts its value back at the next synchronisation.
     /// Either way a change at the next sign-in may stop being asked for, which matters for a helpdesk reset.
     /// </summary>
-    private static async Task<string?> DescribeFlagPutBackAsync(
+    private static async Task<JimMessage?> DescribeFlagPutBackAsync(
         ConnectedSystem connectedSystem,
         ConnectedSystemObject account,
         AccountFlagsDecision flags,
@@ -1003,8 +1003,7 @@ public class PasswordSynchronisationServer
             return null;
 
         if (flags.EnablementBasis == AccountFlagBasis.CompletesWithheldEnable)
-            return "\"Password never expires\" was changed on this account, but the export JIM held until the account had a password still carries " +
-                   "the Attribute Flow's userAccountControl, and writes it back, \"Password never expires\" and all, once it is released.";
+            return ActivityMessage.Create(nameof(ActivityMessages.PasswordPutBackWithheldEnable));
 
         List<SyncRule> rules;
         try
@@ -1024,9 +1023,7 @@ public class PasswordSynchronisationServer
         var enforcing = rules.FirstOrDefault(rule => AccountControlAttributeFlows.EnforcesAccountControl(rule, account.TypeId));
         return enforcing == null
             ? null
-            : $"\"Password never expires\" was changed on this account, but the Synchronisation Rule {enforcing.Name} writes its userAccountControl " +
-              "with Enforce State on, so the next synchronisation puts the Attribute Flow's value back, and with it whether the password never " +
-              "expires; while that value keeps \"Password never expires\" set, Active Directory does not ask for a change at the next sign-in.";
+            : ActivityMessage.Create(nameof(ActivityMessages.PasswordPutBackEnforced), enforcing.Name);
     }
 
     /// <summary>
@@ -1057,7 +1054,7 @@ public class PasswordSynchronisationServer
         if (account == null)
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
-                $"Initial password no longer needed: the account it was for no longer exists in {connectedSystem.Name}, or is no longer joined to this person.");
+                ActivityMessage.Create(nameof(ActivityMessages.PasswordWithdrawnAccountGone), connectedSystem.Name));
             return PasswordDeliveryAttempt.Withdrawn;
         }
 
@@ -1071,7 +1068,7 @@ public class PasswordSynchronisationServer
         if (initialPasswordConfiguration is not { Enabled: true })
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
-                "Initial password no longer needed: the Synchronisation Rule that provisioned this account no longer sets one, or has been deleted.");
+                ActivityMessage.Create(nameof(ActivityMessages.PasswordWithdrawnRuleOff)));
             return PasswordDeliveryAttempt.Withdrawn;
         }
 
@@ -1219,7 +1216,7 @@ public class PasswordSynchronisationServer
     /// <param name="note">For a delivery, information about how the account's flags came out, added to the message.</param>
     /// <param name="caveat">For a delivery, what did not go as asked, which completes the Activity with a warning.</param>
     private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success,
-        string? delivered = null, string? note = null, string? caveat = null)
+        JimMessage? delivered = null, JimMessage? note = null, JimMessage? caveat = null)
     {
         var failure = success ? null : DescribeFailure(connectedSystem, change);
 
@@ -1235,8 +1232,8 @@ public class PasswordSynchronisationServer
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystemObjectId = change.ConnectedSystemObjectId,
             MetaverseObjectId = change.MetaverseObjectId,
-            Message = success
-                ? (delivered ?? $"Password set on {connectedSystem.Name}.") + (note == null ? string.Empty : $" {note}") + (caveat == null ? string.Empty : $" {caveat}")
+            MessageDetail = success
+                ? JoinSentences(JoinSentences(delivered ?? ActivityMessage.Create(nameof(ActivityMessages.PasswordSetSentence), connectedSystem.Name), note), caveat)
                 : failure
         };
 
@@ -1255,7 +1252,10 @@ public class PasswordSynchronisationServer
         // (#2159). Completed with a warning so the difference reaches everything that reads outcomes by status, which
         // is how the portal, the REST API and PowerShell decide whether to say "Set" plainly.
         if (!success)
-            await _completeActivityWithError(activity, failure!);
+        {
+            activity.ErrorMessageDetail = failure;
+            await _completeActivityWithError(activity, failure!.ToEnglish());
+        }
         else if (caveat != null)
             await _completeActivityWithWarning(activity);
         else
@@ -1276,7 +1276,7 @@ public class PasswordSynchronisationServer
     /// <param name="standIn">Whether the password was delivered as an account's first password in place of its Initial Password (#2160).</param>
     private async Task<PasswordDeliveryAttempt> RecordDeliveredAsync(ConnectedSystem connectedSystem, PendingPasswordChange change,
         AccountFlagsDecision flags, PasswordExpiryBehaviour requestedExpiry, PasswordSetResult setResult, string password,
-        bool staticInitialPassword, string? putBack, InitialPasswordStandIn standIn = InitialPasswordStandIn.None)
+        bool staticInitialPassword, JimMessage? putBack, InitialPasswordStandIn standIn = InitialPasswordStandIn.None)
     {
         var delivered = DescribeDelivery(connectedSystem, change, flags, setResult, standIn);
         var note = DescribePasswordNeverExpires(connectedSystem, flags, requestedExpiry, setResult);
@@ -1285,8 +1285,8 @@ public class PasswordSynchronisationServer
         return PasswordDeliveryAttempt.Delivered(flags, expiryBehaviourHonoured: setResult.ExpiryBehaviourHonoured, standIn);
     }
 
-    private static string? JoinSentences(string? first, string? second) =>
-        first == null ? second : second == null ? first : $"{first} {second}";
+    private static JimMessage? JoinSentences(JimMessage? first, JimMessage? second) =>
+        first == null ? second : second == null ? first : ActivityMessage.Spaced(first, second);
 
     /// <summary>
     /// What a Connector that set the password could not do of what was asked (#2159), for the delivery's Activity:
@@ -1299,7 +1299,7 @@ public class PasswordSynchronisationServer
     /// depends on the echo matching exactly.
     /// </para>
     /// </summary>
-    private static string? DescribeCaveat(ConnectedSystem connectedSystem, AccountFlagsDecision flags, PasswordSetResult setResult,
+    private static JimMessage? DescribeCaveat(ConnectedSystem connectedSystem, AccountFlagsDecision flags, PasswordSetResult setResult,
         string password, bool staticInitialPassword)
     {
         if (setResult.ExpiryBehaviourHonoured)
@@ -1307,19 +1307,21 @@ public class PasswordSynchronisationServer
 
         var applied = setResult.AppliedExpiryBehaviour switch
         {
-            PasswordExpiryBehaviour.RequireChangeAtNextSignIn => ": a change is required at the next sign-in",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy => $": the password expires according to {connectedSystem.Name}'s own password policy",
-            PasswordExpiryBehaviour.NeverExpires => ": the password never expires",
-            _ => string.Empty
+            PasswordExpiryBehaviour.RequireChangeAtNextSignIn => ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatRequireChange)),
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy => ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatExpiresByPolicy), connectedSystem.Name),
+            PasswordExpiryBehaviour.NeverExpires => ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatNeverExpires)),
+            _ => ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatBase))
         };
 
+        // The Connector's own words stay as it wrote them; JIM's withholding of them is its own wording.
         var warning = setResult.ExpiryBehaviourWarning?.Trim();
-        if (!string.IsNullOrEmpty(warning) && !string.IsNullOrEmpty(password) && warning.Contains(password, StringComparison.OrdinalIgnoreCase))
-            warning = "[the Connected System's warning is withheld because it contained the password]";
+        JimMessage? warningMessage = null;
+        if (!string.IsNullOrEmpty(warning))
+            warningMessage = !string.IsNullOrEmpty(password) && warning.Contains(password, StringComparison.OrdinalIgnoreCase)
+                ? ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatWarningWithheld))
+                : ActivityMessage.Create(nameof(ActivityMessages.Verbatim), warning);
 
-        var caveat = string.IsNullOrEmpty(warning)
-            ? $"Not everything asked for could be applied{applied}."
-            : $"Not everything asked for could be applied{applied}. {warning}";
+        var caveat = warningMessage == null ? applied : ActivityMessage.Spaced(applied, warningMessage);
 
         // A change at the next sign-in defeated by "Password never expires" left set: say who keeps the flag, and, for a
         // Static Initial Password, the consequence that makes it matter most.
@@ -1327,13 +1329,10 @@ public class PasswordSynchronisationServer
             return caveat;
 
         var owner = flags.PasswordNeverExpiresBasis == AccountFlagBasis.LeftToAttributeFlow
-            ? "\"Password never expires\" was left to the export that writes userAccountControl, which keeps it set; set it in that Attribute Flow " +
-              "only where passwords should never expire, or choose another expiry for the Initial Password."
-            : "A password set on every Connected System leaves \"Password never expires\" as each account has it.";
-        var shared = staticInitialPassword
-            ? " Every account given this Synchronisation Rule's Static Initial Password therefore keeps that one shared password, which never expires."
-            : string.Empty;
-        return $"{caveat} {owner}{shared}";
+            ? ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatOwnerLeftToExport))
+            : ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatOwnerAsAccountHas));
+        var explained = ActivityMessage.Spaced(caveat, owner);
+        return staticInitialPassword ? ActivityMessage.Spaced(explained, ActivityMessage.Create(nameof(ActivityMessages.PasswordCaveatSharedStatic))) : explained;
     }
 
     /// <summary>
@@ -1343,7 +1342,7 @@ public class PasswordSynchronisationServer
     /// The wording names the export that writes userAccountControl rather than an Attribute Flow, because the mark that
     /// decided it is also set by a Delete performed as a disable.
     /// </summary>
-    private static string? DescribePasswordNeverExpires(ConnectedSystem connectedSystem, AccountFlagsDecision flags,
+    private static JimMessage? DescribePasswordNeverExpires(ConnectedSystem connectedSystem, AccountFlagsDecision flags,
         PasswordExpiryBehaviour requestedExpiry, PasswordSetResult setResult)
     {
         if (flags.PasswordNeverExpires != null || !setResult.ExpiryBehaviourHonoured || setResult.AppliedExpiryBehaviour is not { } applied)
@@ -1357,15 +1356,12 @@ public class PasswordSynchronisationServer
         var leftToExport = flags.PasswordNeverExpiresBasis == AccountFlagBasis.LeftToAttributeFlow;
         if (neverExpires)
             return leftToExport
-                ? "\"Password never expires\" was left to the export that writes userAccountControl, which sets it, so the password never expires."
-                : "\"Password never expires\" was left as the account has it, which is set, so the password never expires.";
+                ? ActivityMessage.Create(nameof(ActivityMessages.PasswordNoteLeftToExportSet))
+                : ActivityMessage.Create(nameof(ActivityMessages.PasswordNoteLeftSet));
 
         return leftToExport
-            ? "\"Password never expires\" was left to the export that writes userAccountControl, which leaves it off, so the password expires " +
-              $"according to {connectedSystem.Name}'s own password policy. To have these passwords never expire, set Password never expires " +
-              "(65536) in the Attribute Flow that writes userAccountControl."
-            : "A password set on every Connected System leaves \"Password never expires\" as each account has it, so the Never expires asked for " +
-              $"was not applied; the password expires according to {connectedSystem.Name}'s own password policy.";
+            ? ActivityMessage.Create(nameof(ActivityMessages.PasswordNoteLeftToExportOff), connectedSystem.Name)
+            : ActivityMessage.Create(nameof(ActivityMessages.PasswordNoteEverySystemOff), connectedSystem.Name);
     }
 
     /// <summary>
@@ -1374,7 +1370,7 @@ public class PasswordSynchronisationServer
     /// work simply stopped being needed, either because the account it was for is gone or because the
     /// Synchronisation Rule that provisioned it no longer sets one.
     /// </summary>
-    private async Task RecordWithdrawnOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, string message)
+    private async Task RecordWithdrawnOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, JimMessage message)
     {
         var activity = new Activity
         {
@@ -1386,7 +1382,7 @@ public class PasswordSynchronisationServer
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystemObjectId = change.ConnectedSystemObjectId,
             MetaverseObjectId = change.MetaverseObjectId,
-            Message = message
+            MessageDetail = message
         };
 
         await _createSystemActivity(activity);
@@ -1401,51 +1397,43 @@ public class PasswordSynchronisationServer
     /// promises about the account came out. An enable is claimed only where the Connected System applied everything
     /// asked of it: a directory that cannot enable an account says so on the warning instead.
     /// </summary>
-    private static string DescribeDelivery(ConnectedSystem connectedSystem, PendingPasswordChange change, AccountFlagsDecision flags,
+    private static JimMessage DescribeDelivery(ConnectedSystem connectedSystem, PendingPasswordChange change, AccountFlagsDecision flags,
         PasswordSetResult setResult, InitialPasswordStandIn standIn)
     {
         var system = connectedSystem.Name;
         var set = standIn switch
         {
-            _ when change.IsProvisioned => $"Initial password set on {system}",
-            InitialPasswordStandIn.Applies => $"Password set on {system} as this Connected System Object's first password, in place of its Initial Password",
-            InitialPasswordStandIn.NoLongerSet => $"Password set on {system} as this Connected System Object's first password. The Synchronisation Rule " +
-                                                  "that provisioned it no longer sets an Initial Password, or has been deleted, so its settings for enabling " +
-                                                  "the Connected System Object and for whether its password never expires were not applied",
-            InitialPasswordStandIn.OtherAccount => $"Password set on {system}. It was also to be the first password of a Connected System Object there " +
-                                                   "that is no longer this person's, so that Initial Password's settings for enabling the Connected System " +
-                                                   "Object and for whether its password never expires were not applied to this one",
-            _ => $"Password set on {system}"
+            _ when change.IsProvisioned => ActivityMessage.Create(nameof(ActivityMessages.PasswordSetInitial), system),
+            InitialPasswordStandIn.Applies => ActivityMessage.Create(nameof(ActivityMessages.PasswordSetStandInApplies), system),
+            InitialPasswordStandIn.NoLongerSet => ActivityMessage.Create(nameof(ActivityMessages.PasswordSetStandInNoLongerSet), system),
+            InitialPasswordStandIn.OtherAccount => ActivityMessage.Create(nameof(ActivityMessages.PasswordSetStandInOtherAccount), system),
+            _ => ActivityMessage.Create(nameof(ActivityMessages.PasswordSetPlain), system)
         };
 
         var enabled = flags.EnableAccount == true && setResult.ExpiryBehaviourHonoured;
         return flags.EnablementBasis switch
         {
-            AccountFlagBasis.LeftToAttributeFlow =>
-                $"{set}. The account's enabled state was left to its Attribute Flow, which sets it, so the Initial Password's \"Enable the Connected System Object once the password is set\" did not apply.",
-            AccountFlagBasis.CompletesWithheldEnable =>
-                $"{set}, and the account enabled as its Attribute Flow asks: JIM held the enable back until the account had a password.",
-            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies && enabled =>
-                $"{set}, and the Connected System Object enabled as the Synchronisation Rule's Initial Password asks.",
-            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies && flags.EnableAccount == true =>
-                $"{set}. The Synchronisation Rule's Initial Password asks for the Connected System Object to be enabled.",
-            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies =>
-                $"{set}. The Synchronisation Rule's Initial Password does not enable it, so it was left as it was created.",
-            _ => $"{set}."
+            AccountFlagBasis.LeftToAttributeFlow => ActivityMessage.Create(nameof(ActivityMessages.PasswordDeliveryEnableLeftToFlow), set),
+            AccountFlagBasis.CompletesWithheldEnable => ActivityMessage.Create(nameof(ActivityMessages.PasswordDeliveryEnableCompletesWithheld), set),
+            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies && enabled => ActivityMessage.Create(nameof(ActivityMessages.PasswordDeliveryEnabledAsAsked), set),
+            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies && flags.EnableAccount == true => ActivityMessage.Create(nameof(ActivityMessages.PasswordDeliveryEnableAsksOnly), set),
+            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies => ActivityMessage.Create(nameof(ActivityMessages.PasswordDeliveryEnableNotAsked), set),
+            _ => ActivityMessage.Create(nameof(ActivityMessages.PasswordDeliveryPlain), set)
         };
     }
 
-    private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
+    internal static JimMessage DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
     {
         var disposition = change.Status == PendingPasswordChangeStatus.Parked
-            ? "JIM has stopped trying; retry it once the cause is fixed"
-            : "JIM will try again";
+            ? ActivityMessage.Create(nameof(ActivityMessages.PasswordRetryParked))
+            : ActivityMessage.Create(nameof(ActivityMessages.PasswordRetryAgain));
 
-        var reason = string.IsNullOrWhiteSpace(change.TargetMessage)
-            ? change.FailureReason?.ToString() ?? "an unknown reason"
+        // The target's own words stay as it wrote them; JIM's name for a failure is a message of its own.
+        MessageArgument reason = string.IsNullOrWhiteSpace(change.TargetMessage)
+            ? change.FailureReason is { } failure ? ActivityMessage.PasswordFailureReason(failure) : ActivityMessage.Create(nameof(ActivityMessages.PasswordReasonUnknown))
             : change.TargetMessage;
 
-        return $"Password not set on {connectedSystem.Name}: {reason}. {disposition}.";
+        return ActivityMessage.Create(nameof(ActivityMessages.PasswordNotSet), connectedSystem.Name, reason, disposition);
     }
 
     /// <summary>
@@ -1771,9 +1759,7 @@ public class PasswordSynchronisationServer
         // consequences.
         await RecordQueueActionAsync(
             ActivityTargetOperationType.RetryPasswordDelivery,
-            retried == 1
-                ? "1 queued password change will be attempted again."
-                : $"{retried} queued password changes will be attempted again.",
+            ActivityMessage.Counted(nameof(ActivityMessages.PasswordQueueRetryOne), retried, ActivityMessage.Plain(retried)),
             filter,
             initiatedBy,
             initiatedByApiKey);
@@ -1803,9 +1789,7 @@ public class PasswordSynchronisationServer
 
         await RecordQueueActionAsync(
             ActivityTargetOperationType.CancelPasswordDelivery,
-            cancelled == 1
-                ? "1 queued password change will not be delivered."
-                : $"{cancelled} queued password changes will not be delivered.",
+            ActivityMessage.Counted(nameof(ActivityMessages.PasswordQueueCancelOne), cancelled, ActivityMessage.Plain(cancelled)),
             filter,
             initiatedBy,
             initiatedByApiKey);
@@ -1856,7 +1840,7 @@ public class PasswordSynchronisationServer
     /// </summary>
     private async Task RecordQueueActionAsync(
         ActivityTargetOperationType operation,
-        string message,
+        JimMessage message,
         PendingPasswordChangeFilter filter,
         MetaverseObject? initiatedBy,
         ApiKey? initiatedByApiKey)
@@ -1865,10 +1849,10 @@ public class PasswordSynchronisationServer
         {
             TargetType = ActivityTargetType.PasswordSynchronisation,
             TargetOperationType = operation,
-            TargetName = DescribeFilter(filter),
+            TargetNameDetail = DescribeFilter(filter),
             ConnectedSystemId = filter.ConnectedSystemId,
             MetaverseObjectId = filter.MetaverseObjectId,
-            Message = message
+            MessageDetail = message
         };
 
         await _createActivity(activity, initiatedBy, initiatedByApiKey);
@@ -1879,21 +1863,23 @@ public class PasswordSynchronisationServer
     /// Names what an action ran over, for the Activity's target. Says what the administrator chose rather than
     /// what it resolved to, because that is what they will look for later.
     /// </summary>
-    private static string DescribeFilter(PendingPasswordChangeFilter filter)
+    internal static JimMessage DescribeFilter(PendingPasswordChangeFilter filter)
     {
         if (filter.TargetsSpecificChanges)
-            return filter.Ids!.Count == 1 ? "One password change" : $"{filter.Ids!.Count} password changes";
+            return filter.Ids!.Count == 1
+                ? ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterOneChange))
+                : ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterChanges), ActivityMessage.Plain(filter.Ids!.Count));
 
-        var parts = new List<string>();
+        var parts = new List<JimMessage>();
 
         if (filter.Status.HasValue)
-            parts.Add(filter.Status.Value.ToString());
+            parts.Add(ActivityMessage.PasswordChangeStatus(filter.Status.Value));
 
         if (filter.FailureReason.HasValue)
-            parts.Add(filter.FailureReason.Value.ToString());
+            parts.Add(ActivityMessage.PasswordFailureReason(filter.FailureReason.Value));
 
-        return parts.Count == 0
-            ? "The Password Synchronisation queue"
-            : $"{string.Join(", ", parts)} password changes";
+        return ActivityMessage.Listed(parts) is { } chosen
+            ? ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterChangesNamed), chosen)
+            : ActivityMessage.Create(nameof(ActivityMessages.PasswordFilterWholeQueue));
     }
 }

@@ -26,6 +26,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 
 | Component | Use for | See |
 |-----------|---------|-----|
+| `<SectionStack>` | The blocks of a page, tab or panel, one section gap (24px) apart; children carry no vertical margins | "Vertical spacing" below |
+| `<SectionCaption>` | Helper text for the block directly above it in a `<SectionStack>`, one caption gap (8px) below it | "Vertical spacing" below |
 | `<TableDensityToggle @bind-Dense="_dense" />` | The compact/normal row toggle in a table's `ToolBarContent` | "Row density" below |
 | `<SegmentedToggle TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive settings or views (the causality panel's view, the Inspect view's Group by, the Metaverse Object's Form/Tabs/Inspect): the quiet slider, not a `MudButtonGroup`. Options are `SegmentedToggleOption<T>`; give options an `Href` to choose between sibling pages as links (`SiblingPages`), a `Tooltip` where the label alone is too terse, and an `Icon` before the label; `Dense` for rows in a list or table | `Shared/SegmentedToggle.razor` |
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
@@ -413,6 +415,10 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 - `ToFriendlyDate()` returns an unambiguous, culture-independent format (day-month-name-year, 24-hour clock with seconds); do not reintroduce culture-dependent short formats (`ToShortDateString()`/`ToShortTimeString()`) for this purpose.
 - Both extension methods take a `DateTime`, not a `DateTimeOffset`; per the DateTime Handling rules in `src/CLAUDE.md`, call `.ToLocalTime()` first when the stored value is UTC and the display should be in the user's local time (the common case for tooltips over `Created`/`ChangeTime`-style fields).
 - `ToShortDateString()` remains fine for a **date-only** value with no time component (e.g. `ExampleDataTemplateDetail.razor`'s Min/Max Date chips); `ToFriendlyDate()` is for full date **and** time.
+
+## Vertical spacing
+
+**Vertical gaps come from the design system, by role: `engineering/DESIGN.md` > Layout > Spacing.** Section gap (24px) between independent blocks, field gap (16px) within a form, caption gap (8px) from a block to its helper text. Put a page's or tab's blocks in a `<SectionStack>`, and its helper text in a `<SectionCaption>` straight after the block it describes; place no `mt-`/`mb-`/`my-`/`ma-` margins of your own, and never match a neighbouring page's value. `VerticalSpacingConventionTests` counts hand-placed vertical margins per file against a baseline that may only fall, so a new margin fails the build; migrate a page to `<SectionStack>` when you touch its layout and lower the baseline (`JIM_UPDATE_SPACING_BASELINE=1 dotnet test test/JIM.Web.Tests --filter VerticalSpacingConventionTests`). The Schema page's tabs are the worked example. The "Panel spacing" rules below describe pages not yet migrated (#3095); they are not a pattern for new markup.
 
 ## Panel spacing (target: uniform `mt-6` visual gaps between all block-level sections)
 - Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections

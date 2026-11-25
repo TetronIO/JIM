@@ -52,6 +52,7 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | `host/Get-LabDomainController.ps1` | Hyper-V host | State, checkpoints and guest OS build (`-AsJson` for the runner) |
 | `host/Remove-LabDomainController.ps1` | Hyper-V host | Stops and removes the VM, its checkpoints and its disk (needs `-Force`) |
 | `host/Grant-LabDelegation.ps1` | Hyper-V host | Applies the delegation to a container created at run time (`-Tombstones` for Deleted Objects) |
+| `host/Initialize-LabHybridForest.ps1` | Hyper-V host | Prepares `dc-hybrid` after its build: creates `OU=CloudSync` and turns Windows Update on, Sundays at 10:00 UTC; see [The hybrid forest](#the-hybrid-forest) |
 | `host/Invoke-LabRebuild.ps1` | Hyper-V host | One phase of the monthly rebuild (`Prune`, `Build`, `Stage`, `Promote`, `Rollback`, `Status`): builds a candidate set beside the live one and swaps names only when the suite passes; see [Monthly rebuild](#monthly-rebuild) |
 | `host/Install-LabScripts.ps1` | Hyper-V host or the repository clone | Copies the host and guest scripts into `C:\jim-ad-lab` in the layout above, and does what `jim-lab` is refused (Host access); see [Deploying to the host](#deploying-to-the-host) |
 | `guest/autounattend.xml` | Guest (via ISO) | Template for the unattended install; rendered by the module |
@@ -83,9 +84,12 @@ The hypervisor host needs, once:
    one cannot be converted once promoted, and its timer runs in real time regardless of checkpoint reverts. Evaluation
    *media* is fine, though: see item 5.
 2. **An Internal virtual switch called `Lab`** (not External, and not Private), which the domain controllers and the
-   runner VM's second adapter attach to. An Internal switch gives the host an adapter of its own on the lab network and
-   has no uplink, so nothing routes out: the domain controllers reach only the host and each other, and the host does not
-   forward. The host is the only NTP-synchronised machine they can reach, so it serves NTP on that adapter (UDP 123,
+   runner VM's second adapter attach to. An Internal switch gives the host an adapter of its own on the lab network
+   (`10.99.0.1/24` in the examples) and keeps the lab off any physical network, so nothing outside can reach it. The host
+   gives the lab outbound access only, through a Windows NAT network (`LabNat`), which the ci-runners repository's
+   `New-LabSwitches.ps1` creates with the switch (Windows allows one NAT network per host). In practice only `dc-hybrid` uses it (see The hybrid forest): the other
+   domain controllers have no DNS forwarder, so they resolve nothing outside their own forest, and they do not run
+   Windows Update. The host is the only NTP-synchronised machine they can reach, so it serves NTP on that adapter (UDP 123,
    that interface only, and no SSH); and it needs a path to them for diagnostics and for
    `Restore-LabDomainController.ps1`'s TCP check when no password is available. The runner VM is the only machine that
    bridges the CI network and the lab. Nothing in the lab trusts, or is trusted by, any real domain.
@@ -112,7 +116,7 @@ The hypervisor host needs, once:
    a Windows Server 2025 schema master to have the November 2025 update (build 26100.7171) or later before Exchange
    extends the schema; the `Extend` phase refuses an older one.
 7. **The Exchange prerequisites that are not on its media**, for the Exchange servers only, downloaded once into one
-   folder (`settings.json` `exchangePrerequisiteDirectory`) under these names, because the lab network has no route out:
+   folder (`settings.json` `exchangePrerequisiteDirectory`) under these names, because the Exchange servers resolve nothing outside their forest:
 
    | File | Download | What it is |
    |------|----------|------------|
@@ -235,13 +239,13 @@ the first build below is easiest when it is driven from the same values:
 | `switchName` | The Internal `Lab` switch the domain controllers attach to (not the external `CI` switch) |
 | `ntpServer` | The host's own address on the `Lab` switch (for example `10.99.0.1`): the only NTP-synchronised machine the domain controllers can reach |
 | `directoryExtensions` | The products extending every forest, in the order applied: `[{ "product": "Exchange", "isoPath": "<Exchange Server SE ISO>" }]`. Empty or absent builds plain forests |
-| `domainControllers` | Per virtual machine (`dc-primary`, `dc-source`, `dc-target`): `domain`, `ipAddress`, `prefixLength`, `gateway` (also the host's address on `Lab`, which leads nowhere by design: the switch has no uplink), `enableRecycleBin` |
+| `domainControllers` | Per virtual machine (`dc-primary`, `dc-source`, `dc-target`): `domain`, `ipAddress`, `prefixLength`, `gateway` (the host's address on `Lab`, which NATs outbound traffic), `enableRecycleBin` |
 | `federationServers` | Per AD FS server (`adfs-primary`): `domainController` (the VM whose forest it joins; its domain and address come from there), `ipAddress`, `prefixLength`, `gateway`, and optionally `computerName` (default `adfs1`) and `serviceName` (default `adfs`) |
 | `exchangeServers` | Per Exchange server (`exchange-primary`): `domainController` (the VM whose forest it joins; its domain and address come from there), `ipAddress`, `prefixLength`, `gateway`, and optionally `computerName` (default `ex1`). It installs from the `directoryExtensions` Exchange media |
 | `exchangePrerequisiteDirectory` | The folder holding the Exchange prerequisites that are not on its media (host prerequisite 7) |
 
-There is no `dnsForwarder`: the lab network has no uplink, so a domain controller has nothing to forward DNS to and
-resolves through itself.
+There is no `dnsForwarder`: the reverted domain controllers have no need to resolve anything outside their own forest,
+so they resolve through themselves alone. Only `dc-hybrid` is given one, and it is not in `settings.json`.
 
 The addresses must agree with what the runner virtual machine is told, `JIM_AD_LAB_PRIMARY_ADDRESS`, `_SOURCE_ADDRESS` and
 `_TARGET_ADDRESS`, which the runbook writes into the runner's `.env`. Neither file holds a password.
@@ -302,8 +306,8 @@ ci-runners runbook says what to check.
 
 Each build takes roughly 40 to 60 minutes: install, promotion, configuration, verification, checkpoint. Run it in an
 elevated PowerShell 7 session on the host, once per domain controller. Substitute your own paths and addresses. The
-examples take `10.99.0.1` as the host's address on the `Lab` switch: it is both the time source and the gateway (which
-leads nowhere), and there is no `-DnsForwarder`, because the network has no uplink.
+examples take `10.99.0.1` as the host's address on the `Lab` switch: it is both the time source and the gateway, and there is no `-DnsForwarder`, because these domain controllers need
+to resolve nothing outside their own forest.
 
 ```powershell
 $admin = Read-Host 'Administrator password' -AsSecureString
@@ -615,6 +619,63 @@ standard output only where the runner needs data (`Get-LabDomainController.ps1 -
 The host-side variables the runner reads are `JIM_AD_LAB_CONTROL_HOST`, `JIM_AD_LAB_CONTROL_USER` (default `jim-lab`),
 `JIM_AD_LAB_CONTROL_KEY`, `JIM_AD_LAB_CONTROL_PORT` (default `22`) and `JIM_AD_LAB_SCRIPT_ROOT` (default `C:\jim-ad-lab`),
 alongside the per-instance addresses, host names, VM names and the two passwords listed in the PRD's harness section.
+
+## The hybrid forest
+
+Scenario 038 (#3029) tests JIM's Microsoft Entra ID Connector against objects that Entra Cloud Sync synchronises from
+Active Directory, and against Source of Authority switches. `onPremisesSyncEnabled` is set only by a synchronisation
+client, so those objects cannot be made through Graph; they need a real forest and a real Cloud Sync agent. That is a
+fourth forest, `dc-hybrid` (`MERIDIAN.LOCAL`, `dc1.meridian.local`), synchronised to a second, dedicated test tenant. It
+differs from the other three in three ways:
+
+- **It is never reverted.** A revert would roll back what Cloud Sync has already copied, and the agent's own
+  credentials with it. It has no checkpoint the runner uses, is not stopped by the power plan, and is left out of the
+  monthly rebuild (it is not in `settings.json`'s `domainControllers`); it is patched in place, by Windows Update on
+  Sundays at 10:00 UTC, clear of the nightly (which starts at 01:23 UTC and is cut off after six hours). Each run creates its objects in an organisational unit of its own under
+  `OU=CloudSync` and deletes that unit at the end, and a run first deletes any unit a failed run left.
+- **It must reach Microsoft.** The Cloud Sync agent makes outbound HTTPS connections only (no inbound port), to the
+  endpoints in Microsoft's [Cloud Sync prerequisites](https://learn.microsoft.com/entra/identity/hybrid/cloud-sync/how-to-prerequisites#firewall-and-proxy-requirements).
+  The host's NAT on the `Lab` switch provides the route (host prerequisite 2); `dc-hybrid` is the one domain controller
+  built with a DNS forwarder, so it is the one that can resolve Microsoft's names.
+- **Its agent is tier 0 for the hybrid tenant.** Whoever controls `dc-hybrid` controls what Cloud Sync writes there. The
+  tenant holds nothing but test objects, and is never the JIM test tenant (`tetronjim`), which Scenarios 035 to 037 use:
+  turning on directory synchronisation is hard to undo.
+
+Licensing: synchronising Active Directory to Entra ID with Cloud Sync, and switching an object's Source of Authority,
+both need only Microsoft Entra ID Free. A custom domain is not needed: a user whose UPN suffix (`meridian.local`) is
+not a verified domain is given the tenant's `onmicrosoft.com` suffix, which the scenario does not depend on.
+
+**One-time setup**, by an administrator, in this order:
+
+1. **The forest.** Build it as any domain controller (see Building a domain controller), with `-Name dc-hybrid -Domain
+   MERIDIAN.LOCAL` and its own address (`10.99.0.14` on the lab host), at least 4 GB of memory, `-SkipBaselineCheckpoint`,
+   and `-DnsForwarder` set to a public resolver (`1.1.1.1`). Nothing uses its `svc-jim`, so a random password nobody
+   keeps will do for `-ServiceAccountPassword`. Then run `host/Initialize-LabHybridForest.ps1`, which creates
+   `OU=CloudSync,DC=meridian,DC=local` and turns Windows Update back on for this machine alone. Re-running the build's
+   `Verify` phase on `dc-hybrid` afterwards reports updates as on; that is expected here.
+2. **Its route to Microsoft.** Confirm the host's NAT is in place (host prerequisite 2), then from `dc-hybrid`:
+   `Test-NetConnection login.microsoftonline.com -Port 443`.
+3. **The tenant.** Create a new Microsoft Entra tenant, and in it a cloud-only account with the Hybrid Identity
+   Administrator role, which the agent's installation signs in with.
+4. **The agent.** On `dc-hybrid`, install the Microsoft Entra provisioning agent (version 1.1.1370.0 or later, which
+   honours a Source of Authority switch) and register it with the tenant. In the Entra admin center, create a Cloud Sync
+   configuration for `meridian.local`, scoped to `OU=CloudSync`, and enable it.
+5. **Switching users back.** Entra ID refuses to switch a user's Source of Authority back to Active Directory while
+   the tenant's `blockCloudObjectTakeoverThroughHardMatchEnabled` is on, which it is by default. Turn it off once, with
+   `PATCH https://graph.microsoft.com/beta/directory/onPremisesSynchronization/{id}` and
+   `{"features":{"blockCloudObjectTakeoverThroughHardMatchEnabled":false}}`.
+6. **The CI app**, as for the JIM test tenant (Scenario 036 in `engineering/INTEGRATION_TESTING.md`): an app
+   registration with a federated credential for this repository's `jim-ad-lab` environment, holding
+   `Application.ReadWrite.OwnedBy`.
+7. **The Connector app.** As a Global Administrator, run `Register-JIMEntraIdConnector -TenantId <tenant>
+   -Name 'JIM Entra ID Connector (CI)' -TrackSourceOfAuthority` against any JIM, then make the CI app an owner of the
+   app registration and its service principal. The scenario replaces its certificate on every run.
+8. **The `jim-ad-lab` environment.** Set the variables `JIM_AD_LAB_HYBRID_ADDRESS`, `JIM_ENTRA_HYBRID_TENANT_ID` and
+   `JIM_ENTRA_HYBRID_CI_CLIENT_ID`. Until all three are set, the nightly leaves Scenario 038 out.
+   `JIM_AD_LAB_HYBRID_HOST`, `JIM_AD_LAB_HYBRID_VM` and `JIM_AD_LAB_HYBRID_DOMAIN` are optional.
+
+The scenario writes to the forest as its Administrator, over LDAPS through the LDAP toolbox, with the password the other
+forests share. It reports as the commit status `jim-entra-hybrid`.
 
 ## Monthly rebuild
 

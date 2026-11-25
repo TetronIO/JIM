@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ReferenceBinding" xml:space="preserve">
+    <value>Object Type binding: {0}</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the Metaverse Object Type's name.</comment>
+  </data>
+  <data name="ReferenceImportFlowInRule" xml:space="preserve">
+    <value>Import Attribute Flow in Synchronisation Rule '{0}'</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the Synchronisation Rule's name.</comment>
+  </data>
+  <data name="ReferenceImportFlowMapping" xml:space="preserve">
+    <value>Import Attribute Flow (mapping {0})</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the mapping's id.</comment>
+  </data>
+  <data name="ReferenceExportSourceInRule" xml:space="preserve">
+    <value>Export Attribute Flow source in Synchronisation Rule '{0}'</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the Synchronisation Rule's name.</comment>
+  </data>
+  <data name="ReferenceExportSourceMapping" xml:space="preserve">
+    <value>Export Attribute Flow source (mapping source {0})</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the mapping source's id.</comment>
+  </data>
+  <data name="ReferenceExportMappingInRuleRemoved" xml:space="preserve">
+    <value>Export Attribute Flow in Synchronisation Rule '{0}' (removed: it would be left with no sources)</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the Synchronisation Rule's name.</comment>
+  </data>
+  <data name="ReferenceExportMappingRemoved" xml:space="preserve">
+    <value>Export Attribute Flow (mapping {0}) removed: it would be left with no sources</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the mapping's id.</comment>
+  </data>
+  <data name="ReferenceScopingCriterion" xml:space="preserve">
+    <value>Scoping criterion {0}</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the criterion's id.</comment>
+  </data>
+  <data name="ReferenceObjectMatchingRule" xml:space="preserve">
+    <value>Object Matching Rule {0}</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the rule's id.</comment>
+  </data>
+  <data name="ReferencePredefinedSearchColumn" xml:space="preserve">
+    <value>Predefined Search column in '{0}'</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="ReferencePredefinedSearchCriterion" xml:space="preserve">
+    <value>Predefined Search criterion {0}</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the criterion's id.</comment>
+  </data>
+  <data name="ReferenceExampleDataAttribute" xml:space="preserve">
+    <value>Example Data template attribute {0}</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the template attribute's id.</comment>
+  </data>
+  <data name="ReferenceExampleDataDependency" xml:space="preserve">
+    <value>Example Data template attribute dependency {0}</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. {0}: the dependency's id.</comment>
+  </data>
+  <data name="ReferenceSsoMapping" xml:space="preserve">
+    <value>Service Settings SSO unique-identifier mapping (cleared)</value>
+    <comment>Describes something JIM removes with a Metaverse Attribute or Object Type, as part of an Activity's name or message. </comment>
+  </data>
+</root>

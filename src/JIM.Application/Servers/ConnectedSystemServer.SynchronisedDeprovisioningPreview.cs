@@ -205,7 +205,7 @@ public partial class ConnectedSystemServer
             {
                 progress.HeldBack.Add(original.Id);
                 if (mvo != null && objectName != null)
-                    deltas.Add(WouldFailForUndecidableScope(mvo, objectName, undecidableBeforehand, original.Id, pass.ConnectedSystemId));
+                    deltas.Add(WouldFailForUndecidableScope(mvo, objectName, undecidableBeforehand.Message, original.Id, pass.ConnectedSystemId));
                 continue;
             }
 

@@ -3,16 +3,19 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
+using JIM.Application.Localisation;
 using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -77,23 +80,27 @@ public class PendingExportDetailTests : JimComponentTestContext
     private void SetupChanges(
         List<PendingExportAttributeValueChange> changes,
         Dictionary<string, int>? totalCounts = null,
-        MetaverseObject? sourceMetaverseObject = null)
+        MetaverseObject? sourceMetaverseObject = null,
+        Action<PendingExport>? configure = null)
     {
+        var pendingExport = new PendingExport
+        {
+            Id = PendingExportId,
+            ConnectedSystemId = ConnectedSystemId,
+            ConnectedSystem = new ConnectedSystem { Id = ConnectedSystemId, Name = "Directory" },
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObject = sourceMetaverseObject,
+            SourceMetaverseObjectId = sourceMetaverseObject?.Id,
+            AttributeValueChanges = new(changes)
+        };
+        configure?.Invoke(pendingExport);
+
         _connectedSystems
             .Setup(r => r.GetPendingExportDetailAsync(PendingExportId))
             .ReturnsAsync(new PendingExportDetailResult
             {
-                PendingExport = new PendingExport
-                {
-                    Id = PendingExportId,
-                    ConnectedSystemId = ConnectedSystemId,
-                    ConnectedSystem = new ConnectedSystem { Id = ConnectedSystemId, Name = "Directory" },
-                    ChangeType = PendingExportChangeType.Update,
-                    Status = PendingExportStatus.Pending,
-                    SourceMetaverseObject = sourceMetaverseObject,
-                    SourceMetaverseObjectId = sourceMetaverseObject?.Id,
-                    AttributeValueChanges = new(changes)
-                },
+                PendingExport = pendingExport,
                 AttributeChangeTotalCounts = totalCounts ?? changes
                     .GroupBy(c => c.Attribute?.Name ?? $"Attribute {c.AttributeId}")
                     .ToDictionary(g => g.Key, g => g.Count())
@@ -178,6 +185,44 @@ public class PendingExportDetailTests : JimComponentTestContext
 
     private static IEnumerable<string> VisibleAttributeNames(IRenderedComponent<PendingExportDetail> cut) =>
         Table(cut).VisibleItems.Select(g => g.AttributeName);
+
+    /// <summary>
+    /// The last error JIM worded itself is stored as a message, so the page shows it in the viewer's language (#3094).
+    /// </summary>
+    [Test]
+    [SetUICulture("fr")]
+    public void PendingExportDetail_LastErrorStoredAsAMessage_ShowsItInTheViewersLanguage()
+    {
+        SetupChanges([], configure: pe =>
+        {
+            pe.ErrorCount = 1;
+            pe.LastErrorMessageDetail = ActivityMessage.ExportFailedNoReason();
+        });
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Find("pre").TextContent,
+            Is.EqualTo(MessageRenderer.Render(ActivityMessage.ExportFailedNoReason(), CultureInfo.GetCultureInfo("fr"), CultureInfo.GetCultureInfo("fr")))
+                .And.Not.EqualTo("Export failed")));
+    }
+
+    /// <summary>
+    /// A last error with no message (another system's words, or one stored before messages existed) is shown as stored.
+    /// </summary>
+    [Test]
+    [SetUICulture("fr")]
+    public void PendingExportDetail_LastErrorWithoutAMessage_ShowsTheStoredText()
+    {
+        SetupChanges([], configure: pe =>
+        {
+            pe.ErrorCount = 1;
+            pe.LastErrorMessage = "The directory went away.";
+        });
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Find("pre").TextContent, Is.EqualTo("The directory went away.")));
+    }
 
     /// <summary>
     /// The page names the runs that queued the export (#2100), each with a way into the Causality Explorer on its item.

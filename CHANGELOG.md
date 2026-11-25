@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Activities and Run Profile Execution Items in the REST API and PowerShell module now return each message's key and values beside its English, so an integration can show it in another language; the portal's Operations queue now shows live progress in the reader's language too (#3039).
 
 - ✨ A multi-valued Metaverse attribute can **Accumulate** values from every Connected System and keep them after the accounts that supplied them are deleted, for audit records such as every account a person has held. (#3059)
-- ✨ A multi-valued Metaverse attribute can **Merge** values from every Connected System: it holds every value any system supplies and drops one only once no system supplies it, so a set such as a person's email addresses stays in step with every source. The Data Flow view names each attribute's contribution mode. (#3059)
+- ✨ A multi-valued Metaverse attribute can **Merge** values from every Connected System, keeping each value while any system still supplies it, so a person's email addresses stay in step with every source; the Data Flow view names each attribute's contribution mode. (#3059)
 - ✨ JIM can reach the internet through an outbound proxy, as the Microsoft Entra ID Connector may need: the installer asks for one, and the standard `HTTPS_PROXY` and `NO_PROXY` settings work on Docker and Podman alike. (#3051)
 
 ### Changed
@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Example data no longer repeats values JIM already holds: `[UniqueInt]` patterns, Example Data Set patterns and numbers counting up now give each new object its own value, even when a template runs twice. (#1789)
 - 🐛 A Delta Import that finds an object deleted now confirms JIM's exported Delete of it and its exported removals of references to it, such as a leaver's group memberships, rather than leaving them waiting for a Full Import or, for the Delete, for ever.
 - 🐛 A queued group membership change or other reference to a Metaverse Object deleted before it was exported is now withdrawn at the next export, rather than holding its Pending Export open and being reported as awaiting provisioning on every run. (#3078)
 - 🐛 Behind an outbound proxy, the SCIM Connector now reads a service provider's certificate through the proxy, so **Fetch certificate** and a failed connection test show the certificate a TLS-inspecting proxy presents, ready to trust.

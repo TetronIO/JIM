@@ -3,6 +3,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
@@ -132,6 +133,29 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     /// Optional context message providing additional detail about the outcome.
     /// </summary>
     public string? DetailMessage { get; set; }
+
+    /// <summary>
+    /// <see cref="DetailMessage"/> as a stored message, so the portal can show it in the viewer's language (#3094). Null
+    /// where the detail is not JIM's own sentence (the column is also a channel for ids and values) or was written before
+    /// messages existed; the portal then shows <see cref="DetailMessage"/>. Set it through <see cref="DetailMessageDetail"/>.
+    /// Never returned by the REST API, which keeps returning <see cref="DetailMessage"/> as it is.
+    /// </summary>
+    public string? DetailMessageDetailJson { get; set; }
+
+    /// <summary>
+    /// The detail as a message. Setting it also sets <see cref="DetailMessage"/> to its British English, so the two can
+    /// never disagree.
+    /// </summary>
+    [NotMapped]
+    public JimMessage? DetailMessageDetail
+    {
+        get => MessageJson.Deserialise(DetailMessageDetailJson);
+        set
+        {
+            DetailMessageDetailJson = MessageJson.Serialise(value);
+            DetailMessage = value?.ToEnglish();
+        }
+    }
 
     /// <summary>
     /// Ordering among siblings in the tree, for consistent display order.

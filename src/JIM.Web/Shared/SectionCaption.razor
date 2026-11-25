@@ -1,0 +1,14 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Helper text describing the block directly above it in a <SectionStack>, one caption gap (8px) below it rather than a
+   section gap, so it reads as part of that block (engineering/DESIGN.md > Layout > Spacing, #3095). *@
+<MudText Typo="Typo.body2" Class="mud-text-secondary jim-section-caption">
+    @ChildContent
+</MudText>
+
+@code {
+    /// <summary>The caption's text.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

@@ -869,11 +869,12 @@ public partial class MetaverseServer
             foreach (var referenceChild in impact.References.Select(reference => new Activity
                      {
                          ParentActivityId = parent.Id,
+                         TargetNameDetail = reference.DescriptionDetail,
                          TargetName = reference.Description,
                          TargetContext = attribute.Name,
                          TargetType = ReferenceActivityTargetType(reference.Kind),
                          TargetOperationType = ActivityTargetOperationType.Delete,
-                         Message = $"Removed {reference.Description} referencing Metaverse Attribute '{attribute.Name}'"
+                         MessageDetail = ActivityMessage.MetaverseAttributeReferenceRemoved(reference, attribute.Name)
                      }))
             {
                 await createActivityAsync(referenceChild);
@@ -887,7 +888,7 @@ public partial class MetaverseServer
                 TargetName = attribute.Name,
                 TargetType = ActivityTargetType.MetaverseAttribute,
                 TargetOperationType = ActivityTargetOperationType.Delete,
-                Message = $"Removed Metaverse Attribute '{attribute.Name}'"
+                MessageDetail = ActivityMessage.MetaverseAttributeRemoved(attribute.Name)
             };
             await createActivityAsync(removalChild);
             await Application.Activities.CompleteActivityAsync(removalChild);
@@ -975,7 +976,7 @@ public partial class MetaverseServer
             TargetContext = impact.MetaverseObjectTypeName,
             TargetType = ActivityTargetType.MetaverseAttribute,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Unassigned Metaverse Attribute '{impact.AttributeName}' from Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
+            MessageDetail = ActivityMessage.MetaverseAttributeUnassigned(impact.AttributeName, impact.MetaverseObjectTypeName)
         };
         await createActivityAsync(parent);
 
@@ -986,11 +987,12 @@ public partial class MetaverseServer
             foreach (var referenceChild in impact.References.Select(reference => new Activity
                      {
                          ParentActivityId = parent.Id,
+                         TargetNameDetail = reference.DescriptionDetail,
                          TargetName = reference.Description,
                          TargetContext = impact.AttributeName,
                          TargetType = ReferenceActivityTargetType(reference.Kind),
                          TargetOperationType = ActivityTargetOperationType.Delete,
-                         Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
+                         MessageDetail = ActivityMessage.MetaverseReferenceRemovedScoped(ActivityMessage.DescribedReference(reference), impact.MetaverseObjectTypeName)
                      }))
             {
                 await createActivityAsync(referenceChild);
@@ -1221,7 +1223,7 @@ public partial class MetaverseServer
                          TargetContext = objectType.Name,
                          TargetType = ObjectTypeReferenceActivityTargetType(reference.Kind),
                          TargetOperationType = ActivityTargetOperationType.Delete,
-                         Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{objectType.Name}'"
+                         MessageDetail = ActivityMessage.MetaverseReferenceRemovedScoped(reference.Description, objectType.Name)
                      }))
             {
                 await createActivityAsync(referenceChild);
@@ -1235,7 +1237,7 @@ public partial class MetaverseServer
                 TargetName = objectType.Name,
                 TargetType = ActivityTargetType.MetaverseObjectType,
                 TargetOperationType = ActivityTargetOperationType.Delete,
-                Message = $"Removed Metaverse Object Type '{objectType.Name}'"
+                MessageDetail = ActivityMessage.MetaverseObjectTypeRemoved(objectType.Name)
             };
             await createActivityAsync(removalChild);
             await Application.Activities.CompleteActivityAsync(removalChild);

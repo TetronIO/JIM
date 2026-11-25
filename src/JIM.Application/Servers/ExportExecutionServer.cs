@@ -17,6 +17,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -1251,7 +1252,7 @@ public class ExportExecutionServer
         var finishedUnwritten = 0;
 
         // Read by batches as they record their outcomes, added to as each chunk is resolved.
-        var unresolvedReferenceNotes = new ConcurrentDictionary<Guid, string>();
+        var unresolvedReferenceNotes = new ConcurrentDictionary<Guid, JimMessage>();
 
         // What the pass records for exports it does not write. Kept off the result until the batches are done: the
         // parallel workers add their own outcomes to it under a lock this pass does not hold.
@@ -1266,17 +1267,17 @@ public class ExportExecutionServer
         var missingMvoIds = new HashSet<Guid>();
         var preparationLock = new object();
 
-        Task ReportPassProgressAsync(string message) => ReportProgressAsync(progressCallback, new ExportProgressInfo
+        Task ReportPassProgressAsync(JimMessage message) => ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
             Phase = ExportPhase.ResolvingReferences,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = immediateProcessedCount + Volatile.Read(ref written),
             PassTotal = passTotal,
             PassProcessed = Volatile.Read(ref written) + Volatile.Read(ref finishedUnwritten),
-            Message = message
+            MessageDetail = message
         });
 
-        await ReportPassProgressAsync($"Resolving {passTotal} deferred exports");
+        await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportResolvingDeferred), ActivityMessage.Plain(passTotal)));
 
         // The order the pass works in (#2905): the largest work first, so the longest batch starts while the others can
         // still overlap it, and every export after any export of the pass it waits on for an anchor, in a later stage. Read
@@ -1315,7 +1316,7 @@ public class ExportExecutionServer
         async Task<List<PendingExport>> PrepareChunkAsync(Guid[] chunkIds, int chunkStart, ISyncRepository repository, bool reportProgress)
         {
             if (reportProgress)
-                await ReportPassProgressAsync($"Loading deferred exports {chunkStart + 1} to {chunkStart + chunkIds.Length} of {passTotal}");
+                await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportLoadingDeferred), ActivityMessage.Plain(chunkStart + 1), ActivityMessage.Plain(chunkStart + chunkIds.Length), ActivityMessage.Plain(passTotal)));
 
             List<PendingExport> chunkExports;
             using (Diagnostics.Diagnostics.Database.StartSpan("LoadDeferredChunk")
@@ -1371,7 +1372,7 @@ public class ExportExecutionServer
 
                 // Nothing else this chunk does may report again (all of it may have been finished with here), so say so now.
                 if (reportProgress)
-                    await ReportPassProgressAsync($"Withdrew references to deleted objects from {withdrawal.FinishedExportIds.Count} deferred exports");
+                    await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportWithdrewDeferredReferences), ActivityMessage.Plain(withdrawal.FinishedExportIds.Count)));
             }
 
             // Separate resolved from still-unresolved exports. A still-unresolved export that has something it can write
@@ -1444,7 +1445,7 @@ public class ExportExecutionServer
                     .ToList();
 
                 if (reportProgress)
-                    await ReportPassProgressAsync($"Saving resolved references for {exportsToWrite.Count} deferred exports");
+                    await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportSavingResolvedReferences), ActivityMessage.Plain(exportsToWrite.Count)));
                 using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedReferences")
                     .SetTag("count", exportsToWrite.Count)
                     .SetTag("changeCount", changesToSave.Count))
@@ -1477,7 +1478,7 @@ public class ExportExecutionServer
                         PendingExportId = export.Id,
                         Deferred = true,
                         Succeeded = false,
-                        UnresolvedReferenceMessage = note
+                        UnresolvedReferenceMessageDetail = note
                     }.WithCauseFrom(export);
                     lock (preparationLock)
                         deferredItems.Add(deferredItem);
@@ -1488,7 +1489,7 @@ public class ExportExecutionServer
             }
 
             if (reportProgress && deferredWholeExports.Count > 0)
-                await ReportPassProgressAsync("Recording exports that are still waiting on their references");
+                await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportRecordingWaiting)));
 
             return exportsToWrite;
         }
@@ -1600,7 +1601,7 @@ public class ExportExecutionServer
                     if (!ahead.IsCompleted)
                     {
                         var chunkIds = chunks[nextChunk];
-                        await ReportPassProgressAsync($"Loading deferred exports {chunkStarts[nextChunk] + 1} to {chunkStarts[nextChunk] + chunkIds.Length} of {passTotal}");
+                        await ReportPassProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ExportLoadingDeferred), ActivityMessage.Plain(chunkStarts[nextChunk] + 1), ActivityMessage.Plain(chunkStarts[nextChunk] + chunkIds.Length), ActivityMessage.Plain(passTotal)));
                         var waited = System.Diagnostics.Stopwatch.StartNew();
                         using (Diagnostics.Diagnostics.Database.StartSpan("AwaitDeferredChunkPreparedAhead")
                             .SetTag("chunk", nextChunk))
@@ -1764,13 +1765,13 @@ public class ExportExecutionServer
     /// <param name="names">The display names of the referenced Metaverse Objects with no anchor, as
     /// <see cref="WithdrawReferencesToDeletedObjectsAsync"/> read them.</param>
     /// <returns>Per Pending Export id, the message for its item; empty unless handling is Error.</returns>
-    private static (Dictionary<Guid, string> Notes, int UnresolvableCount) BuildUnresolvedReferenceNotes(
+    private static (Dictionary<Guid, JimMessage> Notes, int UnresolvableCount) BuildUnresolvedReferenceNotes(
         ConnectedSystem connectedSystem,
         List<PendingExport> stillUnresolvedExports,
         IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
         IReadOnlyDictionary<Guid, string?> names)
     {
-        var notes = new Dictionary<Guid, string>();
+        var notes = new Dictionary<Guid, JimMessage>();
         if (stillUnresolvedExports.Count == 0)
             return (notes, 0);
 
@@ -1814,19 +1815,13 @@ public class ExportExecutionServer
             }).ToList();
 
             const int shown = 3;
-            var summary = string.Join("; ", described.Take(shown));
-            if (described.Count > shown)
-                summary += $"; and {described.Count - shown} more";
-
-            var message = $"{described.Count} reference value(s) could not be written because the referenced Metaverse Object has no " +
-                          $"Connected System Object in this Connected System: {summary}. The referenced object is out of scope for every " +
-                          "Synchronisation Rule into this system, or has not been provisioned yet. Everything else on this export was written; " +
-                          "the reference is retried on the deferred cadence and written when the object appears.";
+            var messageDetail = ActivityMessage.UnresolvedReferences(described, shown);
+            var message = messageDetail.ToEnglish();
 
             switch (handling)
             {
                 case UnresolvedReferenceHandling.Error:
-                    notes[export.Id] = message;
+                    notes[export.Id] = messageDetail;
                     Log.Debug("BuildUnresolvedReferenceNotes: Export {ExportId} for CSO {CsoId}: {Message}",
                         export.Id, export.ConnectedSystemObjectId, message);
                     break;
@@ -1869,7 +1864,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         int passTotal,
         TimeSpan initialPasswordTimeToLive,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        IReadOnlyDictionary<Guid, JimMessage>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
         Func<int>? passProcessedOffset = null,
         Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null)
@@ -2060,7 +2055,7 @@ public class ExportExecutionServer
         int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null,
         int? passTotal = null,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        IReadOnlyDictionary<Guid, JimMessage>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
         Func<int>? passProcessedOffset = null)
     {
@@ -2338,7 +2333,7 @@ public class ExportExecutionServer
             // item names its Pending Export and change alone: reported thinly, but never silently.
             async Task<List<ProcessedExportItem>> DescribeUnloadedBatchAsync(List<ExecutableExportSummary> unloaded, Exception loadFailure)
             {
-                var errorMessage = $"Batch export failed: {loadFailure.Message}";
+                var errorMessage = ActivityMessage.ExportBatchFailed(ActivityMessage.CauseOf(loadFailure));
                 Dictionary<Guid, PendingExport> loaded;
                 try
                 {
@@ -2361,7 +2356,7 @@ public class ExportExecutionServer
                         AttributeChangeCount = export.AttributeValueChanges.Count,
                         AttributeValueChanges = export.AttributeValueChanges.ToList(),
                         Succeeded = false,
-                        ErrorMessage = errorMessage,
+                        ErrorMessageDetail = errorMessage,
                         ErrorCount = export.ErrorCount,
                         ErrorType = ConnectedSystemExportErrorType.General
                     }.WithCauseFrom(export)
@@ -2370,7 +2365,7 @@ public class ExportExecutionServer
                         ChangeType = summary.ChangeType,
                         PendingExportId = summary.Id,
                         Succeeded = false,
-                        ErrorMessage = errorMessage,
+                        ErrorMessageDetail = errorMessage,
                         ErrorType = ConnectedSystemExportErrorType.General
                     }).ToList();
             }
@@ -2417,7 +2412,7 @@ public class ExportExecutionServer
                     PassTotal = passTotal,
                     PassProcessed = passTotal.HasValue ? processedSoFar + (passProcessedOffset?.Invoke() ?? 0) : null,
                     CurrentBatchSize = Volatile.Read(ref latestBatchSize),
-                    Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
+                    MessageDetail = ActivityMessage.Create(passTotal.HasValue ? nameof(ActivityMessages.ExportExecutingDeferred) : nameof(ActivityMessages.ExportExecuting))
                 });
                 return true;
             });
@@ -2458,7 +2453,7 @@ public class ExportExecutionServer
                         {
                             ChangeType = PendingExportChangeType.Update,
                             Succeeded = false,
-                            ErrorMessage = $"A batch's results were recorded, but closing its connection failed: {ex.Message}",
+                            ErrorMessageDetail = ActivityMessage.ExportBatchCloseFailed(ActivityMessage.CauseOf(ex)),
                             ErrorType = ConnectedSystemExportErrorType.General
                         });
                     }
@@ -2609,7 +2604,7 @@ public class ExportExecutionServer
         ISyncRepository repository,
         string connectedSystemName)
     {
-        var itemMessage = $"Batch export failed: {exception.Message}";
+        var itemMessage = ActivityMessage.ExportBatchFailed(ActivityMessage.CauseOf(exception));
 
         IReadOnlySet<Guid>? failed = null;
         if (mark != null)
@@ -2618,7 +2613,7 @@ public class ExportExecutionServer
             var attemptedAt = DateTime.UtcNow;
             var failedAttempts = batch
                 .Where(pe => before.ContainsKey(pe.Id))
-                .ToDictionary(pe => pe.Id, pe => before[pe.Id].AfterFailedAttempt(exception.Message, stackTrace: null, attemptedAt));
+                .ToDictionary(pe => pe.Id, pe => AfterFailedAttempt(before[pe.Id], exception, stackTrace: null, attemptedAt));
             try
             {
                 failed = await repository.ReleaseExecutingPendingExportsAsync(failedAttempts.Values.ToList(), mark.MarkedAt);
@@ -2653,7 +2648,7 @@ public class ExportExecutionServer
                 AttributeChangeCount = export.AttributeValueChanges.Count,
                 AttributeValueChanges = export.AttributeValueChanges.ToList(),
                 Succeeded = false,
-                ErrorMessage = itemMessage,
+                ErrorMessageDetail = itemMessage,
                 ErrorCount = export.ErrorCount,
                 ErrorType = ConnectedSystemExportErrorType.General
             }.WithCauseFrom(export));
@@ -2665,7 +2660,7 @@ public class ExportExecutionServer
             {
                 ChangeType = PendingExportChangeType.Update,
                 Succeeded = false,
-                ErrorMessage = $"The batch's results were recorded, but JIM failed while finishing them: {exception.Message}",
+                ErrorMessageDetail = ActivityMessage.ExportBatchFinishFailed(ActivityMessage.CauseOf(exception)),
                 ErrorType = ConnectedSystemExportErrorType.General
             });
         }
@@ -2694,8 +2689,7 @@ public class ExportExecutionServer
             return null;
 
         return ConnectedSystemExportResult.Failed(
-            $"This object was to be disabled, but the {connectedSystem.ConnectorDefinition?.Name ?? "Connector"} that '{connectedSystem.Name}' uses " +
-            "cannot disable an account, so nothing was sent. Change the export Synchronisation Rule's Deprovisioning Action to Delete or Disconnect.",
+            ActivityMessage.ExportDisableUnsupported(connectedSystem.ConnectorDefinition?.Name, connectedSystem.Name),
             ConnectedSystemExportErrorType.RejectedByConnectedSystem);
     }
 
@@ -2810,7 +2804,7 @@ public class ExportExecutionServer
     private static ConnectedSystemExportResult NoResultFromTheConnector(CancellationToken cancellationToken) =>
         cancellationToken.IsCancellationRequested
             ? ConnectedSystemExportResult.NotAttempted()
-            : ConnectedSystemExportResult.Failed("The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again.");
+            : ConnectedSystemExportResult.Failed(ActivityMessage.ExportNoResult());
 
     /// <summary>
     /// Finishes Disable Pending Exports the Connector carried out (#2085): each is removed and its Connected System Object
@@ -2992,7 +2986,7 @@ public class ExportExecutionServer
         string connectedSystemName,
         IReadOnlySet<int>? initialPasswordRuleIds,
         bool stageExchangeChanges,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
+        IReadOnlyDictionary<Guid, JimMessage>? unresolvedReferenceNotes = null)
     {
         var exportsToUpdate = new List<PendingExport>();
         var exchangeDeclarations = new List<(PendingExport Export, ConnectedSystemExportResult ExportResult, ExchangeDeclaredState Declared, ExchangeRecipientDecision? Decision)>();
@@ -3064,8 +3058,7 @@ public class ExportExecutionServer
             // back silently would repeat that every run unseen: it is a failed attempt like any other.
             if (exportResult.IsNotAttempted)
             {
-                exportResult = ConnectedSystemExportResult.Failed(
-                    "The Connector reported this change as not attempted, although the export run was not cancelled.");
+                exportResult = ConnectedSystemExportResult.Failed(ActivityMessage.ExportNotAttempted());
                 notAttemptedWithoutCancellation++;
             }
 
@@ -3099,7 +3092,7 @@ public class ExportExecutionServer
                 AttributeChangeCount = writtenChanges.Count,
                 AttributeValueChanges = writtenChanges,
                 Succeeded = true,
-                UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null,
+                UnresolvedReferenceMessageDetail = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null,
                 ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
             }.WithCauseFrom(export));
 
@@ -3365,7 +3358,7 @@ public class ExportExecutionServer
     private static void RecordFailedAttempt(PendingExport export, ConnectedSystemExportResult exportResult,
         List<PendingExportAttributeValueChange> writtenChanges, ExportExecutionResult result)
     {
-        MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+        MarkExportFailed(export, exportResult);
         result.FailedCount++;
 
         // Capture export data for activity tracking (before any state changes)
@@ -3378,6 +3371,7 @@ public class ExportExecutionServer
             AttributeValueChanges = writtenChanges,
             Succeeded = false,
             ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+            ErrorMessageDetail = exportResult.ErrorMessageDetail ?? (exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null),
             ErrorCount = export.ErrorCount,
             ErrorType = exportResult.ErrorType,
             RejectedAttributeName = exportResult.RejectedAttributeName
@@ -3412,6 +3406,7 @@ public class ExportExecutionServer
             AttributeValueChanges = collisionChanges,
             Succeeded = false,
             ErrorMessage = collision.Handling == GeneratedValueCollisionHandling.NeedsDecision ? collision.Message : null,
+            ErrorMessageDetail = collision.Handling == GeneratedValueCollisionHandling.NeedsDecision ? collision.MessageDetail : null,
             ErrorCount = export.ErrorCount,
             ErrorType = rejection.ErrorType,
             RejectedAttributeName = rejection.RejectedAttributeName,
@@ -3909,16 +3904,13 @@ public class ExportExecutionServer
                 {
                     case ProvisionedPasswordStagingDisposition.Coalesced:
                         carriedCount++;
-                        activity.Message = InitialPasswordStagingMessages.Carried(connectedSystemName, outcome);
+                        activity.MessageDetail = InitialPasswordStagingMessages.Carried(connectedSystemName, outcome);
                         break;
 
                     default:
                         stagedCount++;
                         var replaced = InitialPasswordStagingMessages.ReplacedWaitingChange(connectedSystemName, outcome);
-                        activity.Message = replaced == null
-                            ? $"Initial password queued for delivery to {connectedSystemName}."
-                            : $"Initial password queued for delivery to {connectedSystemName}, in place of a password change for this person " +
-                              $"that was waiting there: {replaced}";
+                        activity.MessageDetail = InitialPasswordStagingMessages.Queued(connectedSystemName, replaced);
                         if (replaced == null)
                             break;
 
@@ -3927,8 +3919,7 @@ public class ExportExecutionServer
                         activity.Status = ActivityStatus.CompleteWithWarning;
                         if (outcome.ExistingActivityId is { } replacedChangeActivityId)
                         {
-                            var notSet = $"Password not set on {connectedSystemName}: replaced by the Initial Password of a Connected System Object " +
-                                         $"JIM has just provisioned there, because this change {replaced}";
+                            var notSet = InitialPasswordStagingMessages.NotSet(connectedSystemName, replaced);
                             activities.Add(new Activity
                             {
                                 Id = TimeOrderedIds.New(),
@@ -3943,8 +3934,8 @@ public class ExportExecutionServer
                                 InitiatedByType = ActivityInitiatorType.System,
                                 InitiatedByName = "System",
                                 Status = ActivityStatus.CompleteWithError,
-                                Message = notSet,
-                                ErrorMessage = notSet,
+                                MessageDetail = notSet,
+                                ErrorMessageDetail = notSet,
                                 Created = now,
                                 Executed = now,
                                 ExecutionTime = TimeSpan.Zero,
@@ -4119,13 +4110,13 @@ public class ExportExecutionServer
                         case ExchangeRecipientDecisionKind.Refused:
                             refused++;
                             activities.Add(ExchangeFollowUp(change.ActivityId, cso, declared, connectedSystemName, executionItemId, now,
-                                ActivityStatus.CompleteWithError, decision.Reason!, errorMessage: decision.Reason));
+                                ActivityStatus.CompleteWithError, decision.ReasonDetail!, errorMessage: decision.ReasonDetail));
                             break;
 
                         case ExchangeRecipientDecisionKind.TypeChangeNotSupported:
                             typeChanges++;
                             activities.Add(ExchangeFollowUp(change.ActivityId, cso, declared, connectedSystemName, executionItemId, now,
-                                ActivityStatus.CompleteWithWarning, decision.Reason!));
+                                ActivityStatus.CompleteWithWarning, decision.ReasonDetail!));
                             break;
 
                         default:
@@ -4194,7 +4185,7 @@ public class ExportExecutionServer
     /// screen for it, because delivery happens on a later, unrelated pass.
     /// </summary>
     private static Activity ExchangeFollowUp(Guid id, ConnectedSystemObject cso, ExchangeDeclaredState declared, string connectedSystemName,
-        Guid? executionItemId, DateTime now, ActivityStatus status, string message, string? errorMessage = null) => new()
+        Guid? executionItemId, DateTime now, ActivityStatus status, JimMessage message, JimMessage? errorMessage = null) => new()
     {
         Id = id,
         TargetType = ActivityTargetType.ExchangeRecipient,
@@ -4208,8 +4199,8 @@ public class ExportExecutionServer
         InitiatedByType = ActivityInitiatorType.System,
         InitiatedByName = "System",
         Status = status,
-        Message = message,
-        ErrorMessage = errorMessage,
+        MessageDetail = message,
+        ErrorMessageDetail = errorMessage,
         Created = now,
         Executed = now,
         ExecutionTime = TimeSpan.Zero,
@@ -4779,12 +4770,30 @@ public class ExportExecutionServer
     /// Records a failed attempt on an export (#2119): it stays Pending and is attempted again at the next export run.
     /// This is a synchronous version for batch processing - does not save to database.
     /// </summary>
-    private static void MarkExportFailed(PendingExport export, string errorMessage, string? stackTrace = null)
+    /// <remarks>
+    /// The error is kept as a message where JIM worded it (#3094): the export result's own message, or JIM's "Export
+    /// failed" where the Connector gave no reason. A Connector's own words stay its text, with no message.
+    /// </remarks>
+    private static void MarkExportFailed(PendingExport export, ConnectedSystemExportResult exportResult)
     {
-        var failed = PendingExportRetryState.Of(export).AfterFailedAttempt(errorMessage, stackTrace, DateTime.UtcNow);
+        var state = PendingExportRetryState.Of(export);
+        var attemptedAt = DateTime.UtcNow;
+        var detail = exportResult.ErrorMessageDetail ?? (exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null);
+        var failed = detail != null && (exportResult.ErrorMessage == null || detail.ToEnglish() == exportResult.ErrorMessage)
+            ? state.AfterFailedAttempt(detail, stackTrace: null, attemptedAt)
+            : state.AfterFailedAttempt(exportResult.ErrorMessage ?? "Export failed", stackTrace: null, attemptedAt);
         failed.ApplyTo(export);
         LogFailedAttempt(failed);
     }
+
+    /// <summary>
+    /// One more failed attempt for an exception: kept as the message the exception carries where JIM worded it (#3094),
+    /// else as the exception's own text.
+    /// </summary>
+    private static PendingExportRetryState AfterFailedAttempt(PendingExportRetryState state, Exception exception, string? stackTrace, DateTime attemptedAt) =>
+        exception.DetailOf() is { } detail && detail.ToEnglish() == exception.Message
+            ? state.AfterFailedAttempt(detail, stackTrace, attemptedAt)
+            : state.AfterFailedAttempt(exception.Message, stackTrace, attemptedAt);
 
     /// <summary>
     /// Logs a failed attempt once it has been applied.
@@ -4957,7 +4966,7 @@ public class ExportExecutionServer
 
                 if (!exportResult.Success)
                 {
-                    MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+                    MarkExportFailed(export, exportResult);
                     exportsToUpdate.Add(export);
                     result.FailedCount++;
 
@@ -4970,6 +4979,7 @@ public class ExportExecutionServer
                         AttributeValueChanges = export.AttributeValueChanges.ToList(),
                         Succeeded = false,
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+                        ErrorMessageDetail = exportResult.ErrorMessageDetail ?? (exportResult.ErrorMessage == null ? ActivityMessage.ExportFailedNoReason() : null),
                         ErrorCount = export.ErrorCount,
                         ErrorType = exportResult.ErrorType,
                         RejectedAttributeName = exportResult.RejectedAttributeName
@@ -5112,7 +5122,7 @@ public class ExportExecutionServer
             var now = DateTime.UtcNow;
             foreach (var export in pendingExports)
             {
-                PendingExportRetryState.Of(export).AfterFailedAttempt(ex.Message, ex.StackTrace, now).ApplyTo(export);
+                AfterFailedAttempt(PendingExportRetryState.Of(export), ex, ex.StackTrace, now).ApplyTo(export);
                 export.Status = PendingExportStatus.ExportNotConfirmed;
 
                 // Create ProcessedExportItem so the RPEI pipeline can record the failure.
@@ -5125,7 +5135,7 @@ public class ExportExecutionServer
                     AttributeChangeCount = export.AttributeValueChanges.Count,
                     AttributeValueChanges = export.AttributeValueChanges.ToList(),
                     Succeeded = false,
-                    ErrorMessage = $"Export failed: {ex.Message}",
+                    ErrorMessageDetail = ActivityMessage.ExportRunFailed(ActivityMessage.CauseOf(ex)),
                     ErrorCount = export.ErrorCount,
                     ErrorType = ConnectedSystemExportErrorType.General
                 }.WithCauseFrom(export));
@@ -5193,6 +5203,7 @@ public class ExportExecutionServer
         FailingSince = pendingExport.FailingSince,
         LastAttemptedAt = pendingExport.LastAttemptedAt,
         LastErrorMessage = pendingExport.LastErrorMessage,
+        LastErrorMessageDetailJson = pendingExport.LastErrorMessageDetailJson,
         LastErrorStackTrace = pendingExport.LastErrorStackTrace,
         SourceMetaverseObject = pendingExport.SourceMetaverseObject,
         SourceMetaverseObjectId = pendingExport.SourceMetaverseObjectId,
