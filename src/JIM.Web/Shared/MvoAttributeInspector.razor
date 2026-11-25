@@ -254,7 +254,13 @@
                                 <span>·</span>
                                 <MudLink Href="@activityHref">@(entry.Change.ActivityDescription ?? MetaverseText.MaiActivityFallback)</MudLink>
                             }
-                            @if (!string.IsNullOrEmpty(entry.SyncRuleName))
+                            @if (MadeByAPerson(entry.Change))
+                            {
+                                @* A person's change outside synchronisation (a removal by hand, #3059) is theirs, not the
+                                   rule that once contributed the value. *@
+                                <span>· @entry.Change.InitiatedByName</span>
+                            }
+                            else if (!string.IsNullOrEmpty(entry.SyncRuleName))
                             {
                                 <span>· @entry.SyncRuleName</span>
                             }
@@ -351,6 +357,12 @@
             return $"/activity/{change.ActivityId.Value}";
         return null;
     }
+
+    /// <summary>A change a person made outside any synchronisation, naming them.</summary>
+    private static bool MadeByAPerson(ProvenanceChange change) =>
+        change.ActivityRunProfileExecutionItemId == null &&
+        change.ChangeInitiatorType == MetaverseObjectChangeInitiatorType.User &&
+        !string.IsNullOrEmpty(change.InitiatedByName);
 
     private static string StateLabel(AttributeSourceState state) => state switch
     {

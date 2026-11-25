@@ -2432,9 +2432,10 @@ public partial class MetaverseRepository : IMetaverseRepository
             .Select(vc => new ProvenanceChange
             {
                 ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
+                // A change made outside synchronisation, such as a removal by hand (#3059), has an Activity of its own and no item.
                 ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
-                    : (Guid?)null,
+                    : vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityId,
                 ActivityRunProfileExecutionItemId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItemId,
                 ActivityDescription = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.TargetName
@@ -2510,9 +2511,10 @@ public partial class MetaverseRepository : IMetaverseRepository
                 vc.ContributedByKind,
                 vc.ContributedByClaimType,
                 ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
+                // A change made outside synchronisation, such as a removal by hand (#3059), has an Activity of its own and no item.
                 ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
-                    : (Guid?)null,
+                    : vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityId,
                 ActivityRunProfileExecutionItemId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItemId,
                 ActivityDescription = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.TargetName

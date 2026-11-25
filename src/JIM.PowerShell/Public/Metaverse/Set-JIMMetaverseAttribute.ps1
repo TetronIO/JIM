@@ -240,7 +240,7 @@ function Set-JIMMetaverseAttribute {
             if ($currentAttribute.contributionMode -eq 'Accumulate') {
                 if (-not $Force) {
                     Write-Error ("Changing '$($currentAttribute.name)' from Accumulate to $ContributionMode removes, at each Metaverse Object's next " +
-                        "synchronisation, the values that no contributor supplies any more. $impactText Run the command again with -Force to make this change.")
+                        "synchronisation, the values that no contributor supplies any more. $(if ($impactText) { "$impactText " })Run the command again with -Force to make this change.")
                     return
                 }
                 $confirmLeavingAccumulate = $true

@@ -103,7 +103,9 @@ public partial class MetaverseServer
                 metaverseObject.AttributeValues.Remove(value);
 
             await StageEditOutsideSynchronisationAsync(metaverseObject, additions: [], removals: named,
-                activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, changeInitiatorType: null, activity.Id);
+                activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName,
+                // An administrator's change, whether made in the portal or through an API key they hold.
+                MetaverseObjectChangeInitiatorType.User, activity.Id);
             await Application.Repository.Metaverse.RemoveMetaverseObjectAttributeValuesAsync(metaverseObject, named.Select(v => v.Id).ToList());
             await MarkDerivedInputChangesAsync(metaverseObject, named);
         }

@@ -152,4 +152,31 @@ public class AccumulatedValueRemovalDatabaseTests
             Assert.That((await check.MetaverseObjects.SingleAsync(m => m.Id == seeded.MetaverseObjectId)).ScopeReviewPending, Is.False);
         }
     }
+    /// <summary>
+    /// The inspector's history links a removal to its own Activity: a change made outside synchronisation has one and no
+    /// Run Profile Execution Item, which the history read once looked for alone.
+    /// </summary>
+    [Test]
+    public async Task GetAttributeHistoryRawEntriesAsync_RemovalByHand_CarriesItsActivityAsync()
+    {
+        Seeded seeded;
+        await using (var seed = NewContext())
+            seeded = await SeedAsync(seed);
+        var activity = new Activity { TargetType = ActivityTargetType.MetaverseObject, TargetOperationType = ActivityTargetOperationType.Update, TargetName = "rm" };
+        await using (var seed = NewContext())
+        {
+            seed.Activities.Add(activity);
+            await seed.SaveChangesAsync();
+        }
+        var (mvo, removed) = await LoadAndStageRemovalAsync(seeded);
+        mvo.Changes.Single().ActivityId = activity.Id;
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Metaverse.RemoveMetaverseObjectAttributeValuesAsync(mvo, [seeded.RemovedValueId]);
+
+        await using var read = NewContext();
+        var entries = await new PostgresDataRepository(read).Metaverse.GetAttributeHistoryRawEntriesAsync(seeded.MetaverseObjectId, removed.AttributeId, 10);
+
+        Assert.That(entries.Single().Change.ActivityId, Is.EqualTo(activity.Id));
+    }
 }
+
