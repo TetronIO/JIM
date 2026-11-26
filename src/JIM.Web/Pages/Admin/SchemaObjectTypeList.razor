@@ -25,11 +25,11 @@
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@* TabPanelsClass is pa-0 rather than pt-5 because both tabs host a virtualised grid, and the grid supplies its
-   own mt-5 (see the tab content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content
-   margin). *@
-<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" TabPanelsClass="pa-0" Class="mt-2">
+@* Each tab's blocks sit in a <SectionStack>, so the tab bar to the first block is one section gap (pt-6) and every
+   gap below it is the stack's (engineering/DESIGN.md > Layout > Spacing, #3095). *@
+<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" TabPanelsClass="pt-6" Class="mt-2">
     <MudTabPanel Text="@AdminText.SchemaTabObjectTypes" Icon="@Icons.Material.Filled.Category">
+        <SectionStack>
         @* Same shared grid as the Attributes tab, but windowed in memory: Object Types are a small configuration
            list, loaded whole once, so search and sort are applied in the page rather than each becoming a
            database range read. The URL parameters are prefixed so this grid's state cannot collide with the
@@ -38,7 +38,7 @@
         @* ─── Filters ─── *@
         @if (_metaverseObjectTypeHeaders is { Count: > 0 })
         {
-            <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
+            <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.End">
                 <MudItem Class="flex-grow-1">
                     <MudSelect T="MetaverseObjectDeletionRule?" Label="@AdminText.SchemaDeletionRule" Variant="Variant.Outlined"
                                Dense="true" Clearable="true" Value="_deletionRuleFilter" ValueChanged="OnDeletionRuleFilterChangedAsync">
@@ -183,13 +183,15 @@
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
+        </SectionStack>
     </MudTabPanel>
     <MudTabPanel Text="@AdminText.SchemaTabAttributes" Icon="@Icons.Material.Filled.ListAlt">
+        <SectionStack>
         @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
            shared grid; this tab supplies the columns, the window loader and the empty states. The tab itself already
            says "Attributes", so there is no toolbar title and the count carries the nouns. *@
         @* ─── Filters ─── *@
-        <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
+        <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.End">
             <MudItem Class="flex-grow-1">
                 <MudSelect T="AttributeDataType?" Label="@CommonText.ColumnType" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" Value="_attributeTypeFilter" ValueChanged="OnAttributeTypeFilterChangedAsync">
@@ -368,6 +370,7 @@
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
+        </SectionStack>
     </MudTabPanel>
     <MudTabPanel Text="@AdminText.SchemaTabDataFlow" Icon="@Icons.Material.Filled.SwapHoriz">
         <DataFlowTab />

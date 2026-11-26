@@ -61,7 +61,7 @@ The columns are grouped into two bands, one per side of the Metaverse. The **Con
 | | **→ / ←** | Which way the value moves. It points right on an inbound flow and left on an outbound one |
 | Metaverse | **Object Type** | The Metaverse Object Type the flow applies to |
 | Metaverse | **Attribute** | The Metaverse Attribute: the target inbound, the source outbound |
-| | **Priority** | The flow's position in its target's [Attribute Priority](../concepts/attribute-priority.md) order, with the number of contributors it is one of. Inbound only |
+| | **Priority** | The flow's position in its target's [Attribute Priority](../concepts/attribute-priority.md) order, with the number of contributors it is one of. For a target in the Accumulate or Merge contribution mode, which uses no order, the mode's name instead. Inbound only |
 | | **Null is a value** / **Enforce State** | The setting that applies in the chosen direction. With no direction chosen the column is headed **Options** and carries whichever applies per row |
 | | **Synchronisation Rule** | The owning rule, linked to its Attribute Flow tab. A disabled rule is marked as such: its flows are still listed, because they remain configuration you are reasoning about, but they move no data |
 

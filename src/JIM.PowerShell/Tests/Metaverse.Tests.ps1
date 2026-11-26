@@ -690,6 +690,112 @@ Describe 'Set-JIMMetaverseAttribute' {
         }
     }
 
+    Context 'Leaving Accumulate (#3059)' {
+
+        It 'Reads the impact under -WhatIf and states how many Metaverse Objects would lose values (#3059, PRD Scenario 7)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*contribution-mode-impact*' } -MockWith {
+                    [PSCustomObject]@{ objectsLosingValues = 1200; valuesNoLongerSupplied = 3000; objectsKeepingOneContributor = 0; objectsGainingValues = 0; requiresConfirmation = $true }
+                }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                # The What if line is written to the host, which Pester cannot read; the sentence it carries is the
+                # helper's, tested below.
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Merge -Force -WhatIf
+
+                Should -Invoke Invoke-JIMApi -Times 1 -ParameterFilter { $Endpoint -eq '/api/v1/metaverse/attributes/1/contribution-mode-impact?mode=Merge' }
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'PATCH' }
+                Get-JIMContributionModeImpactText -Impact ([PSCustomObject]@{ objectsLosingValues = 1200; valuesNoLongerSupplied = 3000 }) |
+                    Should -Be "At their next synchronisation, at least 1,200 Metaverse Object(s) lose values (3,000 value(s) no contributor supplies any more)."
+            }
+        }
+
+        It 'States the impact when refusing to leave Accumulate without -Force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*contribution-mode-impact*' } -MockWith {
+                    [PSCustomObject]@{ objectsLosingValues = 1200; valuesNoLongerSupplied = 3000; objectsKeepingOneContributor = 0; objectsGainingValues = 0; requiresConfirmation = $true }
+                }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -ContributionMode Merge -Confirm:$false -ErrorAction Stop } | Should -Throw '*1,200 Metaverse Object(s) lose values*'
+            }
+        }
+
+        It 'Refuses to leave Accumulate without -Force and sends nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Confirm:$false -ErrorAction Stop } | Should -Throw '*-Force*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+
+        It 'Leaves Accumulate with -Force, confirming the removal to JIM' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Force -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Body.contributionMode -eq 'Priority' -and $Body.confirmLeavingAccumulate -eq $true
+                }
+            }
+        }
+
+        It 'Refuses to leave Accumulate for Merge without -Force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -ContributionMode Merge -Confirm:$false -ErrorAction Stop } | Should -Throw '*-Force*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+
+        It 'Moves from Merge to Accumulate without -Force, since nothing is removed' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Email Addresses'; contributionMode = 'Merge' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Accumulate -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Body.contributionMode -eq 'Accumulate' -and -not $Body.ContainsKey('confirmLeavingAccumulate')
+                }
+            }
+        }
+
+        It 'Does not confirm anything when the attribute is not in Accumulate' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Department'; contributionMode = 'Priority' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and -not $Body.ContainsKey('confirmLeavingAccumulate')
+                }
+            }
+        }
+
+        It 'Does not preview a change under -WhatIf even with -Force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Force -WhatIf | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+    }
+
     Context 'Endpoint routing' {
 
         It 'Routes a rename to a PATCH on the attribute endpoint' {

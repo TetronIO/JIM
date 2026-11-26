@@ -725,8 +725,8 @@ public partial class SyncImportTaskProcessor
                             // watermark queries across all pages of a delta import.
                             ConnectedSystemImportResult result;
                             var fetchMessage = pageNumber > 0
-                                ? $"Importing objects from Connected System (page {pageNumber + 1})"
-                                : "Importing objects from Connected System";
+                                ? ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystemPage), ActivityMessage.Plain(pageNumber + 1))
+                                : ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromSystem));
                             await ReportProgressAsync(fetchMessage);
                             using (Diagnostics.Connector.StartSpan("ImportPage")
                                 .SetTag("connectedSystemId", _connectedSystem.Id)
@@ -762,10 +762,10 @@ public partial class SyncImportTaskProcessor
                             // How many have arrived is rendered from the Activity's counters, so the
                             // message says only what those cannot: which page is being read. A single
                             // page adds nothing over the running step's own name.
-                            var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
-                                ? $"Reading page {pageNumber:N0}"
-                                : string.Empty;
-                            await ReportProgressAsync(progressMessage);
+                            if (pageNumber > 1 || result.PaginationTokens.Count > 0)
+                                await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressReadingPage), pageNumber));
+                            else
+                                await ReportProgressAsync(string.Empty);
 
                             // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                             AddExternalIdsToCollection(result, externalIdsImported);
@@ -906,7 +906,7 @@ public partial class SyncImportTaskProcessor
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
                 // file based connectors return all the results from the Connected System in one go. no paging.
-                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Importing objects from file");
+                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, ActivityMessage.Create(nameof(ActivityMessages.ProgressImportingFromFile)));
                 ConnectedSystemImportResult result;
 
                 // The whole file is read inside this one call, so what the Connector reports about
@@ -1237,7 +1237,7 @@ public partial class SyncImportTaskProcessor
                 Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
                     hasCsoRef, LogSanitiser.Sanitise(extId));
                 orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
-                orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
+                ActivityMessage.SetError(orphanedRpei, ActivityMessage.Create(nameof(ActivityMessages.ImportOrphanedItem), extId, hasCsoRef.ToString()));
             }
         }
 
@@ -1245,7 +1245,7 @@ public partial class SyncImportTaskProcessor
         var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
-        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, "Recording results");
+        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, ActivityMessage.Create(nameof(ActivityMessages.ProgressRecordingResults)));
         await FlushImportRpeisAsync(alsoCountInActivityTotals: reconciliation?.RaisedItemTotals);
         _activity.ObjectsProcessed = remainingRpeiCount;
 
@@ -1483,7 +1483,7 @@ public partial class SyncImportTaskProcessor
             if (!stagingUnit)
             {
                 _activity.ObjectsProcessed = totalCreatedSoFar;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating Connected System Objects");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressCreatingCsos)));
                 await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
             SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -1593,7 +1593,7 @@ public partial class SyncImportTaskProcessor
             if (!stagingUnit)
             {
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Updating Connected System Objects");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressUpdatingCsos)));
                 await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
             SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -2095,11 +2095,7 @@ public partial class SyncImportTaskProcessor
         item.SyncOutcomes.Clear();
         item.ObjectTypeSnapshot = arrivingTypeName;
         item.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
-        item.ErrorMessage =
-            $"JIM holds this object as a '{heldTypeName}', and this Full Import allows Object Type changes, but it could not retire the '{heldTypeName}' object: " +
-            "it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronisation Rule still manages). " +
-            $"The new '{arrivingTypeName}' object has not been created, and the '{heldTypeName}' object has been left as it is, so nothing is deprovisioned. " +
-            $"Bring the '{heldTypeName}' object into the Full Import's scope, or disable the Synchronisation Rules bound to its Object Type, then run the Full Import again.";
+        item.ErrorMessageDetail = ActivityMessage.ImportObjectTypeChangeWithdrawn(heldTypeName, arrivingTypeName);
 
         Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: Object Type change for External ID '{ExternalId}' withdrawn: held CSO {CsoId} of type '{HeldObjectType}' was not retired by deletion detection, so the replacement of type '{ObjectType}' is not created.",
             LogSanitiser.Sanitise(item.ExternalIdSnapshot), change.Held.Primary.Entry.CsoId,
@@ -2366,10 +2362,13 @@ public partial class SyncImportTaskProcessor
             // objects, so a synchronisation on another Connected System can stage an export against one at any point
             // between imports, and that export would be sent to a target object that no longer exists. Reporting nothing
             // must not become doing nothing.
-            var deletedPeCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(batch.Select(candidate => candidate.Id).Distinct().ToList());
-            if (deletedPeCount > 0)
+            //
+            // A Delete JIM sent is confirmed by the object being gone, and the deletion item raised below records which
+            // export it confirms (#3087), as a Delta Import does for an object the Connector reports deleted.
+            var clearedExports = await _syncRepo.DeletePendingExportsOfDeletedObjectsAsync(batch.Select(candidate => candidate.Id).Distinct().ToList());
+            if (clearedExports.Count > 0)
                 Log.Information("ApplyDeletionCandidatesAsync: Cleaned up {Count} stale Pending Export(s) for {CandidateCount} obsolete CSO(s)",
-                    deletedPeCount, batch.Length);
+                    clearedExports.Count, batch.Length);
 
             // An object stays Obsolete until a synchronisation run on its own Connected System deletes it, so every
             // import in between finds it missing all over again. Only the first of those is a deletion: the rest need
@@ -2390,11 +2389,17 @@ public partial class SyncImportTaskProcessor
 
             // In the candidates' order, as each was applied when they were held whole.
             var loadedById = loaded.ToDictionary(cso => cso.Id);
+            var deletionItems = new Dictionary<Guid, (ActivityRunProfileExecutionItem Item, ConnectedSystemObject Cso)>();
             foreach (var cso in idsToMark.Where(loadedById.ContainsKey).Select(id => loadedById[id]))
             {
-                MarkDeletionDetected(cso, connectedSystemObjectsToBeUpdated);
+                deletionItems[cso.Id] = (MarkDeletionDetected(cso, connectedSystemObjectsToBeUpdated), cso);
                 markedThisRun.Add(cso.Id);
             }
+
+            // Before the batch is saved below, so each confirmation is written with its deletion item.
+            var confirmedDeletes = RecordDeletesConfirmedByObjectDeletion(clearedExports, deletionItems);
+            if (confirmedDeletes > 0)
+                Log.Information("ApplyDeletionCandidatesAsync: The deletions confirmed {ConfirmedDeletes} exported Delete(s)", confirmedDeletes);
 
             // A Full Import saves the objects it marks a batch at a time, as it saved what it read (#2521), rather than
             // holding every one it marks to the end.
@@ -2408,7 +2413,8 @@ public partial class SyncImportTaskProcessor
     /// deletion, the object marked Obsolete, and the object queued for update, which saves its status and records its
     /// change. The synchronisation that follows deletes it.
     /// </summary>
-    private void MarkDeletionDetected(ConnectedSystemObject cso, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    /// <returns>The execution item recording the deletion.</returns>
+    private ActivityRunProfileExecutionItem MarkDeletionDetected(ConnectedSystemObject cso, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         // we need to create a Run Profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
@@ -2434,6 +2440,7 @@ public partial class SyncImportTaskProcessor
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         _csoIdsQueuedForUpdate.Add(cso.Id);
         connectedSystemObjectsToBeUpdated.Add(cso);
+        return activityRunProfileExecutionItem;
     }
 
     /// <summary>
@@ -2551,8 +2558,7 @@ public partial class SyncImportTaskProcessor
                 ConnectedSystemObjectId = cso.Id,
                 ObjectChangeType = ObjectChangeType.Updated,
                 ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                ErrorMessage = "The Create export succeeded, but this import read every object and did not report this one back. " +
-                    "The Create will be retried on the next export."
+                ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportedCreateNotConfirmed))
             };
             executionItem.SnapshotCsoDisplayFields(cso);
 
@@ -3608,6 +3614,18 @@ public partial class SyncImportTaskProcessor
     /// otherwise.
     /// </summary>
     /// <param name="message">The Activity's new message, or null to report only its counters.</param>
+    private Task ReportProgressAsync(JimMessage message)
+    {
+        if (_progressThrottle is { } throttle)
+            return throttle.ReportAsync(message);
+
+        return _syncRepo.UpdateActivityMessageAsync(_activity, message);
+    }
+
+    /// <summary>
+    /// <see cref="ReportProgressAsync(JimMessage)"/> for narration that is not JIM's own wording (a Connector's), written as
+    /// English only.
+    /// </summary>
     private Task ReportProgressAsync(string? message = null)
     {
         if (_progressThrottle is { } throttle)
@@ -3781,7 +3799,7 @@ public partial class SyncImportTaskProcessor
                 if (duplicateAttributeNames is { Count: > 0 })
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
-                    activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+                    ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateAttributes), string.Join(", ", duplicateAttributeNames)));
 
                     // The item records the object as returned, both copies of the attribute included (#874); see
                     // RecordRejectedObjectSnapshot, in the finally below.
@@ -3796,9 +3814,9 @@ public partial class SyncImportTaskProcessor
                 if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
-                    activityRunProfileExecutionItem.ErrorMessage = importObject.ChangeType == ObjectChangeType.Deleted && string.IsNullOrEmpty(importObject.ObjectType)
-                        ? "The Connector reported a deletion without its Object Type, and its External ID does not tell JIM which object was deleted: this Connector's External IDs can name different objects in different Object Types. Nothing was deleted; run a Full Import, which detects deletions by absence."
-                        : $"PerformImportAsync: Couldn't find valid Connected System ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                    activityRunProfileExecutionItem.ErrorMessageDetail = importObject.ChangeType == ObjectChangeType.Deleted && string.IsNullOrEmpty(importObject.ObjectType)
+                        ? ActivityMessage.Create(nameof(ActivityMessages.ImportDeletionWithoutObjectType))
+                        : ActivityMessage.ImportObjectTypeNotFound(_connectedSystem.Id, importObject.ObjectType);
                     continue;
                 }
 
@@ -3858,7 +3876,7 @@ public partial class SyncImportTaskProcessor
                         else if (returnedOnAnEarlierPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. An object with this external ID was already returned on an earlier page, so this copy has been rejected. This may indicate a directory server paging issue.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateExternalIdAcrossPages), externalIdValue));
                             Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. An earlier page already returned it. Rejecting this copy.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
@@ -3869,7 +3887,7 @@ public partial class SyncImportTaskProcessor
                         if (repeatedOnThisPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportDuplicateExternalIdInBatch), externalIdValue));
                             Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' at index {Index}. This page returns it more than once, so every copy is rejected.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
 
@@ -4080,7 +4098,7 @@ public partial class SyncImportTaskProcessor
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
                             var extIdForError = activityRunProfileExecutionItem.ExternalIdSnapshot ?? "[unknown]";
-                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{extIdForError}'. No specific error was recorded.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportCsoCreationFailed), extIdForError));
                             Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
                                 LogSanitiser.Sanitise(extIdForError));
                         }
@@ -4208,7 +4226,7 @@ public partial class SyncImportTaskProcessor
                             _verificationDangerousDisagreementCount++;
                             var changedAttrCount = connectedSystemObject.PendingAttributeValueAdditions.Count + connectedSystemObject.PendingAttributeValueRemovals.Count;
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Verification Mode: the stored import content hash for CSO {connectedSystemObject.Id} matched the incoming hash, but the honest diff found {changedAttrCount} changed attribute value(s). A content-hash skip would have missed this change.";
+                            ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportHashVerificationFailed), connectedSystemObject.Id.ToString(), ActivityMessage.Plain(changedAttrCount)));
                             Log.Error("ProcessImportObjectsAsync: Verification Mode DANGEROUS DISAGREEMENT for CSO {CsoId}: stored hash matched incoming hash but the diff found {ChangedAttrCount} changed attribute value(s).",
                                 connectedSystemObject.Id, changedAttrCount);
                         }
@@ -4295,7 +4313,7 @@ public partial class SyncImportTaskProcessor
             {
                 // log the unhandled exception to the Run Profile execution item, so admins can see the error via a client.
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-                activityRunProfileExecutionItem.ErrorMessage = e.Message;
+                ActivityMessage.SetError(activityRunProfileExecutionItem, e);
                 activityRunProfileExecutionItem.ErrorStackTrace = e.StackTrace;
 
                 // still perform system logging.
@@ -4329,7 +4347,7 @@ public partial class SyncImportTaskProcessor
                 _activity.ObjectsProcessed = importIndex + 1;
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
-                    await ReportProgressAsync("Processing imported objects");
+                    await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressProcessingImported)));
 
                     // Periodic memory diagnostics (#917): the import processing phase accumulates
                     // hydrated CSOs until the save phase, so at scale this is where peak memory
@@ -4353,7 +4371,7 @@ public partial class SyncImportTaskProcessor
         // Activity's counters carry what is left to say.
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
-            await ReportProgressAsync("Processing imported objects");
+            await ReportProgressAsync(ActivityMessage.Create(nameof(ActivityMessages.ProgressProcessingImported)));
         }
 
         // Summary statistics for this page (#2521): counting every item held so far, on every page, made each page's
@@ -5335,17 +5353,11 @@ public partial class SyncImportTaskProcessor
 
         // An object an earlier import already marked obsolete is disconnected by the next synchronisation whatever this
         // run does, so saying nothing is deprovisioned would be untrue for it.
-        var keptClause = primary.Entry.Status == ConnectedSystemObjectStatus.Obsolete
-            ? $"the existing '{heldTypeName}' object, which an earlier import marked obsolete, has been left as it is"
-            : $"the existing '{heldTypeName}' object has been left as it is, so nothing is deprovisioned";
 
         activityRunProfileExecutionItem.ObjectTypeSnapshot = arrivingTypeName;
         activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
-        activityRunProfileExecutionItem.ErrorMessage =
-            $"JIM holds this object as a '{heldTypeName}', but the Connector now returns it as a '{arrivingTypeName}' (External ID '{activityRunProfileExecutionItem.ExternalIdSnapshot}'). " +
-            $"It has not been imported, and {keptClause}. " +
-            $"If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM will retire the '{heldTypeName}' object and import a new '{arrivingTypeName}' one. " +
-            "If it has not, review the Object Types selected on the Connected System.";
+        activityRunProfileExecutionItem.ErrorMessageDetail = ActivityMessage.ImportObjectTypeChangeRefused(
+            heldTypeName, arrivingTypeName, activityRunProfileExecutionItem.ExternalIdSnapshot, primary.Entry.Status == ConnectedSystemObjectStatus.Obsolete);
 
         Log.Warning("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' but arrived as type '{ObjectType}'. Refusing the Object Type change and keeping the held object.",
             LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), primary.Entry.CsoId,
@@ -5526,7 +5538,7 @@ public partial class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.Id);
 
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
-                activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
+                ActivityMessage.SetError(activityRunProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ImportUnexpectedAttribute), importObjectAttribute.Name));
                 csoIsInvalid = true;
 
                 Log.Error("CreateConnectedSystemObjectFromImportObject: Set ErrorType={ErrorType}, ErrorMessage={ErrorMessage} on RPEI {RpeiId}",

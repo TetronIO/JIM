@@ -45,6 +45,7 @@ public class WorkerTaskHeaderTests
         ObjectsToProcess = 790007,
         ObjectsProcessed = 174000,
         ProgressMessage = "Saving changes",
+        ProgressMessageDetailJson = "{\"Catalogue\":\"JIM.Application:ActivityMessages\",\"Key\":\"TargetFactoryReset\",\"Arguments\":[]}",
         Steps = Steps(2, ActivityPhaseStatus.Completed),
         ExecutionMode = WorkerTaskExecutionMode.Parallel,
         Started = new DateTime(2026, 10, 24, 21, 1, 0, DateTimeKind.Utc),

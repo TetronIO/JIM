@@ -1087,6 +1087,54 @@ public partial class SyncRepository
         if (csoIds.Length == 0)
             return 0;
 
+        await DeletePendingExportChangesAndDetachAsync(csoIds);
+
+        // Delete parent records and return count
+        return await _context.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemObjectId"" = ANY({0})",
+            csoIds);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeletedPendingExportSummary>> DeletePendingExportsOfDeletedObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIds = connectedSystemObjectIds.Distinct().ToArray();
+        if (csoIds.Length == 0)
+            return [];
+
+        await DeletePendingExportChangesAndDetachAsync(csoIds);
+
+        // The rows are read as the statement deletes them, so what is reported is exactly what was deleted: no export
+        // staged between a read and the delete can be cleared without being reported.
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+        await using var command = new NpgsqlCommand(
+            """
+            DELETE FROM "PendingExports" WHERE "ConnectedSystemObjectId" = ANY(@csoIds)
+            RETURNING "Id", "ConnectedSystemObjectId", "ChangeType", "Status"
+            """, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = csoIds });
+
+        var deleted = new List<DeletedPendingExportSummary>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            deleted.Add(new DeletedPendingExportSummary(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                (PendingExportChangeType)reader.GetInt32(2),
+                (PendingExportStatus)reader.GetInt32(3)));
+        }
+        return deleted;
+    }
+
+    /// <summary>
+    /// What deleting the Pending Exports of <paramref name="csoIds"/> needs before the statement that deletes them: their
+    /// queued and prefetched entries forgotten, their tracked instances detached, and their attribute value changes deleted.
+    /// </summary>
+    private async Task DeletePendingExportChangesAndDetachAsync(Guid[] csoIds)
+    {
         ForgetQueuedForCsoIds(csoIds);
 
         // Instances of the rows this method is about to delete may be tracked on the worker's
@@ -1116,13 +1164,6 @@ public partial class SyncRepository
                   WHERE pe.""ConnectedSystemObjectId"" = ANY({0})
               )",
             csoIds);
-
-        // Delete parent records and return count
-        var deleted = await _context.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemObjectId"" = ANY({0})",
-            csoIds);
-
-        return deleted;
     }
 
     /// <summary>
@@ -1208,6 +1249,7 @@ public partial class SyncRepository
                     tracked.LastAttemptedAt = pe.LastAttemptedAt;
                     tracked.LastErrorMessage = pe.LastErrorMessage;
                     tracked.LastErrorStackTrace = pe.LastErrorStackTrace;
+                    tracked.LastErrorMessageDetailJson = pe.LastErrorMessageDetailJson;
                     tracked.HasUnresolvedReferences = pe.HasUnresolvedReferences;
                 }
 
@@ -1256,7 +1298,8 @@ public partial class SyncRepository
                     "LastAttemptedAt" timestamptz,
                     "LastErrorMessage" text,
                     "LastErrorStackTrace" text,
-                    "HasUnresolvedReferences" boolean
+                    "HasUnresolvedReferences" boolean,
+                    "LastErrorMessageDetailJson" text
                 ) ON COMMIT PRESERVE ROWS;
                 TRUNCATE _pe_bulk_update
                 """;
@@ -1291,6 +1334,10 @@ public partial class SyncRepository
                 else
                     await writer.WriteNullAsync();
                 await writer.WriteAsync(pe.HasUnresolvedReferences, NpgsqlTypes.NpgsqlDbType.Boolean);
+                if (pe.LastErrorMessageDetailJson is not null)
+                    await writer.WriteAsync(pe.LastErrorMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
+                else
+                    await writer.WriteNullAsync();
             }
             await writer.CompleteAsync();
         }
@@ -1663,6 +1710,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             await writer.WriteAsync(pe.StagedByRunProfileExecutionItemIds.ToArray(),
                 NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid);
+            if (pe.LastErrorMessageDetailJson is not null)
+                await writer.WriteAsync(pe.LastErrorMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

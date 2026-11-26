@@ -56,6 +56,14 @@ Each attribute's rules decide its values:
 | Reference | Objects of the chosen Object Types, between a minimum and maximum number for a multi-valued attribute; a Manager attribute builds a reporting hierarchy |
 | Identifier | A new identifier for each object |
 
+Values that must not repeat are checked against everything JIM already holds, not only the objects the template is creating: a `[UniqueInt]` pattern, a pattern that reads Example Data Sets with `{0}`, and a Number counting up. They are also kept clear of the values Synchronisation Rules generate (see [Generated Values](generated-values.md)), including retired ones. In practice:
+
+- `[UniqueInt]` adds the number where it sits in the pattern, starting at 2. If a `jo.bloggs@company.com` already exists, the template's first Jo Bloggs gets `jo.bloggs2@company.com`.
+- A pattern that reads Example Data Sets picks again when a value is taken. If the sets run out of unused combinations, the template stops with an error naming the attribute: add values to the sets, create fewer objects, or add `[UniqueInt]` to the pattern.
+- A Number counting up starts at its minimum, or after the highest number the attribute already holds if that is higher, and carries on from there each time the template runs. It shares its counter with any Synchronisation Rule that generates a sequence for the same attribute, so the two never give out the same number.
+
+Uppercase and lowercase count as the same value.
+
 **Population %** gives the attribute a value on exactly that share of the objects, rounded up to a whole object, and leaves it empty on the rest. An attribute can depend on another one's value, such as an email address only for distribution groups. For a dependent attribute, Population % is a share of the objects meeting the condition, rounded up to a whole object in the same way. A true-or-false share counts only the objects that end up with a value, so an attribute at 50% Population % and 20% true on 200 objects gives 100 values, 20 of them true.
 
 ### Generate the objects

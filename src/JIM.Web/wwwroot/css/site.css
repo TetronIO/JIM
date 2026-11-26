@@ -3,6 +3,15 @@
 :root {
     --jim-instance-bar-height: 28px;
 
+    /* Vertical spacing by role (engineering/DESIGN.md > Layout > Spacing, #3095). A gap is chosen by what it
+       separates, never by matching a neighbouring page: section between independent blocks (the tab bar and the
+       first block, an introduction, a filter bar, a table, a panel), field between the fields of one form or
+       group, caption from a control to the helper text describing it. <SectionStack> and <SectionCaption> apply
+       them, so a page places no vertical margins of its own. */
+    --jim-space-section: 24px;
+    --jim-space-field: 16px;
+    --jim-space-caption: 8px;
+
     /* The corner radius of every container element: papers, tables, alerts, expansion panels, code
        blocks and cards, plus anything hand-built that joins one of them into a single box. This is
        the only place the figure appears; nothing else should write a container radius as a literal.
@@ -1464,6 +1473,21 @@ a.jim-system-rule-chip-part:focus-visible {
     overflow-wrap: anywhere;
 }
 
+/* The impact report under a contribution mode notice (#3059): one line per effect, a caption gap below the notice. */
+.jim-impact-lines {
+    margin-block: var(--jim-space-caption) 0;
+    padding-inline-start: 20px;
+}
+
+/* A value of an Accumulate attribute, with its remove button after it (#3059). The button sits at the row's end so a
+   column of them lines up, and the value keeps the room to wrap. */
+.jim-inspector-removable-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 /* The origin as labelled rows rather than one wrapping sentence: every fact lines up, and each chip keeps its own
    line instead of breaking mid-phrase. */
 /* The label column is exactly as wide as its longest label, so the values (pills, mostly) get the rest. A fixed
@@ -1588,9 +1612,19 @@ a.jim-system-rule-chip-part:focus-visible {
 
 .jim-inspector-candidate {
     grid-column: 2;
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
     font-size: 0.8125rem;
     overflow-wrap: anywhere;
+}
+
+/* A history entry's first line: the change chip, then the value, a field gap's worth of space between them. */
+.jim-inspector-rail-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
 }
 
 /* History on a rail: one dot per change, coloured by what the change did. */
@@ -1723,6 +1757,14 @@ a.jim-system-rule-chip-part:focus-visible {
     .jim-code-inline {
         background-color: var(--jim-code-inline-bg, rgba(110, 118, 129, 0.4));
     }
+}
+
+/* Inline code on a filled coloured surface (a snackbar): the grey tint all but vanishes on a saturated fill, leaving
+   only the pill's padding, which reads as a stray gap. A translucent white tint keeps the value's edges visible on any
+   severity colour, with the surface's own text colour. */
+.mud-snackbar .jim-code-inline {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: inherit;
 }
 
 /* Higher-contrast inline code, for use on dimmed/secondary helper text over a low-contrast surface
@@ -7912,4 +7954,33 @@ html[lang] .mud-table tbody tr.jim-row-selected > td:first-child {
 html[lang] .jim-filter-header-active .mud-icon-button {
     color: var(--jim-link-color) !important;
     background-color: color-mix(in srgb, var(--jim-link-color) 16%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   Section stack (#3095): the one way blocks are spaced vertically.
+   <SectionStack> lays its children out with the section gap between them, and its children's own vertical margins
+   are neutralised, so a utility margin left on a child (or a component's built-in one, such as VirtualisedDataGrid's
+   default mt-5) cannot add to the gap and drift it. A <SectionCaption> placed straight after the block it describes
+   is pulled up to the caption gap. The html[lang] qualifier and !important are load-bearing: MudBlazor's utility
+   margins are !important too, and its stylesheet loads after this one (src/JIM.Web/CLAUDE.md > "Custom CSS").
+   --------------------------------------------------------------------------- */
+html[lang] .jim-section-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--jim-space-section);
+}
+
+html[lang] .jim-section-stack > * {
+    margin-block: 0 !important;
+}
+
+/* A VirtualisedDataGrid's built-in top margin (GridClass, mt-5 by default, which pages not yet in a stack rely on) sits
+   on the grid inside its scroll container, one level below the stack's children, so the rule above cannot reach it:
+   left alone it added 20px to the section gap. Neutralised here for the grid and its loading placeholder alike. */
+html[lang] .jim-section-stack > .jim-virtualised-list > * {
+    margin-block: 0 !important;
+}
+
+html[lang] .jim-section-stack > .jim-section-caption {
+    margin-top: calc(var(--jim-space-caption) - var(--jim-space-section)) !important;
 }

@@ -7,6 +7,8 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -387,20 +389,20 @@ public partial class ConnectedSystemServer
         var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
 
         // An object held back is recorded and counted, and left (with its Metaverse Object) exactly as it was.
-        void HoldBack(ConnectedSystemObject heldBack, string undecidable)
+        void HoldBack(ConnectedSystemObject heldBack, ScopingCriterionFailedException undecidable)
         {
             executionItems.Add(new ActivityRunProfileExecutionItem
             {
                 Id = TimeOrderedIds.New(),
                 ConnectedSystemObjectId = heldBack.Id,
                 ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
-                ErrorMessage = $"{undecidable} It and Metaverse Object {heldBack.MetaverseObjectId} were left as they were, " +
-                               "and the Connected System is not deleted until they can be processed.",
+                ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.DeprovisioningScopeHeldBack),
+                    ActivityMessage.CauseOf(undecidable), heldBack.MetaverseObjectId?.ToString() ?? string.Empty),
                 DisplayNameSnapshot = heldBack.NameOrId,
                 ObjectTypeSnapshot = heldBack.Type?.Name
             });
             Log.Warning("ExecuteSynchronisedDeprovisioningAsync: CSO {CsoId} held back; a surviving contributor's scope could not be decided: {Message}",
-                heldBack.Id, LogSanitiser.Sanitise(undecidable));
+                heldBack.Id, LogSanitiser.Sanitise(undecidable.Message));
             result.ConnectedSystemObjectsHeldBack++;
         }
 
@@ -449,7 +451,7 @@ public partial class ConnectedSystemServer
             if (obsoletionResult.UndecidableSurvivorScope is { } undecidableInCore)
             {
                 connectedSystemObject.Status = statusBeforeObsoletion;
-                HoldBack(connectedSystemObject, undecidableInCore.Message);
+                HoldBack(connectedSystemObject, undecidableInCore);
                 continue;
             }
 
@@ -660,7 +662,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="syncRepository">Where survivors are read from: the run's repository, or a preview's read-only guard.</param>
     /// <param name="connections">The page's connections, from its export evaluation cache, for connection criteria (#2021).</param>
-    private async Task<string?> DescribeUndecidableScopeAsync(ConnectedSystemObject connectedSystemObject,
+    private async Task<ScopingCriterionFailedException?> DescribeUndecidableScopeAsync(ConnectedSystemObject connectedSystemObject,
         List<SyncRule> fallibleImportRules, List<SyncRule> fallibleExportRules,
         Dictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers, ISyncRepository syncRepository,
         MetaverseObjectConnections? connections)
@@ -678,7 +680,7 @@ public partial class ConnectedSystemServer
                 }
                 catch (ScopingCriterionFailedException scopingEx)
                 {
-                    return scopingEx.Message;
+                    return scopingEx;
                 }
             }
         }
@@ -707,7 +709,7 @@ public partial class ConnectedSystemServer
                 }
                 catch (ScopingCriterionFailedException scopingEx)
                 {
-                    return scopingEx.Message;
+                    return scopingEx;
                 }
             }
         }

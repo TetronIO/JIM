@@ -132,6 +132,58 @@ public class AttributePriorityListTests : JimComponentTestContext
         }
     }
 
+    private static SyncRuleMapping BuildAccumulateContributor(int id, string systemName, string ruleName)
+    {
+        var mapping = BuildContributor(id, systemName, ruleName);
+        mapping.TargetMetaverseAttribute = new JIM.Models.Core.MetaverseAttribute
+        {
+            Id = AttributeId, Name = "Account Audit Log", Type = JIM.Models.Core.AttributeDataType.Text,
+            AttributePlurality = JIM.Models.Core.AttributePlurality.MultiValued,
+            ContributionMode = JIM.Models.Core.AttributeContributionMode.Accumulate
+        };
+        return mapping;
+    }
+
+    [Test]
+    public void Editable_AccumulateAttribute_ListsContributorsWithNoOrderToSet()
+    {
+        // An Accumulate attribute (#3059) has no winner, so the editable surface must not offer a reorder or a
+        // "Null is a value" choice that would have no effect; it lists who contributes.
+        SetupContributors(BuildAccumulateContributor(10, "Active Directory", "AD People Inbound"),
+                          BuildAccumulateContributor(20, "Entra ID", "Entra People Inbound"));
+
+        var cut = Render<AttributePriorityList>(p =>
+        {
+            p.Add(c => c.MetaverseObjectTypeId, ObjectTypeId);
+            p.Add(c => c.MetaverseAttributeId, AttributeId);
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".apt-row"), Has.Count.EqualTo(2));
+            Assert.That(cut.HasComponent<MudDropContainer<JIM.Web.Models.Api.AttributePriorityContributorDto>>(), Is.False, "no reorder");
+            Assert.That(cut.HasComponent<MudCheckBox<bool>>(), Is.False, "no Null is a value choice");
+            Assert.That(cut.HasComponent<MudButton>(), Is.False, "no save");
+            Assert.That(cut.HasComponent<MudAlert>(), Is.True, "the list says why there is no order");
+        }
+    }
+
+    [Test]
+    public void ReadOnly_AccumulateAttributeWithPendingContributor_StillRendersThePendingRow()
+    {
+        SetupContributors(BuildAccumulateContributor(10, "Active Directory", "AD People Inbound"));
+
+        var cut = RenderReadOnly(p => p.Add(c => c.PendingContributorSystemName, "Entra ID"));
+
+        var rows = cut.FindAll(".apt-row");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows, Has.Count.EqualTo(2));
+            Assert.That(rows[1].TextContent, Does.Contain("Entra ID"));
+            Assert.That(rows[1].ClassName, Does.Contain("apt-row-current"));
+        }
+    }
+
     [Test]
     public void ReadOnly_RendersNoReorderOrSaveAffordances()
     {

@@ -89,4 +89,100 @@
   <data name="UnreadableRecordsOther" xml:space="preserve">
     <value>{0} Metaverse Objects recorded changes made outside synchronization that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.</value>
   </data>
+  <data name="ExprFlowDerived" xml:space="preserve">
+    <value> (derived by Synchronization Rule '{0}')</value>
+  </data>
+  <data name="ExportMissingInput" xml:space="preserve">
+    <value>{0} No Pending Export was generated for Metaverse Object {1} on '{2}'. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behavior.</value>
+  </data>
+  <data name="AfTargetImportDerived" xml:space="preserve">
+    <value>'{0}' (derived by Synchronization Rule '{1}')</value>
+  </data>
+  <data name="AfMissingInput" xml:space="preserve">
+    <value>The Expression for target attribute {0} was not evaluated because this object has no value for {1}, so {2}; the object's other attributes were unaffected. Missing Input Behavior is set to Fail this mapping on this Attribute Flow. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behavior.</value>
+  </data>
+  <data name="AfCredential" xml:space="preserve">
+    <value>Target attribute {0} holds credentials, so JIM never exports it through an Attribute Flow and {1}; the object's other attributes were unaffected. Remove the Attribute Flow targeting it. JIM delivers passwords only through Password Synchronization, on Connected Systems whose Connector supports it.</value>
+  </data>
+  <data name="GeneratedValueLostRace" xml:space="preserve">
+    <value>{0}'s generated value "{1}" was issued to another object at the same moment as this one; it will be regenerated the next time this object synchronizes.</value>
+  </data>
+  <data name="QueueNotQueued" xml:space="preserve">
+    <value>Not queued for {0}: Password Synchronization is switched off there, and the Connected System Object this change would reach is still owed its first password, which JIM delivers instead.</value>
+  </data>
+  <data name="QueueNone" xml:space="preserve">
+    <value>No Connected System is configured for Password Synchronization, so this password was not queued for delivery anywhere.</value>
+  </data>
+  <data name="QueueHeldOne" xml:space="preserve">
+    <value>Held until Password Synchronization is enabled on {0}; the change will be delivered then, or expire first.</value>
+  </data>
+  <data name="QueueHeldOther" xml:space="preserve">
+    <value>Held until Password Synchronization is enabled on {0}; the changes will be delivered then, or expire first.</value>
+  </data>
+  <data name="InitialPasswordCarried" xml:space="preserve">
+    <value>Initial password not queued for {0}: a password change already waiting for this person there will be this Connected System Object's first password instead, keeping its own password and expiry. Its delivery applies this Synchronization Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires, except where an export has written those itself.</value>
+  </data>
+  <data name="PasswordReplacedHeld" xml:space="preserve">
+    <value>it is held while Password Synchronization is switched off for {0}, so it had not reached it, and a Connected System Object's first password is delivered whatever the pause.</value>
+  </data>
+  <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
+    <value>it is for the Object Type that Password Synchronization sets passwords on in {0}, which this Connected System Object is not, so it could not reach it, nor any other of this person's there while this one is theirs.</value>
+  </data>
+  <data name="AttributePriorityRenumbered" xml:space="preserve">
+    <value>Attribute priority numbers were renumbered by a change to Synchronization Rule '{0}'. The order in which Synchronization Rules contribute to the Metaverse Attribute is unchanged.</value>
+  </data>
+  <data name="RecallScopeHeldBack" xml:space="preserve">
+    <value>{0} Metaverse Object {1} was left as it was, with the values the Synchronization Rule contributed.</value>
+  </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM holds this object as a '{0}', and this Full Import allows Object Type changes, but it could not retire the '{0}' object: it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronization Rule still manages). The new '{1}' object has not been created, and the '{0}' object has been left as it is, so nothing is deprovisioned. Bring the '{0}' object into the Full Import's scope, or disable the Synchronization Rules bound to its Object Type, then run the Full Import again.</value>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System: {1}. The referenced object is out of scope for every Synchronization Rule into this system, or has not been provisioned yet. Everything else on this export was written; the reference is retried on the deferred cadence and written when the object appears.</value>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronization would neither join it to one nor provision it</value>
+  </data>
+  <data name="PasswordSetStandInNoLongerSet" xml:space="preserve">
+    <value>Password set on {0} as this Connected System Object's first password. The Synchronization Rule that provisioned it no longer sets an Initial Password, or has been deleted, so its settings for enabling the Connected System Object and for whether its password never expires were not applied</value>
+  </data>
+  <data name="PasswordDeliveryEnabledAsAsked" xml:space="preserve">
+    <value>{0}, and the Connected System Object enabled as the Synchronization Rule's Initial Password asks.</value>
+  </data>
+  <data name="PasswordDeliveryEnableAsksOnly" xml:space="preserve">
+    <value>{0}. The Synchronization Rule's Initial Password asks for the Connected System Object to be enabled.</value>
+  </data>
+  <data name="PasswordDeliveryEnableNotAsked" xml:space="preserve">
+    <value>{0}. The Synchronization Rule's Initial Password does not enable it, so it was left as it was created.</value>
+  </data>
+  <data name="PasswordWithdrawnRuleOff" xml:space="preserve">
+    <value>Initial password no longer needed: the Synchronization Rule that provisioned this account no longer sets one, or has been deleted.</value>
+  </data>
+  <data name="PasswordCaveatSharedStatic" xml:space="preserve">
+    <value>Every account given this Synchronization Rule's Static Initial Password therefore keeps that one shared password, which never expires.</value>
+  </data>
+  <data name="PasswordPutBackEnforced" xml:space="preserve">
+    <value>"Password never expires" was changed on this account, but the Synchronization Rule {0} writes its userAccountControl with Enforce State on, so the next synchronization puts the Attribute Flow's value back, and with it whether the password never expires; while that value keeps "Password never expires" set, Active Directory does not ask for a change at the next sign-in.</value>
+  </data>
+  <data name="PasswordFilterWholeQueue" xml:space="preserve">
+    <value>The Password Synchronization queue</value>
+  </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>a synchronization would neither join nor project it</value>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>This object's import Synchronization Rules match {0} different Metaverse Objects: {1}. JIM does not choose between them, so {2}. Correct the data, or the rules' Object Matching Rules, so that they identify one Metaverse Object.</value>
+  </data>
+  <data name="PasswordStatusCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>This object was to be disabled, but the {0} that '{1}' uses cannot disable an account, so nothing was sent. Change the export Synchronization Rule's Deprovisioning Action to Delete or Disconnect.</value>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>This object was to be disabled, but the Connector that '{0}' uses cannot disable an account, so nothing was sent. Change the export Synchronization Rule's Deprovisioning Action to Delete or Disconnect.</value>
+  </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>The Connector reported this change as not attempted, although the export run was not canceled.</value>
+  </data>
 </root>

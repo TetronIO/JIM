@@ -1953,7 +1953,7 @@
     <value>Les objets que cette règle provisionne ne sont pas des destinataires Exchange.</value>
   </data>
   <data name="ExRecipNotSetUpHelp" xml:space="preserve">
-    <value>Déclarez ce que chacun doit être dans Exchange : une boîte aux lettres, une boîte partagée, de salle ou d’équipement, un utilisateur de messagerie, un contact de messagerie ou un groupe activé pour la messagerie. Son système connecté gère les destinataires Exchange.</value>
+    <value>Déclarez ce que chacun doit être dans Exchange : une boîte aux lettres, une boîte partagée, de salle ou d’équipement, un utilisateur de messagerie, un contact de messagerie ou un groupe à extension messagerie. Son système connecté gère les destinataires Exchange.</value>
   </data>
   <data name="ExRecipSetUp" xml:space="preserve">
     <value>Configurer les destinataires</value>

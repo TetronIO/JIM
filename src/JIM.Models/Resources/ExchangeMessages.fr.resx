@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FitUnmanagedDeclared" xml:space="preserve">
+    <value>« {0} » ne peut pas être déclaré : c’est ce que JIM lit pour un destinataire qu’il ne gère pas. Utilisez l’un des types suivants : {1}.</value>
+  </data>
+  <data name="FitUserOnlyMailbox" xml:space="preserve">
+    <value>Seul un utilisateur peut avoir une boîte aux lettres ; cet objet est de type {0}.</value>
+  </data>
+  <data name="FitUserOnlySharedMailbox" xml:space="preserve">
+    <value>Seul un utilisateur peut avoir une boîte aux lettres partagée ; cet objet est de type {0}.</value>
+  </data>
+  <data name="FitUserOnlyRoomMailbox" xml:space="preserve">
+    <value>Seul un utilisateur peut avoir une boîte aux lettres de salle ; cet objet est de type {0}.</value>
+  </data>
+  <data name="FitUserOnlyEquipmentMailbox" xml:space="preserve">
+    <value>Seul un utilisateur peut avoir une boîte aux lettres d’équipement ; cet objet est de type {0}.</value>
+  </data>
+  <data name="FitUserOnlyMailUser" xml:space="preserve">
+    <value>Seul un utilisateur peut être un utilisateur de messagerie ; cet objet est de type {0}.</value>
+  </data>
+  <data name="FitContactOnly" xml:space="preserve">
+    <value>Seul un contact peut être un contact de messagerie ; cet objet est de type {0}.</value>
+  </data>
+  <data name="FitGroupOnly" xml:space="preserve">
+    <value>Seul un groupe peut être à extension messagerie ; cet objet est de type {0}.</value>
+  </data>
+  <data name="FitGroupNotUniversal" xml:space="preserve">
+    <value>Seuls les groupes universels peuvent être à extension messagerie ; ce groupe n’est pas universel.</value>
+  </data>
+  <data name="FitUnrecognised" xml:space="preserve">
+    <value>« {0} » n’est pas un type de destinataire Exchange ; utilisez l’un des types suivants : {1}.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailbox" xml:space="preserve">
+    <value>Cet objet est un type de destinataire que JIM ne gère pas (par exemple une boîte aux lettres liée ou distante) ; il ne peut donc pas devenir une boîte aux lettres. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeSharedMailbox" xml:space="preserve">
+    <value>Cet objet est un type de destinataire que JIM ne gère pas (par exemple une boîte aux lettres liée ou distante) ; il ne peut donc pas devenir une boîte aux lettres partagée. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeRoomMailbox" xml:space="preserve">
+    <value>Cet objet est un type de destinataire que JIM ne gère pas (par exemple une boîte aux lettres liée ou distante) ; il ne peut donc pas devenir une boîte aux lettres de salle. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeEquipmentMailbox" xml:space="preserve">
+    <value>Cet objet est un type de destinataire que JIM ne gère pas (par exemple une boîte aux lettres liée ou distante) ; il ne peut donc pas devenir une boîte aux lettres d’équipement. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailUser" xml:space="preserve">
+    <value>Cet objet est un type de destinataire que JIM ne gère pas (par exemple une boîte aux lettres liée ou distante) ; il ne peut donc pas devenir un utilisateur de messagerie. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailContact" xml:space="preserve">
+    <value>Cet objet est un type de destinataire que JIM ne gère pas (par exemple une boîte aux lettres liée ou distante) ; il ne peut donc pas devenir un contact de messagerie. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="UnmanagedCannotBecomeMailEnabledGroup" xml:space="preserve">
+    <value>Cet objet est un type de destinataire que JIM ne gère pas (par exemple une boîte aux lettres liée ou distante) ; il ne peut donc pas devenir un groupe à extension messagerie. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="TypeChangeNotSupported" xml:space="preserve">
+    <value>La modification du type d’un destinataire n’est pas prise en charge dans cette version : dans Exchange, cet objet est de type {0}, et il est désormais déclaré de type {1}. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="TypeChangeToNoneNotSupported" xml:space="preserve">
+    <value>La modification du type d’un destinataire n’est pas prise en charge dans cette version : dans Exchange, cet objet est de type {0}, et il est désormais déclaré comme n’étant pas un destinataire. Rien n’a été modifié dans Exchange.</value>
+  </data>
+  <data name="TypeNameMailbox" xml:space="preserve">
+    <value>boîte aux lettres</value>
+  </data>
+  <data name="TypeNameSharedMailbox" xml:space="preserve">
+    <value>boîte aux lettres partagée</value>
+  </data>
+  <data name="TypeNameRoomMailbox" xml:space="preserve">
+    <value>boîte aux lettres de salle</value>
+  </data>
+  <data name="TypeNameEquipmentMailbox" xml:space="preserve">
+    <value>boîte aux lettres d’équipement</value>
+  </data>
+  <data name="TypeNameMailUser" xml:space="preserve">
+    <value>utilisateur de messagerie</value>
+  </data>
+  <data name="TypeNameMailContact" xml:space="preserve">
+    <value>contact de messagerie</value>
+  </data>
+  <data name="TypeNameMailEnabledGroup" xml:space="preserve">
+    <value>groupe à extension messagerie</value>
+  </data>
+  <data name="TypeNameNone" xml:space="preserve">
+    <value>« aucun destinataire »</value>
+  </data>
+  <data name="TypeNameUnmanaged" xml:space="preserve">
+    <value>« destinataire non géré par JIM »</value>
+  </data>
+  <data name="TypeNameOther" xml:space="preserve">
+    <value>« {0} »</value>
+  </data>
+  <data name="QueuedMailbox" xml:space="preserve">
+    <value>Boîte aux lettres mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedUpdateMailbox" xml:space="preserve">
+    <value>Mise à jour de la boîte aux lettres mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedSharedMailbox" xml:space="preserve">
+    <value>Boîte aux lettres partagée mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedUpdateSharedMailbox" xml:space="preserve">
+    <value>Mise à jour de la boîte aux lettres partagée mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedRoomMailbox" xml:space="preserve">
+    <value>Boîte aux lettres de salle mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedUpdateRoomMailbox" xml:space="preserve">
+    <value>Mise à jour de la boîte aux lettres de salle mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedEquipmentMailbox" xml:space="preserve">
+    <value>Boîte aux lettres d’équipement mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedUpdateEquipmentMailbox" xml:space="preserve">
+    <value>Mise à jour de la boîte aux lettres d’équipement mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedMailUser" xml:space="preserve">
+    <value>Utilisateur de messagerie mis en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedUpdateMailUser" xml:space="preserve">
+    <value>Mise à jour de l’utilisateur de messagerie mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedMailContact" xml:space="preserve">
+    <value>Contact de messagerie mis en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedUpdateMailContact" xml:space="preserve">
+    <value>Mise à jour du contact de messagerie mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedMailEnabledGroup" xml:space="preserve">
+    <value>Groupe à extension messagerie mis en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="QueuedUpdateMailEnabledGroup" xml:space="preserve">
+    <value>Mise à jour du groupe à extension messagerie mise en file d’attente pour Exchange sur {0}.</value>
+  </data>
+  <data name="Replaced" xml:space="preserve">
+    <value>Non remis à Exchange : remplacé par un état déclaré plus récent pour cet objet, mis en file d’attente par une exportation ultérieure vers {0}.</value>
+  </data>
+  <data name="FilterOneChange" xml:space="preserve">
+    <value>Une modification Exchange</value>
+  </data>
+  <data name="FilterChanges" xml:space="preserve">
+    <value>{0} modifications Exchange</value>
+  </data>
+  <data name="FilterQueue" xml:space="preserve">
+    <value>La file d’attente Exchange</value>
+  </data>
+  <data name="FilterAnyChanges" xml:space="preserve">
+    <value>Modifications Exchange</value>
+  </data>
+  <data name="FilterAnyChangesMatching" xml:space="preserve">
+    <value>Modifications Exchange correspondant à « {0} »</value>
+  </data>
+  <data name="FilterNamedChanges" xml:space="preserve">
+    <value>Modifications Exchange : {0}</value>
+  </data>
+  <data name="FilterNamedChangesMatching" xml:space="preserve">
+    <value>Modifications Exchange : {0}, correspondant à « {1} »</value>
+  </data>
+  <data name="FilterJoined" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="FilterStateQueued" xml:space="preserve">
+    <value>en file d’attente</value>
+  </data>
+  <data name="FilterStateDelivering" xml:space="preserve">
+    <value>envoi en cours</value>
+  </data>
+  <data name="FilterStateRetrying" xml:space="preserve">
+    <value>nouvelle tentative</value>
+  </data>
+  <data name="FilterStateParked" xml:space="preserve">
+    <value>suspendues</value>
+  </data>
+  <data name="FilterStateDelivered" xml:space="preserve">
+    <value>livrées</value>
+  </data>
+  <data name="FilterStateWithdrawn" xml:space="preserve">
+    <value>retirées</value>
+  </data>
+  <data name="FilterStateReplaced" xml:space="preserve">
+    <value>remplacées</value>
+  </data>
+  <data name="FilterStateRefused" xml:space="preserve">
+    <value>refusées</value>
+  </data>
+  <data name="FilterStateNotMade" xml:space="preserve">
+    <value>non effectuées</value>
+  </data>
+  <data name="FilterStateHeld" xml:space="preserve">
+    <value>en attente</value>
+  </data>
+  <data name="FilterKindObjectNotFound" xml:space="preserve">
+    <value>objet introuvable</value>
+  </data>
+  <data name="FilterKindRefused" xml:space="preserve">
+    <value>refus</value>
+  </data>
+  <data name="FilterKindInsufficientPermissions" xml:space="preserve">
+    <value>autorisations insuffisantes</value>
+  </data>
+  <data name="FilterKindAuthenticationFailed" xml:space="preserve">
+    <value>échec de l’authentification</value>
+  </data>
+  <data name="FilterKindUnreachable" xml:space="preserve">
+    <value>inaccessible</value>
+  </data>
+</root>

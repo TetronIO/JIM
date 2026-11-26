@@ -345,4 +345,58 @@
   <data name="ProvSeveralValues" xml:space="preserve">
     <value>Der Ausdruck hat {0} Werte zurückgegeben, dieses Attribut ist aber einwertig, daher würde diese Quelle keinen Wert liefern, und die Synchronisierung meldet einen Fehler.</value>
   </data>
+  <data name="ContributionModeNeedsMultiValued" xml:space="preserve">
+    <value>Der Beitragsmodus {0} gilt nur für mehrwertige Attribute. Stellen Sie den Modus auf „Priorität“, bevor Sie das Attribut einwertig machen.</value>
+  </data>
+  <data name="ContributionModeNotForReference" xml:space="preserve">
+    <value>Der Beitragsmodus {0} ist für Referenzattribute nicht verfügbar, da eine Referenz entfernt wird, wenn das Metaverse-Objekt gelöscht wird, auf das sie verweist. Um einen Verlauf der Referenzen zu behalten, erfassen Sie die Kennung des referenzierten Objekts als Text in einem separaten mehrwertigen Textattribut.</value>
+  </data>
+  <data name="ContributionModeUnsupported" xml:space="preserve">
+    <value>Der Beitragsmodus {0} ist für ein Attribut vom Typ {1} nicht verfügbar.</value>
+  </data>
+  <data name="ContributionModeMergeNotForReference" xml:space="preserve">
+    <value>Der Beitragsmodus „Zusammenführen“ ist für Referenzattribute nicht verfügbar. Verwenden Sie für ein Referenzattribut den Beitragsmodus „Priorität“.</value>
+  </data>
+  <data name="TrustThumbprintRequired" xml:space="preserve">
+    <value>Ein Fingerabdruck ist erforderlich. JIM vertraut nicht einfach dem, was ein Server gerade vorlegt.</value>
+  </data>
+  <data name="TrustServerUnreachable" xml:space="preserve">
+    <value>{0}:{1} war nicht erreichbar, daher wurde nichts als vertrauenswürdig eingestuft.</value>
+  </data>
+  <data name="TrustServerOfferedNothing" xml:space="preserve">
+    <value>{0}:{1} hat kein Zertifikat vorgelegt, daher gibt es nichts, dem vertraut werden könnte.</value>
+  </data>
+  <data name="TrustThumbprintMismatch" xml:space="preserve">
+    <value>{0} legt ein anderes Zertifikat vor als das von Ihnen bestätigte, daher wurde nichts als vertrauenswürdig eingestuft. Das ist zu erwarten, wenn das Zertifikat erneuert wurde; andernfalls sollten Sie der Ursache nachgehen.</value>
+  </data>
+  <data name="TrustRootRequiredWithRoot" xml:space="preserve">
+    <value>Diese Verbindung zum {0} akzeptiert nur das Stammzertifikat der Zertifikatskette, daher würde das Vertrauen in „{1}“ sie nicht zum Laufen bringen, und es wurde nichts als vertrauenswürdig eingestuft. Vertrauen Sie stattdessen „{2}“.</value>
+  </data>
+  <data name="TrustRootRequiredNoRoot" xml:space="preserve">
+    <value>Diese Verbindung zum {0} akzeptiert nur das Stammzertifikat der Zertifikatskette, und JIM konnte es nicht finden, daher wurde nichts als vertrauenswürdig eingestuft. Beschaffen Sie das Stammzertifikat von den Betreibern Ihrer PKI und fügen Sie es unter Admin &gt; Zertifikate hinzu.</value>
+  </data>
+  <data name="TrustAlreadyInStore" xml:space="preserve">
+    <value>„{0}“ befindet sich bereits im Zertifikatspeicher von JIM.</value>
+  </data>
+  <data name="AccumulatedValueRemovalNotAccumulate" xml:space="preserve">
+    <value>Nur Werte eines Attributs im Modus „Akkumulieren“ können manuell entfernt werden; „{0}“ ist im Modus {1}.</value>
+  </data>
+  <data name="AccumulatedValueRemovalNothingNamed" xml:space="preserve">
+    <value>Geben Sie mindestens einen zu entfernenden Wert von „{0}“ an.</value>
+  </data>
+  <data name="AccumulatedValueRemovalNotHeld" xml:space="preserve">
+    <value>Das Metaverse-Objekt enthält keinen Wert „{0}“ für „{1}“. Es wurde nichts entfernt.</value>
+  </data>
+  <data name="AccumulatedValueRemovalSupplied" xml:space="preserve">
+    <value>„{0}“ wird weiterhin von der Synchronisierungsregel „{1}“ aus dem verbundenen System „{2}“ geliefert, sodass die nächste Synchronisierung ihn wieder hinzufügen würde. Ändern Sie zuerst den Wert an seiner Quelle oder nehmen Sie das Objekt aus dem Bereich der Regel. Es wurde nichts entfernt.</value>
+  </data>
+  <data name="AccumulatedValueRemovalUndecidable" xml:space="preserve">
+    <value>JIM kann nicht feststellen, ob die Synchronisierungsregel „{0}“ aus dem verbundenen System „{1}“ diese Werte noch liefert, daher wurde nichts entfernt: {2}</value>
+  </data>
+  <data name="AccumulatedValuesRemovedOne" xml:space="preserve">
+    <value>{0} Wert aus „{1}“ entfernt.</value>
+  </data>
+  <data name="AccumulatedValuesRemovedOther" xml:space="preserve">
+    <value>{0} Werte aus „{1}“ entfernt.</value>
+  </data>
 </root>

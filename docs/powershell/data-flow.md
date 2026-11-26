@@ -81,6 +81,7 @@ One object per flow. The cmdlet pages through the whole result set itself.
 | `MetaverseObjectTypeName` | `string` | The name of the Metaverse Object Type the flow applies to. |
 | `TargetMetaverseAttributeId` | `int` | The Metaverse Attribute an Import flow writes. Empty on an Export flow, where the Metaverse side is the source. |
 | `TargetMetaverseAttributeName` | `string` | The Metaverse Attribute an Import flow writes. Empty on an Export flow. |
+| `TargetMetaverseAttributeContributionMode` | `string` | How the target Metaverse attribute combines its contributors' values: `Priority`, `Accumulate` or `Merge`. Under `Accumulate` and `Merge` every contributor adds its values and Priority is not used. Empty for an export flow. One of `Priority`, `Accumulate` or `Merge`. |
 | `TargetConnectedSystemAttributeId` | `int` | The Connected System attribute an Export flow writes. Empty on an Import flow, where the Connected System side is the source. |
 | `TargetConnectedSystemAttributeName` | `string` | The Connected System attribute an Export flow writes. Empty on an Import flow. |
 | `Sources` | `object[]` | What feeds the target, in evaluation order: Connected System attributes on an Import flow, Metaverse Attributes on an Export flow, or an expression on either. Each names its attribute, or carries the expression, with its place in the order and a display name. Each has `Order`, `MetaverseAttributeId`, `MetaverseAttributeName`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName`, `Expression`, `IsExpression` and `DisplayName`. |

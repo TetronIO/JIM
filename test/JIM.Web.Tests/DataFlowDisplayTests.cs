@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Web.Models;
@@ -50,6 +51,23 @@ public class DataFlowDisplayTests
         flow.ContributorCount = 3;
 
         Assert.That(DataFlowDisplay.PriorityLabel(flow), Is.EqualTo("2 of 3"));
+    }
+
+    [TestCase(AttributeContributionMode.Accumulate, "Accumulate")]
+    [TestCase(AttributeContributionMode.Merge, "Merge")]
+    public void PriorityLabel_TargetWithNoWinner_NamesTheModeInsteadOfAPosition(AttributeContributionMode mode, string expected)
+    {
+        // Under Accumulate and Merge (#3059) every contributor adds its values: a position would claim an order the
+        // engine does not use.
+        var flow = BuildImportFlow(priority: 1);
+        flow.ContributorCount = 2;
+        flow.TargetMetaverseAttributeContributionMode = mode;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DataFlowDisplay.PriorityLabel(flow), Is.EqualTo(expected));
+            Assert.That(DataFlowDisplay.IsHighestPriorityContributor(flow), Is.False);
+        }
     }
 
     [Test]

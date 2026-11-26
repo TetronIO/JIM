@@ -50,6 +50,9 @@
 #             AD FS scenarios sign in through)
 #   for Exchange JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS and JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS (exchange-primary and
 #             exchange-source, which the Exchange recipient scenarios provision through; #2021)
+#   for hybrid JIM_AD_LAB_HYBRID_ADDRESS (dc-hybrid, the forest Entra Cloud Sync synchronises), JIM_ENTRA_HYBRID_TENANT_ID
+#             and JIM_ENTRA_HYBRID_CI_CLIENT_ID (the hybrid test tenant and its CI app; Scenario 038, #3029). Until all
+#             three are set, a nightly leaves Scenario 038 out and posts no jim-entra-hybrid status
 #   optional  repository variable JIM_BENCH_API_URL and secret JIM_BENCH_API_KEY, which the runner reads to stream
 #             results to the metrics API (as for every integration run); unset, results stay local
 #
@@ -175,6 +178,8 @@ jobs:
       # naming the variable when it is unset, so a lab without an Exchange server still runs everything else.
       JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS }}
       JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS }}
+      # The hybrid forest (Scenario 038, #3029). Not in the check below either: a lab without it leaves the scenario out.
+      JIM_AD_LAB_HYBRID_ADDRESS: ${{ vars.JIM_AD_LAB_HYBRID_ADDRESS }}
 
     steps:
       # For the four-hour check in "Summarise the run" (see Timing above).
@@ -299,6 +304,7 @@ jobs:
         id: plan
         env:
           SCENARIO: ${{ inputs.scenario || 'All' }}
+          HYBRID_CONFIGURED: ${{ vars.JIM_AD_LAB_HYBRID_ADDRESS != '' && vars.JIM_ENTRA_HYBRID_TENANT_ID != '' && vars.JIM_ENTRA_HYBRID_CI_CLIENT_ID != '' }}
         run: |
           . ./test/integration/utils/Resolve-IntegrationScenarioName.ps1
           . ./test/integration/utils/Get-ScenarioDirectoryTypes.ps1
@@ -309,12 +315,16 @@ jobs:
           $entra = ($name -eq 'All') -or ($number -eq 35)
           $entraConnector = ($name -eq 'All') -or ($number -in 36, 37)
           $entraConnectorScenarios = if ($name -eq 'All') { '36 37' } elseif ($number -in 36, 37) { "$number" } else { '' }
+          # Scenario 038 needs the hybrid forest and tenant: a nightly runs it once they are configured, and a run asked
+          # for it by number runs it regardless, failing with the name of whatever is missing.
+          $entraHybrid = (($name -eq 'All') -and $env:HYBRID_CONFIGURED -eq 'true') -or ($number -eq 38)
+          "entra_hybrid=$($entraHybrid.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "entra_connector_scenarios=$entraConnectorScenarios" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "suite=$($suite.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "sign_in=$($signIn.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "entra=$($entra.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "entra_connector=$($entraConnector.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Scenario '$env:SCENARIO' ($name): LDAP suite $suite, AD FS sign-in checks $signIn, Entra ID sign-in checks $entra, Entra ID Connector checks $entraConnector"
+          Write-Host "Scenario '$env:SCENARIO' ($name): LDAP suite $suite, AD FS sign-in checks $signIn, Entra ID sign-in checks $entra, Entra ID Connector checks $entraConnector, hybrid checks $entraHybrid"
 
       # The suite. -ContinueOnFailure so one red scenario does not hide the others: the point of a night's run is
       # the full list. The runner reverts each domain controller to its checkpoint, populates and re-checkpoints
@@ -453,6 +463,28 @@ jobs:
             if ($LASTEXITCODE -ne 0) { $failed += $number }
           }
           if ($failed.Count -gt 0) { Write-Host "::error::Entra ID Connector scenario(s) failed: $($failed -join ', ')"; exit 1 }
+
+      # The hybrid checks (Scenario 038, #3029): the Entra ID Connector against objects Entra Cloud Sync copies from the
+      # lab's hybrid forest (dc-hybrid) into the hybrid test tenant, with their Source of Authority switched to Entra ID
+      # and back. The harness writes to the forest over LDAPS and checks Entra ID through Graph itself. Its own tenant and
+      # CI app, so it shares nothing with the Entra ID Connector checks above. Reported as jim-entra-hybrid below.
+      - name: Run the hybrid checks
+        id: entra_hybrid
+        if: ${{ !cancelled() && steps.plan.outputs.entra_hybrid == 'true' }}
+        continue-on-error: true
+        env:
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+          JIM_ENTRA_HYBRID_TENANT_ID: ${{ vars.JIM_ENTRA_HYBRID_TENANT_ID }}
+          JIM_ENTRA_HYBRID_CI_CLIENT_ID: ${{ vars.JIM_ENTRA_HYBRID_CI_CLIENT_ID }}
+          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
+          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          # -SkipBuild as in the AD FS step above.
+          $marker = 'test/integration/.jim-images-built'
+          $build = @(if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq (git rev-parse HEAD))) { '-SkipBuild' })
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 38 -Template Nano -DirectoryType ActiveDirectory @build
+          exit $LASTEXITCODE
 
       # What the run left, condensed: scenario counts and the domain controller OS builds (recorded by the runner in
       # the regression report, or in the performance file for a single scenario) into dc-builds.json, the job
@@ -642,6 +674,25 @@ jobs:
             default   { $state = 'error'; $description = 'the run stopped before the Entra ID Connector checks ran' }
           }
           gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-entra-connector' -f description="$description" -f target_url="$env:RUN_URL"
+          exit $LASTEXITCODE
+
+      # The hybrid checks' own status, kept apart like jim-entra-connector's and not a release gate. Posted only by a run
+      # that set out to run them; a cancelled run posts nothing.
+      - name: Post the jim-entra-hybrid commit status
+        if: ${{ always() && job.status != 'cancelled' && steps.plan.outputs.entra_hybrid == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ENTRA_HYBRID_OUTCOME: ${{ steps.entra_hybrid.outcome }}
+        run: |
+          switch ($env:ENTRA_HYBRID_OUTCOME) {
+            'success' { $state = 'success'; $description = 'Hybrid and Source of Authority checks passed (Scenario 038)' }
+            'failure' { $state = 'failure'; $description = 'Hybrid and Source of Authority checks failed (Scenario 038); see the run' }
+            default   { $state = 'error'; $description = 'the run stopped before the hybrid checks ran' }
+          }
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-entra-hybrid' -f description="$description" -f target_url="$env:RUN_URL"
           exit $LASTEXITCODE
 
       # The runner is not ephemeral: without teardown the stack and the key persist between jobs. Always run.

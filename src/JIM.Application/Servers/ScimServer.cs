@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using JIM.Connectors.SCIM.ServiceProvider;
@@ -152,8 +154,8 @@ public class ScimServer
 
     private async Task RecordRequestTallyAsync(ScimRequestTally tally)
     {
-        var warningMessage = tally.LatestRejection == null ? null : $"Latest rejection: {tally.LatestRejection}";
-        if (await Application.Repository.Activity.AddToScimRequestSummaryAsync(tally, warningMessage))
+        var warning = tally.LatestRejection == null ? null : ActivityMessage.Create(nameof(ActivityMessages.ScimLatestRejection), tally.LatestRejection);
+        if (await Application.Repository.Activity.AddToScimRequestSummaryAsync(tally, warning))
             return;
 
         var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(tally.ConnectedSystemId);
@@ -168,7 +170,7 @@ public class ScimServer
             TargetType = ActivityTargetType.ScimRequests,
             TargetOperationType = ActivityTargetOperationType.Receive,
             TargetName = connectedSystem.Name,
-            Message = $"SCIM requests from '{tally.ApiKeyName}'",
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ScimRequestsFrom), tally.ApiKeyName),
             ConnectedSystemId = tally.ConnectedSystemId,
             AggregationWindowStart = tally.WindowStart,
             FirstSeen = tally.FirstSeen,
@@ -177,7 +179,7 @@ public class ScimServer
             TotalUpdated = tally.Updated,
             TotalDeleted = tally.Deleted,
             TotalErrors = tally.Rejected,
-            WarningMessage = warningMessage
+            WarningMessageDetail = warning
         };
 
         try
@@ -185,13 +187,13 @@ public class ScimServer
             // One terminal insert, never create-then-complete: a second full-row write would erase what a concurrent
             // flush added between the two (the lost update SecurityAuditServer guards against the same way).
             await Application.Activities.CreateCompletedActivityWithTriadAsync(activity, ActivityInitiatorType.ApiKey, tally.ApiKeyId, tally.ApiKeyName,
-                warningMessage == null ? ActivityStatus.Complete : ActivityStatus.CompleteWithWarning);
+                warning == null ? ActivityStatus.Complete : ActivityStatus.CompleteWithWarning);
         }
         catch (DbUpdateException)
         {
             // Another flush created this window's Activity first (the partial unique index refused ours); add to it.
             Application.Repository.ClearChangeTracker();
-            if (!await Application.Repository.Activity.AddToScimRequestSummaryAsync(tally, warningMessage))
+            if (!await Application.Repository.Activity.AddToScimRequestSummaryAsync(tally, warning))
                 throw;
         }
     }

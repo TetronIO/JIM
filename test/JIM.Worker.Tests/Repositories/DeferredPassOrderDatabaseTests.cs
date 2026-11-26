@@ -520,6 +520,91 @@ public class DeferredPassOrderDatabaseTests
         return false;
     }
 
+    // ─── Withdrawing references to deleted Metaverse Objects (#3078) ───
+
+    /// <summary>
+    /// A group gaining two members, one of whom has since been deleted: the deleted member's addition is withdrawn from the
+    /// database and never sent, the other is written, and the withdrawal raises nothing on the worker's tracking context.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_MemberAdditionNamesADeletedMetaverseObject_IsWithdrawnAndTheRestWrittenAsync()
+    {
+        var s = await SeedSchemaAsync();
+        var user = await SeedUserAsync(s, "user-0");
+        var deleted = Guid.NewGuid();
+        var group = await SeedGroupCreateAsync(s, T0, [user, deleted], anchor: "cn=group,ou=groups,dc=glitterband,dc=local",
+            changeType: PendingExportChangeType.Update);
+        var sent = new List<string>();
+
+        var result = await RunExportAsync(s, sent);
+
+        await using var verify = NewContext();
+        var memberChanges = await verify.PendingExportAttributeValueChanges
+            .Where(c => c.PendingExportId == group.ExportId && c.AttributeId == s.MemberAttributeId)
+            .Select(c => c.UnresolvedReferenceValue)
+            .ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.Zero);
+            Assert.That(result.WithdrawnReferenceCount, Is.EqualTo(1));
+            Assert.That(sent, Is.EqualTo(new[] { "user-0" }), "only the member who still exists is sent");
+            Assert.That(memberChanges, Does.Not.Contain(deleted.ToString()), "the deleted member's addition is gone from the database");
+        }
+    }
+
+    /// <summary>
+    /// A group whose only queued change is a deleted member's addition: the export is finished with, and its row removed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_OnlyChangeNamesADeletedMetaverseObject_ExportIsRemovedAsync()
+    {
+        var s = await SeedSchemaAsync();
+        var group = await SeedGroupCreateAsync(s, T0, [Guid.NewGuid()], anchor: "cn=group,ou=groups,dc=glitterband,dc=local",
+            changeType: PendingExportChangeType.Update);
+        await using (var trim = NewContext())
+        {
+            await trim.PendingExportAttributeValueChanges
+                .Where(c => c.PendingExportId == group.ExportId && c.AttributeId == s.DisplayNameAttributeId)
+                .ExecuteDeleteAsync();
+        }
+        var sent = new List<string>();
+
+        var result = await RunExportAsync(s, sent);
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.Zero);
+            Assert.That(result.WithdrawnReferenceCount, Is.EqualTo(1));
+            Assert.That(sent, Is.Empty, "nothing is sent");
+            Assert.That(await verify.PendingExports.AnyAsync(pe => pe.Id == group.ExportId), Is.False, "the export is finished with");
+            Assert.That(await verify.PendingExportAttributeValueChanges.AnyAsync(c => c.PendingExportId == group.ExportId), Is.False);
+        }
+    }
+
+    /// <summary>Runs the export on one worker, recording the members each write sends.</summary>
+    private async Task<ExportExecutionResult> RunExportAsync(Schema s, List<string> sentMembers)
+    {
+        var connector = new Mock<IConnector>();
+        connector.Setup(c => c.Name).Returns("Recording Connector");
+        connector.As<IConnectorExportUsingCalls>()
+            .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                sentMembers.AddRange(exports.SelectMany(export => export.AttributeValueChanges)
+                    .Where(c => c.AttributeId == s.MemberAttributeId && c.StringValue != null)
+                    .Select(c => c.StringValue!));
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+
+        await using var callerContext = NewWorkerContext();
+        var callerRepository = new PostgresDataRepository(callerContext);
+        using var jim = new JimApplication(callerRepository, syncRepository: callerRepository.Sync);
+        var connectedSystem = (await jim.ConnectedSystems.GetConnectedSystemAsync(s.SystemId))!;
+        return await jim.ExportExecution.ExecuteExportsAsync(connectedSystem, connector.Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 10, MaxParallelism = 1 }, CancellationToken.None);
+    }
+
     private sealed record Schema(int SystemId, int TypeId, int MvTypeId, int ObjectIdAttributeId, int DisplayNameAttributeId, int MemberAttributeId);
 
     private async Task<DeferredExportOrderingSummary> ReadSummaryAsync(Schema s, params Guid[] exportIds)

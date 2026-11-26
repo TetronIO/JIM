@@ -26,6 +26,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 
 | Component | Use for | See |
 |-----------|---------|-----|
+| `<SectionStack>` | The blocks of a page, tab or panel, one section gap (24px) apart; children carry no vertical margins | "Vertical spacing" below |
+| `<SectionCaption>` | Helper text for the block directly above it in a `<SectionStack>`, one caption gap (8px) below it | "Vertical spacing" below |
 | `<TableDensityToggle @bind-Dense="_dense" />` | The compact/normal row toggle in a table's `ToolBarContent` | "Row density" below |
 | `<SegmentedToggle TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive settings or views (the causality panel's view, the Inspect view's Group by, the Metaverse Object's Form/Tabs/Inspect): the quiet slider, not a `MudButtonGroup`. Options are `SegmentedToggleOption<T>`; give options an `Href` to choose between sibling pages as links (`SiblingPages`), a `Tooltip` where the label alone is too terse, and an `Icon` before the label; `Dense` for rows in a list or table | `Shared/SegmentedToggle.razor` |
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
@@ -326,6 +328,10 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 
 The four surfaces showing Boolean attribute values (the Connector Space table, and the Metaverse Object detail's Form, Tabs and Table views) each carried their own copy of this markup, and the copies had already drifted: three rendered icon-plus-label at `Size.Small`, the fourth rendered a default-size icon and no label at all. The component is what stops them drifting again; `BooleanValueTests` pins the icons, the colours, the labels and the default icon size.
 
+## Values in sentences
+
+**A value or name placed into a sentence of portal text is inline code, composed with `InlineCode.Format(template, values...)`, and its placeholder carries no quotes.** The design rule and its scope are in `engineering/DESIGN.md` > Values and names in running text. The helper encodes each value (the message renders as markup, and values come from directories and administrators), so never build `<code class="jim-code-inline">` into a markup string by hand. Older components still do; migrate them when you touch them. In Razor markup the element is fine as it is, since Razor encodes the value.
+
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
 - This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
@@ -413,6 +419,10 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 - `ToFriendlyDate()` returns an unambiguous, culture-independent format (day-month-name-year, 24-hour clock with seconds); do not reintroduce culture-dependent short formats (`ToShortDateString()`/`ToShortTimeString()`) for this purpose.
 - Both extension methods take a `DateTime`, not a `DateTimeOffset`; per the DateTime Handling rules in `src/CLAUDE.md`, call `.ToLocalTime()` first when the stored value is UTC and the display should be in the user's local time (the common case for tooltips over `Created`/`ChangeTime`-style fields).
 - `ToShortDateString()` remains fine for a **date-only** value with no time component (e.g. `ExampleDataTemplateDetail.razor`'s Min/Max Date chips); `ToFriendlyDate()` is for full date **and** time.
+
+## Vertical spacing
+
+**Vertical gaps come from the design system, by role: `engineering/DESIGN.md` > Layout > Spacing.** Section gap (24px) between independent blocks, field gap (16px) within a form, caption gap (8px) from a block to its helper text. Put a page's or tab's blocks in a `<SectionStack>`, and its helper text in a `<SectionCaption>` straight after the block it describes; place no `mt-`/`mb-`/`my-`/`ma-` margins of your own, and never match a neighbouring page's value. `VerticalSpacingConventionTests` counts hand-placed vertical margins per file against a baseline that may only fall, so a new margin fails the build; migrate a page to `<SectionStack>` when you touch its layout and lower the baseline (`JIM_UPDATE_SPACING_BASELINE=1 dotnet test test/JIM.Web.Tests --filter VerticalSpacingConventionTests`). The Schema page's tabs are the worked example. The "Panel spacing" rules below describe pages not yet migrated (#3095); they are not a pattern for new markup.
 
 ## Panel spacing (target: uniform `mt-6` visual gaps between all block-level sections)
 - Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections

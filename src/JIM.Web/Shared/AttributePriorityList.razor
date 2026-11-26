@@ -1,3 +1,4 @@
+@using JIM.Models.Core
 @using JIM.Models.Activities.DTOs
 @using JIM.Models.Logic
 @using JIM.Web.Models.Api
@@ -23,6 +24,49 @@ else if (_contributors.Count == 0 && string.IsNullOrEmpty(PendingContributorSyst
     <MudAlert Severity="Severity.Info" Dense="true">
         @SyncRuleText.PriorityNoContributors
     </MudAlert>
+}
+else if (_noWinnerMode != null)
+{
+    @* An Accumulate or Merge attribute (#3059): every contributor adds its values, so there is no order and no winner. *@
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">@(_noWinnerMode == AttributeContributionMode.Merge
+        ? MetaverseAttributeText.PriorityListMergeNotice
+        : MetaverseAttributeText.PriorityListAccumulateNotice)</MudAlert>
+    <div class="d-flex align-center px-2 py-1 mud-text-secondary" style="font-weight: 500;">
+        <div style="flex: 1 1 0;">@MetaverseAttributeText.ColumnConnectedSystem</div>
+        <div style="flex: 1 1 0;">@MetaverseAttributeText.ColumnSynchronisationRule</div>
+    </div>
+    <div class="apt-list-frame rounded">
+        @foreach (var contributor in _contributors)
+        {
+            var isThisMapping = HighlightMappingId.HasValue && contributor.MappingId == HighlightMappingId.Value;
+            <div class="apt-row d-flex align-center px-2 py-2 @(contributor.SyncRuleEnabled ? null : "mud-text-disabled") @(isThisMapping ? "apt-row-current" : null)">
+                <div style="flex: 1 1 0;">
+                    @if (string.IsNullOrEmpty(contributor.ConnectedSystemName))
+                    {
+                        <EmptyValue />
+                    }
+                    else
+                    {
+                        @contributor.ConnectedSystemName
+                    }
+                </div>
+                <div style="flex: 1 1 0;">
+                    @contributor.SyncRuleName
+                    @if (!contributor.SyncRuleEnabled)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">@CommonText.Disabled</MudChip>
+                    }
+                </div>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(PendingContributorSystemName))
+        {
+            <div class="apt-row apt-row-current d-flex align-center px-2 py-2">
+                <div style="flex: 1 1 0;">@PendingContributorSystemName</div>
+                <div style="flex: 1 1 0;" class="mud-text-secondary">@MetaverseAttributeText.PendingContributorThisMapping</div>
+            </div>
+        }
+    </div>
 }
 else
 {
@@ -189,6 +233,10 @@ else
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private MudDropContainer<AttributePriorityContributorDto>? _dropContainer;
+
+    // An Accumulate or Merge attribute (#3059) has no order to manage; read from the contributors' target attribute. Null
+    // for a Priority attribute.
+    private AttributeContributionMode? _noWinnerMode;
     private List<AttributePriorityContributorDto> _contributors = new();
 
     // Snapshot of the loaded order (mapping id + null-is-value), so dirty state and Reset compare against persisted truth.
@@ -222,6 +270,8 @@ else
         using var jim = JimFactory.Create();
         var mappings = await jim.ConnectedSystems.GetAttributePriorityOrderAsync(MetaverseObjectTypeId, MetaverseAttributeId);
         _contributors = mappings.Select(AttributePriorityContributorDto.FromEntity).ToList();
+        var mode = mappings.FirstOrDefault()?.TargetMetaverseAttribute?.ContributionMode;
+        _noWinnerMode = mode is AttributeContributionMode.Accumulate or AttributeContributionMode.Merge ? mode : null;
         _original = _contributors.Select(c => (c.MappingId, c.NullIsValue)).ToList();
         _dirty = false;
         _loading = false;

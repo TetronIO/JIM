@@ -3,12 +3,14 @@
 
 using System.Globalization;
 using JIM.Application.Exceptions;
+using JIM.Application.Localisation;
 using JIM.Application.Expressions;
 using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -156,7 +158,7 @@ internal sealed class CollisionRemediationRun
         if (assignment.RemediationCount >= UniqueValueGenerationServer.MaximumRemediations && !assignment.RenameAuthorised)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
                 GeneratedValueNeedsDecisionReason.RemediationLimitReached,
-                $"it has already been corrected {assignment.RemediationCount} times, so JIM has stopped correcting it");
+                ActivityMessage.CollisionWhyLimitReached(assignment.RemediationCount));
 
         var generationServer = new UniqueValueGenerationServer(repository);
         var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(mapping, context.AllExportRules);
@@ -173,10 +175,10 @@ internal sealed class CollisionRemediationRun
         if (verdict.Anchoring != GeneratedValueAnchoring.Unanchored && !assignment.RenameAuthorised)
         {
             var anchoringName = SystemName(context, verdict.ConnectedSystemId!.Value);
-            var what = anchoringBuiltValue == null ? "it" : $"the {anchoringBuiltValue} built from it";
+            var what = ActivityMessage.CollisionHeld(anchoringBuiltValue);
             var why = verdict.Anchoring == GeneratedValueAnchoring.Anchored
-                ? $"{anchoringName} has already accepted {what} for this object, so changing it would rename an account already in use"
-                : $"JIM cannot tell whether {anchoringName} already holds {what}, because {anchoringName} has not completed a Full Import since its connector space was cleared";
+                ? ActivityMessage.CollisionWhyAnchored(anchoringName, what)
+                : ActivityMessage.CollisionWhyCannotTell(anchoringName, what);
             var reason = verdict.Anchoring == GeneratedValueAnchoring.Anchored
                 ? GeneratedValueNeedsDecisionReason.AnchoredElsewhere
                 : GeneratedValueNeedsDecisionReason.CannotTell;
@@ -216,7 +218,7 @@ internal sealed class CollisionRemediationRun
 
         if (outcome.Kind != GenerationOutcomeKind.Generated)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
-                GeneratedValueNeedsDecisionReason.NoValueAvailable, $"no other value could be found for it: {outcome.FailureMessage}");
+                GeneratedValueNeedsDecisionReason.NoValueAvailable, ActivityMessage.CollisionWhyNoValue(FailureOf(outcome)));
 
         var reasonCode = assignment.RenameAuthorised ? CausalReasonCode.GeneratedValueRenameAuthorised : CausalReasonCode.GeneratedValueAlreadyInUse;
         var revised = Revise(assignment, outcome, executionItemId, _connectedSystem.Id);
@@ -289,7 +291,7 @@ internal sealed class CollisionRemediationRun
         if (assignment.RemediationCount >= UniqueValueGenerationServer.MaximumRemediations && !assignment.RenameAuthorised)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
                 GeneratedValueNeedsDecisionReason.RemediationLimitReached,
-                $"it has already been corrected {assignment.RemediationCount} times, so JIM has stopped correcting it");
+                ActivityMessage.CollisionWhyLimitReached(assignment.RemediationCount));
 
         var generationServer = new UniqueValueGenerationServer(repository);
         var request = new GenerationRequest
@@ -307,7 +309,7 @@ internal sealed class CollisionRemediationRun
         var outcome = await generationServer.RegenerateAsync(request, Options);
         if (outcome.Kind != GenerationOutcomeKind.Generated)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
-                GeneratedValueNeedsDecisionReason.NoValueAvailable, $"no other value could be found for it: {outcome.FailureMessage}");
+                GeneratedValueNeedsDecisionReason.NoValueAvailable, ActivityMessage.CollisionWhyNoValue(FailureOf(outcome)));
 
         var revised = Revise(assignment, outcome, executionItemId, _connectedSystem.Id);
         var revision = new GeneratedValueRevision
@@ -348,7 +350,8 @@ internal sealed class CollisionRemediationRun
         export.Status = PendingExportStatus.Pending;
         export.LastAttemptedAt = DateTime.UtcNow;
 
-        var message = $"{_connectedSystem.Name} already holds the {attributeName} \"{rejectedValue}\" for another object, so JIM corrected it to \"{newValue}\".";
+        var messageDetail = ActivityMessage.CollisionRemediated(_connectedSystem.Name, attributeName, rejectedValue, newValue);
+        var message = messageDetail.ToEnglish();
         Log.Warning("CollisionRemediation: {ConnectedSystem} rejected the {Attribute} \"{RejectedValue}\" on Pending Export {ExportId} as already in use; " +
             "JIM corrected it to \"{NewValue}\". The export stays queued for the next synchronisation to re-stage.",
             LogSanitiser.Sanitise(_connectedSystem.Name), LogSanitiser.Sanitise(attributeName), LogSanitiser.Sanitise(rejectedValue), export.Id, LogSanitiser.Sanitise(newValue));
@@ -360,6 +363,7 @@ internal sealed class CollisionRemediationRun
             RejectedValue = rejectedValue,
             NewValue = newValue,
             Message = message,
+            MessageDetail = messageDetail,
             ExecutionItemId = executionItemId,
             CarryingAttribute = carryingAttribute
         };
@@ -367,22 +371,23 @@ internal sealed class CollisionRemediationRun
 
     private async Task<GeneratedValueCollisionOutcome> EnterNeedsDecisionAsync(
         PendingExport export, GeneratedValueAssignment assignment, string attributeName, string rejectedValue, int? anchoredBy,
-        Guid executionItemId, ISyncRepository repository, GeneratedValueNeedsDecisionReason reason, string why)
+        Guid executionItemId, ISyncRepository repository, GeneratedValueNeedsDecisionReason reason, JimMessage why)
     {
         await new UniqueValueGenerationServer(repository).EnterNeedsDecisionAsync(assignment, _connectedSystem.Id, anchoredBy, executionItemId, reason);
 
-        var message = $"{_connectedSystem.Name} rejected the {attributeName} \"{rejectedValue}\" because another object there already holds it, " +
-                      $"and JIM has not changed it: {why}. Allow the rename, retry once the conflict is resolved in {_connectedSystem.Name}, or leave it.";
+        var messageDetail = ActivityMessage.CollisionNeedsDecision(_connectedSystem.Name, attributeName, rejectedValue, why);
+        var message = messageDetail.ToEnglish();
+        var whyEnglish = why.ToEnglish();
 
         // Parked under its own status (plan decision 12): never exported, and not counted against its error count,
         // until the decision releases it.
         export.Status = PendingExportStatus.Parked;
         export.LastAttemptedAt = DateTime.UtcNow;
-        export.LastErrorMessage = message;
+        export.LastErrorMessageDetail = messageDetail;
 
         Log.Warning("CollisionRemediation: {ConnectedSystem} rejected the {Attribute} \"{RejectedValue}\" on Pending Export {ExportId} as already in use; " +
             "the value needs a decision ({Why}), so the export is parked.",
-            LogSanitiser.Sanitise(_connectedSystem.Name), LogSanitiser.Sanitise(attributeName), LogSanitiser.Sanitise(rejectedValue), export.Id, LogSanitiser.Sanitise(why));
+            LogSanitiser.Sanitise(_connectedSystem.Name), LogSanitiser.Sanitise(attributeName), LogSanitiser.Sanitise(rejectedValue), export.Id, LogSanitiser.Sanitise(whyEnglish));
 
         return new GeneratedValueCollisionOutcome
         {
@@ -390,9 +395,14 @@ internal sealed class CollisionRemediationRun
             AttributeName = attributeName,
             RejectedValue = rejectedValue,
             Message = message,
+            MessageDetail = messageDetail,
             ExecutionItemId = executionItemId
         };
     }
+
+    /// <summary>Why value generation failed, as an argument: its message where it has one, else its text.</summary>
+    private static MessageArgument FailureOf(GenerationOutcome outcome) =>
+        outcome.FailureDetail is { } detail ? detail : outcome.FailureMessage ?? string.Empty;
 
     private GeneratedValueCollisionOutcome? LogOrdinary(PendingExport export, string reason)
     {

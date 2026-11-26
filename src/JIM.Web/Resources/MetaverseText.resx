@@ -1410,6 +1410,34 @@
     <value>Exchange recipient</value>
     <comment>Title for a change to no recipient type, or to one JIM does not recognise.</comment>
   </data>
+  <data name="EchTitleMailbox" xml:space="preserve">
+    <value>Mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleSharedMailbox" xml:space="preserve">
+    <value>Shared mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleRoomMailbox" xml:space="preserve">
+    <value>Room mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleEquipmentMailbox" xml:space="preserve">
+    <value>Equipment mailbox</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleMailUser" xml:space="preserve">
+    <value>Mail user</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleMailContact" xml:space="preserve">
+    <value>Mail contact</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
+  <data name="EchTitleMailEnabledGroup" xml:space="preserve">
+    <value>Mail-enabled group</value>
+    <comment>Title of a queued Exchange change that makes the account this recipient type.</comment>
+  </data>
   <data name="EchPillQueued" xml:space="preserve">
     <value>Queued</value>
     <comment>Status pill.</comment>
@@ -2345,5 +2373,25 @@
   <data name="SpdPasswordsTabOperations" xml:space="preserve">
     <value>Passwords tab of Operations</value>
     <comment>Link text in the alert, to the queue on the Operations page.</comment>
+  </data>
+  <data name="MaiRemoveValue" xml:space="preserve">
+    <value>Remove value</value>
+    <comment>Button beside a value of an Accumulate attribute</comment>
+  </data>
+  <data name="TvRemoveValueTitle" xml:space="preserve">
+    <value>Remove value?</value>
+    <comment>Confirmation title</comment>
+  </data>
+  <data name="TvRemoveValueQuestion" xml:space="preserve">
+    <value>Remove {0} from {1}? Accumulate keeps every value its contributors have supplied, so it is kept until someone removes it. The removal is recorded on this object's change history and reaches the Connected Systems {1} is exported to at their next synchronisation.</value>
+    <comment>{0} value and {1} attribute name, each rendered as inline code, so no quotes</comment>
+  </data>
+  <data name="TvRemoveValueConfirm" xml:space="preserve">
+    <value>Remove</value>
+    <comment>Confirm button</comment>
+  </data>
+  <data name="TvValueRemoved" xml:space="preserve">
+    <value>Removed {0} from {1}.</value>
+    <comment>{0} value and {1} attribute name, each rendered as inline code, so no quotes</comment>
   </data>
 </root>

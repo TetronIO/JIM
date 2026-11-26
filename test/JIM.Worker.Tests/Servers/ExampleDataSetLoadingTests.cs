@@ -60,7 +60,9 @@ public class ExampleDataSetLoadingTests
         _mockRepository = new Mock<IRepository>();
         _mockRepository.Setup(r => r.ExampleData).Returns(_mockExampleDataRepository.Object);
         _mockRepository.Setup(r => r.ServiceSettings).Returns(new Mock<IServiceSettingsRepository>().Object);
-        _application = new JimApplication(_mockRepository.Object);
+        // Example Data Set patterns are kept unique through the Unique Value Generation service (#1789), which needs a
+        // synchronisation repository to check values against.
+        _application = new JimApplication(_mockRepository.Object, new JIM.InMemoryData.SyncRepository());
     }
 
     [TearDown]

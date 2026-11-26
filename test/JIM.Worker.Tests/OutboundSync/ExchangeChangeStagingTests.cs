@@ -148,6 +148,9 @@ public class ExchangeChangeStagingTests
             Assert.That(activity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
             Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
             Assert.That(activity.Message, Is.EqualTo($"Mailbox queued for Exchange on {account.System.Name}."));
+            var german = System.Globalization.CultureInfo.GetCultureInfo("de");
+            Assert.That(JIM.Models.Localisation.MessageRenderer.Render(activity.MessageDetail!, german, german),
+                Is.EqualTo($"Postfach für Exchange auf {account.System.Name} in die Warteschlange gestellt."), "stored as a message, in the reader's language");
             Assert.That(item.ExecutionItemId, Is.Not.Null, "the item is named before it exists, so the Activity can point at it");
             Assert.That(activity.ParentRunProfileExecutionItemId, Is.EqualTo(item.ExecutionItemId));
             Assert.That(activity.ParentActivityId, Is.Null, "an Activity has one parent");

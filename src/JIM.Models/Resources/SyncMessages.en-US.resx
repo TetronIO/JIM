@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScopingCriterionFailed" xml:space="preserve">
+    <value>The scoping criterion on '{0}' in the Synchronization Rule '{1}' could not be evaluated, so this object's scope was left as it was. {2}</value>
+  </data>
+  <data name="ExpressionMissingInput" xml:space="preserve">
+    <value>Expression for target attribute '{0}' was not evaluated: no value for {1}. Missing Input Behavior is set to Fail the object.</value>
+  </data>
+  <data name="ExpressionMissingInputDescribed" xml:space="preserve">
+    <value>{0} Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behavior.</value>
+  </data>
+  <data name="ExpressionMissingInputDescribedDerived" xml:space="preserve">
+    <value>{0} The Attribute Flow is derived by Synchronization Rule '{1}'. Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behavior.</value>
+  </data>
+  <data name="ExportRuleOverlap" xml:space="preserve">
+    <value>This Metaverse Object is in scope of {0} export Synchronization Rules that target '{1}' in '{2}': {3}. Only one export rule may manage an object, so nothing is exported to that Connected System for it. Give the rules scopes that never overlap, or combine them into one rule.</value>
+  </data>
+  <data name="ExportObjectTypeConflict" xml:space="preserve">
+    <value>Metaverse Object {0}: Synchronization Rule '{1}' targets Connected System Object Type '{2}' in '{3}', but this Metaverse Object is already represented there by a '{4}' object. A Metaverse Object can have only one Connected System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no Metaverse Object satisfies two outbound Synchronization Rules targeting this Connected System, or give the exported Object Types their own Connected System over the same target.</value>
+  </data>
+  <data name="HistoryFailedPage" xml:space="preserve">
+    <value>Failed to record the execution items and change history of page {0} of {1} for Connected System '{2}'. Those synchronization changes were saved; their history was not, and the run stopped without saving the changes of any page after the next one, or of the steps after the pages.</value>
+  </data>
+  <data name="HistoryFailedAfterPages" xml:space="preserve">
+    <value>Failed to record the execution items and change history of the steps after the pages for Connected System '{0}'. Those synchronization changes were saved; their history was not, and the run stopped before saving any further changes.</value>
+  </data>
+</root>

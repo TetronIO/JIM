@@ -349,7 +349,8 @@ public class Worker : BackgroundService
                                                 dataGenTemplateServiceTask.InitiatedByType,
                                                 dataGenTemplateServiceTask.InitiatedById,
                                                 dataGenTemplateServiceTask.InitiatedByName,
-                                                newWorkerTask.Activity.Id);
+                                                newWorkerTask.Activity.Id,
+                                                _uniqueValueReservations);
                                             newWorkerTask.Activity.TotalCreated = objectsCreated;
                                             // Clear the transient progress message ("Persisting to database... batch X/Y")
                                             // so the completed Activity does not retain a stale in-progress status line.
@@ -512,7 +513,7 @@ public class Worker : BackgroundService
                                                     // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view
                                                     // issues with connectors through JIM, rather than an admin having to dig through server logs.
                                                     runFailed = true;
-                                                    await SafeFailActivityAsync(taskJim, newWorkerTask.Activity, ex, "Unhandled exception whilst executing sync run");
+                                                    await SafeFailActivityAsync(taskJim, newWorkerTask.Activity, ex, "Unhandled exception whilst executing sync run", ActivityMessage.ContextSyncRunUnhandled());
                                                 }
                                                 finally
                                                 {
@@ -900,7 +901,7 @@ public class Worker : BackgroundService
                             // failed with the guard's reason and then completed, as any other failed run is.
                             var stoppedForMemory = memoryNotes.StopReason != null;
                             if (stoppedForMemory && newWorkerTask.Activity.Status == ActivityStatus.InProgress)
-                                await SafeFailActivityAsync(taskJim, newWorkerTask.Activity, new MemoryExhaustedException(memoryNotes.StopReason!), "Stopped by the Worker's memory guard");
+                                await SafeFailActivityAsync(taskJim, newWorkerTask.Activity, new MemoryExhaustedException(memoryNotes.StopReason!), "Stopped by the Worker's memory guard", ActivityMessage.ContextMemoryGuard());
 
                             // Mark the task as complete — unless it was already cancelled by the main loop's
                             // CancelWorkerTaskAsync (which deletes the DB record and marks the activity Cancelled).
@@ -1000,16 +1001,16 @@ public class Worker : BackgroundService
                 {
                     case MemoryGuardAction.Warn:
                     {
-                        var warning = WorkerMemoryOutcome.WarningText(reading);
-                        Log.Warning("GuardMemoryAsync: {Warning}", warning);
+                        var warning = WorkerMemoryOutcome.Warning(reading);
+                        Log.Warning("GuardMemoryAsync: {Warning}", warning.ToEnglish());
                         foreach (var task in tasks)
                             task.MemoryNotes.RecordWarning(warning);
                         break;
                     }
                     case MemoryGuardAction.Stop:
                     {
-                        var reason = WorkerMemoryOutcome.StopText(reading);
-                        Log.Error("GuardMemoryAsync: Stopping {Count} running task(s). {Reason}", tasks.Count, reason);
+                        var reason = WorkerMemoryOutcome.Stop(reading);
+                        Log.Error("GuardMemoryAsync: Stopping {Count} running task(s). {Reason}", tasks.Count, reason.ToEnglish());
                         await RecordMemoryEvidenceAsync(tasks, reading, "Stopping running work: memory nearly exhausted");
                         foreach (var task in tasks)
                         {
@@ -1020,7 +1021,7 @@ public class Worker : BackgroundService
                     }
                     case MemoryGuardAction.Abort:
                         await RecordMemoryEvidenceAsync(tasks, reading, "Restarting: memory nearly exhausted and running work did not stop");
-                        await AbortForMemoryAsync(tasks, WorkerMemoryOutcome.AbortText(reading));
+                        await AbortForMemoryAsync(tasks, WorkerMemoryOutcome.Abort(reading));
                         break;
                 }
             }
@@ -1065,9 +1066,9 @@ public class Worker : BackgroundService
     /// exited: an orderly exit waits for the running tasks, and a task blocked inside one call is the reason for the
     /// abort in the first place.
     /// </summary>
-    private async Task AbortForMemoryAsync(List<TaskTask> tasks, string reason)
+    private async Task AbortForMemoryAsync(List<TaskTask> tasks, JimMessage reason)
     {
-        Log.Fatal("GuardMemoryAsync: {Count} running task(s) did not stop when asked; recording why and ending the Worker. {Reason}", tasks.Count, reason);
+        Log.Fatal("GuardMemoryAsync: {Count} running task(s) did not stop when asked; recording why and ending the Worker. {Reason}", tasks.Count, reason.ToEnglish());
 
         foreach (var task in tasks)
         {
@@ -1087,14 +1088,14 @@ public class Worker : BackgroundService
         }
 
         await Log.CloseAndFlushAsync();
-        Environment.FailFast(reason);
+        Environment.FailFast(reason.ToEnglish());
     }
 
     /// <summary>
     /// Adds the memory guard's warning to a finished task's Activity, read on a context of its own: the task's own may
     /// be unusable by now, and its copy of the Activity may be stale once completion has run.
     /// </summary>
-    private async Task RecordMemoryWarningAsync(Guid activityId, string warning)
+    private async Task RecordMemoryWarningAsync(Guid activityId, JimMessage warning)
     {
         try
         {
@@ -1773,7 +1774,7 @@ public class Worker : BackgroundService
         {
             // If completing the activity fails, try to fail it with the error
             Log.Error(ex, "CompleteActivityBasedOnExecutionResultsAsync: Failed to complete activity {ActivityId}, attempting to mark as failed", activity.Id);
-            await SafeFailActivityAsync(jim, activity, ex, "Failed to complete activity after sync run");
+            await SafeFailActivityAsync(jim, activity, ex, "Failed to complete activity after sync run", ActivityMessage.ContextCompleteFailed());
         }
 
         return (activity.Status, objectLevelErrorCount);
@@ -1915,7 +1916,7 @@ public class Worker : BackgroundService
     /// it will attempt a direct database update as a last resort to ensure the activity is not left in InProgress state.
     /// Activities must never be left in InProgress state as this blocks the integration test scripts and monitoring systems.
     /// </summary>
-    internal async Task SafeFailActivityAsync(JimApplication jim, Activity activity, Exception originalException, string context)
+    internal async Task SafeFailActivityAsync(JimApplication jim, Activity activity, Exception originalException, string context, JimMessage? contextMessage = null)
     {
         Log.Error(originalException, "SafeFailActivityAsync: {Context} for activity {ActivityId}", context, activity.Id);
 
@@ -1933,7 +1934,7 @@ public class Worker : BackgroundService
         // fails too (for example the database is down), fall through to the in-context attempts as a
         // long shot before declaring the activity stuck.
         if (ShouldFailOnFreshContextFirst(originalException) &&
-            await TryFailActivityOnFreshContextAsync(activity, originalException, context))
+            await TryFailActivityOnFreshContextAsync(activity, originalException, context, contextMessage))
             return;
 
         try
@@ -1951,7 +1952,7 @@ public class Worker : BackgroundService
                 // Second attempt: Try to update the activity status directly
                 // This handles EF Core tracking issues or DbContext disposal problems
                 activity.Status = ActivityStatus.FailedWithError;
-                activity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
+                SetFailureInContext(activity, context, contextMessage, originalException);
 
                 // Only persist stack traces for unexpected errors (bugs), not for operational errors
                 if (originalException is not OperationalException)
@@ -1972,7 +1973,7 @@ public class Worker : BackgroundService
                 // Last resort: a fresh DbContext, unaffected by whatever poisoned the original one.
                 // Only log Fatal once this genuinely fails - a premature Fatal here previously claimed
                 // the activity was stuck while the fresh-context attempt below then succeeded.
-                if (!await TryFailActivityOnFreshContextAsync(activity, originalException, context))
+                if (!await TryFailActivityOnFreshContextAsync(activity, originalException, context, contextMessage))
                 {
                     Log.Fatal("SafeFailActivityAsync: CRITICAL - Could not update activity {ActivityId} status by any method. " +
                         "Activity will remain stuck in InProgress state. Manual database intervention required. Original error: {OriginalError}",
@@ -1995,7 +1996,7 @@ public class Worker : BackgroundService
     /// DbContext), for when the original context's change tracker is poisoned by a failed SaveChanges.
     /// Returns true when the Activity is confirmed in a terminal state (updated now, or already terminal).
     /// </summary>
-    private async Task<bool> TryFailActivityOnFreshContextAsync(Activity activity, Exception originalException, string context)
+    private async Task<bool> TryFailActivityOnFreshContextAsync(Activity activity, Exception originalException, string context, JimMessage? contextMessage)
     {
         try
         {
@@ -2016,7 +2017,7 @@ public class Worker : BackgroundService
             }
 
             freshActivity.Status = ActivityStatus.FailedWithError;
-            freshActivity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
+            SetFailureInContext(freshActivity, context, contextMessage, originalException);
             freshActivity.ErrorDetail = ActivityErrorDetail.TryDescribe(originalException);
 
             // Only persist stack traces for unexpected errors (bugs), not for operational errors
@@ -2091,6 +2092,18 @@ public class Worker : BackgroundService
             return exception.Message;
 
         return $"{exception.Message} --> {GetFullExceptionMessage(exception.InnerException)}";
+    }
+
+    /// <summary>
+    /// Records a failure with what the Worker was doing when it happened ("{context}: {failure}") on an Activity, with
+    /// the message beside it where the caller supplied one and it says exactly the English written here (#3039).
+    /// </summary>
+    private static void SetFailureInContext(Activity activity, string context, JimMessage? contextMessage, Exception exception)
+    {
+        var english = $"{context}: {GetFullExceptionMessage(exception)}";
+        activity.ErrorMessage = english;
+        var detail = contextMessage == null ? null : ActivityMessage.FailureInContext(contextMessage, exception);
+        activity.ErrorMessageDetailJson = detail != null && detail.ToEnglish() == english ? MessageJson.Serialise(detail) : null;
     }
 
     private static void InitialiseLogging()

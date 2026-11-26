@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging.DTOs;
 
@@ -29,6 +30,13 @@ public class AttributePriorityOrderDto
     public string? MetaverseAttributeName { get; set; }
 
     /// <summary>
+    /// How the attribute combines its contributors' values. Under <c>Priority</c> the order below decides which
+    /// contributor supplies the values; under <c>Accumulate</c> and <c>Merge</c> every contributor adds its values, the
+    /// order is not used, and a change to it is refused.
+    /// </summary>
+    public AttributeContributionMode ContributionMode { get; set; }
+
+    /// <summary>
     /// The Attribute Flows that contribute a value to the attribute, highest priority first; empty when none does.
     /// </summary>
     public List<AttributePriorityContributorDto> Contributors { get; set; } = new();
@@ -51,6 +59,7 @@ public class AttributePriorityOrderDto
             MetaverseObjectTypeId = metaverseObjectTypeId,
             MetaverseAttributeId = metaverseAttributeId,
             MetaverseAttributeName = contributors.Count > 0 ? orderedMappings.First().TargetMetaverseAttribute?.Name : null,
+            ContributionMode = orderedMappings.FirstOrDefault()?.TargetMetaverseAttribute?.ContributionMode ?? AttributeContributionMode.Priority,
             Contributors = contributors
         };
     }

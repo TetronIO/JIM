@@ -3,7 +3,10 @@
 
 using System.Collections.Concurrent;
 using System.Globalization;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Data.Repositories;
+using JIM.Models.Localisation;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -117,6 +120,77 @@ public sealed class UniqueValueGenerationServer
                     options.Reservations.Release(ownerId, scope, attributeId, normalisedValue);
             }
         }
+    }
+
+    /// <summary>
+    /// Claims values a caller has built itself (#1789): each one is checked through the same reservation set and record
+    /// gates a generated value passes (claimed by another run, the retired values register, held by a Metaverse Object,
+    /// held by a live generated value assignment), case-insensitively, and claimed in <paramref name="options"/>'s
+    /// reservation set under its <see cref="UniqueValueResolveOptions.ReservationOwnerId"/> if it is free. Returns one
+    /// answer per claim, in order: true when the value is now the caller's, false when it is taken and the caller must
+    /// try another. When the same value appears more than once in one call, only the first is claimed.
+    /// <para>
+    /// Example data is the caller: its patterns and Example Data Sets decide what a value looks like, and only the
+    /// question "is it taken?" is asked here, so there is one answer to that question across JIM. No assignment is
+    /// recorded, because no Synchronisation Rule mapping owns the value; the value is held by the Metaverse Object the
+    /// caller saves it on, where the Metaverse gate finds it from then on. The caller releases its claims
+    /// (<see cref="UniqueValueReservationSet.ReleaseAll"/>) once those objects are saved. The connector space gate does
+    /// not apply: nothing flows these values to a Connected System yet.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<bool>> ClaimValuesAsync(IReadOnlyList<UniqueValueClaim> claims, UniqueValueResolveOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(claims);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (claims.Count == 0)
+            return [];
+
+        // The gates are written over generation requests, so each claim is expressed as one. The settings are transient
+        // and never saved: "never reuse" on, so the retired values register applies, exactly as it does for every
+        // Sequence and for every generated mapping left at its default.
+        var settings = new SyncRuleMappingGeneration { NeverReuse = true };
+        var requests = claims.Select(claim => new GenerationRequest
+        {
+            Mode = GeneratedValueMode.Import,
+            MetaverseAttributeId = claim.MetaverseAttributeId,
+            Generation = settings,
+            TargetType = claim.TargetType,
+            AttributeName = claim.AttributeName,
+            BaseValue = claim.Value
+        }).ToList();
+
+        var candidates = new Dictionary<int, (string Text, long? Numeric)>(claims.Count);
+        for (var i = 0; i < claims.Count; i++)
+        {
+            if (requests[i].TargetType is AttributeDataType.Number or AttributeDataType.LongNumber && !claims[i].NumericValue.HasValue)
+                throw new ArgumentException($"The claim for {claims[i].AttributeName} is for a number attribute but carries no numeric value.", nameof(claims));
+
+            candidates[i] = (claims[i].Value, claims[i].NumericValue);
+        }
+
+        var noForms = new Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>>();
+        var rejections = new CandidateRejections(requests);
+        var claimedThisCall = new HashSet<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)>();
+        var ownerId = options.ReservationOwnerId;
+
+        var survivors = FilterReservationGate([.. Enumerable.Range(0, claims.Count)], requests, candidates, noForms, options, ownerId, claimedThisCall, rejections);
+        if (survivors.Count > 0)
+            survivors = await FilterRetiredGateAsync(survivors, requests, candidates, rejections);
+        if (survivors.Count > 0)
+            survivors = await FilterValueGateAsync(survivors, requests, candidates, noForms, rejections);
+        if (survivors.Count > 0)
+            survivors = await FilterOtherAssignmentsGateAsync(survivors, requests, candidates, noForms, rejections);
+
+        // Claimed in order, so where one value appears twice the first claim wins and the second finds it taken.
+        var claimed = new bool[claims.Count];
+        foreach (var i in survivors)
+        {
+            var keys = ReservationKeysOf(requests[i], candidates[i].Text.ToLowerInvariant(), null);
+            claimed[i] = options.Reservations.TryReserveAll(ownerId, keys);
+        }
+
+        return claimed;
     }
 
     /// <summary>
@@ -1361,6 +1435,7 @@ public sealed class UniqueValueGenerationServer
     {
         private readonly string?[] _lastGate = new string?[requests.Count];
         private readonly string?[] _lastForm = new string?[requests.Count];
+        private readonly JimMessage?[] _lastFormDetail = new JimMessage?[requests.Count];
         private readonly List<string>?[] _skipped = new List<string>?[requests.Count];
 
         /// <summary>
@@ -1370,6 +1445,7 @@ public sealed class UniqueValueGenerationServer
         {
             _lastGate[i] = gate;
             _lastForm[i] = null;
+            _lastFormDetail[i] = null;
         }
 
         /// <summary>
@@ -1380,6 +1456,8 @@ public sealed class UniqueValueGenerationServer
             var builtFrom = $"{check.Name} (built from {requests[i].AttributeName})";
             _lastGate[i] = gate;
             _lastForm[i] = $"its {builtFrom}, \"{check.Value}\",";
+            _lastFormDetail[i] = ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueFormFragment), check.Name,
+                requests[i].AttributeName, check.Value ?? string.Empty);
             (_skipped[i] ??= []).Add($"{candidate}: {builtFrom} is already held by {gate}");
         }
 
@@ -1398,9 +1476,17 @@ public sealed class UniqueValueGenerationServer
                   $"the last candidate, \"{candidateText}\", is already held by {gateText}."
                 : $"No free value was found for {request.AttributeName} after {request.Generation.AttemptLimit} attempts; " +
                   $"the last candidate, \"{candidateText}\", was passed over because {_lastForm[i]} is already held by {gateText}.";
+            MessageArgument candidateArgument = lastCandidate ?? (MessageArgument)ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueNoCandidate));
+            MessageArgument gateArgument = _lastGate[i] ?? (MessageArgument)ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueAnotherObject));
+            var detail = _lastFormDetail[i] == null
+                ? ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueExhausted), request.AttributeName,
+                    ActivityMessage.Plain(request.Generation.AttemptLimit), candidateArgument, gateArgument)
+                : ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueExhaustedForm), request.AttributeName,
+                    ActivityMessage.Plain(request.Generation.AttemptLimit), candidateArgument, _lastFormDetail[i]!, gateArgument);
             return new GenerationOutcome(request, GenerationOutcomeKind.Exhausted, null, null, null, message)
             {
-                SkippedCandidates = SkippedCandidates(i)
+                SkippedCandidates = SkippedCandidates(i),
+                FailureDetail = detail.ToEnglish() == message ? detail : null
             };
         }
     }
@@ -1595,7 +1681,10 @@ public sealed class UniqueValueGenerationServer
 
     private static GenerationOutcome WidthExceeded(GenerationRequest request, string candidate, int fixedWidth) =>
         new(request, GenerationOutcomeKind.WidthExceeded, null, null, null,
-            $"The next value for {request.AttributeName} would be \"{candidate}\", which no longer fits the configured fixed width of {fixedWidth} digits.");
+            $"The next value for {request.AttributeName} would be \"{candidate}\", which no longer fits the configured fixed width of {fixedWidth} digits.")
+        {
+            FailureDetail = ActivityMessage.Create(nameof(ActivityMessages.GeneratedValueWidthExceeded), request.AttributeName, candidate, ActivityMessage.Plain(fixedWidth))
+        };
 
     // ---- Shared helpers ----
 

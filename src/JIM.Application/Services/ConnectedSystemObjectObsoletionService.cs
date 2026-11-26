@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
+using JIM.Application.Localisation;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -180,7 +181,7 @@ public static class ConnectedSystemObjectObsoletionService
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && priorityContext != null && mvo.Type != null &&
             await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
                 mvo,
-                mvo.AttributeValues.Where(av => av.ContributedBySystemId == connectedSystemId).ToList(),
+                mvo.AttributeValues.Where(av => av.ContributedBySystemId == connectedSystemId && ContributedValueRecall.IsRecallable(av)).ToList(),
                 recallScope,
                 priorityContext,
                 syncRepository,
@@ -189,7 +190,7 @@ public static class ConnectedSystemObjectObsoletionService
         {
             deletionExecutionItem.ObjectChangeType = ObjectChangeType.NotSet;
             deletionExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
-            deletionExecutionItem.ErrorMessage = undecidable.Message;
+            ActivityMessage.SetError(deletionExecutionItem, undecidable);
             result.UndecidableSurvivorScope = undecidable;
             result.ExecutionItems.Add(deletionExecutionItem);
             Log.Warning("ProcessObsoleteConnectedSystemObjectAsync: CSO {CsoId} held back, with Metaverse Object {MvoId}; a surviving contributor's scope could not be decided: {Message}",
@@ -260,9 +261,10 @@ public static class ConnectedSystemObjectObsoletionService
         var generatedValueOutcomes = new List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>();
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
         {
-            // Find all MVO attribute values contributed by this Connected System and mark them for removal
+            // Find all MVO attribute values contributed by this Connected System and mark them for removal. An
+            // Accumulate attribute's values stay (#3059).
             var contributedAttributes = mvo.AttributeValues
-                .Where(av => av.ContributedBySystemId == connectedSystemId)
+                .Where(av => av.ContributedBySystemId == connectedSystemId && ContributedValueRecall.IsRecallable(av))
                 .ToList();
 
             foreach (var attributeValue in contributedAttributes)

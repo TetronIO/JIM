@@ -8,6 +8,9 @@ namespace JIM.Models.Core.DTOs;
 /// </summary>
 public class ProvenanceValue
 {
+    /// <summary>The value's id.</summary>
+    public Guid Id { get; set; }
+
     /// <summary>The value as display text; null for an asserted-null row.</summary>
     public string? DisplayValue { get; set; }
 

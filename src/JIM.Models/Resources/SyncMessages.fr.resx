@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScopingCriterionFailed" xml:space="preserve">
+    <value>Le critère de périmètre sur « {0} » dans la règle de synchronisation « {1} » n’a pas pu être évalué ; le périmètre de cet objet a donc été laissé en l’état. {2}</value>
+  </data>
+  <data name="Unknown" xml:space="preserve">
+    <value>(inconnu)</value>
+  </data>
+  <data name="ExpressionEvaluationFailed" xml:space="preserve">
+    <value>L’évaluation de l’expression a échoué pour l’attribut cible « {0} » : {1}</value>
+  </data>
+  <data name="ExpressionMissingInput" xml:space="preserve">
+    <value>L’expression pour l’attribut cible « {0} » n’a pas été évaluée : aucune valeur pour {1}. Le comportement en cas d’entrée manquante est défini sur « Faire échouer l’objet ».</value>
+  </data>
+  <data name="ExpressionMissingInputDescribed" xml:space="preserve">
+    <value>{0} Fournissez la valeur manquante, gérez son absence dans l’expression, ou modifiez le comportement en cas d’entrée manquante du flux d’attributs.</value>
+  </data>
+  <data name="ExpressionMissingInputDescribedDerived" xml:space="preserve">
+    <value>{0} Le flux d’attributs est dérivé par la règle de synchronisation « {1} ». Fournissez la valeur manquante, gérez son absence dans l’expression, ou modifiez le comportement en cas d’entrée manquante du flux d’attributs.</value>
+  </data>
+  <data name="ExportRuleOverlap" xml:space="preserve">
+    <value>Cet objet Metaverse relève de {0} règles de synchronisation d’exportation qui ciblent « {1} » dans « {2} » : {3}. Une seule règle d’exportation peut gérer un objet ; rien n’est donc exporté pour lui vers ce système connecté. Donnez aux règles des périmètres qui ne se chevauchent jamais, ou regroupez-les en une seule règle.</value>
+  </data>
+  <data name="ExportRuleHandOver" xml:space="preserve">
+    <value>Est sorti du périmètre de « {0} ». « {1} » couvre toujours cet objet ; elle gère donc désormais le compte au lieu qu’il soit déprovisionné.</value>
+  </data>
+  <data name="ReferenceRecallScopingFailure" xml:space="preserve">
+    <value>{0} Les références que l’objet Metaverse {1} détenait vers des objets supprimés n’ont pas été retirées de ses comptes.</value>
+  </data>
+  <data name="ExportObjectTypeConflict" xml:space="preserve">
+    <value>Objet Metaverse {0} : la règle de synchronisation « {1} » cible le type d’objet de système connecté « {2} » dans « {3} », mais cet objet Metaverse y est déjà représenté par un objet « {4} ». Un objet Metaverse ne peut avoir qu’un seul objet de système connecté par système connecté ; rien n’a donc été préparé pour cette règle. Réduisez les critères de périmètre afin qu’aucun objet Metaverse ne satisfasse deux règles de synchronisation sortantes ciblant ce système connecté, ou donnez aux types d’objet exportés leur propre système connecté sur la même cible.</value>
+  </data>
+  <data name="HistoryFailedPage" xml:space="preserve">
+    <value>Échec de l’enregistrement des éléments d’exécution et de l’historique des modifications de la page {0} sur {1} pour le système connecté « {2} ». Ces modifications de synchronisation ont été enregistrées ; leur historique ne l’a pas été, et l’exécution s’est arrêtée sans enregistrer les modifications d’aucune page après la suivante, ni des étapes après les pages.</value>
+  </data>
+  <data name="HistoryFailedAfterPages" xml:space="preserve">
+    <value>Échec de l’enregistrement des éléments d’exécution et de l’historique des modifications des étapes après les pages pour le système connecté « {0} ». Ces modifications de synchronisation ont été enregistrées ; leur historique ne l’a pas été, et l’exécution s’est arrêtée avant d’enregistrer d’autres modifications.</value>
+  </data>
+  <data name="HistoryNextWritten" xml:space="preserve">
+    <value>La page {0} sur {1} avait enregistré ses modifications lorsque l’échec a été détecté ; son historique a été écrit.</value>
+  </data>
+  <data name="HistoryNextWriteFailed" xml:space="preserve">
+    <value>La page {0} sur {1} avait enregistré ses modifications lorsque l’échec a été détecté ; son historique n’a pas pu être écrit non plus : {2}</value>
+  </data>
+  <data name="HistoryNextDepends" xml:space="preserve">
+    <value>La page {0} sur {1} avait enregistré ses modifications lorsque l’échec a été détecté ; son historique n’a pas été écrit, car il fait référence à l’historique qui a échoué ({2}).</value>
+  </data>
+  <data name="HistoryDependencyOfPage" xml:space="preserve">
+    <value>{0} de la page {1}</value>
+  </data>
+</root>

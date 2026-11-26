@@ -130,6 +130,72 @@ public class DeltaImportDeletedReferenceRemovalTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task DeltaImport_ObjectWhoseDeleteWasExportedIsReportedDeleted_RecordsTheConfirmationOfTheDeleteAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var leaver = SeedCso(connectedSystem, type, "Leaver");
+        var delete = SeedObjectExport(connectedSystem, leaver, PendingExportChangeType.Delete, PendingExportStatus.Exported);
+
+        var activity = await RunDeltaImportAsync(connectedSystem, [[Delete(type, leaver)]]);
+
+        // The walk from the leaver's import reaches the Delete's confirmation only through this edge (#3087).
+        var edge = SyncRepo.CausalEdges.SingleOrDefault(e => e.EdgeType == CausalEdgeType.ExportCausedImportConfirmation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.PendingExportsConfirmed, Is.EqualTo(1), "the Activity counts the confirmed Delete with its other confirmations");
+            Assert.That(edge, Is.Not.Null, "the deletion confirms the exported Delete, so the import records which export it confirms");
+            Assert.That(edge?.CausePendingExportId, Is.EqualTo(delete.Id), "the edge names the Delete it confirms");
+            Assert.That(edge?.CauseConnectedSystemObjectId, Is.EqualTo(leaver.Id));
+            Assert.That(ExecutionItemOf(edge)?.ObjectChangeType, Is.EqualTo(ObjectChangeType.Deleted),
+                "the confirmation is recorded on the object's deletion");
+            Assert.That(edge?.EffectSyncOutcome?.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed));
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_ObjectWhoseDeleteWasNotConfirmedBeforeIsReportedDeleted_RecordsTheConfirmationOfTheDeleteAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var leaver = SeedCso(connectedSystem, type, "Leaver");
+        var delete = SeedObjectExport(connectedSystem, leaver, PendingExportChangeType.Delete, PendingExportStatus.ExportNotConfirmed);
+
+        await RunDeltaImportAsync(connectedSystem, [[Delete(type, leaver)]]);
+
+        var edge = SyncRepo.CausalEdges.SingleOrDefault(e => e.EdgeType == CausalEdgeType.ExportCausedImportConfirmation);
+        Assert.That(edge?.CausePendingExportId, Is.EqualTo(delete.Id), "a Delete sent and not yet confirmed is confirmed by the deletion too");
+    }
+
+    [Test]
+    public async Task DeltaImport_ObjectWhoseDeleteWasNeverSentIsReportedDeleted_RecordsNoConfirmationAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var leaver = SeedCso(connectedSystem, type, "Leaver");
+        SeedObjectExport(connectedSystem, leaver, PendingExportChangeType.Delete, PendingExportStatus.Pending);
+
+        await RunDeltaImportAsync(connectedSystem, [[Delete(type, leaver)]]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await PendingExportOfAsync(leaver), Is.Null, "a Delete for an object already gone has nothing left to do");
+            Assert.That(SyncRepo.CausalEdges.Where(e => e.EdgeType == CausalEdgeType.ExportCausedImportConfirmation), Is.Empty,
+                "the target deleted the object itself: JIM's Delete was never sent, so nothing of JIM's was confirmed");
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_ObjectWithAnExportedUpdateIsReportedDeleted_RecordsNoConfirmationAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var leaver = SeedCso(connectedSystem, type, "Leaver");
+        SeedObjectExport(connectedSystem, leaver, PendingExportChangeType.Update, PendingExportStatus.Exported);
+
+        await RunDeltaImportAsync(connectedSystem, [[Delete(type, leaver)]]);
+
+        Assert.That(SyncRepo.CausalEdges.Where(e => e.EdgeType == CausalEdgeType.ExportCausedImportConfirmation), Is.Empty,
+            "a deletion does not confirm an Update: the update's values are not in the target, they are moot");
+    }
+
+    [Test]
     public async Task DeltaImport_DeletionWithheldByItsLimit_LeavesTheExportedDeleteAwaitingConfirmationAsync()
     {
         var (connectedSystem, type) = await ArrangeAsync();
@@ -177,6 +243,22 @@ public class DeltaImportDeletedReferenceRemovalTests : WorkflowTestBase
         await processor.PerformImportAsync();
         return activity;
     }
+
+    /// <summary>A whole-object export of <paramref name="cso"/>, with no attribute changes, as a Delete's export leaves it.</summary>
+    private PendingExport SeedObjectExport(ConnectedSystem connectedSystem, ConnectedSystemObject cso, PendingExportChangeType changeType,
+        PendingExportStatus status)
+    {
+        var export = new PendingExport
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = connectedSystem.Id, ConnectedSystemObjectId = cso.Id,
+            ChangeType = changeType, Status = status, CreatedAt = DateTime.UtcNow
+        };
+        SyncRepo.SeedPendingExport(export);
+        return export;
+    }
+
+    private ActivityRunProfileExecutionItem? ExecutionItemOf(CausalEdge? edge) =>
+        edge == null ? null : SyncRepo.Rpeis.GetValueOrDefault(edge.EffectRunProfileExecutionItemId);
 
     private async Task<PendingExport?> PendingExportOfAsync(ConnectedSystemObject cso)
     {

@@ -20,6 +20,13 @@ function New-JIMMetaverseAttribute {
         Whether the attribute holds one value or many. A Boolean holds one value, so JIM refuses MultiValued for a
         Boolean.
 
+    .PARAMETER ContributionMode
+        How the values of several import Synchronisation Rules are combined. Priority (JIM's default when this is not
+        given) takes the values from the highest-priority contributor. Accumulate adds every value any contributor
+        supplies and never removes one through synchronisation. Merge also adds every contributor's values, and removes
+        a value once no contributor supplies it any more. JIM refuses Accumulate and Merge for a single-valued or a
+        Reference attribute.
+
     .PARAMETER ObjectTypeIds
         The IDs of the Metaverse Object Types to bind the attribute to. It can also be bound later, with
         Add-JIMMetaverseObjectTypeAttribute.
@@ -44,6 +51,18 @@ function New-JIMMetaverseAttribute {
         New-JIMMetaverseAttribute -Name "PhoneNumbers" -Type Text -AttributePlurality MultiValued
 
         Creates a multi-valued text attribute.
+
+    .EXAMPLE
+        New-JIMMetaverseAttribute -Name "Account Audit Log" -Type Text -AttributePlurality MultiValued -ContributionMode Accumulate
+
+        Creates an attribute that every Connected System can add values to, and that keeps them after the accounts
+        that supplied them are deleted.
+
+    .EXAMPLE
+        New-JIMMetaverseAttribute -Name "Email Addresses" -Type Text -AttributePlurality MultiValued -ContributionMode Merge
+
+        Creates an attribute that holds every address any Connected System supplies, and drops an address once no
+        Connected System supplies it any more.
 
     .EXAMPLE
         New-JIMMetaverseAttribute -Name "Department" -Type Text -ObjectTypeIds 1,2
@@ -71,6 +90,10 @@ function New-JIMMetaverseAttribute {
         [string]$AttributePlurality = 'SingleValued',
 
         [Parameter()]
+        [ValidateSet('Priority', 'Accumulate', 'Merge')]
+        [string]$ContributionMode,
+
+        [Parameter()]
         [int[]]$ObjectTypeIds,
 
         [Parameter()]
@@ -96,6 +119,10 @@ function New-JIMMetaverseAttribute {
             name = $Name
             type = $typeName
             attributePlurality = $AttributePlurality
+        }
+
+        if ($PSBoundParameters.ContainsKey('ContributionMode')) {
+            $body.contributionMode = $ContributionMode
         }
 
         if ($ObjectTypeIds) {

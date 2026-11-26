@@ -237,7 +237,7 @@ function Get-LabExchangePrerequisite {
         Communications Managed API 4.0, which Microsoft ships in UCMARedist on the Exchange media. .NET Framework 4.8.1
         is part of Windows Server 2025.
 
-        The lab network has no route out, so the other three are downloaded once on the host, from DownloadUrl, into
+        The Exchange servers resolve nothing outside their forest, so the other three are downloaded once on the host, from DownloadUrl, into
         settings.json exchangePrerequisiteDirectory under FileName (see README.md). The host checks each carries a valid
         Microsoft signature before copying it into the guest. DisplayNamePattern recognises the installed software
         among the names in the guest's Uninstall registry keys, so a re-run installs nothing twice.

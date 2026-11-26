@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScopingCriterionFailed" xml:space="preserve">
+    <value>Das Geltungsbereichskriterium für „{0}“ in der Synchronisierungsregel „{1}“ konnte nicht ausgewertet werden, daher wurde der Geltungsbereich dieses Objekts unverändert belassen. {2}</value>
+  </data>
+  <data name="Unknown" xml:space="preserve">
+    <value>(unbekannt)</value>
+  </data>
+  <data name="ExpressionEvaluationFailed" xml:space="preserve">
+    <value>Die Auswertung des Ausdrucks ist für das Zielattribut „{0}“ fehlgeschlagen: {1}</value>
+  </data>
+  <data name="ExpressionMissingInput" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut „{0}“ wurde nicht ausgewertet: kein Wert für {1}. Das Verhalten bei fehlender Eingabe ist auf „Objekt fehlschlagen lassen“ gesetzt.</value>
+  </data>
+  <data name="ExpressionMissingInputDescribed" xml:space="preserve">
+    <value>{0} Geben Sie den fehlenden Wert an, behandeln Sie sein Fehlen im Ausdruck oder ändern Sie das Verhalten bei fehlender Eingabe des Attributflusses.</value>
+  </data>
+  <data name="ExpressionMissingInputDescribedDerived" xml:space="preserve">
+    <value>{0} Der Attributfluss wird von der Synchronisierungsregel „{1}“ abgeleitet. Geben Sie den fehlenden Wert an, behandeln Sie sein Fehlen im Ausdruck oder ändern Sie das Verhalten bei fehlender Eingabe des Attributflusses.</value>
+  </data>
+  <data name="ExportRuleOverlap" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt liegt im Geltungsbereich von {0} Export-Synchronisierungsregeln, die „{1}“ in „{2}“ als Ziel haben: {3}. Nur eine Exportregel darf ein Objekt verwalten, daher wird für dieses Objekt nichts in dieses verbundene System exportiert. Geben Sie den Regeln Geltungsbereiche, die sich nie überschneiden, oder fassen Sie sie zu einer Regel zusammen.</value>
+  </data>
+  <data name="ExportRuleHandOver" xml:space="preserve">
+    <value>Hat den Geltungsbereich von „{0}“ verlassen. „{1}“ deckt dieses Objekt weiterhin ab und verwaltet daher nun das Konto, anstatt dass es deprovisioniert wird.</value>
+  </data>
+  <data name="ReferenceRecallScopingFailure" xml:space="preserve">
+    <value>{0} Die Verweise, die das Metaverse-Objekt {1} auf gelöschte Objekte hielt, wurden nicht aus seinen Konten entfernt.</value>
+  </data>
+  <data name="ExportObjectTypeConflict" xml:space="preserve">
+    <value>Metaverse-Objekt {0}: Die Synchronisierungsregel „{1}“ zielt auf den Objekttyp im verbundenen System „{2}“ in „{3}“, aber dieses Metaverse-Objekt wird dort bereits durch ein Objekt „{4}“ repräsentiert. Ein Metaverse-Objekt kann pro verbundenem System nur ein Objekt im verbundenen System haben, daher wurde für diese Regel nichts bereitgestellt. Schränken Sie entweder die Geltungsbereichskriterien so ein, dass kein Metaverse-Objekt zwei ausgehende Synchronisierungsregeln erfüllt, die dieses verbundene System als Ziel haben, oder geben Sie den exportierten Objekttypen ein eigenes verbundenes System über demselben Ziel.</value>
+  </data>
+  <data name="HistoryFailedPage" xml:space="preserve">
+    <value>Die Ausführungselemente und der Änderungsverlauf von Seite {0} von {1} für das verbundene System „{2}“ konnten nicht aufgezeichnet werden. Diese Synchronisierungsänderungen wurden gespeichert, ihr Verlauf jedoch nicht, und der Lauf wurde angehalten, ohne die Änderungen einer Seite nach der nächsten oder der Schritte nach den Seiten zu speichern.</value>
+  </data>
+  <data name="HistoryFailedAfterPages" xml:space="preserve">
+    <value>Die Ausführungselemente und der Änderungsverlauf der Schritte nach den Seiten für das verbundene System „{0}“ konnten nicht aufgezeichnet werden. Diese Synchronisierungsänderungen wurden gespeichert, ihr Verlauf jedoch nicht, und der Lauf wurde angehalten, bevor weitere Änderungen gespeichert wurden.</value>
+  </data>
+  <data name="HistoryNextWritten" xml:space="preserve">
+    <value>Seite {0} von {1} hatte ihre Änderungen gespeichert, als der Fehler gefunden wurde; ihr Verlauf wurde geschrieben.</value>
+  </data>
+  <data name="HistoryNextWriteFailed" xml:space="preserve">
+    <value>Seite {0} von {1} hatte ihre Änderungen gespeichert, als der Fehler gefunden wurde; ihr Verlauf konnte ebenfalls nicht geschrieben werden: {2}</value>
+  </data>
+  <data name="HistoryNextDepends" xml:space="preserve">
+    <value>Seite {0} von {1} hatte ihre Änderungen gespeichert, als der Fehler gefunden wurde; ihr Verlauf wurde nicht geschrieben, weil er sich auf den fehlgeschlagenen Verlauf bezieht ({2}).</value>
+  </data>
+  <data name="HistoryDependencyOfPage" xml:space="preserve">
+    <value>{0} von Seite {1}</value>
+  </data>
+</root>

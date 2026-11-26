@@ -80,7 +80,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         await ClaimConfigurationChangesAwaitingSynchronisationAsync("Delta Synchronisation");
         syncSpan.SetTag("typesProcessedInFull", _objectTypeIdsToProcessInFull.Count);
 
-        await _phases.EnterAsync(RunPhaseKeys.SyncPrepare, "Preparing delta sync");
+        await _phases.EnterAsync(RunPhaseKeys.SyncPrepare, ActivityMessage.Create(nameof(ActivityMessages.ProgressPreparingDeltaSync)));
 
         // Determine the watermark - when was the last successful sync?
         var lastSyncTimestamp = _connectedSystem.LastSyncCompletedAt ?? DateTime.MinValue;
@@ -197,7 +197,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // estimate the pager revises as pages end early.
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var estimatedCsoPages = (int)Math.Ceiling((double)totalCsosToProcess / pageSize);
-        await _phases.EnterAsync(RunPhaseKeys.SyncProcessObjects, "Processing modified Connected System Objects");
+        await _phases.EnterAsync(RunPhaseKeys.SyncProcessObjects, ActivityMessage.Create(nameof(ActivityMessages.ProgressProcessingModifiedCsos)));
 
         using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessModifiedConnectedSystemObjects");
         processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
@@ -306,6 +306,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
                 // run has no generated mappings.
                 await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
+
+                // Contributor re-election reads the joined objects of this page's predicted Merge withdrawals in one query (#3059).
+                BeginReElectionPage(csoPagedResult.Results, activeSyncRules);
 
                 // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
                 // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.

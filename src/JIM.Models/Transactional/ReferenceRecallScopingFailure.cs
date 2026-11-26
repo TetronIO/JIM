@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Transactional;
 
 /// <summary>
@@ -10,11 +13,16 @@ namespace JIM.Models.Transactional;
 /// </summary>
 /// <param name="MetaverseObjectId">The referencing Metaverse Object.</param>
 /// <param name="Message">Why the scope could not be decided, naming the Synchronisation Rule and the attribute.</param>
-public sealed record ReferenceRecallScopingFailure(Guid MetaverseObjectId, string Message)
+/// <param name="Cause"><paramref name="Message"/> as a message, where the failure carried one that says exactly the same.</param>
+public sealed record ReferenceRecallScopingFailure(Guid MetaverseObjectId, string Message, JimMessage? Cause = null)
 {
     /// <summary>
     /// The error message for the object's execution item: why, and what was left undone.
     /// </summary>
-    public string DescribeForAdministrator() =>
-        $"{Message} The references Metaverse Object {MetaverseObjectId} held to deleted objects were not removed from its accounts.";
+    public string DescribeForAdministrator() => Describe().ToEnglish();
+
+    /// <summary><see cref="DescribeForAdministrator"/> as a message.</summary>
+    public JimMessage Describe() =>
+        JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ReferenceRecallScopingFailure),
+            Cause is { } cause && cause.ToEnglish() == Message ? cause : (MessageArgument)Message, MetaverseObjectId.ToString());
 }

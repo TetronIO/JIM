@@ -16,4 +16,19 @@ public static class MessageCatalogues
     public const string ScopingCriteria = "JIM.Models:ScopingCriteriaMessages";
 
     public const string SyncRule = "JIM.Models:SyncRuleMessages";
+
+    /// <summary>What a run says when an expression, a scoping criterion or an export rule stops an object (<c>SyncMessages.resx</c>).</summary>
+    public const string Sync = "JIM.Models:SyncMessages";
+
+    /// <summary>How a Metaverse Attribute's references read in an Activity and a confirmation dialog (<c>MetaverseReferenceMessages.resx</c>).</summary>
+    public const string MetaverseReferences = "JIM.Models:MetaverseReferenceMessages";
+
+    /// <summary>What export staging says about a declared Exchange recipient type (<c>ExchangeMessages.resx</c>).</summary>
+    public const string Exchange = "JIM.Models:ExchangeMessages";
+
+    /// <summary>What a factory reset's Activity says it removed (<c>SystemResetMessages.resx</c>).</summary>
+    public const string SystemReset = "JIM.Models:SystemResetMessages";
+
+    /// <summary>How an Object Matching Rule's comparison and an ambiguous or disagreeing match read (<c>ObjectMatchingMessages.resx</c>).</summary>
+    public const string ObjectMatching = "JIM.Models:ObjectMatchingMessages";
 }

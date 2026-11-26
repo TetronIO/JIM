@@ -1523,4 +1523,7 @@
   <data name="RunProfilesTargetRemoved" xml:space="preserve">
     <value>Des profils d’exécution ciblent une partition supprimée</value>
   </data>
+  <data name="DataFlowPriorityTooltipNoOrder" xml:space="preserve">
+    <value>Cet attribut Metaverse utilise le mode de contribution « {0} » : chaque règle de synchronisation qui y contribue ajoute ses valeurs, l’ordre de priorité n’est donc pas utilisé.</value>
+  </data>
 </root>

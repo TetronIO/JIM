@@ -652,4 +652,763 @@
   <data name="TargetRuleForUnknownType" xml:space="preserve">
     <value>Regel für Objekttyp</value>
   </data>
+  <data name="ImportOrphanedItem" xml:space="preserve">
+    <value>Interner Fehler: Für den Import wurde ein Ausführungselement erstellt (ExtId={0}), das Objekt im verbundenen System wurde jedoch nicht gespeichert. Objektverweis vorhanden={1}. Dies weist auf einen Fehler in der Persistenzschicht hin.</value>
+  </data>
+  <data name="ImportDuplicateAttributes" xml:space="preserve">
+    <value>Das importierte Objekt enthält mindestens ein doppeltes Attribut: {0}. Bitte entfernen Sie die Duplikate und versuchen Sie es erneut.</value>
+  </data>
+  <data name="ImportDuplicateExternalIdAcrossPages" xml:space="preserve">
+    <value>Doppelte externe ID „{0}“ über Importseiten hinweg gefunden. Ein Objekt mit dieser externen ID wurde bereits auf einer früheren Seite zurückgegeben, daher wurde diese Kopie abgelehnt. Dies kann auf ein Paging-Problem des Verzeichnisservers hindeuten.</value>
+  </data>
+  <data name="ImportDuplicateExternalIdInBatch" xml:space="preserve">
+    <value>Doppelte externe ID „{0}“ im selben Importstapel gefunden. Alle Objekte mit dieser externen ID wurden abgelehnt. Korrigieren Sie die Quelldaten, damit die externen IDs eindeutig sind.</value>
+  </data>
+  <data name="ImportCsoCreationFailed" xml:space="preserve">
+    <value>Das Objekt im verbundenen System konnte für das importierte Objekt mit der externen ID „{0}“ nicht erstellt werden. Es wurde kein spezifischer Fehler aufgezeichnet.</value>
+  </data>
+  <data name="ImportHashVerificationFailed" xml:space="preserve">
+    <value>Verifizierungsmodus: Der gespeicherte Import-Inhaltshash für das Objekt im verbundenen System {0} stimmte mit dem eingehenden Hash überein, der vollständige Vergleich ergab jedoch {1} geänderte Attributwert(e). Das Überspringen anhand des Inhaltshashs hätte diese Änderung übersehen.</value>
+  </data>
+  <data name="ImportUnexpectedAttribute" xml:space="preserve">
+    <value>Das Attribut „{0}“ des importierten Objekts wurde nicht erwartet.</value>
+  </data>
+  <data name="ExportScopingFailed" xml:space="preserve">
+    <value>{0} Für das Metaverse-Objekt {1} wurde nichts exportiert.</value>
+  </data>
+  <data name="FailureInContext" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="ContextSyncRunUnhandled" xml:space="preserve">
+    <value>Nicht behandelte Ausnahme bei der Ausführung des Synchronisierungslaufs</value>
+  </data>
+  <data name="ContextMemoryGuard" xml:space="preserve">
+    <value>Vom Speicherschutz des Workers gestoppt</value>
+  </data>
+  <data name="ContextCompleteFailed" xml:space="preserve">
+    <value>Die Aktivität konnte nach dem Synchronisierungslauf nicht abgeschlossen werden</value>
+  </data>
+  <data name="MemoryFiguresByWorker" xml:space="preserve">
+    <value>{0} von {1} belegt, davon {2} durch den Worker</value>
+  </data>
+  <data name="MemoryFiguresByThisService" xml:space="preserve">
+    <value>{0} von {1} belegt, davon {2} durch diesen Dienst</value>
+  </data>
+  <data name="MemoryRemedy" xml:space="preserve">
+    <value>Bei {0} beendet der Worker seine laufenden Arbeiten, statt mittendrin gestoppt zu werden; geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus.</value>
+  </data>
+  <data name="MemoryWarning" xml:space="preserve">
+    <value>Der Arbeitsspeicher war während dieser Ausführung knapp: {0}. {1}</value>
+  </data>
+  <data name="MemoryStop" xml:space="preserve">
+    <value>Der Worker hat diese Ausführung gestoppt, weil sein Arbeitsspeicher fast erschöpft war: {0}. Hätte er weitergemacht, hätte das Betriebssystem den Worker mittendrin gestoppt. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="MemoryAbort" xml:space="preserve">
+    <value>Der Worker hat diese Ausführung gestoppt und sich selbst neu gestartet, weil sein Arbeitsspeicher fast erschöpft war ({0}) und die Ausführung auf Aufforderung nicht angehalten hat. Hätte er weitergemacht, hätte das Betriebssystem den Worker ohne Vorwarnung gestoppt. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="OutOfMemory" xml:space="preserve">
+    <value>Diese Ausführung hat nicht genug Arbeitsspeicher gehabt und wurde gestoppt. In einem Container mit Speicherbegrenzung kann JIM bei etwa 75 % dieses Limits den Speicher erschöpfen. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="OutOfMemoryWithFigures" xml:space="preserve">
+    <value>Diese Ausführung hat nicht genug Arbeitsspeicher gehabt und wurde gestoppt (derzeit {0}). In einem Container mit Speicherbegrenzung kann JIM bei etwa 75 % dieses Limits den Speicher erschöpfen. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="LikelyOutOfMemory" xml:space="preserve">
+    <value>Der Worker hat sehr wahrscheinlich nicht genug Arbeitsspeicher gehabt: Zum Zeitpunkt seiner letzten Meldung waren {0}. Geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus und starten Sie die Ausführung dann erneut.</value>
+  </data>
+  <data name="UnknownValue" xml:space="preserve">
+    <value>(unbekannt)</value>
+  </data>
+  <data name="NoneValue" xml:space="preserve">
+    <value>(keine)</value>
+  </data>
+  <data name="ExprFlowFailed" xml:space="preserve">
+    <value>Die Auswertung des Ausdrucks ist{0} beim Fluss in das Attribut „{1}“{2} fehlgeschlagen: {3}. Ausdruck: {4}</value>
+  </data>
+  <data name="ExprFlowSubject" xml:space="preserve">
+    <value> für das Metaverse-Objekt {0}</value>
+  </data>
+  <data name="ExprFlowDerived" xml:space="preserve">
+    <value> (abgeleitet von der Synchronisierungsregel „{0}“)</value>
+  </data>
+  <data name="DriftNotChecked" xml:space="preserve">
+    <value>Die Driftprüfung konnte dieses Objekt nicht prüfen, daher wurde keine Korrektur vorbereitet. {0}</value>
+  </data>
+  <data name="ExportMissingInput" xml:space="preserve">
+    <value>{0} Für das Metaverse-Objekt {1} wurde in „{2}“ kein ausstehender Export erzeugt. Geben Sie den fehlenden Wert an, behandeln Sie sein Fehlen im Ausdruck oder ändern Sie das Verhalten bei fehlender Eingabe des Attributflusses.</value>
+  </data>
+  <data name="AfTargetExport" xml:space="preserve">
+    <value>„{0}“ auf „{1}“</value>
+  </data>
+  <data name="AfTargetImport" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="AfTargetImportDerived" xml:space="preserve">
+    <value>„{0}“ (abgeleitet von der Synchronisierungsregel „{1}“)</value>
+  </data>
+  <data name="AfOutcomeExport" xml:space="preserve">
+    <value>für dieses Attribut wurde kein ausstehender Export erzeugt</value>
+  </data>
+  <data name="AfOutcomeImport" xml:space="preserve">
+    <value>für dieses Attribut wurde kein Wert übertragen</value>
+  </data>
+  <data name="AfMissingInput" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} wurde nicht ausgewertet, weil dieses Objekt keinen Wert für {1} hat; {2}. Die übrigen Attribute des Objekts waren nicht betroffen. Das Verhalten bei fehlender Eingabe ist für diesen Attributfluss auf „Dieses Mapping fehlschlagen lassen“ gesetzt. Geben Sie den fehlenden Wert an, behandeln Sie sein Fehlen im Ausdruck oder ändern Sie das Verhalten bei fehlender Eingabe des Attributflusses.</value>
+  </data>
+  <data name="AfGeneratedBaseNotSingle" xml:space="preserve">
+    <value>Der Basisausdruck des generierten Werts für {0} hat mehr als einen Wert zurückgegeben; {1}. Die übrigen Attribute des Objekts waren nicht betroffen. Der Basisausdruck eines generierten Werts muss einen einzelnen Textwert liefern, kein Array: „{2}“.</value>
+  </data>
+  <data name="AfNotConvertible" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} hat „{1}“ zurückgegeben, was ein Attribut vom Typ {2} nicht aufnehmen kann; {3}. Das Attribut behält seinen aktuellen Wert, und die übrigen Attribute des Objekts waren nicht betroffen. Ändern Sie den Ausdruck so, dass er einen Wert vom Typ {2} zurückgibt: „{4}“.</value>
+  </data>
+  <data name="AfMultiValuedNamed" xml:space="preserve">
+    <value>„{0}“ hat {1} Werte, das Zielattribut {2} ist jedoch einwertig; {3}. Das Attribut behält seinen aktuellen Wert, und die übrigen Attribute des Objekts waren nicht betroffen. Verwenden Sie Where, Join (verknüpfen), Count, Min oder Max im Ausdruck, um festzulegen, welchen Wert es erhalten soll, oder ordnen Sie es einem mehrwertigen Attribut zu: „{4}“.</value>
+  </data>
+  <data name="AfMultiValued" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} hat {1} Werte zurückgegeben, das Attribut ist jedoch einwertig; {2}. Das Attribut behält seinen aktuellen Wert, und die übrigen Attribute des Objekts waren nicht betroffen. Ändern Sie den Ausdruck so, dass er einen Wert zurückgibt, oder ordnen Sie ihn einem mehrwertigen Attribut zu: „{3}“.</value>
+  </data>
+  <data name="AfDatesCollapse" xml:space="preserve">
+    <value>{0}, das Zielattribut {1} speichert Datumswerte jedoch auf {2} genau, sodass einige davon zum selben Datum werden; es werden daher {3} verschiedene Werte gesendet. Das Attribut und die übrigen Attribute des Objekts werden weiterhin exportiert. Wenn die Datumswerte getrennt bleiben müssen, halten Sie sie weiter auseinander als die Auflösung des verbundenen Systems, oder prüfen Sie die Datumsauflösung des Attributs auf der Registerkarte „Schema“ des verbundenen Systems.</value>
+  </data>
+  <data name="AfDatesNamed" xml:space="preserve">
+    <value>„{0}“ enthält {1} Datumswerte</value>
+  </data>
+  <data name="AfDatesExpression" xml:space="preserve">
+    <value>Der Ausdruck für das Zielattribut {0} hat {1} Datumswerte zurückgegeben</value>
+  </data>
+  <data name="AfResolutionTenMicroseconds" xml:space="preserve">
+    <value>zehn Mikrosekunden</value>
+  </data>
+  <data name="AfResolutionHundredMicroseconds" xml:space="preserve">
+    <value>hundert Mikrosekunden</value>
+  </data>
+  <data name="AfResolutionMillisecond" xml:space="preserve">
+    <value>die Millisekunde</value>
+  </data>
+  <data name="AfResolutionTenMilliseconds" xml:space="preserve">
+    <value>zehn Millisekunden</value>
+  </data>
+  <data name="AfResolutionHundredMilliseconds" xml:space="preserve">
+    <value>hundert Millisekunden</value>
+  </data>
+  <data name="AfResolutionSecond" xml:space="preserve">
+    <value>die Sekunde</value>
+  </data>
+  <data name="AfResolutionMinute" xml:space="preserve">
+    <value>die Minute</value>
+  </data>
+  <data name="AfResolutionDay" xml:space="preserve">
+    <value>den Tag</value>
+  </data>
+  <data name="AfResolutionMicrosecond" xml:space="preserve">
+    <value>die Mikrosekunde</value>
+  </data>
+  <data name="AfCredential" xml:space="preserve">
+    <value>Das Zielattribut {0} enthält Anmeldeinformationen, daher exportiert JIM es nie über einen Attributfluss, und {1}; die übrigen Attribute des Objekts waren nicht betroffen. Entfernen Sie den Attributfluss, der es als Ziel hat. JIM übermittelt Kennwörter nur über die Kennwortsynchronisierung, und zwar in verbundenen Systemen, deren Connector sie unterstützt.</value>
+  </data>
+  <data name="AfMultiToSingle" xml:space="preserve">
+    <value>{0} hat {1} Werte, das Zielattribut {2} ist jedoch einwertig; {3}. Ordnen Sie es einem mehrwertigen Attribut zu, reduzieren Sie die Quelle auf einen einzelnen Wert oder verwenden Sie einen Ausdruck, um einen Wert auszuwählen.</value>
+  </data>
+  <data name="AfSourceExport" xml:space="preserve">
+    <value>Mehrwertiges Metaverse-Quellattribut „{0}“</value>
+  </data>
+  <data name="AfSourceImport" xml:space="preserve">
+    <value>Mehrwertiges Quellattribut „{0}“</value>
+  </data>
+  <data name="GeneratedValueLostRace" xml:space="preserve">
+    <value>Der generierte Wert von {0}, „{1}“, wurde im selben Moment an ein anderes Objekt vergeben; er wird bei der nächsten Synchronisierung dieses Objekts neu generiert.</value>
+  </data>
+  <data name="GeneratedValueExhausted" xml:space="preserve">
+    <value>Für {0} wurde nach {1} Versuchen kein freier Wert gefunden; der letzte Kandidat „{2}“ wird bereits von {3} gehalten.</value>
+  </data>
+  <data name="GeneratedValueExhaustedForm" xml:space="preserve">
+    <value>Für {0} wurde nach {1} Versuchen kein freier Wert gefunden; der letzte Kandidat „{2}“ wurde übergangen, weil {3} bereits von {4} gehalten wird.</value>
+  </data>
+  <data name="GeneratedValueFormFragment" xml:space="preserve">
+    <value>dessen {0} (aus {1} gebildet), „{2}“,</value>
+  </data>
+  <data name="GeneratedValueNoCandidate" xml:space="preserve">
+    <value>(es wurde kein Kandidat ausprobiert)</value>
+  </data>
+  <data name="GeneratedValueAnotherObject" xml:space="preserve">
+    <value>einem anderen Objekt</value>
+  </data>
+  <data name="GeneratedValueWidthExceeded" xml:space="preserve">
+    <value>Der nächste Wert für {0} wäre „{1}“ und passt nicht mehr in die konfigurierte feste Breite von {2} Stellen.</value>
+  </data>
+  <data name="ProgressSavingChanges" xml:space="preserve">
+    <value>Änderungen werden gespeichert</value>
+  </data>
+  <data name="ProgressCreatingCsos" xml:space="preserve">
+    <value>Objekte im verbundenen System werden erstellt</value>
+  </data>
+  <data name="ProgressUpdatingCsos" xml:space="preserve">
+    <value>Objekte im verbundenen System werden aktualisiert</value>
+  </data>
+  <data name="ProgressLoadingBatch" xml:space="preserve">
+    <value>Stapel {0} von {1} wird geladen (insgesamt {2} Objekte)</value>
+  </data>
+  <data name="ProgressProcessingImported" xml:space="preserve">
+    <value>Importierte Objekte werden verarbeitet</value>
+  </data>
+  <data name="ProgressImportingFromFile" xml:space="preserve">
+    <value>Objekte werden aus der Datei importiert</value>
+  </data>
+  <data name="ProgressImportingFromSystem" xml:space="preserve">
+    <value>Objekte werden aus dem verbundenen System importiert</value>
+  </data>
+  <data name="ProgressImportingFromSystemPage" xml:space="preserve">
+    <value>Objekte werden aus dem verbundenen System importiert (Seite {0})</value>
+  </data>
+  <data name="ProgressReadingPage" xml:space="preserve">
+    <value>Seite {0} wird gelesen</value>
+  </data>
+  <data name="ProgressRecordingResults" xml:space="preserve">
+    <value>Ergebnisse werden aufgezeichnet</value>
+  </data>
+  <data name="ProgressExporting" xml:space="preserve">
+    <value>{0} Änderungen werden exportiert</value>
+  </data>
+  <data name="ProgressPreparingDeltaSync" xml:space="preserve">
+    <value>Deltasynchronisierung wird vorbereitet</value>
+  </data>
+  <data name="ProgressProcessingModifiedCsos" xml:space="preserve">
+    <value>Geänderte Objekte im verbundenen System werden verarbeitet</value>
+  </data>
+  <data name="ProbeUndeterminedOne" xml:space="preserve">
+    <value>JIM konnte {0} nicht auf bereits verwendete Werte prüfen. {1}. JIM hat {2} Wert allein anhand seiner eigenen Datensätze gewählt.</value>
+  </data>
+  <data name="ProbeUndeterminedOther" xml:space="preserve">
+    <value>JIM konnte {0} nicht auf bereits verwendete Werte prüfen. {1}. JIM hat {2} Werte allein anhand seiner eigenen Datensätze gewählt.</value>
+  </data>
+  <data name="ProbeIncomplete" xml:space="preserve">
+    <value>Die Prüfung von {0} durch JIM auf bereits verwendete Werte war unvollständig. {1}.</value>
+  </data>
+  <data name="ScimLatestRejection" xml:space="preserve">
+    <value>Letzte Ablehnung: {0}</value>
+  </data>
+  <data name="ScimRequestsFrom" xml:space="preserve">
+    <value>SCIM-Anfragen von „{0}“</value>
+  </data>
+  <data name="HierarchyNoPartitions" xml:space="preserve">
+    <value>Die Aktualisierung der Hierarchie hat keine Partitionen aus dem verbundenen System abgerufen, daher blieb die bestehende Hierarchie unverändert. Das deutet meist auf ein Verbindungs-, Authentifizierungs- oder Geltungsbereichsproblem hin und nicht auf ein leeres Verzeichnis; prüfen Sie die Einstellungen und die Konnektivität des verbundenen Systems und versuchen Sie es dann erneut.</value>
+  </data>
+  <data name="QueueExplicitOne" xml:space="preserve">
+    <value>Kennwort-Festlegung für {0} Konto angefordert: {1}.</value>
+  </data>
+  <data name="QueueExplicitOther" xml:space="preserve">
+    <value>Kennwort-Festlegung für {0} Konten angefordert: {1}.</value>
+  </data>
+  <data name="QueueNotQueued" xml:space="preserve">
+    <value>Nicht in die Warteschlange gestellt für {0}: Die Kennwortsynchronisierung ist dort ausgeschaltet, und das Objekt im verbundenen System, das diese Änderung erreichen würde, wartet noch auf sein erstes Kennwort, das JIM stattdessen übermittelt.</value>
+  </data>
+  <data name="QueueNone" xml:space="preserve">
+    <value>Kein verbundenes System ist für die Kennwortsynchronisierung konfiguriert, daher wurde dieses Kennwort nirgends zur Zustellung eingereiht.</value>
+  </data>
+  <data name="QueueQueuedOne" xml:space="preserve">
+    <value>Kennwortänderung für {0} verbundenes System eingereiht: {1}.</value>
+  </data>
+  <data name="QueueQueuedOther" xml:space="preserve">
+    <value>Kennwortänderung für {0} verbundene Systeme eingereiht: {1}.</value>
+  </data>
+  <data name="QueueHeldOne" xml:space="preserve">
+    <value>Zurückgehalten, bis die Kennwortsynchronisierung auf {0} aktiviert ist; die Änderung wird dann zugestellt oder läuft vorher ab.</value>
+  </data>
+  <data name="QueueHeldOther" xml:space="preserve">
+    <value>Zurückgehalten, bis die Kennwortsynchronisierung auf {0} aktiviert ist; die Änderungen werden dann zugestellt oder laufen vorher ab.</value>
+  </data>
+  <data name="ExchangeRetryNothingSingle" xml:space="preserve">
+    <value>Es wurde nichts wiederholt: Die Änderung ist nicht mehr angehalten oder in Wiederholung.</value>
+  </data>
+  <data name="ExchangeRetryNothingMany" xml:space="preserve">
+    <value>Es wurde nichts wiederholt: Keine der Änderungen ist noch angehalten oder in Wiederholung.</value>
+  </data>
+  <data name="ExchangeRetryNothingMatched" xml:space="preserve">
+    <value>Es wurde nichts wiederholt: Es passte keine Exchange-Änderung in der Warteschlange, die angehalten oder in Wiederholung war.</value>
+  </data>
+  <data name="ExchangeRetriedOne" xml:space="preserve">
+    <value>1 Exchange-Änderung in der Warteschlange wird erneut versucht.</value>
+  </data>
+  <data name="ExchangeRetriedOther" xml:space="preserve">
+    <value>{0} Exchange-Änderungen in der Warteschlange werden erneut versucht.</value>
+  </data>
+  <data name="ExchangeRetryRecord" xml:space="preserve">
+    <value>Wiederholt; JIM versucht es in Kürze erneut.</value>
+  </data>
+  <data name="ServiceSettingUpdatedFromEnvironment" xml:space="preserve">
+    <value>Integrierte Diensteinstellung „{0}“ aus der Umgebungskonfiguration aktualisiert</value>
+  </data>
+  <data name="SeedingApplying" xml:space="preserve">
+    <value>Integrierte Konfiguration wird angewendet</value>
+  </data>
+  <data name="AuthCreatingInitialAdmin" xml:space="preserve">
+    <value>Initialer Administratorbenutzer wird bei der ersten Anmeldung erstellt</value>
+  </data>
+  <data name="AuthAssigningAdminRole" xml:space="preserve">
+    <value>Rolle {0} wird dem initialen Administrator zugewiesen</value>
+  </data>
+  <data name="SearchUpdating" xml:space="preserve">
+    <value>Vordefinierte Suche „{0}“ wird aktualisiert</value>
+  </data>
+  <data name="SearchAddingGroup" xml:space="preserve">
+    <value>Eine Kriteriengruppe wird zur vordefinierten Suche „{0}“ hinzugefügt</value>
+  </data>
+  <data name="SearchUpdatingGroup" xml:space="preserve">
+    <value>Eine Kriteriengruppe der vordefinierten Suche „{0}“ wird aktualisiert</value>
+  </data>
+  <data name="SearchDeletingGroup" xml:space="preserve">
+    <value>Eine Kriteriengruppe wird aus der vordefinierten Suche „{0}“ gelöscht</value>
+  </data>
+  <data name="SearchAddingCriterion" xml:space="preserve">
+    <value>Ein Kriterium wird zur vordefinierten Suche „{0}“ hinzugefügt</value>
+  </data>
+  <data name="SearchUpdatingCriterion" xml:space="preserve">
+    <value>Ein Kriterium der vordefinierten Suche „{0}“ wird aktualisiert</value>
+  </data>
+  <data name="SearchDeletingCriterion" xml:space="preserve">
+    <value>Ein Kriterium wird aus der vordefinierten Suche „{0}“ gelöscht</value>
+  </data>
+  <data name="RoleCreating" xml:space="preserve">
+    <value>Rolle „{0}“ wird erstellt</value>
+  </data>
+  <data name="RoleAddingMember" xml:space="preserve">
+    <value>„{0}“ wird zur Rolle „{1}“ hinzugefügt</value>
+  </data>
+  <data name="RoleRemovingMember" xml:space="preserve">
+    <value>„{0}“ wird aus der Rolle „{1}“ entfernt</value>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>API-Schlüssel „{0}“ wird erstellt</value>
+  </data>
+  <data name="ApiKeyUpdating" xml:space="preserve">
+    <value>API-Schlüssel „{0}“ wird aktualisiert</value>
+  </data>
+  <data name="ApiKeyDeleting" xml:space="preserve">
+    <value>API-Schlüssel „{0}“ wird gelöscht</value>
+  </data>
+  <data name="CertAddingUploaded" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat wird aus hochgeladenen Daten hinzugefügt</value>
+  </data>
+  <data name="CertAddingFromFile" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat wird aus dem Dateipfad hinzugefügt: {0}</value>
+  </data>
+  <data name="CertUpdating" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat „{0}“ wird aktualisiert</value>
+  </data>
+  <data name="CertDeleting" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat „{0}“ wird gelöscht</value>
+  </data>
+  <data name="ExportPreparing" xml:space="preserve">
+    <value>Exporte werden vorbereitet</value>
+  </data>
+  <data name="ExportCompletedSummary" xml:space="preserve">
+    <value>Export abgeschlossen: {0} erfolgreich, {1} fehlgeschlagen, {2} zurückgestellt</value>
+  </data>
+  <data name="ExportExecuting" xml:space="preserve">
+    <value>Export läuft</value>
+  </data>
+  <data name="ExportExecutingDeferred" xml:space="preserve">
+    <value>Zurückgestellter Export läuft</value>
+  </data>
+  <data name="ExportToFile" xml:space="preserve">
+    <value>{0} Änderungen werden in eine Datei exportiert</value>
+  </data>
+  <data name="RetentionRunning" xml:space="preserve">
+    <value>Bereinigung der Aufbewahrung von Änderungsverlauf und Aktivitäten</value>
+  </data>
+  <data name="AutoSelectingContainers" xml:space="preserve">
+    <value>{0} Container, die während des Exports erstellt wurden, werden automatisch ausgewählt</value>
+  </data>
+  <data name="UpdateObjectType" xml:space="preserve">
+    <value>Objekttyp aktualisieren: {0}</value>
+  </data>
+  <data name="UpdateAttribute" xml:space="preserve">
+    <value>Attribut aktualisieren: {0}.{1}</value>
+  </data>
+  <data name="BulkUpdateAttributes" xml:space="preserve">
+    <value>Massenaktualisierung von {0} Attribut(en) für {1}</value>
+  </data>
+  <data name="WithdrawnReferencesToDeletedObjectsWarning" xml:space="preserve">
+    <value>{0} anstehende Verweiswerte wurden zurückgezogen, weil das Metaverse-Objekt, auf das sie verwiesen, gelöscht wurde; sie hätten nie geschrieben werden können. Ein ausstehender Export, der nichts mehr zu senden hatte, wurde abgeschlossen.</value>
+  </data>
+  <data name="MetaverseAttributeReferenceRemoved" xml:space="preserve">
+    <value>{0} entfernt, das auf das Metaverse-Attribut „{1}“ verwies</value>
+  </data>
+  <data name="MetaverseAttributeRemoved" xml:space="preserve">
+    <value>Metaverse-Attribut „{0}“ entfernt</value>
+  </data>
+  <data name="MetaverseAttributeUnassigned" xml:space="preserve">
+    <value>Metaverse-Attribut „{0}“ vom Metaverse-Objekttyp „{1}“ entfernt</value>
+  </data>
+  <data name="MetaverseReferenceRemovedScoped" xml:space="preserve">
+    <value>{0} entfernt, das auf den Metaverse-Objekttyp „{1}“ beschränkt war</value>
+  </data>
+  <data name="MetaverseObjectTypeRemoved" xml:space="preserve">
+    <value>Metaverse-Objekttyp „{0}“ entfernt</value>
+  </data>
+  <data name="ExportResolvingDeferred" xml:space="preserve">
+    <value>{0} zurückgestellte Exporte werden aufgelöst</value>
+  </data>
+  <data name="ExportLoadingDeferred" xml:space="preserve">
+    <value>Zurückgestellte Exporte {0} bis {1} von {2} werden geladen</value>
+  </data>
+  <data name="ExportWithdrewDeferredReferences" xml:space="preserve">
+    <value>Verweise auf gelöschte Objekte aus {0} zurückgestellten Exporten entfernt</value>
+  </data>
+  <data name="ExportSavingResolvedReferences" xml:space="preserve">
+    <value>Aufgelöste Verweise für {0} zurückgestellte Exporte werden gespeichert</value>
+  </data>
+  <data name="ExportRecordingWaiting" xml:space="preserve">
+    <value>Exporte, die noch auf ihre Verweise warten, werden erfasst</value>
+  </data>
+  <data name="ExportBatchFailed" xml:space="preserve">
+    <value>Export des Stapels fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ExportBatchCloseFailed" xml:space="preserve">
+    <value>Die Ergebnisse eines Stapels wurden erfasst, aber das Schließen seiner Verbindung ist fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ExportBatchFinishFailed" xml:space="preserve">
+    <value>Die Ergebnisse des Stapels wurden erfasst, aber JIM ist bei ihrem Abschluss fehlgeschlagen: {0}</value>
+  </data>
+  <data name="ExportFailedNoReason" xml:space="preserve">
+    <value>Export fehlgeschlagen</value>
+  </data>
+  <data name="CollisionRemediated" xml:space="preserve">
+    <value>{0} enthält den Wert „{2}“ für das Attribut {1} bereits für ein anderes Objekt, daher hat JIM ihn auf „{3}“ korrigiert.</value>
+  </data>
+  <data name="CollisionNeedsDecision" xml:space="preserve">
+    <value>{0} hat den Wert „{2}“ für das Attribut {1} abgelehnt, weil ein anderes Objekt ihn dort bereits enthält, und JIM hat ihn nicht geändert: {3}. Erlauben Sie die Umbenennung, versuchen Sie es erneut, sobald der Konflikt in {0} gelöst ist, oder lassen Sie ihn unverändert.</value>
+  </data>
+  <data name="CollisionWhyLimitReached" xml:space="preserve">
+    <value>er wurde bereits {0}-mal korrigiert, daher korrigiert JIM ihn nicht mehr</value>
+  </data>
+  <data name="CollisionWhyAnchored" xml:space="preserve">
+    <value>{0} hat {1} für dieses Objekt bereits akzeptiert, daher würde eine Änderung ein bereits verwendetes Konto umbenennen</value>
+  </data>
+  <data name="CollisionWhyCannotTell" xml:space="preserve">
+    <value>JIM kann nicht feststellen, ob {0} {1} bereits enthält, weil {0} seit dem Leeren seines Connectorbereichs keinen vollständigen Import abgeschlossen hat</value>
+  </data>
+  <data name="CollisionWhyNoValue" xml:space="preserve">
+    <value>es konnte kein anderer Wert dafür gefunden werden: {0}</value>
+  </data>
+  <data name="CollisionItself" xml:space="preserve">
+    <value>ihn</value>
+  </data>
+  <data name="CollisionBuiltFromIt" xml:space="preserve">
+    <value>den daraus gebildeten Wert {0}</value>
+  </data>
+  <data name="InitialPasswordCarried" xml:space="preserve">
+    <value>Initialkennwort für {0} nicht in die Warteschlange gestellt: Eine für diese Person dort bereits wartende Kennwortänderung wird stattdessen das erste Kennwort dieses Objekts im verbundenen System und behält ihr eigenes Kennwort und ihr Ablaufdatum. Bei der Zustellung gelten die Initialkennwort-Einstellungen dieser Synchronisierungsregel für das Aktivieren des Objekts im verbundenen System und dafür, ob sein Kennwort nie abläuft, außer wenn ein Export diese selbst geschrieben hat.</value>
+  </data>
+  <data name="InitialPasswordCarriedParked" xml:space="preserve">
+    <value>{0} Sie war zurückgestellt worden ({1}) und ist nun wieder fällig, da das Objekt im verbundenen System existiert.</value>
+  </data>
+  <data name="InitialPasswordCarriedDelivering" xml:space="preserve">
+    <value>{0} Sie wurde gerade zugestellt, als das Objekt im verbundenen System erstellt wurde, und wird mit diesen Einstellungen erneut zugestellt.</value>
+  </data>
+  <data name="InitialPasswordCarriedWaiting" xml:space="preserve">
+    <value>{0} Sie wartete darauf, dass das Objekt im verbundenen System existiert, und ist jetzt fällig.</value>
+  </data>
+  <data name="InitialPasswordQueued" xml:space="preserve">
+    <value>Initialkennwort für die Zustellung an {0} in die Warteschlange gestellt.</value>
+  </data>
+  <data name="InitialPasswordQueuedReplacing" xml:space="preserve">
+    <value>Initialkennwort für die Zustellung an {0} in die Warteschlange gestellt, anstelle einer dort wartenden Kennwortänderung dieser Person: {1}</value>
+  </data>
+  <data name="PasswordNotSetReplaced" xml:space="preserve">
+    <value>Kennwort auf {0} nicht gesetzt: ersetzt durch das Initialkennwort eines Objekts im verbundenen System, das JIM dort soeben bereitgestellt hat. Grund: {1}</value>
+  </data>
+  <data name="PasswordReplacedHeld" xml:space="preserve">
+    <value>Sie wird zurückgehalten, solange die Kennwortsynchronisierung für {0} ausgeschaltet ist, hatte es also nicht erreicht, und das erste Kennwort eines Objekts im verbundenen System wird unabhängig von der Pause zugestellt.</value>
+  </data>
+  <data name="PasswordReplacedAccountGone" xml:space="preserve">
+    <value>Sie wurde für ein Objekt im verbundenen System festgelegt, das dort nicht mehr existiert oder nicht mehr dieser Person gehört.</value>
+  </data>
+  <data name="PasswordReplacedOtherObjectType" xml:space="preserve">
+    <value>Sie gilt für den Objekttyp, für den die Kennwortsynchronisierung in {0} Kennwörter setzt; dieses Objekt im verbundenen System gehört nicht dazu, daher konnte sie es nicht erreichen, und auch kein anderes Objekt dieser Person dort, solange dieses ihr gehört.</value>
+  </data>
+  <data name="PasswordReplacedStoppedTrying" xml:space="preserve">
+    <value>JIM hatte aufgehört, sie zuzustellen ({0}).</value>
+  </data>
+  <data name="PasswordParkedPolicy" xml:space="preserve">
+    <value>das Kennwort die Kennwortrichtlinie des Systems nicht erfüllte</value>
+  </data>
+  <data name="PasswordParkedConfiguration" xml:space="preserve">
+    <value>ein Konfigurationsproblem verhinderte, dass es gesetzt wurde</value>
+  </data>
+  <data name="PasswordParkedUnsupported" xml:space="preserve">
+    <value>das System auf ihm kein Kennwort setzen kann</value>
+  </data>
+  <data name="PasswordParkedObjectMissing" xml:space="preserve">
+    <value>das Objekt im verbundenen System noch nicht existierte</value>
+  </data>
+  <data name="PasswordParkedUnreachable" xml:space="preserve">
+    <value>das System nicht erreichbar war</value>
+  </data>
+  <data name="PasswordParkedUnrecorded" xml:space="preserve">
+    <value>aus einem Grund, den JIM nicht erfasst hat</value>
+  </data>
+  <data name="PasswordParkedWithTargetMessage" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="AttributePriorityRenumbered" xml:space="preserve">
+    <value>Die Attributprioritätsnummern wurden durch eine Änderung an der Synchronisierungsregel „{0}“ neu nummeriert. Die Reihenfolge, in der Synchronisierungsregeln zum Metaverse-Attribut beitragen, bleibt unverändert.</value>
+  </data>
+  <data name="DeprovisioningScopeHeldBack" xml:space="preserve">
+    <value>{0} Es und das Metaverse-Objekt {1} wurden unverändert gelassen, und das verbundene System wird erst gelöscht, wenn sie verarbeitet werden können.</value>
+  </data>
+  <data name="RecallScopeHeldBack" xml:space="preserve">
+    <value>{0} Das Metaverse-Objekt {1} wurde unverändert gelassen, mit den Werten, die die Synchronisierungsregel beigetragen hat.</value>
+  </data>
+  <data name="ImportObjectTypeChangeWithdrawn" xml:space="preserve">
+    <value>JIM führt dieses Objekt als „{0}“, und dieser vollständige Import erlaubt Objekttypänderungen, konnte das Objekt „{0}“ aber nicht stilllegen: Es liegt außerhalb dessen, was die Löscherkennung des vollständigen Imports abdeckt (eine Partition, die dieses Ausführungsprofil nicht importiert, oder ein abgewählter Objekttyp, den eine aktivierte Synchronisierungsregel noch verwaltet). Das neue Objekt „{1}“ wurde nicht erstellt, und das Objekt „{0}“ blieb unverändert, sodass nichts deprovisioniert wird. Nehmen Sie das Objekt „{0}“ in den Geltungsbereich des vollständigen Imports auf, oder deaktivieren Sie die an seinen Objekttyp gebundenen Synchronisierungsregeln, und führen Sie den vollständigen Import dann erneut aus.</value>
+  </data>
+  <data name="ExportedCreateNotConfirmed" xml:space="preserve">
+    <value>Der Create-Export war erfolgreich, aber dieser Import hat alle Objekte gelesen und dieses nicht zurückgemeldet. Das Erstellen wird beim nächsten Export erneut versucht.</value>
+  </data>
+  <data name="ImportDeletionWithoutObjectType" xml:space="preserve">
+    <value>Der Connector hat eine Löschung ohne Objekttyp gemeldet, und seine externe ID verrät JIM nicht, welches Objekt gelöscht wurde: Die externen IDs dieses Connectors können in verschiedenen Objekttypen verschiedene Objekte bezeichnen. Es wurde nichts gelöscht; führen Sie einen vollständigen Import aus, der Löschungen anhand fehlender Objekte erkennt.</value>
+  </data>
+  <data name="ImportObjectTypeNotFound" xml:space="preserve">
+    <value>Im verbundenen System ({0}) wurde kein gültiger Objekttyp für den importierten Objekttyp gefunden: {1}</value>
+  </data>
+  <data name="ImportObjectTypeChangeRefused" xml:space="preserve">
+    <value>JIM führt dieses Objekt als „{0}“, aber der Connector liefert es jetzt als „{1}“ (externe ID „{2}“). Es wurde nicht importiert, und {3}. Wenn sich der Typ des Objekts tatsächlich geändert hat, führen Sie einen vollständigen Import aus, bei dem in seinem Ausführungsprofil „Objekttypänderungen zulassen“ aktiviert ist: JIM legt das Objekt „{0}“ still und importiert ein neues Objekt „{1}“. Wenn nicht, prüfen Sie die im verbundenen System ausgewählten Objekttypen.</value>
+  </data>
+  <data name="ImportKeptHeldObsolete" xml:space="preserve">
+    <value>das vorhandene Objekt „{0}“, das ein früherer Import als veraltet markiert hat, blieb unverändert</value>
+  </data>
+  <data name="ImportKeptHeldNothingDeprovisioned" xml:space="preserve">
+    <value>das vorhandene Objekt „{0}“ blieb unverändert, sodass nichts deprovisioniert wird</value>
+  </data>
+  <data name="UnresolvedReferencesNote" xml:space="preserve">
+    <value>{0} Verweiswert(e) konnten nicht geschrieben werden, weil das referenzierte Metaverse-Objekt kein Objekt im verbundenen System hat: {1}. Das referenzierte Objekt liegt außerhalb des Geltungsbereichs aller Synchronisierungsregeln für dieses System oder wurde noch nicht bereitgestellt. Alles Übrige dieses Exports wurde geschrieben; der Verweis wird im zurückgestellten Takt erneut versucht und geschrieben, sobald das Objekt erscheint.</value>
+  </data>
+  <data name="UnresolvedReferencesAndMore" xml:space="preserve">
+    <value>{0}; und {1} weitere</value>
+  </data>
+  <data name="ProvisioningMatchFailed" xml:space="preserve">
+    <value>Vor der Bereitstellung in „{0}“: {1}</value>
+  </data>
+  <data name="ProvisioningAmbiguity" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt entspricht {0} Objekten im verbundenen System „{1}“, daher gilt: {2}. Ein Metaverse-Objekt kann in jedem verbundenen System nur mit einem Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ProvisioningAmbiguityOnRule" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt entspricht {0} Objekten im verbundenen System „{1}“ bei {2} ({3}), daher gilt: {4}. Ein Metaverse-Objekt kann in jedem verbundenen System nur mit einem Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ProvisioningAmbiguityMoreValues" xml:space="preserve">
+    <value>und {0} weitere</value>
+  </data>
+  <data name="ProvisioningOutcomeWasNot" xml:space="preserve">
+    <value>wurde es weder mit einem von ihnen verknüpft noch bereitgestellt</value>
+  </data>
+  <data name="ProvisioningOutcomeWouldNot" xml:space="preserve">
+    <value>würde eine Synchronisierung es weder mit einem von ihnen verknüpfen noch bereitstellen</value>
+  </data>
+  <data name="PasswordSetInitial" xml:space="preserve">
+    <value>Initialkennwort auf {0} gesetzt</value>
+  </data>
+  <data name="PasswordSetStandInApplies" xml:space="preserve">
+    <value>Kennwort auf {0} als erstes Kennwort dieses Objekts im verbundenen System gesetzt, anstelle seines Initialkennworts</value>
+  </data>
+  <data name="PasswordSetStandInNoLongerSet" xml:space="preserve">
+    <value>Kennwort auf {0} als erstes Kennwort dieses Objekts im verbundenen System gesetzt. Die Synchronisierungsregel, die es bereitgestellt hat, setzt kein Initialkennwort mehr oder wurde gelöscht, daher wurden ihre Einstellungen zum Aktivieren des Objekts im verbundenen System und dazu, ob sein Kennwort nie abläuft, nicht angewendet</value>
+  </data>
+  <data name="PasswordSetStandInOtherAccount" xml:space="preserve">
+    <value>Kennwort auf {0} gesetzt. Es sollte auch das erste Kennwort eines Objekts im verbundenen System dort sein, das nicht mehr dieser Person gehört, daher wurden die Einstellungen dieses Initialkennworts zum Aktivieren des Objekts im verbundenen System und dazu, ob sein Kennwort nie abläuft, bei diesem nicht angewendet</value>
+  </data>
+  <data name="PasswordSetPlain" xml:space="preserve">
+    <value>Kennwort auf {0} gesetzt</value>
+  </data>
+  <data name="PasswordSetSentence" xml:space="preserve">
+    <value>Kennwort auf {0} gesetzt.</value>
+  </data>
+  <data name="PasswordDeliveryEnableLeftToFlow" xml:space="preserve">
+    <value>{0}. Der Aktivierungsstatus des Kontos wurde seinem Attributfluss überlassen, der ihn festlegt, daher galt die Einstellung „Objekt im verbundenen System aktivieren, sobald das Kennwort gesetzt ist“ des Initialkennworts nicht.</value>
+  </data>
+  <data name="PasswordDeliveryEnableCompletesWithheld" xml:space="preserve">
+    <value>{0}, und das Konto wurde aktiviert, wie sein Attributfluss es verlangt: JIM hat die Aktivierung zurückgehalten, bis das Konto ein Kennwort hatte.</value>
+  </data>
+  <data name="PasswordDeliveryEnabledAsAsked" xml:space="preserve">
+    <value>{0}, und das Objekt im verbundenen System wurde aktiviert, wie es das Initialkennwort der Synchronisierungsregel verlangt.</value>
+  </data>
+  <data name="PasswordDeliveryEnableAsksOnly" xml:space="preserve">
+    <value>{0}. Das Initialkennwort der Synchronisierungsregel verlangt, dass das Objekt im verbundenen System aktiviert wird.</value>
+  </data>
+  <data name="PasswordDeliveryEnableNotAsked" xml:space="preserve">
+    <value>{0}. Das Initialkennwort der Synchronisierungsregel aktiviert es nicht, daher blieb es so, wie es erstellt wurde.</value>
+  </data>
+  <data name="PasswordDeliveryPlain" xml:space="preserve">
+    <value>{0}.</value>
+  </data>
+  <data name="PasswordNotSet" xml:space="preserve">
+    <value>Kennwort auf {0} nicht gesetzt: {1}. {2}.</value>
+  </data>
+  <data name="PasswordRetryParked" xml:space="preserve">
+    <value>JIM versucht es nicht mehr; wiederholen Sie den Vorgang, sobald die Ursache behoben ist</value>
+  </data>
+  <data name="PasswordRetryAgain" xml:space="preserve">
+    <value>JIM versucht es erneut</value>
+  </data>
+  <data name="PasswordReasonUnknown" xml:space="preserve">
+    <value>ein unbekannter Grund</value>
+  </data>
+  <data name="PasswordWithdrawnAccountGone" xml:space="preserve">
+    <value>Initialkennwort nicht mehr erforderlich: Das Konto, für das es bestimmt war, existiert in {0} nicht mehr oder ist nicht mehr mit dieser Person verknüpft.</value>
+  </data>
+  <data name="PasswordWithdrawnRuleOff" xml:space="preserve">
+    <value>Initialkennwort nicht mehr erforderlich: Die Synchronisierungsregel, die dieses Konto bereitgestellt hat, setzt keines mehr oder wurde gelöscht.</value>
+  </data>
+  <data name="PasswordCaveatBase" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden.</value>
+  </data>
+  <data name="PasswordCaveatRequireChange" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden: Beim nächsten Anmelden ist eine Änderung erforderlich.</value>
+  </data>
+  <data name="PasswordCaveatExpiresByPolicy" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden: Das Kennwort läuft gemäß der eigenen Kennwortrichtlinie von {0} ab.</value>
+  </data>
+  <data name="PasswordCaveatNeverExpires" xml:space="preserve">
+    <value>Nicht alles Angeforderte konnte angewendet werden: Das Kennwort läuft nie ab.</value>
+  </data>
+  <data name="PasswordCaveatWarningWithheld" xml:space="preserve">
+    <value>[Die Warnung des verbundenen Systems wird zurückgehalten, weil sie das Kennwort enthielt]</value>
+  </data>
+  <data name="PasswordCaveatOwnerLeftToExport" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde dem Export überlassen, der userAccountControl schreibt und die Einstellung gesetzt lässt; setzen Sie sie in diesem Attributfluss nur, wenn Kennwörter nie ablaufen sollen, oder wählen Sie für das Initialkennwort ein anderes Ablaufverhalten.</value>
+  </data>
+  <data name="PasswordCaveatOwnerAsAccountHas" xml:space="preserve">
+    <value>Ein auf jedem verbundenen System gesetztes Kennwort belässt „Kennwort läuft nie ab“ so, wie jedes Konto es hat.</value>
+  </data>
+  <data name="PasswordCaveatSharedStatic" xml:space="preserve">
+    <value>Jedes Konto, dem das statische Initialkennwort dieser Synchronisierungsregel zugewiesen wurde, behält daher dieses eine gemeinsame Kennwort, das nie abläuft.</value>
+  </data>
+  <data name="PasswordPutBackWithheldEnable" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde für dieses Konto geändert, aber der Export, den JIM zurückgehalten hat, bis das Konto ein Kennwort hatte, enthält noch das userAccountControl des Attributflusses und schreibt es, samt „Kennwort läuft nie ab“, zurück, sobald er freigegeben wird.</value>
+  </data>
+  <data name="PasswordPutBackEnforced" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde für dieses Konto geändert, aber die Synchronisierungsregel {0} schreibt ihr userAccountControl mit aktiviertem „Zustand erzwingen“, daher stellt die nächste Synchronisierung den Wert des Attributflusses wieder her und damit auch, ob das Kennwort nie abläuft; solange dieser Wert „Kennwort läuft nie ab“ gesetzt lässt, verlangt Active Directory beim nächsten Anmelden keine Änderung.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportSet" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde dem Export überlassen, der userAccountControl schreibt und die Einstellung setzt, daher läuft das Kennwort nie ab.</value>
+  </data>
+  <data name="PasswordNoteLeftSet" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ blieb so, wie das Konto es hat, nämlich gesetzt, daher läuft das Kennwort nie ab.</value>
+  </data>
+  <data name="PasswordNoteLeftToExportOff" xml:space="preserve">
+    <value>„Kennwort läuft nie ab“ wurde dem Export überlassen, der userAccountControl schreibt und die Einstellung ausgeschaltet lässt, daher läuft das Kennwort gemäß der eigenen Kennwortrichtlinie von {0} ab. Damit diese Kennwörter nie ablaufen, setzen Sie „Kennwort läuft nie ab“ (65536) im Attributfluss, der userAccountControl schreibt.</value>
+  </data>
+  <data name="PasswordNoteEverySystemOff" xml:space="preserve">
+    <value>Ein auf jedem verbundenen System gesetztes Kennwort belässt „Kennwort läuft nie ab“ so, wie jedes Konto es hat, daher wurde das angeforderte „Läuft nie ab“ nicht angewendet; das Kennwort läuft gemäß der eigenen Kennwortrichtlinie von {0} ab.</value>
+  </data>
+  <data name="PasswordQueueRetryOne" xml:space="preserve">
+    <value>{0} Kennwortänderung in der Warteschlange wird erneut versucht.</value>
+  </data>
+  <data name="PasswordQueueRetryOther" xml:space="preserve">
+    <value>{0} Kennwortänderungen in der Warteschlange werden erneut versucht.</value>
+  </data>
+  <data name="PasswordQueueCancelOne" xml:space="preserve">
+    <value>{0} Kennwortänderung in der Warteschlange wird nicht zugestellt.</value>
+  </data>
+  <data name="PasswordQueueCancelOther" xml:space="preserve">
+    <value>{0} Kennwortänderungen in der Warteschlange werden nicht zugestellt.</value>
+  </data>
+  <data name="PasswordFilterOneChange" xml:space="preserve">
+    <value>Eine Kennwortänderung</value>
+  </data>
+  <data name="PasswordFilterChanges" xml:space="preserve">
+    <value>{0} Kennwortänderungen</value>
+  </data>
+  <data name="PasswordFilterWholeQueue" xml:space="preserve">
+    <value>Die Warteschlange der Kennwortsynchronisierung</value>
+  </data>
+  <data name="ExchangeRetryFailed" xml:space="preserve">
+    <value>Die Wiederholung wurde nicht abgeschlossen: {0}</value>
+  </data>
+  <data name="ExportNotConfirmedByImport" xml:space="preserve">
+    <value>Wir haben eine Änderung exportiert, aber bei einem bestätigenden Import keine Bestätigung dafür erhalten. Details: {0} Attribut(e): {1}. Die Änderung wird beim nächsten Exportlauf erneut durchgesetzt.</value>
+  </data>
+  <data name="ImportAmbiguity" xml:space="preserve">
+    <value>Dieses Objekt entspricht {0} Metaverse-Objekten, daher gilt: {1}. Ein Objekt im verbundenen System kann nur mit einem Metaverse-Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ImportAmbiguityOnRule" xml:space="preserve">
+    <value>Dieses Objekt entspricht {0} Metaverse-Objekten bei {1} ({2}), daher gilt: {3}. Ein Objekt im verbundenen System kann nur mit einem Metaverse-Objekt verknüpft werden: Korrigieren Sie die Daten oder die Objektabgleichsregel, sodass seine Werte genau eines identifizieren.</value>
+  </data>
+  <data name="ImportOutcomeWasNot" xml:space="preserve">
+    <value>wurde es weder verknüpft noch projiziert</value>
+  </data>
+  <data name="ImportOutcomeWouldNot" xml:space="preserve">
+    <value>würde eine Synchronisierung es weder verknüpfen noch projizieren</value>
+  </data>
+  <data name="ImportRuleDisagreement" xml:space="preserve">
+    <value>Die Synchronisierungsregeln für den Import dieses Objekts entsprechen {0} verschiedenen Metaverse-Objekten: {1}. JIM wählt nicht zwischen ihnen aus, daher gilt: {2}. Korrigieren Sie die Daten oder die Objektabgleichsregeln dieser Synchronisierungsregeln, sodass sie genau ein Metaverse-Objekt identifizieren.</value>
+  </data>
+  <data name="ImportRuleDisagreementItem" xml:space="preserve">
+    <value>„{0}“ entspricht {1} bei {2} („{3}“)</value>
+  </data>
+  <data name="JoinedBySemicolon" xml:space="preserve">
+    <value>{0}; {1}</value>
+  </data>
+  <data name="PasswordFilterChangesNamed" xml:space="preserve">
+    <value>Kennwortänderungen: {0}</value>
+  </data>
+  <data name="PasswordStatusPending" xml:space="preserve">
+    <value>wartend</value>
+  </data>
+  <data name="PasswordStatusParked" xml:space="preserve">
+    <value>zurückgestellt</value>
+  </data>
+  <data name="PasswordStatusExpired" xml:space="preserve">
+    <value>abgelaufen</value>
+  </data>
+  <data name="PasswordStatusCancelled" xml:space="preserve">
+    <value>abgebrochen</value>
+  </data>
+  <data name="PasswordFailureNone" xml:space="preserve">
+    <value>keine</value>
+  </data>
+  <data name="PasswordFailureTransient" xml:space="preserve">
+    <value>Ziel nicht verfügbar</value>
+  </data>
+  <data name="PasswordFailureConfigurationFault" xml:space="preserve">
+    <value>Konfigurationsfehler</value>
+  </data>
+  <data name="PasswordFailurePolicyRejection" xml:space="preserve">
+    <value>Ablehnung durch Richtlinie</value>
+  </data>
+  <data name="PasswordFailureTargetObjectNotFound" xml:space="preserve">
+    <value>Objekt im verbundenen System nicht gefunden</value>
+  </data>
+  <data name="PasswordFailureUnsupportedOperation" xml:space="preserve">
+    <value>nicht unterstützter Vorgang</value>
+  </data>
+  <data name="PasswordStatusDelivering" xml:space="preserve">
+    <value>wird zugestellt</value>
+  </data>
+  <data name="ExportNotAttempted" xml:space="preserve">
+    <value>Der Connector hat diese Änderung als nicht versucht gemeldet, obwohl die Exportausführung nicht abgebrochen wurde.</value>
+  </data>
+  <data name="ExportNoResult" xml:space="preserve">
+    <value>Der Connector hat für diese Änderung kein Ergebnis zurückgegeben, daher kann JIM nicht feststellen, ob sie geschrieben wurde; sie wird erneut gesendet.</value>
+  </data>
+  <data name="ExportDisableUnsupported" xml:space="preserve">
+    <value>Dieses Objekt sollte deaktiviert werden, aber der von „{1}“ verwendete {0} kann kein Konto deaktivieren, daher wurde nichts gesendet. Ändern Sie die Deprovisionierungsaktion der Exportsynchronisierungsregel in „Löschen“ oder „Trennen“.</value>
+  </data>
+  <data name="ExportDisableUnsupportedUnnamed" xml:space="preserve">
+    <value>Dieses Objekt sollte deaktiviert werden, aber der von „{0}“ verwendete Connector kann kein Konto deaktivieren, daher wurde nichts gesendet. Ändern Sie die Deprovisionierungsaktion der Exportsynchronisierungsregel in „Löschen“ oder „Trennen“.</value>
+  </data>
+  <data name="QuotedName" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="ExportClassRequirementsNotMetOne" xml:space="preserve">
+    <value>Die Klasse(n) „{0}“ kann diesem Objekt nicht hinzugefügt werden: „{1}“ erfordert {2}, und dieser Export schreibt es nicht und findet auch keinen Wert, der bereits auf dem Objekt vorhanden ist. Fügen Sie einen Attributfluss für das fehlende Attribut hinzu, oder entfernen Sie die Auswahl der Hilfsklasse, durch die die Klasse hinzugefügt wurde.</value>
+  </data>
+  <data name="ExportClassRequirementsNotMetOther" xml:space="preserve">
+    <value>Die Klasse(n) „{0}“ kann diesem Objekt nicht hinzugefügt werden: „{1}“ erfordert {2}, und dieser Export schreibt sie nicht und findet auch keine Werte, die bereits auf dem Objekt vorhanden sind. Fügen Sie einen Attributfluss für die fehlenden Attribute hinzu, oder entfernen Sie die Auswahl der Hilfsklasse, durch die die Klasse hinzugefügt wurde.</value>
+  </data>
+  <data name="ExportSingleValuedContradictedOne" xml:space="preserve">
+    <value>Dieser Export enthält mehr als eine Änderung für das einwertige Attribut {0}, daher gibt er nicht an, welchen Wert das Objekt haben soll, und JIM hat ihn nicht gesendet. Ein einwertiges Attribut wird als eine einzige Änderung exportiert, die den Wert enthält, den es haben soll; prüfen Sie, ob mehr als ein Attributfluss in das Attribut schreibt.</value>
+  </data>
+  <data name="ExportSingleValuedContradictedOther" xml:space="preserve">
+    <value>Dieser Export enthält mehr als eine Änderung für die einwertigen Attribute {0}, daher gibt er nicht an, welchen Wert das Objekt haben soll, und JIM hat ihn nicht gesendet. Ein einwertiges Attribut wird als eine einzige Änderung exportiert, die den Wert enthält, den es haben soll; prüfen Sie, ob mehr als ein Attributfluss in diese Attribute schreibt.</value>
+  </data>
 </root>

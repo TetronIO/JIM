@@ -249,6 +249,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // run has no generated mappings.
                 await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
 
+                // Contributor re-election reads the joined objects of this page's predicted Merge withdrawals in one query (#3059).
+                BeginReElectionPage(csoPagedResult.Results, activeSyncRules);
+
                 // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
                 // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
 

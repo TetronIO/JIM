@@ -385,4 +385,76 @@
   <data name="ProvSeveralValues" xml:space="preserve">
     <value>The Expression returned {0} values, but this attribute is single-valued, so this source would supply no value and synchronisation reports an error.</value>
   </data>
+  <data name="ContributionModeNeedsMultiValued" xml:space="preserve">
+    <value>The {0} contribution mode applies only to multi-valued attributes. Set the mode to Priority before making the attribute single-valued.</value>
+    <comment>{0} is the contribution mode, Accumulate.</comment>
+  </data>
+  <data name="ContributionModeNotForReference" xml:space="preserve">
+    <value>The {0} contribution mode is not available for Reference attributes, because a reference is removed when the Metaverse Object it points to is deleted. To keep a history of references, record the referenced object's identifier as text in a separate multi-valued text attribute.</value>
+    <comment>{0} is the contribution mode, Accumulate.</comment>
+  </data>
+  <data name="ContributionModeUnsupported" xml:space="preserve">
+    <value>The {0} contribution mode is not available for a {1} attribute.</value>
+    <comment>{0} is the contribution mode; {1} is a data type.</comment>
+  </data>
+  <data name="ContributionModeMergeNotForReference" xml:space="preserve">
+    <value>The Merge contribution mode is not available for Reference attributes. Use the Priority contribution mode for a Reference attribute.</value>
+    <comment>Refusal when an administrator chooses Merge for a Reference attribute.</comment>
+  </data>
+  <data name="TrustThumbprintRequired" xml:space="preserve">
+    <value>A thumbprint is required. JIM will not trust whatever a server happens to be presenting.</value>
+    <comment>Refusal when trusting a server certificate without the confirmed thumbprint.</comment>
+  </data>
+  <data name="TrustServerUnreachable" xml:space="preserve">
+    <value>{0}:{1} could not be reached, so nothing was trusted.</value>
+    <comment>Result of trusting a server certificate. {0}: host name, {1}: port number.</comment>
+  </data>
+  <data name="TrustServerOfferedNothing" xml:space="preserve">
+    <value>{0}:{1} offered no certificate, so there is nothing to trust.</value>
+    <comment>Result of trusting a server certificate. {0}: host name, {1}: port number.</comment>
+  </data>
+  <data name="TrustThumbprintMismatch" xml:space="preserve">
+    <value>{0} is presenting a different certificate from the one you confirmed, so nothing has been trusted. This is expected if the certificate was renewed; investigate if it was not.</value>
+    <comment>Result of trusting a server certificate. {0}: host name.</comment>
+  </data>
+  <data name="TrustRootRequiredWithRoot" xml:space="preserve">
+    <value>This connection to the {0} accepts only the root of the certificate chain, so trusting '{1}' would not make it work, and nothing was trusted. Trust '{2}' instead.</value>
+    <comment>Result of trusting a server certificate. {0}: what the far end is called, in English, by the Connector (for example 'directory server'), {1}: the certificate chosen, {2}: the root certificate.</comment>
+  </data>
+  <data name="TrustRootRequiredNoRoot" xml:space="preserve">
+    <value>This connection to the {0} accepts only the root of the certificate chain, and JIM could not find it, so nothing was trusted. Get the root certificate from whoever runs your PKI and add it under Admin &gt; Certificates.</value>
+    <comment>Result of trusting a server certificate. {0}: what the far end is called, in English, by the Connector (for example 'directory server'). Admin &gt; Certificates is the portal's menu path.</comment>
+  </data>
+  <data name="TrustAlreadyInStore" xml:space="preserve">
+    <value>'{0}' is already in the JIM certificate store.</value>
+    <comment>Result of trusting a server certificate. {0}: the certificate's common name.</comment>
+  </data>
+  <data name="AccumulatedValueRemovalNotAccumulate" xml:space="preserve">
+    <value>Only values of an attribute in Accumulate mode can be removed by hand; '{0}' is in {1} mode.</value>
+    <comment>{0} attribute name, {1} its contribution mode</comment>
+  </data>
+  <data name="AccumulatedValueRemovalNothingNamed" xml:space="preserve">
+    <value>Name at least one value of '{0}' to remove.</value>
+    <comment>{0} attribute name</comment>
+  </data>
+  <data name="AccumulatedValueRemovalNotHeld" xml:space="preserve">
+    <value>The Metaverse Object holds no value '{0}' for '{1}'. Nothing was removed.</value>
+    <comment>{0} the value or value id named, {1} attribute name</comment>
+  </data>
+  <data name="AccumulatedValueRemovalSupplied" xml:space="preserve">
+    <value>'{0}' is still supplied by the Synchronisation Rule '{1}' from the Connected System '{2}', so its next synchronisation would add it back. Change the value at its source, or take the object out of the rule's scope, first. Nothing was removed.</value>
+    <comment>{0} value, {1} Synchronisation Rule name, {2} Connected System name</comment>
+  </data>
+  <data name="AccumulatedValueRemovalUndecidable" xml:space="preserve">
+    <value>JIM cannot tell whether the Synchronisation Rule '{0}' from the Connected System '{1}' still supplies these values, so nothing was removed: {2}</value>
+    <comment>{0} Synchronisation Rule name, {1} Connected System name, {2} the reason</comment>
+  </data>
+  <data name="AccumulatedValuesRemovedOne" xml:space="preserve">
+    <value>Removed {0} value from '{1}'.</value>
+    <comment>{0} count, {1} attribute name</comment>
+  </data>
+  <data name="AccumulatedValuesRemovedOther" xml:space="preserve">
+    <value>Removed {0} values from '{1}'.</value>
+    <comment>{0} count, {1} attribute name</comment>
+  </data>
 </root>

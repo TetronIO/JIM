@@ -560,7 +560,11 @@
                         @if (ShowAttributePriorityContext() && _attributeFlowMapping.TargetMetaverseAttribute is { } targetAttribute)
                         {
                             var alreadyContributes = MappingAlreadyContributesToSelectedAttribute();
+                            var targetHasNoWinner = targetAttribute.ContributionMode is AttributeContributionMode.Accumulate or AttributeContributionMode.Merge;
                             <MudAlert Severity="Severity.Info" Class="mt-5">
+                                @* An Accumulate or Merge attribute has no order (#3059); the list below says so itself. *@
+                                @if (!targetHasNoWinner)
+                                {
                                 <MudText Typo="Typo.body1">
                                     @if (alreadyContributes)
                                     {
@@ -571,6 +575,7 @@
                                         @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AttributeHasContributors, targetAttribute.Name)
                                     }
                                 </MudText>
+                                }
                                 <div class="mt-3">
                                     <AttributePriorityList MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
                                                            MetaverseAttributeId="targetAttribute.Id"
@@ -580,11 +585,14 @@
                                                            PendingContributorSystemName="@(alreadyContributes ? null : SyncRule.ConnectedSystem?.Name)"
                                                            PendingContributorNullIsValue="_attributeFlowMapping.NullIsValue" />
                                 </div>
+                                @if (!targetHasNoWinner)
+                                {
                                 <MudText Typo="Typo.body2" Class="mt-3">
                                     <MudLink Href="@($"/admin/schema/object-types/{SyncRule.MetaverseObjectTypeId}")" Target="_blank">
                                         @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ManagePriorityOnObjectType, SyncRule.MetaverseObjectType?.Name ?? SyncRuleText.MetaverseFallbackName)
                                     </MudLink>
                                 </MudText>
+                                }
                             </MudAlert>
                         }
 
@@ -592,14 +600,18 @@
                             <SettingsSection Title="@SyncRuleText.ValueHandlingTitle" Class="mt-5"
                                              Summary="@AttributeFlowSectionSummaries.ValueHandling(_attributeFlowMapping, _attributeFlowMapping.TargetMetaverseAttribute?.Type == AttributeDataType.Text)"
                                              Attention="@(_attributeFlowMapping.NullIsValue ? SyncRuleText.AttentionBlankClears : null)">
-                            @* ─── Null is a value (#91) ─── *@
-                            <MudCheckBox T="bool" Dense="true" Class="mt-5"
-                                @bind-Value="_attributeFlowMapping.NullIsValue"
-                                Label="@SyncRuleText.NullIsValueLabel" />
+                            @* ─── Null is a value (#91); no effect on an Accumulate or Merge target (#3059) ─── *@
+                            <MudTooltip Arrow="true" Placement="Placement.Top" Inline="false"
+                                        Disabled="@(!TargetHasNoWinner())" Text="@NullIsValueNoEffectTooltip()">
+                                <MudCheckBox T="bool" Dense="true" Class="mt-5"
+                                    @bind-Value="_attributeFlowMapping.NullIsValue"
+                                    Disabled="@TargetHasNoWinner()"
+                                    Label="@SyncRuleText.NullIsValueLabel" />
+                            </MudTooltip>
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                                 @SyncRuleText.NullIsValueHelp
                             </MudText>
-                            @if (_attributeFlowMapping.NullIsValue)
+                            @if (_attributeFlowMapping.NullIsValue && !TargetHasNoWinner())
                             {
                                 <MudAlert Severity="Severity.Warning" Class="mt-3">
                                     @SyncRuleText.NullIsValueWarning
@@ -639,6 +651,11 @@
                         }
                         else if (SyncRule.Direction == SyncRuleDirection.Export)
                         {
+                        @* ─── Exporting an Accumulate attribute (#3059): every kept value goes out ─── *@
+                        @if (SourceAccumulates())
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mt-5">@MetaverseAttributeText.ExportAccumulateAdvisory</MudAlert>
+                        }
                         @* ─── Initial Export Only (#223) ─── *@
                         <MudCheckBox T="bool" Dense="true" Class="mt-5"
                             @bind-Value="_attributeFlowMapping.InitialExportOnly"
@@ -743,6 +760,22 @@
     private SettingsSection? _expressionMissingInputSection;
 
     /// <summary>A Generated Value's target attribute type, by direction; null until one is chosen.</summary>
+    /// <summary>
+    /// Whether the import mapping being edited targets an attribute with no priority winner (#3059): Accumulate or Merge.
+    /// "Null is a value" and the priority order have no effect on one.
+    /// </summary>
+    private bool TargetHasNoWinner() =>
+        _attributeFlowMapping?.TargetMetaverseAttribute?.ContributionMode is AttributeContributionMode.Accumulate or AttributeContributionMode.Merge;
+
+    private string NullIsValueNoEffectTooltip() =>
+        _attributeFlowMapping?.TargetMetaverseAttribute?.ContributionMode == AttributeContributionMode.Merge
+            ? MetaverseAttributeText.NullIsValueMergeTooltip
+            : MetaverseAttributeText.NullIsValueAccumulateTooltip;
+
+    /// <summary>Whether the export mapping being edited reads an Accumulate attribute (#3059).</summary>
+    private bool SourceAccumulates() =>
+        _attributeFlowMapping?.Sources.Any(source => source.MetaverseAttribute?.ContributionMode == AttributeContributionMode.Accumulate) == true;
+
     private AttributeDataType? GeneratedTargetType => SyncRule.Direction == SyncRuleDirection.Import
         ? _attributeFlowMapping?.TargetMetaverseAttribute?.Type
         : _attributeFlowMapping?.TargetConnectedSystemAttribute?.Type;

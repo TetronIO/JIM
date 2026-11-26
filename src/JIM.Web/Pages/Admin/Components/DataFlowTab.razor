@@ -10,6 +10,8 @@
 @* The system-wide view of every attribute data flow in both directions (#1199). Pure discovery: nothing is edited *@
 @* here, rows link to the surface that owns the change. *@
 
+@* The tab's blocks are spaced by the design system (<SectionStack>, #3095), not by margins placed here. *@
+<SectionStack>
 <MudText Typo="Typo.body1" Class="mud-text-secondary">
     @SchemaText.DataFlowIntro
 </MudText>
@@ -18,7 +20,7 @@
 @* Direction sits with the other filters and behaves like them (cleared means both), but it does more than filter: *@
 @* Inbound and Outbound carry different settings, so choosing one lets the table drop the columns that do not apply *@
 @* to it and name the one that does, instead of a catch-all header over two unrelated concepts. *@
-<MudStack Row="true" Spacing="3" Class="mt-6 flex-wrap" AlignItems="AlignItems.Center">
+<MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
     <MudItem Class="flex-grow-1">
         <MudSelect T="SyncRuleDirection?" Label="@SchemaText.DataFlowDirectionLabel" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_direction" ValueChanged="OnDirectionChangedAsync">
@@ -62,9 +64,9 @@
 
 @* Search scope lives here rather than as helper text under the toolbar box, which would overflow the toolbar's *@
 @* fixed height and sit on the header row beneath it. *@
-<MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+<SectionCaption>
     @SchemaText.SearchScopeText
-</MudText>
+</SectionCaption>
 
 @* Columns are anchored to sides, not to source and target: those two swap sides between directions, so a Source
    column would mean the Connected System on one row and the Metaverse on the next, and no column could be learned.
@@ -252,6 +254,7 @@
         }
     </EmptyContent>
 </VirtualisedDataGrid>
+</SectionStack>
 
 @code {
     private IList<DataFlowHeader> _flows = new List<DataFlowHeader>();

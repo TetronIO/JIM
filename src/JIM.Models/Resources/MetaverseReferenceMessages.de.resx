@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ReferenceBinding" xml:space="preserve">
+    <value>Objekttyp-Zuordnung: {0}</value>
+  </data>
+  <data name="ReferenceImportFlowInRule" xml:space="preserve">
+    <value>Importattributfluss in der Synchronisierungsregel „{0}“</value>
+  </data>
+  <data name="ReferenceImportFlowMapping" xml:space="preserve">
+    <value>Importattributfluss (Zuordnung {0})</value>
+  </data>
+  <data name="ReferenceExportSourceInRule" xml:space="preserve">
+    <value>Quelle eines Exportattributflusses in der Synchronisierungsregel „{0}“</value>
+  </data>
+  <data name="ReferenceExportSourceMapping" xml:space="preserve">
+    <value>Quelle eines Exportattributflusses (Zuordnungsquelle {0})</value>
+  </data>
+  <data name="ReferenceExportMappingInRuleRemoved" xml:space="preserve">
+    <value>Exportattributfluss in der Synchronisierungsregel „{0}“ (entfernt: Er hätte keine Quelle mehr)</value>
+  </data>
+  <data name="ReferenceExportMappingRemoved" xml:space="preserve">
+    <value>Exportattributfluss (Zuordnung {0}) entfernt: Er hätte keine Quelle mehr</value>
+  </data>
+  <data name="ReferenceScopingCriterion" xml:space="preserve">
+    <value>Geltungsbereichskriterium {0}</value>
+  </data>
+  <data name="ReferenceObjectMatchingRule" xml:space="preserve">
+    <value>Objektabgleichsregel {0}</value>
+  </data>
+  <data name="ReferencePredefinedSearchColumn" xml:space="preserve">
+    <value>Spalte der vordefinierten Suche „{0}“</value>
+  </data>
+  <data name="ReferencePredefinedSearchCriterion" xml:space="preserve">
+    <value>Kriterium der vordefinierten Suche {0}</value>
+  </data>
+  <data name="ReferenceExampleDataAttribute" xml:space="preserve">
+    <value>Attribut {0} der Beispieldatenvorlage</value>
+  </data>
+  <data name="ReferenceExampleDataDependency" xml:space="preserve">
+    <value>Abhängigkeit {0} eines Attributs der Beispieldatenvorlage</value>
+  </data>
+  <data name="ReferenceSsoMapping" xml:space="preserve">
+    <value>Zuordnung der eindeutigen SSO-Kennung in den Diensteinstellungen (gelöscht)</value>
+  </data>
+</root>

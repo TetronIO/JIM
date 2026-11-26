@@ -305,7 +305,7 @@
     EnforceStateCorrectsMultiValuedSet, ScopedExceptionWriteback,
     GraceFreezesSoleSource,
     GraceExpiryDeletesAndExports, GraceFallbackFlowsAndExports, GraceAssertedNullBeatsSurvivor,
-    GraceExpressionInputFallback, DeletionImpactPreview, All).
+    GraceExpressionInputFallback, AccumulateKeepsEveryAccount, MergeKeepsSourcesInStep, DeletionImpactPreview, All).
     Run-IntegrationTests.ps1 resets and repopulates OpenLDAP for every scenario invocation, so a
     single named -Step run starts from a fresh environment with no synchronised state; the script
     therefore establishes the baseline (both systems fully imported and synchronised) before
@@ -352,7 +352,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "RemovedMappingRecall", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "EnforceStateCorrectsLoser", "ScopedExceptionAuthority", "DisabledExceptionKeepsSlot", "EnforceStateCorrectsMultiValuedSet", "ScopedExceptionWriteback", "GraceFreezesSoleSource", "GraceExpiryDeletesAndExports", "GraceFallbackFlowsAndExports", "GraceAssertedNullBeatsSurvivor", "GraceExpressionInputFallback", "DeletionImpactPreview", "All")]
+    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "RemovedMappingRecall", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "EnforceStateCorrectsLoser", "ScopedExceptionAuthority", "DisabledExceptionKeepsSlot", "EnforceStateCorrectsMultiValuedSet", "ScopedExceptionWriteback", "GraceFreezesSoleSource", "GraceExpiryDeletesAndExports", "GraceFallbackFlowsAndExports", "GraceAssertedNullBeatsSurvivor", "GraceExpressionInputFallback", "AccumulateKeepsEveryAccount", "MergeKeepsSourcesInStep", "DeletionImpactPreview", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -3912,6 +3912,394 @@ userPassword: Test@123!
                 Name = "GraceExpressionInputFallback"
                 Success = $graceExpressionSuccess
                 Note = ($graceExpressionNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 19b: AccumulateKeepsEveryAccount
+    # ========================================================================
+    if ($Step -eq "AccumulateKeepsEveryAccount" -or $Step -eq "All") {
+        Write-TestSection "Test 19b: An Accumulate Attribute Keeps Every Account's Values (Henry)"
+
+        $accumulateSuccess = $true
+        $accumulateNotes = @()
+
+        try {
+            # #3059: a multi-valued attribute in the Accumulate contribution mode takes values from every
+            # contributor and synchronisation never removes them. A brand-new user, Henry (S14-7), is added to
+            # both suffixes so nothing an earlier step changed can colour the result, and the step sets its own
+            # deletion policy (Manual) so Henry's Metaverse Object survives his Primary account's deletion and
+            # the recall of his Priority attributes runs exactly as Test 2 proves it. Runs before
+            # DeletionImpactPreview, which deletes Primary outright.
+            Set-Scenario14UserTypeDeletionPolicy -DeletionRule "Manual" -GracePeriod ([TimeSpan]::Zero) | Out-Null
+
+            $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+            $auditLogName = "Account Audit Log (S14)"
+            $auditLog = @(Get-JIMMetaverseAttribute) | Where-Object { $_.name -eq $auditLogName } | Select-Object -First 1
+            if (-not $auditLog) {
+                $auditLog = New-JIMMetaverseAttribute -Name $auditLogName -Type Text -AttributePlurality MultiValued `
+                    -ContributionMode Accumulate -ObjectTypeIds @($mvUserType.id)
+            }
+            if ($auditLog.contributionMode -ne "Accumulate") {
+                throw "'$auditLogName' read back with contribution mode '$($auditLog.contributionMode)'; expected Accumulate."
+            }
+            Write-Host "  OK '$auditLogName' is an Accumulate attribute (ID: $($auditLog.id))" -ForegroundColor Green
+
+            # One entry per account, naming the system, the account's Employee ID and its title, so a rename adds
+            # an entry rather than changing one.
+            $primaryImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq "$primarySystemName Import Users" } | Select-Object -First 1
+            $secondaryImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq "$secondarySystemName Import Users" } | Select-Object -First 1
+            if (-not $primaryImportRule -or -not $secondaryImportRule) {
+                throw "Could not resolve both import Synchronisation Rules."
+            }
+            foreach ($pair in @(@{ Rule = $primaryImportRule; Label = "Primary" }, @{ Rule = $secondaryImportRule; Label = "Secondary" })) {
+                $existing = @(Get-JIMSyncRuleMapping -SyncRuleId $pair.Rule.id) | Where-Object { $_.targetMetaverseAttributeId -eq $auditLog.id }
+                if (-not $existing) {
+                    New-JIMSyncRuleMapping -SyncRuleId $pair.Rule.id -TargetMetaverseAttributeId $auditLog.id `
+                        -Expression ('"' + $pair.Label + '|" + cs["employeeNumber"] + "|title=" + cs["title"]') | Out-Null
+                }
+            }
+
+            # Accumulate has no winner, so the contributors' order is reported as the mode and cannot be changed.
+            $auditPriority = Get-JIMMetaverseAttributePriority -AttributeId $auditLog.id -ObjectTypeId $mvUserType.id
+            if ($auditPriority.contributionMode -ne "Accumulate" -or @($auditPriority.contributors).Count -ne 2) {
+                throw "'$auditLogName' priority read-back: mode '$($auditPriority.contributionMode)', $(@($auditPriority.contributors).Count) contributor(s); expected Accumulate with 2."
+            }
+
+            Write-Host "Adding Henry (S14-7) to both suffixes..." -ForegroundColor Gray
+            foreach ($side in @(
+                    @{ Config = $primaryLdapConfig; Uri = $primaryLdapUri; Label = "Primary"; Domain = "yellowstone.local" },
+                    @{ Config = $secondaryLdapConfig; Uri = $secondaryLdapUri; Label = "Secondary"; Domain = "glitterband.local" })) {
+                $henryLdif = @"
+dn: uid=henry14,$($side.Config.UserContainer)
+changetype: add
+objectClass: inetOrgPerson
+uid: henry14
+cn: Henry Hughes (S14)
+sn: Hughes
+givenName: Henry
+displayName: Henry Hughes (S14)
+mail: henry14@$($side.Domain)
+employeeNumber: S14-7
+description: $($side.Label)-sourced description for Henry Hughes (S14)
+title: Engineer ($($side.Label))
+userPassword: Test@123!
+
+"@
+                try {
+                    Invoke-Scenario14LdapModify -ContainerName $side.Config.ContainerName -LdapUri $side.Uri `
+                        -BindDN $side.Config.BindDN -BindPassword $side.Config.BindPassword -Ldif $henryLdif
+                }
+                catch {
+                    if ("$_" -notmatch "already exists") { throw }
+                    Write-Host "  Henry's $($side.Label) entry already exists (idempotent no-op)" -ForegroundColor Gray
+                }
+            }
+
+            function Invoke-Scenario14ImportAndSync {
+                param([Parameter(Mandatory=$true)] $System, [Parameter(Mandatory=$true)] $Import, [Parameter(Mandatory=$true)] $Sync, [Parameter(Mandatory=$true)] [string]$Why)
+                $importResult = Start-JIMRunProfile -ConnectedSystemId $System.id -RunProfileId $Import.id -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import ($($System.name)) $Why"
+                if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+                $syncResult = Start-JIMRunProfile -ConnectedSystemId $System.id -RunProfileId $Sync.id -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation ($($System.name)) $Why"
+            }
+
+            # PRD Scenario 1: both systems add their entry.
+            Invoke-Scenario14ImportAndSync -System $primarySystem -Import $primaryFullImport -Sync $primaryFullSync -Why "with Henry added"
+            Invoke-Scenario14ImportAndSync -System $secondarySystem -Import $secondaryFullImport -Sync $secondaryFullSync -Why "with Henry added"
+
+            $henryMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-7" -PageSize 5) | Select-Object -First 1
+            if (-not $henryMvo) {
+                throw "Henry (S14-7) has no Metaverse Object after both systems synchronised."
+            }
+            Assert-MvoAttributeValue -MvoId $henryMvo.id -AttributeName $auditLogName `
+                -ExpectedValues @("Primary|S14-7|title=Engineer (Primary)", "Secondary|S14-7|title=Engineer (Secondary)") `
+                -Name "Henry's Account Audit Log (an entry from each system)"
+            $accumulateNotes += "both systems added their entry to the Accumulate attribute"
+
+            # PRD Scenario 3: a rename adds an entry and keeps the old one.
+            Write-Host "Renaming Henry's Primary title..." -ForegroundColor Gray
+            $renameLdif = "dn: uid=henry14,$($primaryLdapConfig.UserContainer)`nchangetype: modify`nreplace: title`ntitle: Lead Engineer (Primary)`n"
+            Invoke-Scenario14LdapModify -ContainerName $primaryLdapConfig.ContainerName -LdapUri $primaryLdapUri `
+                -BindDN $primaryLdapConfig.BindDN -BindPassword $primaryLdapConfig.BindPassword -Ldif $renameLdif
+            Invoke-Scenario14ImportAndSync -System $primarySystem -Import $primaryFullImport -Sync $primaryFullSync -Why "after Henry's rename"
+
+            $afterRename = @("Primary|S14-7|title=Engineer (Primary)", "Primary|S14-7|title=Lead Engineer (Primary)", "Secondary|S14-7|title=Engineer (Secondary)")
+            Assert-MvoAttributeValue -MvoId $henryMvo.id -AttributeName $auditLogName -ExpectedValues $afterRename `
+                -Name "Henry's Account Audit Log (the rename added an entry and kept the old one)"
+            Assert-MvoAttributeValue -MvoId $henryMvo.id -AttributeName "Job Title" -ExpectedValue "Lead Engineer (Primary)" `
+                -Name "Henry's Job Title (a Priority attribute, replaced by the rename as before)"
+            $accumulateNotes += "a rename added an entry and kept the old one, while Job Title (Priority) was replaced"
+
+            # PRD Scenario 2: the account is deleted; its entries stay, its Priority values are recalled.
+            Write-Host "Deleting Henry from the Primary suffix only..." -ForegroundColor Gray
+            $henryPrimaryDn = "uid=henry14,$($primaryLdapConfig.UserContainer)"
+            $deleteOutput = docker exec $primaryLdapConfig.ContainerName ldapdelete -x -H $primaryLdapUri -D $primaryLdapConfig.BindDN -w $primaryLdapConfig.BindPassword "$henryPrimaryDn" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "ldapdelete failed for '$henryPrimaryDn' (exit $LASTEXITCODE): $deleteOutput"
+            }
+            Invoke-Scenario14ImportAndSync -System $primarySystem -Import $primaryFullImport -Sync $primaryFullSync -Why "after Henry's Primary account was deleted"
+
+            Assert-MvoAttributeValue -MvoId $henryMvo.id -AttributeName $auditLogName -ExpectedValues $afterRename `
+                -Name "Henry's Account Audit Log (every entry kept after his Primary account was deleted)"
+            Assert-MvoAttributeValue -MvoId $henryMvo.id -AttributeName "Description" `
+                -ExpectedValue "Secondary-sourced description for Henry Hughes (S14)" `
+                -ExpectedContributingSyncRuleName "$secondarySystemName Import Users" `
+                -Name "Henry's Description (a Priority attribute, still recalled and re-elected to Secondary)"
+            $accumulateNotes += "deleting Henry's Primary account kept every entry while his Priority values handed over to Secondary"
+
+            # Reordering an Accumulate attribute's contributors is refused, since no order is used.
+            $contributorIds = @($auditPriority.contributors | ForEach-Object { $_.mappingId })
+            $reorderRefused = $false
+            try {
+                Set-JIMMetaverseAttributePriority -AttributeId $auditLog.id -ObjectTypeId $mvUserType.id `
+                    -MappingId @($contributorIds[1], $contributorIds[0]) -Confirm:$false -ErrorAction Stop | Out-Null
+            }
+            catch {
+                if ("$_" -notmatch "Accumulate") { throw }
+                $reorderRefused = $true
+            }
+            if (-not $reorderRefused) {
+                throw "Reordering the contributors of an Accumulate attribute was accepted; JIM must refuse it."
+            }
+            $accumulateNotes += "a reorder of its contributors was refused"
+
+            # PRD Scenario 6 (#3059, Phase 3): an administrator removes a kept entry by hand. The entry from the deleted
+            # Primary account goes; the Secondary entry, which Secondary still supplies, is refused, naming its rule.
+            $suppliedRefused = $false
+            try {
+                Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId $henryMvo.id -AttributeName $auditLogName `
+                    -Value "Secondary|S14-7|title=Engineer (Secondary)" -Force -ErrorAction Stop | Out-Null
+            }
+            catch {
+                if ("$_" -notmatch [regex]::Escape($secondaryImportRule.name)) { throw }
+                $suppliedRefused = $true
+            }
+            if (-not $suppliedRefused) {
+                throw "Removing an entry Secondary still supplies was accepted; JIM must refuse it, naming the rule."
+            }
+
+            $removal = Remove-JIMMetaverseObjectAttributeValue -MetaverseObjectId $henryMvo.id -AttributeName $auditLogName `
+                -Value "Primary|S14-7|title=Engineer (Primary)" -Force -ErrorAction Stop
+            if (-not $removal.activityId) {
+                throw "The removal returned no Activity."
+            }
+            Assert-ActivitySuccess -ActivityId $removal.activityId -Name "Removal of a kept Account Audit Log entry"
+            Assert-MvoAttributeValue -MvoId $henryMvo.id -AttributeName $auditLogName `
+                -ExpectedValues @("Primary|S14-7|title=Lead Engineer (Primary)", "Secondary|S14-7|title=Engineer (Secondary)") `
+                -Name "Henry's Account Audit Log (the removed entry is gone; the others stay)"
+            $accumulateNotes += "removing a kept entry by hand worked, and removing one Secondary still supplies was refused naming its rule"
+        }
+        catch {
+            $accumulateSuccess = $false
+            $accumulateNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "AccumulateKeepsEveryAccount"
+                Success = $accumulateSuccess
+                Note = ($accumulateNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 19c: MergeKeepsSourcesInStep
+    # ========================================================================
+    if ($Step -eq "MergeKeepsSourcesInStep" -or $Step -eq "All") {
+        Write-TestSection "Test 19c: A Merge Attribute Keeps Its Sources in Step (Iris)"
+
+        $mergeSuccess = $true
+        $mergeNotes = @()
+
+        try {
+            # #3059: a multi-valued attribute in the Merge contribution mode takes values from every contributor,
+            # and drops a value once no contributor supplies it. A brand-new user, Iris (S14-8), is added to both
+            # suffixes so nothing an earlier step changed can colour the result, with Manual deletion so her
+            # Metaverse Object survives her Secondary account's deletion. Runs before DeletionImpactPreview, which
+            # deletes Primary outright.
+            Set-Scenario14UserTypeDeletionPolicy -DeletionRule "Manual" -GracePeriod ([TimeSpan]::Zero) | Out-Null
+
+            $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+            $directoryName = "Telephone Directory (S14)"
+            $directory = @(Get-JIMMetaverseAttribute) | Where-Object { $_.name -eq $directoryName } | Select-Object -First 1
+            if (-not $directory) {
+                $directory = New-JIMMetaverseAttribute -Name $directoryName -Type Text -AttributePlurality MultiValued `
+                    -ContributionMode Merge -ObjectTypeIds @($mvUserType.id)
+            }
+            if ($directory.contributionMode -ne "Merge") {
+                throw "'$directoryName' read back with contribution mode '$($directory.contributionMode)'; expected Merge."
+            }
+            Write-Host "  OK '$directoryName' is a Merge attribute (ID: $($directory.id))" -ForegroundColor Green
+
+            # Both systems feed it from telephoneNumber, beside their existing Other Telephones (Priority) mapping.
+            $primaryImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq "$primarySystemName Import Users" } | Select-Object -First 1
+            $secondaryImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq "$secondarySystemName Import Users" } | Select-Object -First 1
+            if (-not $primaryImportRule -or -not $secondaryImportRule) {
+                throw "Could not resolve both import Synchronisation Rules."
+            }
+            foreach ($rule in @($primaryImportRule, $secondaryImportRule)) {
+                $existing = @(Get-JIMSyncRuleMapping -SyncRuleId $rule.id) | Where-Object { $_.targetMetaverseAttributeId -eq $directory.id }
+                if (-not $existing) {
+                    $userType = @(Get-JIMConnectedSystem -Id $rule.connectedSystemId -ObjectTypes) |
+                        Where-Object { $_.name -eq "inetOrgPerson" } | Select-Object -First 1
+                    $telephoneAttr = $userType.attributes | Where-Object { $_.name -eq "telephoneNumber" } | Select-Object -First 1
+                    if (-not $telephoneAttr) {
+                        throw "'telephoneNumber' not found on the object type of '$($rule.name)'."
+                    }
+                    New-JIMSyncRuleMapping -SyncRuleId $rule.id -TargetMetaverseAttributeId $directory.id `
+                        -SourceConnectedSystemAttributeId $telephoneAttr.id | Out-Null
+                }
+            }
+
+            # Merge has no winner, so the contributors' order is reported as the mode and cannot be changed.
+            $directoryPriority = Get-JIMMetaverseAttributePriority -AttributeId $directory.id -ObjectTypeId $mvUserType.id
+            if ($directoryPriority.contributionMode -ne "Merge" -or @($directoryPriority.contributors).Count -ne 2) {
+                throw "'$directoryName' priority read-back: mode '$($directoryPriority.contributionMode)', $(@($directoryPriority.contributors).Count) contributor(s); expected Merge with 2."
+            }
+
+            $phoneA = "+44 20 7946 3001"
+            $phoneB = "+44 20 7946 3002"
+            $phoneC = "+44 20 7946 3003"
+
+            Write-Host "Adding Iris (S14-8) to both suffixes (Primary: A, B; Secondary: B, C)..." -ForegroundColor Gray
+            foreach ($side in @(
+                    @{ Config = $primaryLdapConfig; Uri = $primaryLdapUri; Label = "Primary"; Domain = "yellowstone.local"; Phones = @($phoneA, $phoneB) },
+                    @{ Config = $secondaryLdapConfig; Uri = $secondaryLdapUri; Label = "Secondary"; Domain = "glitterband.local"; Phones = @($phoneB, $phoneC) })) {
+                $phoneLines = ($side.Phones | ForEach-Object { "telephoneNumber: $_" }) -join "`n"
+                $irisLdif = @"
+dn: uid=iris14,$($side.Config.UserContainer)
+changetype: add
+objectClass: inetOrgPerson
+uid: iris14
+cn: Iris Irving (S14)
+sn: Irving
+givenName: Iris
+displayName: Iris Irving (S14)
+mail: iris14@$($side.Domain)
+employeeNumber: S14-8
+title: Analyst ($($side.Label))
+$phoneLines
+userPassword: Test@123!
+
+"@
+                try {
+                    Invoke-Scenario14LdapModify -ContainerName $side.Config.ContainerName -LdapUri $side.Uri `
+                        -BindDN $side.Config.BindDN -BindPassword $side.Config.BindPassword -Ldif $irisLdif
+                }
+                catch {
+                    if ("$_" -notmatch "already exists") { throw }
+                    Write-Host "  Iris's $($side.Label) entry already exists (idempotent no-op)" -ForegroundColor Gray
+                }
+            }
+
+            function Invoke-Scenario14MergeImportAndSync {
+                param([Parameter(Mandatory=$true)] $System, [Parameter(Mandatory=$true)] $Import, [Parameter(Mandatory=$true)] $Sync, [Parameter(Mandatory=$true)] [string]$Why)
+                $importResult = Start-JIMRunProfile -ConnectedSystemId $System.id -RunProfileId $Import.id -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import ($($System.name)) $Why"
+                if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+                $syncResult = Start-JIMRunProfile -ConnectedSystemId $System.id -RunProfileId $Sync.id -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation ($($System.name)) $Why"
+            }
+
+            function Set-Scenario14IrisPrimaryPhones {
+                param([string[]]$Phones)
+                $lines = @("dn: uid=iris14,$($primaryLdapConfig.UserContainer)", "changetype: modify")
+                $lines += if ($Phones.Count -gt 0) { @("replace: telephoneNumber") + ($Phones | ForEach-Object { "telephoneNumber: $_" }) } else { @("delete: telephoneNumber") }
+                Invoke-Scenario14LdapModify -ContainerName $primaryLdapConfig.ContainerName -LdapUri $primaryLdapUri `
+                    -BindDN $primaryLdapConfig.BindDN -BindPassword $primaryLdapConfig.BindPassword -Ldif (($lines -join "`n") + "`n")
+            }
+
+            function Get-Scenario14IrisPhoneContributor {
+                param([Parameter(Mandatory=$true)] [string]$MvoId, [Parameter(Mandatory=$true)] [string]$Phone)
+                $row = @((Get-JIMMetaverseObject -Id $MvoId -ErrorAction Stop).attributeValues |
+                    Where-Object { $_.attributeName -ceq $directoryName -and $_.stringValue -eq $Phone })
+                if ($row.Count -ne 1) {
+                    throw "Expected exactly one '$directoryName' row holding '$Phone' on Iris's Metaverse Object; found $($row.Count)."
+                }
+                return $row[0].contributedBySyncRuleName
+            }
+
+            # PRD Scenario 4, start: both systems add their values, B once.
+            Invoke-Scenario14MergeImportAndSync -System $primarySystem -Import $primaryFullImport -Sync $primaryFullSync -Why "with Iris added"
+            Invoke-Scenario14MergeImportAndSync -System $secondarySystem -Import $secondaryFullImport -Sync $secondaryFullSync -Why "with Iris added"
+
+            $irisMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-8" -PageSize 5) | Select-Object -First 1
+            if (-not $irisMvo) {
+                throw "Iris (S14-8) has no Metaverse Object after both systems synchronised."
+            }
+            Assert-MvoAttributeValue -MvoId $irisMvo.id -AttributeName $directoryName -ExpectedValues @($phoneA, $phoneB, $phoneC) `
+                -Name "Iris's Telephone Directory (every system's numbers, the shared one once)"
+            $mergeNotes += "both systems added their numbers to the Merge attribute, the shared one once"
+
+            # PRD Scenario 4, first change: Primary drops B, which Secondary still supplies.
+            Write-Host "Removing B from Iris's Primary entry..." -ForegroundColor Gray
+            Set-Scenario14IrisPrimaryPhones -Phones @($phoneA)
+            Invoke-Scenario14MergeImportAndSync -System $primarySystem -Import $primaryFullImport -Sync $primaryFullSync -Why "after Primary dropped B"
+            Assert-MvoAttributeValue -MvoId $irisMvo.id -AttributeName $directoryName -ExpectedValues @($phoneA, $phoneB, $phoneC) `
+                -Name "Iris's Telephone Directory (B kept: Secondary still supplies it)"
+            $bContributor = Get-Scenario14IrisPhoneContributor -MvoId $irisMvo.id -Phone $phoneB
+            if ($bContributor -ne "$secondarySystemName Import Users") {
+                throw "B should now be credited to '$secondarySystemName Import Users'; it names '$bContributor'."
+            }
+            $mergeNotes += "Primary dropping B kept it, credited to Secondary"
+
+            # PRD Scenario 4, second change: Primary drops A, which nobody else supplies.
+            Write-Host "Removing A from Iris's Primary entry..." -ForegroundColor Gray
+            Set-Scenario14IrisPrimaryPhones -Phones @()
+            Invoke-Scenario14MergeImportAndSync -System $primarySystem -Import $primaryFullImport -Sync $primaryFullSync -Why "after Primary dropped A"
+            Assert-MvoAttributeValue -MvoId $irisMvo.id -AttributeName $directoryName -ExpectedValues @($phoneB, $phoneC) `
+                -Name "Iris's Telephone Directory (A removed: nobody supplies it)"
+            $mergeNotes += "Primary dropping A removed it"
+
+            # PRD Scenario 5: Primary supplies B again, then Iris's Secondary account is deleted. C goes; B stays,
+            # credited back to Primary.
+            Write-Host "Giving Primary B again, then deleting Iris from the Secondary suffix..." -ForegroundColor Gray
+            Set-Scenario14IrisPrimaryPhones -Phones @($phoneB)
+            Invoke-Scenario14MergeImportAndSync -System $primarySystem -Import $primaryFullImport -Sync $primaryFullSync -Why "after Primary supplied B again"
+            $irisSecondaryDn = "uid=iris14,$($secondaryLdapConfig.UserContainer)"
+            $deleteOutput = docker exec $secondaryLdapConfig.ContainerName ldapdelete -x -H $secondaryLdapUri -D $secondaryLdapConfig.BindDN -w $secondaryLdapConfig.BindPassword "$irisSecondaryDn" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "ldapdelete failed for '$irisSecondaryDn' (exit $LASTEXITCODE): $deleteOutput"
+            }
+            Invoke-Scenario14MergeImportAndSync -System $secondarySystem -Import $secondaryFullImport -Sync $secondaryFullSync -Why "after Iris's Secondary account was deleted"
+            Assert-MvoAttributeValue -MvoId $irisMvo.id -AttributeName $directoryName -ExpectedValues @($phoneB) `
+                -Name "Iris's Telephone Directory (C recalled with her Secondary account; B kept)"
+            $bContributor = Get-Scenario14IrisPhoneContributor -MvoId $irisMvo.id -Phone $phoneB
+            if ($bContributor -ne "$primarySystemName Import Users") {
+                throw "B should be credited back to '$primarySystemName Import Users'; it names '$bContributor'."
+            }
+            $mergeNotes += "deleting Iris's Secondary account removed C and kept B, credited back to Primary"
+
+            # Reordering a Merge attribute's contributors is refused, since no order is used.
+            $contributorIds = @($directoryPriority.contributors | ForEach-Object { $_.mappingId })
+            $reorderRefused = $false
+            try {
+                Set-JIMMetaverseAttributePriority -AttributeId $directory.id -ObjectTypeId $mvUserType.id `
+                    -MappingId @($contributorIds[1], $contributorIds[0]) -Confirm:$false -ErrorAction Stop | Out-Null
+            }
+            catch {
+                if ("$_" -notmatch "Merge") { throw }
+                $reorderRefused = $true
+            }
+            if (-not $reorderRefused) {
+                throw "Reordering the contributors of a Merge attribute was accepted; JIM must refuse it."
+            }
+            $mergeNotes += "a reorder of its contributors was refused"
+        }
+        catch {
+            $mergeSuccess = $false
+            $mergeNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "MergeKeepsSourcesInStep"
+                Success = $mergeSuccess
+                Note = ($mergeNotes -join "; ")
             }
         }
     }

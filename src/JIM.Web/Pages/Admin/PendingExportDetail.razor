@@ -210,7 +210,7 @@
                                 <tr>
                                     <td><strong>@ConnectorSpaceText.PexLabelErrorMessage</strong></td>
                                     <td>
-                                        <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">@_pendingExport.LastErrorMessage</pre>
+                                        <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">@MessageDisplay.Show(_pendingExport.LastErrorMessageDetail, _pendingExport.LastErrorMessage)</pre>
                                     </td>
                                 </tr>
                             }

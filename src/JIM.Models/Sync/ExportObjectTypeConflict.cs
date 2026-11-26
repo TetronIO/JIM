@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Sync;
 
 /// <summary>
@@ -46,4 +49,13 @@ public class ExportObjectTypeConflict
     /// The name of that existing Connected System Object's Object Type.
     /// </summary>
     public required string ExistingObjectTypeName { get; set; }
+
+    /// <summary>
+    /// What the administrator reads on the object's execution item and in the Synchronisation Preview: what could not be
+    /// done, why, and how to fix it.
+    /// </summary>
+    /// <param name="connectedSystemName">The Connected System being exported to.</param>
+    public JimMessage Describe(string connectedSystemName) =>
+        JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExportObjectTypeConflict), MetaverseObjectId.ToString(), SyncRuleName,
+            TargetObjectTypeName, connectedSystemName, ExistingObjectTypeName);
 }

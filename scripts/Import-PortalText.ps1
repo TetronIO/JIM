@@ -17,7 +17,8 @@
 
     Key and en-GB are required. An empty en-US, fr or de cell writes nothing for that language: en-US holds only the
     strings whose spelling differs, and a language not yet being translated is left out. Lines starting with # are
-    skipped.
+    skipped. A literal \n in a cell is written as a line break, for a message that is lines (the cell itself cannot
+    hold one).
 
     Each row is checked before anything is written: the key must be a C# identifier, and every translation must use
     exactly the English string's {n} placeholders.
@@ -140,7 +141,7 @@ for ($i = 1; $i -lt $lines.Count; $i++) {
     $cells = $lines[$i].Split("`t")
     $row = @{}
     for ($c = 0; $c -lt $columns.Count; $c++) {
-        $row[$columns[$c]] = if ($c -lt $cells.Count) { $cells[$c] } else { '' }
+        $row[$columns[$c]] = if ($c -lt $cells.Count) { $cells[$c].Replace('\n', "`n") } else { '' }
     }
 
     $key = $row['Key'].Trim()
