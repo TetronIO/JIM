@@ -1011,6 +1011,33 @@ public interface ISyncRepository
     Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);
 
     /// <summary>
+    /// Bulk creates a synchronisation page's projected Metaverse Objects with their attribute values, recording each as
+    /// unpublished in the same transaction as its own row (#2848). The page writes them before it opens the transaction
+    /// that writes everything else it changed, so they can be written across parallel connections; the page's transaction
+    /// publishes them (<see cref="PublishMetaverseObjectsAsync"/>) once their joins are written, and a page that never
+    /// commits leaves them to <see cref="RemoveUnpublishedMetaverseObjectsAsync"/>.
+    /// </summary>
+    /// <param name="metaverseObjects">The objects to create.</param>
+    /// <param name="activityId">The synchronisation Activity whose page projected them.</param>
+    Task CreateUnpublishedMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects, Guid activityId);
+
+    /// <summary>
+    /// Marks Metaverse Objects a synchronisation page projected as published (#2848), deleting their unpublished records.
+    /// Called in the page's transaction, which joins the objects to their sources, so the records go exactly when the
+    /// joins are committed.
+    /// </summary>
+    Task PublishMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Removes Metaverse Objects a synchronisation page projected and never published (#2848): those still recorded as
+    /// unpublished, among <paramref name="metaverseObjectIds"/> when given (a page that failed), or all of them when not
+    /// (the Worker's start, after a Worker stopped mid-page). An object with nothing joined is deleted with its values.
+    /// One a Connected System Object has joined since (another system's synchronisation, running at the same time) is
+    /// kept, and its record removed. Runs in a transaction of its own, so it must not be called while one is open.
+    /// </summary>
+    Task<UnpublishedMetaverseObjectRemoval> RemoveUnpublishedMetaverseObjectsAsync(IReadOnlyCollection<Guid>? metaverseObjectIds = null);
+
+    /// <summary>
     /// Bulk updates MVOs with their attribute values.
     /// </summary>
     Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);
@@ -2609,6 +2636,22 @@ public interface ISyncRepository
     /// commits them, or when the provider is not relational (the in-memory test repository).
     /// </summary>
     Task<ISyncRepositoryTransaction?> BeginTransactionAsync();
+
+    /// <summary>
+    /// Creates a savepoint in the transaction this repository's writes are joining (#2848), so a step can roll back a
+    /// failed attempt and carry on in the same transaction. Returns null when no transaction is open, or when the
+    /// provider is not relational (the in-memory test repository): each write then lands as it is made, and there is
+    /// nothing to roll back to.
+    /// </summary>
+    Task<ISyncRepositorySavepoint?> CreateSavepointAsync();
+
+    /// <summary>
+    /// Removes the Pending Exports this repository staged across parallel connections for a transaction it held, that the
+    /// transaction did not make live (#2848): all of them once it has rolled back, and any whose staging failed once it has
+    /// committed. A synchronisation page calls it when its transaction has ended, whichever way. Returns the number removed;
+    /// 0 where nothing was staged that way (the in-memory test repository never stages).
+    /// </summary>
+    Task<int> RemovePendingExportsStagedForTransactionAsync();
 
     #endregion
 

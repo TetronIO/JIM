@@ -977,7 +977,10 @@ public class DriftDetectionService
             .Select(SyncEngine.CarryOverSurvivingChange));
 
         if (existingPendingExport.Status == PendingExportStatus.Pending)
+        {
             correction.Id = existingPendingExport.Id;
+            correction.ReusesReplacedExportId = true;
+        }
         correction.InheritStagersFrom(existingPendingExport);
     }
 

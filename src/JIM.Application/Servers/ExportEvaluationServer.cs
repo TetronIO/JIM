@@ -3225,6 +3225,7 @@ public class ExportEvaluationServer
             // (#2100). One already sent and awaiting confirmation is an export cycle of its own, and its id stays
             // with what was sent. A Pending one that failed and awaits a retry keeps its id across retries anyway.
             Id = continuedPendingExport is { Status: PendingExportStatus.Pending } ? continuedPendingExport.Id : TimeOrderedIds.New(),
+            ReusesReplacedExportId = continuedPendingExport is { Status: PendingExportStatus.Pending },
             ConnectedSystemId = exportRule.ConnectedSystemId,
             ConnectedSystemObjectId = csoId,
             ChangeType = changeType,
