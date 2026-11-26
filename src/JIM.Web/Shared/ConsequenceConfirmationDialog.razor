@@ -59,7 +59,7 @@
                     @if (!string.IsNullOrEmpty(IrreversibleWarning) || IrreversibleWarningMarkup != null)
                     {
                         <MudAlert Severity="Severity.Error">
-                            @(IrreversibleWarningMarkup ?? (MarkupString)System.Net.WebUtility.HtmlEncode(IrreversibleWarning ?? string.Empty))
+                            @(IrreversibleWarningMarkup ?? (MarkupString)(System.Net.WebUtility.HtmlEncode(IrreversibleWarning) ?? string.Empty))
                         </MudAlert>
                     }
 
