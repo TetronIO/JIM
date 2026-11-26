@@ -10647,10 +10647,29 @@ public partial class ConnectedSystemServer
             .OrderBy(other => other.Name, StringComparer.Ordinal)
             .ToList();
 
+        // Rules into the same Object Type stage into one account together (#2826); only an attribute both write is a problem,
+        // since neither exports it for an object both have in scope. A configuration-sized read, a rule at a time.
+        var writtenHere = syncRule.AttributeFlowRules
+            .Where(mapping => mapping.Enabled)
+            .Select(mapping => mapping.TargetConnectedSystemAttribute?.Id ?? mapping.TargetConnectedSystemAttributeId)
+            .OfType<int>()
+            .ToHashSet();
         foreach (var other in otherRulesInThisSystem.Where(other => other.ConnectedSystemObjectTypeId == objectTypeId))
         {
-            syncRule.AddRuleSaveWarning(Msg.Create(nameof(CsText.SaveWarningExportRulesOverlap),
-                other.Name, other.ConnectedSystemObjectTypeName, other.ConnectedSystemName, other.MetaverseObjectTypeName));
+            var otherRule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(other.Id);
+            var shared = (otherRule?.AttributeFlowRules ?? [])
+                .Where(mapping => mapping.Enabled && writtenHere.Contains(mapping.TargetConnectedSystemAttribute?.Id ?? mapping.TargetConnectedSystemAttributeId ?? 0))
+                .Select(mapping => mapping.TargetConnectedSystemAttribute?.Name)
+                .OfType<string>()
+                .Distinct()
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+            if (shared.Count == 0)
+                continue;
+
+            syncRule.AddRuleSaveWarning(Msg.Create(nameof(CsText.SaveWarningExportRulesShareAttributes),
+                other.Name, string.Join(", ", shared.Select(name => $"'{name}'")), other.ConnectedSystemObjectTypeName,
+                other.ConnectedSystemName, other.MetaverseObjectTypeName));
         }
 
         var thisObjectTypeName = syncRule.ConnectedSystemObjectType?.Name;

@@ -203,6 +203,9 @@
   <data name="SaveWarningExportRulesOverlap" xml:space="preserve">
     <value>La règle de synchronisation d’exportation « {0} » gère aussi des objets « {1} » dans « {2} » pour « {3} ». Une seule règle d’exportation peut gérer un objet : une synchronisation n’exporte rien vers ce système connecté pour un objet que les deux règles ont dans leur périmètre, et le signale comme un chevauchement de règles d’exportation. Donnez aux règles des périmètres qui ne se chevauchent jamais, ou regroupez-les en une seule règle.</value>
   </data>
+  <data name="SaveWarningExportRulesShareAttributes" xml:space="preserve">
+    <value>La règle de synchronisation d’exportation « {0} » écrit aussi {1} dans les objets « {2} » de « {3} » pour « {4} ». Pour un objet que les deux règles ont dans leur périmètre, une synchronisation n’exporte la valeur d’aucune des deux règles pour un attribut partagé, et le signale comme un chevauchement de règles d’exportation ; tous les autres attributs que chaque règle écrit sont toujours exportés. Faites écrire chaque attribut partagé par une seule des règles, ou donnez aux règles des périmètres qui ne se chevauchent jamais.</value>
+  </data>
   <data name="SaveWarningExportObjectTypesDiffer" xml:space="preserve">
     <value>La règle de synchronisation d’exportation « {0} » provisionne des objets « {1} » vers « {2} » en tant que « {3} », et cette règle les provisionne en tant que {4}. Chaque objet ne peut avoir qu’un seul objet dans « {2} » ; lorsque les périmètres des deux règles couvrent le même, une seule règle le provisionne et l’autre signale un échec de synchronisation pour cet objet à chaque synchronisation. Veillez à ce que les périmètres ne se chevauchent jamais.</value>
   </data>

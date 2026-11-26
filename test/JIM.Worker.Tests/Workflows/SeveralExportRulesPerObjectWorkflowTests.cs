@@ -218,6 +218,26 @@ public class SeveralExportRulesPerObjectWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullSync_AnAccountHandedToARuleThatDidNotCoverIt_SendsEveryAttributeThatRuleWritesAsync()
+    {
+        // Jane's rename moves her from the base rule's scope to the second provisioning rule's, which takes her account
+        // over (#2822). It had never written to the account, so its EmployeeId goes though it did not change.
+        var arrangement = await ArrangeAsync(addOnProvisions: true, baseDisplayNameScope: "Jane Smith", addOnDisplayNameScope: "Jane Doe");
+        await ProvisionAndConfirmAsync(arrangement);
+
+        SetHrValue(arrangement, "DisplayName", "Jane Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Rename");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AdAccount(arrangement).JoinSyncRuleId, Is.EqualTo(arrangement.AddOnRule.Id), "precondition: the account was handed over");
+            Assert.That(ChangedAttributeNames(AdPendingExports(arrangement).Single()), Is.EquivalentTo(new[] { "EmployeeId" }));
+            Assert.That(CoverageOf(AdAccount(arrangement)), Is.Empty, "the rule now manages the account, so it is not recorded as covering it");
+        }
+    }
+
+    [Test]
     public async Task FullSync_AnAddOnRuleStopsCoveringAnAccount_RemovesItsCoverageAsync()
     {
         var arrangement = await ArrangeAsync(addOnScope: "EMP001");
@@ -370,7 +390,8 @@ public class SeveralExportRulesPerObjectWorkflowTests : WorkflowTestBase
     /// Attributes" writes EmployeeId (and DisplayName too, from EmployeeId, when <paramref name="addOnAlsoWritesDisplayName"/>).
     /// </summary>
     private async Task<Arrangement> ArrangeAsync(bool addOnAlsoWritesDisplayName = false, bool addOnProvisions = false,
-        bool addOnEnabled = true, bool addOnCoverageRecorded = true, string? addOnScope = null, string? addOnDisplayNameScope = null)
+        bool addOnEnabled = true, bool addOnCoverageRecorded = true, string? addOnScope = null, string? addOnDisplayNameScope = null,
+        string? baseDisplayNameScope = null)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvDisplayName = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -400,6 +421,8 @@ public class SeveralExportRulesPerObjectWorkflowTests : WorkflowTestBase
             ScopeTo(addOnRule, mvEmployeeId, addOnScope);
         if (addOnDisplayNameScope != null)
             ScopeTo(addOnRule, mvDisplayName, addOnDisplayNameScope);
+        if (baseDisplayNameScope != null)
+            ScopeTo(baseRule, mvDisplayName, baseDisplayNameScope);
         // A rule created since the coverage record began sends everything when it starts covering an account (#2826).
         baseRule.CoverageRecordedAt = DateTime.UtcNow;
         addOnRule.CoverageRecordedAt = addOnCoverageRecorded ? DateTime.UtcNow : null;

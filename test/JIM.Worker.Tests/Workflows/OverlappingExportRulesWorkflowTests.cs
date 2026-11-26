@@ -278,17 +278,41 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task CreateOrUpdateSyncRuleAsync_AnotherEnabledExportRuleTargetsTheSameObjectType_WarnsNamingItAsync()
+    public async Task CreateOrUpdateSyncRuleAsync_AnotherEnabledExportRuleWritesTheSameAttribute_WarnsNamingItAndTheAttributeAsync()
     {
-        await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        await ArrangeAsync(baseScope: Raj, managersScope: Jane, managersAlsoWriteDisplayName: true);
         var baseRule = await SavedRuleAsync("AD Base Accounts");
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Manager Accounts")).ToList(), Has.Count.EqualTo(1),
-                "saving one of two export rules into one Object Type warns once, naming the other");
-            Assert.That(baseRule.SaveWarnings.Single(w => w.Contains("AD Manager Accounts")), Does.Contain("user"));
+                "saving one of two export rules writing one attribute warns once, naming the other");
+            Assert.That(baseRule.SaveWarnings.Single(w => w.Contains("AD Manager Accounts")), Does.Contain("user").And.Contain("'DisplayName'"));
         }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_AnotherEnabledExportRuleWritesOtherAttributesOfTheSameObjectType_DoesNotWarnAsync()
+    {
+        // #2826: rules writing different attributes of one account each export their own, so there is nothing to warn of.
+        await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Manager Accounts")), Is.Empty);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_TheSharedAttributesMappingIsDisabledOnTheOtherRule_DoesNotWarnAsync()
+    {
+        await ArrangeAsync(baseScope: Raj, managersScope: Jane, managersAlsoWriteDisplayName: true);
+        var managersRule = DbContext.SyncRules.Single(r => r.Name == "AD Manager Accounts");
+        foreach (var mapping in managersRule.AttributeFlowRules.Where(m => m.TargetConnectedSystemAttribute?.Name == "DisplayName"))
+            mapping.Enabled = false;
+        await DbContext.SaveChangesAsync();
+
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Manager Accounts")), Is.Empty, "a disabled mapping writes nothing");
     }
 
     [Test]
@@ -411,7 +435,7 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
     public async Task CreateOrUpdateSyncRuleAsync_RulesForTheSameAndForADifferentObjectType_WarnsAboutEachOnceAsync()
     {
         // The same-type overlap (#2820) and the different-type conflict (#2824) are separate warnings, one per other rule.
-        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane, managersAlsoWriteDisplayName: true);
         var adContact = await CreateCsoTypeAsync(arrangement.Ad.Id, "contact");
         await CreateExportSyncRuleAsync(arrangement.Ad.Id, adContact, PersonType(), "AD Contacts");
         await DbContext.SaveChangesAsync();
@@ -423,7 +447,7 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
             Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Manager Accounts")).ToList(), Has.Count.EqualTo(1));
             Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Contacts")).ToList(), Has.Count.EqualTo(1));
             Assert.That(baseRule.SaveWarnings.Single(w => w.Contains("AD Manager Accounts")), Does.Contain("Export Rules Overlap"),
-                "the same-type warning is the overlap warning, unchanged");
+                "the same-type warning names the outcome its shared attribute gets");
             Assert.That(baseRule.SaveWarnings.Single(w => w.Contains("AD Contacts")), Does.Not.Contain("Export Rules Overlap"),
                 "the different-type warning describes its own outcome");
         }

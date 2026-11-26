@@ -776,6 +776,14 @@ public class ExportEvaluationServer
                     fullSends.Add((account.Id, rule.Id));
             }
 
+            // A rule that has just taken the account over (#2822) and was not covering it before has never written to it, so it
+            // sends everything too; one that was covering it already has, and its row ends below as it now manages the account.
+            var takenOverBy = group?.OrderedRules.FirstOrDefault(rule => rule.Id == managingRuleId &&
+                result.HandOvers.Any(handOver => handOver.ConnectedSystemObjectId == account.Id));
+            if (takenOverBy != null && !recorded.Contains(takenOverBy.Id) && takenOverBy.CoverageRecordedAt != null &&
+                account.Status == ConnectedSystemObjectStatus.Normal)
+                fullSends.Add((account.Id, takenOverBy.Id));
+
             result.CoverageEnded.AddRange(recorded
                 .Where(ruleId => ruleIdsForAccount.Contains(ruleId) && covering.All(rule => rule.Id != ruleId))
                 .Select(ruleId => (account.Id, ruleId)));

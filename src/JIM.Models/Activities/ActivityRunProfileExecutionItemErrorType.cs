@@ -316,10 +316,13 @@ public enum ActivityRunProfileExecutionItemErrorType
 
     /// <summary>
     /// Two or more enabled export Synchronisation Rules have the Metaverse Object in scope for the same Connected System
-    /// and Connected System Object Type (#2820). A Metaverse Object holds one Connected System Object there, and only one
-    /// rule may manage it, so nothing is staged for any of those rules on this object; its other Connected Systems and the
-    /// rest of the run are unaffected. The message names the rules; give them scopes that never overlap, or combine them.
+    /// and Connected System Object Type, and write the same attribute. Neither rule's value is exported for that attribute
+    /// and its drift is not corrected; every other attribute the rules write is exported. The message names the attributes
+    /// and the rules; give each attribute to one rule, or give the rules scopes that never overlap.
     /// </summary>
+    /// <remarks>
+    /// #2826. Items recorded under #2820 name only the rules: then, any two rules covering one object staged nothing for it.
+    /// </remarks>
     ExportRuleOverlap,
 
     /// <summary>

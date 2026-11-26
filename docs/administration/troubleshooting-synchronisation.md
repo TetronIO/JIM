@@ -117,13 +117,13 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** After the next synchronisation, the object's execution item stages the export it expects, or records nothing for the rule it no longer matches.
 
-## :material-call-split: **Export Rules Overlap**: `This Metaverse Object is in scope of ... export Synchronisation Rules that target '...' in '...': ...`
+## :material-call-split: **Export Rules Overlap**: `... export Synchronisation Rules that target '...' in '...' all write ...: ...`
 
-**What it means.** Two or more enabled export Synchronisation Rules for the same Connected System and Object Type both have this Metaverse Object in scope. Only one export rule may manage an object, so JIM exported nothing to that Connected System for it and corrected no drift there; the object's other Connected Systems, and every other object, carried on. The message names the rules.
+**What it means.** Two or more enabled export Synchronisation Rules for the same Connected System and Object Type have this Metaverse Object in scope, and they write the same attribute. JIM cannot tell which value is right, so it exported neither rule's value for that attribute and corrected no drift on it; the Connected System keeps the value it holds. Every other attribute the rules write was exported as usual. The message names the attributes and the rules. Items recorded by v1.0.0 or earlier read `This Metaverse Object is in scope of ...`: those releases exported nothing at all for an object two rules covered.
 
-**How to fix.** Give the rules Scoping Criteria that never overlap, or combine them into one rule; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the other.
+**How to fix.** Have only one of the rules write the attribute, or give the rules Scoping Criteria that never overlap; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the shared attribute.
 
-**Check.** After the next synchronisation, the object's execution item stages the export it expects and records no Export Rules Overlap item.
+**Check.** After the next synchronisation, the object's execution item stages the attribute it expects and records no Export Rules Overlap item.
 
 ## :material-shape-plus-outline: **Projection Type Conflict**: `More than one import Synchronisation Rule would project this object, into different Metaverse Object Types: ...`
 

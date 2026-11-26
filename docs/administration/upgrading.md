@@ -202,6 +202,8 @@ The web interface is briefly unavailable after an upgrade while JIM starts:
 - **The web and scheduler wait.** `jim.web` and `jim.scheduler` poll JIM's readiness and do not start until the database upgrade has completed and JIM has left maintenance mode. `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second while it waits.
 - **Readiness is externally observable.** `GET /api/v1/health/ready` returns `503 Service Unavailable` with `"status": "not_ready"` throughout, then `200 OK` with `"status": "ready"` once JIM is serving.
 
+- **Export rules learn which accounts they cover.** Upgrading from v1.0.0 or earlier, the worker records in the background, while it has no other work, which accounts each existing export Synchronisation Rule already covers. Until it has finished with a rule, an account that rule starts covering is sent only the attributes that changed; afterwards it is sent everything the rule writes, as [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects) describes.
+
 Most database upgrades are near-instant; one that rewrites a large table scales with your object count, so time it against a production-sized staging environment first.
 
 !!! warning "If the database upgrade fails"
