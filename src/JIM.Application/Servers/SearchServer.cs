@@ -99,7 +99,7 @@ public class SearchServer
             TargetName = predefinedSearch.Name,
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Updating Predefined Search '{predefinedSearch.Name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchUpdating), predefinedSearch.Name)
         };
         await createActivityAsync(activity);
 
@@ -164,7 +164,7 @@ public class SearchServer
             TargetName = searchName,
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Adding a criteria group to Predefined Search '{searchName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchAddingGroup), searchName)
         };
         await createActivityAsync(activity);
 
@@ -224,7 +224,7 @@ public class SearchServer
             TargetName = searchName,
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Updating a criteria group on Predefined Search '{searchName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchUpdatingGroup), searchName)
         };
         await createActivityAsync(activity);
 
@@ -280,7 +280,7 @@ public class SearchServer
             TargetName = searchName,
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Deleting a criteria group from Predefined Search '{searchName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchDeletingGroup), searchName)
         };
         await createActivityAsync(activity);
 
@@ -350,7 +350,7 @@ public class SearchServer
             TargetName = searchName,
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Adding a criterion to Predefined Search '{searchName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchAddingCriterion), searchName)
         };
         await createActivityAsync(activity);
 
@@ -407,7 +407,7 @@ public class SearchServer
             TargetName = searchName,
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Updating a criterion on Predefined Search '{searchName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchUpdatingCriterion), searchName)
         };
         await createActivityAsync(activity);
 
@@ -463,7 +463,7 @@ public class SearchServer
             TargetName = searchName,
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Deleting a criterion from Predefined Search '{searchName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchDeletingCriterion), searchName)
         };
         await createActivityAsync(activity);
 

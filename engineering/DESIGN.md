@@ -293,6 +293,26 @@ The portal uses a fixed sidebar (240px, MudBlazor's `DrawerVariant.Mini` default
 
 Cards and elevated surfaces use subtle background shifts between `background` and `surface` tokens. No drop shadows on cards or data tables; the design is deliberately flat. Grid-card hover lightens the border rather than adding a shadow.
 
+### Spacing
+
+Vertical gaps are chosen by **role**, never by size and never by matching a neighbouring page. Three roles cover the portal; each is a token on `:root` in `site.css`, drawn from the spacing scale above.
+
+| Role | Token | Size | Separates |
+|------|-------|------|-----------|
+| Section | `--jim-space-section` | 24px (`lg`) | Independent blocks: a tab bar and the first block below it, an introduction, a filter bar, a table, a panel, two panels side by side |
+| Field | `--jim-space-field` | 16px (`md`) | The fields of one form or group |
+| Caption | `--jim-space-caption` | 8px (`sm`) | A control or block and the helper text that describes it |
+
+**How they are applied: by components, not by margins.**
+
+- `<SectionStack>` lays out the blocks of a page, tab or panel one section gap apart. Its children's own vertical margins are neutralised, so a utility class left on a child, or a component's built-in margin, cannot change the gap.
+- `<SectionCaption>` placed straight after a block inside a `<SectionStack>` sits one caption gap below it, so it reads as part of that block.
+- A tab bar's panels take `TabPanelsClass="pt-6"` (the section gap) when their content is a `<SectionStack>`.
+
+**Enforced.** `VerticalSpacingConventionTests` (`test/JIM.Web.Tests/Spacing/`) counts the vertical margin utilities (`mt-`, `mb-`, `my-`, `ma-`, non-zero) placed by hand in every `.razor` file against a baseline that may only fall. A new file starts at zero. A genuine exception carries a `spacing: exempt - <why>` comment on its line or one of the two above.
+
+**Migration** ([#3095](https://github.com/TetronIO/JIM/issues/3095)). The portal predates these roles, so most pages still place margins by hand; each page moves to `<SectionStack>` as it is touched, and the baseline records the progress. The Schema page's three tabs are the worked example.
+
 ### Docs site
 
 The MkDocs Material docs site uses a standard two-column layout (nav plus content). Table and admonition body text is set at 0.72rem (up from Material's 0.64rem default). Default Material hover shadow on cards is removed for a flatter look consistent with the portal.
@@ -327,6 +347,16 @@ A button inside an alert is filled in the alert's severity colour (`warning` on 
 ### Chips
 
 Metaverse text-chips render as a 16% tint of `primary` over the surface, with `primary-darken` text. Connected-system text-chips render as a 16% tint of `secondary`, with `secondary-darken` text. Both use `rounded.full` for pill shape. The chip-type prefix labels (`.jim-mv-chip-prefix`, `.jim-cs-chip-prefix`) sit inside chips as tinted text drawn from the `-lighten` variants of each colour, providing a softer accent against the tinted chip body.
+
+### Values and names in running text
+
+A value or name placed into a sentence (an attribute value, an attribute or object name, a column, a setting) is shown as inline code: the `jim-code-inline` pill, in IBM Plex Mono on a light tint. The pill marks where the value starts and ends, so the sentence puts no quotes around it; a value can itself contain quotes, spaces or punctuation, and quotes around it make it ambiguous. This covers confirmation dialogs, snackbars and explanatory text. It does not cover a value in an input, a table cell of its own or an attribute display, which show the value plainly (monospace where it is code-like, `jim-text-code`).
+
+On a filled coloured surface (a snackbar) the pill takes a translucent white tint and the surface's text colour, so its edges stay visible on every severity colour.
+
+A list of values shown inline (the values each source supplies, in the attribute inspector) puts each in its own pill rather than joining them with commas, since a value can hold a comma or a space. The attribute inspector's history does the same for each change's value, beside its chip. An object's current values, one to a line, stay plain.
+
+In the portal, compose such a message with `InlineCode.Format(template, values...)` (`src/JIM.Web/Localisation/InlineCode.cs`), which encodes each value and returns markup for a dialog's `MarkupMessage` or a snackbar; never build the `<code>` element into a markup string by hand. In Razor markup, `<code class="jim-code-inline">@value</code>` is fine, since Razor encodes the value. The text's placeholders carry no quotes, in every language. A dialog title cannot hold markup, so a name in a title keeps its quotes. Messages the application layer produces for the REST API and PowerShell are plain text, so they keep theirs too.
 
 ### Cards
 

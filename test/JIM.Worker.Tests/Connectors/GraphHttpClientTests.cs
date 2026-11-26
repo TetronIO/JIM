@@ -145,6 +145,21 @@ public class GraphHttpClientTests
     }
 
     [Test]
+    public void SendAsync_PersistentlyUnavailable_ThrowsAfterEveryConfiguredRetry()
+    {
+        var handler = Respond(HttpStatusCode.ServiceUnavailable);
+        using var client = CreateClient(handler);
+
+        var exception = Assert.ThrowsAsync<GraphRequestException>(async () => await client.SendAsync(HttpMethod.Get, "users", null, null, CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+            Assert.That(handler.CallCount, Is.EqualTo(4), "the initial attempt plus the three configured retries.");
+        }
+    }
+
+    [Test]
     public void SendAsync_UnauthorisedTwice_Throws()
     {
         var handler = Respond(HttpStatusCode.Unauthorized);

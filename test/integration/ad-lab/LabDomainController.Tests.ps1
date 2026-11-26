@@ -1667,6 +1667,62 @@ Describe 'Get-LabOldPasswordAllowedPeriod' -Skip:(-not [bool]($IsWindows -or ($P
     }
 }
 
+Describe 'Get-LabHybridUpdatePolicyChange' {
+    It 'sets all four values on a guest with no update policy key at all' {
+        $change = Get-LabHybridUpdatePolicyChange -Current $null
+        @($change.Keys | Sort-Object) | Should -Be @('AUOptions', 'NoAutoUpdate', 'ScheduledInstallDay', 'ScheduledInstallTime')
+        $change.NoAutoUpdate | Should -Be 0
+        $change.AUOptions | Should -Be 4
+        $change.ScheduledInstallDay | Should -Be 1
+        $change.ScheduledInstallTime | Should -Be 10
+    }
+
+    It 'turns updates back on for a domain controller as the build leaves it (NoAutoUpdate 1, notify only)' {
+        $change = Get-LabHybridUpdatePolicyChange -Current ([pscustomobject]@{ NoAutoUpdate = 1; AUOptions = 3 })
+        @($change.Keys | Sort-Object) | Should -Be @('AUOptions', 'NoAutoUpdate', 'ScheduledInstallDay', 'ScheduledInstallTime')
+    }
+
+    It 'changes nothing on a guest already set up' {
+        $current = [pscustomobject]@{ NoAutoUpdate = 0; AUOptions = 4; ScheduledInstallDay = 1; ScheduledInstallTime = 10 }
+        (Get-LabHybridUpdatePolicyChange -Current $current).Count | Should -Be 0
+    }
+
+    It 'changes only the value that differs' {
+        $current = [pscustomobject]@{ NoAutoUpdate = 0; AUOptions = 4; ScheduledInstallDay = 1; ScheduledInstallTime = 3 }
+        $change = Get-LabHybridUpdatePolicyChange -Current $current
+        @($change.Keys) | Should -Be @('ScheduledInstallTime')
+        $change.ScheduledInstallTime | Should -Be 10
+    }
+
+    It 'installs well clear of the nightly, which starts at 01:23 UTC and is cut off after six hours' {
+        $change = Get-LabHybridUpdatePolicyChange -Current $null
+        $change.ScheduledInstallTime | Should -BeGreaterOrEqual 8
+    }
+}
+
+Describe 'Get-LabHybridSyncOuDn' {
+    It 'places the Cloud Sync organisational unit directly under the domain' {
+        Get-LabHybridSyncOuDn -DomainDn 'DC=meridian,DC=local' | Should -Be 'OU=CloudSync,DC=meridian,DC=local'
+    }
+
+    It 'matches the organisational unit the harness scopes Scenario 038 to' {
+        . (Join-Path $PSScriptRoot '..' 'utils' 'Test-Helpers.ps1')
+        $previous = @{ Address = $env:JIM_AD_LAB_HYBRID_ADDRESS; Domain = $env:JIM_AD_LAB_HYBRID_DOMAIN; Password = $env:JIM_AD_LAB_ADMIN_PASSWORD }
+        try {
+            $env:JIM_AD_LAB_HYBRID_ADDRESS = '10.99.0.14'
+            $env:JIM_AD_LAB_HYBRID_DOMAIN = 'meridian.local'
+            $env:JIM_AD_LAB_ADMIN_PASSWORD = 'not-a-real-password'
+            $config = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Hybrid
+            Get-LabHybridSyncOuDn -DomainDn $config.BaseDN | Should -Be $config.SyncOuDn
+        }
+        finally {
+            $env:JIM_AD_LAB_HYBRID_ADDRESS = $previous.Address
+            $env:JIM_AD_LAB_HYBRID_DOMAIN = $previous.Domain
+            $env:JIM_AD_LAB_ADMIN_PASSWORD = $previous.Password
+        }
+    }
+}
+
 Describe 'Module surface' {
     It 'imports without Hyper-V or the ActiveDirectory module' {
         { Import-Module $script:ModulePath -Force } | Should -Not -Throw
@@ -1968,7 +2024,7 @@ Describe 'ConvertFrom-LabRebuildSetting' {
         { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*'$Key'*"
     }
 
-    It 'passes the DNS forwarder on when there is one, and leaves it out when there is none (the lab has no uplink)' {
+    It 'passes the DNS forwarder on when there is one, and leaves it out when there is none (most lab domain controllers have none)' {
         $with = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
         $with.Roles[0].BuildParameters.DnsForwarder | Should -Be '10.0.0.1'
 
@@ -3360,7 +3416,7 @@ Describe 'Invoke-LabRebuildPhase' {
 
 Describe 'Get-LabGuestPhaseArgument without a DNS forwarder' {
     BeforeAll {
-        # The lab network has no uplink, so there is nothing to forward to and the setting is optional.
+        # Most lab domain controllers resolve nothing outside their own forest, so the setting is optional.
         function Get-ForwarderTestSetting {
             return @{
                 ComputerName           = 'dc1'

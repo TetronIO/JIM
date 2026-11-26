@@ -6588,9 +6588,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 "FailingSince" = v."FailingSince",
                 "LastAttemptedAt" = v."LastAttemptedAt",
                 "LastErrorMessage" = v."LastErrorMessage",
-                "LastErrorStackTrace" = v."LastErrorStackTrace"
-            FROM unnest(@ids, @statuses, @errorCounts, @failingSinces, @lastAttemptedAts, @lastErrorMessages, @lastErrorStackTraces)
-                AS v("Id", "Status", "ErrorCount", "FailingSince", "LastAttemptedAt", "LastErrorMessage", "LastErrorStackTrace")
+                "LastErrorStackTrace" = v."LastErrorStackTrace",
+                "LastErrorMessageDetailJson" = v."LastErrorMessageDetailJson"
+            FROM unnest(@ids, @statuses, @errorCounts, @failingSinces, @lastAttemptedAts, @lastErrorMessages, @lastErrorStackTraces, @lastErrorMessageDetails)
+                AS v("Id", "Status", "ErrorCount", "FailingSince", "LastAttemptedAt", "LastErrorMessage", "LastErrorStackTrace", "LastErrorMessageDetailJson")
             WHERE t."Id" = v."Id"
               AND t."Status" = @executing
               AND t."LastAttemptedAt" = @markedAt
@@ -6616,6 +6617,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             { Value = states.Select(s => s.LastErrorMessage).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("lastErrorStackTraces", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
             { Value = states.Select(s => s.LastErrorStackTrace).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("lastErrorMessageDetails", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = states.Select(s => s.LastErrorMessageDetailJson).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("executing", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Executing });
         command.Parameters.Add(new NpgsqlParameter("markedAt", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = markedAt });
 
@@ -8616,6 +8619,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 MetaverseObjectTypeName = m.SyncRule.MetaverseObjectType.Name,
                 TargetMetaverseAttributeId = m.TargetMetaverseAttributeId,
                 TargetMetaverseAttributeName = m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : null,
+                TargetMetaverseAttributeContributionMode = m.SyncRule.Direction == SyncRuleDirection.Import && m.TargetMetaverseAttribute != null
+                    ? m.TargetMetaverseAttribute.ContributionMode
+                    : null,
                 TargetConnectedSystemAttributeId = m.TargetConnectedSystemAttributeId,
                 TargetConnectedSystemAttributeName = m.TargetConnectedSystemAttribute != null ? m.TargetConnectedSystemAttribute.Name : null,
                 Sources = m.Sources.OrderBy(s => s.Order).Select(s => new DataFlowSource
@@ -10670,7 +10676,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <summary>
     /// Batch updates PendingExport rows using UPDATE ... FROM (VALUES ...) pattern.
     /// Updates: Status, ChangeType, ErrorCount, FailingSince, LastAttemptedAt,
-    /// LastErrorMessage, LastErrorStackTrace, HasUnresolvedReferences, ConnectedSystemObjectId.
+    /// LastErrorMessage, LastErrorStackTrace, HasUnresolvedReferences, ConnectedSystemObjectId, LastErrorMessageDetailJson.
     /// </summary>
     private async Task BulkUpdatePendingExportsRawAsync(List<PendingExport> exports)
     {
@@ -10700,7 +10706,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task BulkUpdatePendingExportRowsRawAsync(List<PendingExport> exports)
     {
-        const int columnsPerRow = 10; // Id + 9 mutable columns
+        const int columnsPerRow = 11; // Id + 10 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
@@ -10716,7 +10722,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::timestamp with time zone, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::text, {{{offset + 7}}}::text, {{{offset + 8}}}::boolean, {{{offset + 9}}}::uuid)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::timestamp with time zone, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::text, {{{offset + 7}}}::text, {{{offset + 8}}}::boolean, {{{offset + 9}}}::uuid, {{{offset + 10}}}::text)");
 
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
@@ -10729,6 +10735,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorMessageDetailJson, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append(@") AS v(""Id"", ");

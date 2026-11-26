@@ -59,6 +59,8 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **User Interface changes:** Always create CLAUDE Artefacts to demonstrate UI changes (excluding text only changes). This will help the user comprehend the options. The user prefers visual explanation of UI changes to text.
 
+**Consult the design system before any visual decision; never ask the user one it answers.** Spacing, colour, typography, buttons, chips and the other conventions are specified in `engineering/DESIGN.md` and `src/JIM.Web/CLAUDE.md`: read the relevant section first and apply it. Vertical spacing in particular is chosen by role (`DESIGN.md` > Layout > Spacing) and applied with `<SectionStack>` / `<SectionCaption>`, never by a hand-placed margin and never by copying a neighbouring page's value, which is how gaps drifted before (#3095). Where the design system genuinely has no answer, decide one, write it into `DESIGN.md` in the same change, and say so; do not ask the user to pick values one fix at a time.
+
 **Pushback & honesty:** Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
 
 No glazing. Do not call an idea "great", "brilliant", or "smart" without concrete reasons, and even then lead with what is wrong or missing. Compliments without substance are noise. Do not echo my framing back ("X is definitely the move", "that makes a lot of sense"); start with the most useful sentence you can write instead.

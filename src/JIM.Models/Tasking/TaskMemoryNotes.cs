@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Tasking;
 
 /// <summary>
@@ -10,16 +12,16 @@ namespace JIM.Models.Tasking;
 /// </summary>
 public sealed class TaskMemoryNotes
 {
-    private string? _warning;
-    private string? _stopReason;
+    private JimMessage? _warning;
+    private JimMessage? _stopReason;
 
     /// <summary>Why memory was low while the task ran, or null when it was not.</summary>
-    public string? Warning => Volatile.Read(ref _warning);
+    public JimMessage? Warning => Volatile.Read(ref _warning);
 
     /// <summary>Why the guard stopped the task, or null when it did not.</summary>
-    public string? StopReason => Volatile.Read(ref _stopReason);
+    public JimMessage? StopReason => Volatile.Read(ref _stopReason);
 
-    public void RecordWarning(string warning) => Interlocked.CompareExchange(ref _warning, warning, null);
+    public void RecordWarning(JimMessage warning) => Interlocked.CompareExchange(ref _warning, warning, null);
 
-    public void RecordStop(string reason) => Interlocked.CompareExchange(ref _stopReason, reason, null);
+    public void RecordStop(JimMessage reason) => Interlocked.CompareExchange(ref _stopReason, reason, null);
 }

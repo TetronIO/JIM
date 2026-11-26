@@ -56,8 +56,8 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         $result | Should -Not -Contain 'DirectoryServer389'
     }
 
-    It 'restricts Scenarios 003, 024, 025, 030, 031, 034 and 035 (Active Directory lab only) to ActiveDirectory' {
-        foreach ($number in 3, 24, 25, 30, 31, 34, 35) {
+    It 'restricts Scenarios 003, 024, 025, 030, 031, 034, 035 and 038 (Active Directory lab only) to ActiveDirectory' {
+        foreach ($number in 3, 24, 25, 30, 31, 34, 35, 38) {
             Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number | Should -Be @('ActiveDirectory')
         }
     }
@@ -91,7 +91,7 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         # "judge an ActiveDirectory sweep by Samba AD" substitution.
         foreach ($number in 1..40) {
             $supported = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number)
-            if ($number -in 3, 24, 25, 30, 31, 34, 35) {
+            if ($number -in 3, 24, 25, 30, 31, 34, 35, 38) {
                 $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller, or the lab's AD FS or Exchange server"
             }
             elseif ($number -in 14, 19, 22, 32) {
@@ -227,6 +227,10 @@ Describe 'Test-ScenarioRunsOnItsOwn' {
         Test-ScenarioRunsOnItsOwn -ScenarioNumber 37 | Should -BeTrue
     }
 
+    It 'keeps Scenario 038 (hybrid and Source of Authority) out of the sweep, for ad-lab.yml to run on its own and report as jim-entra-hybrid' {
+        Test-ScenarioRunsOnItsOwn -ScenarioNumber 38 | Should -BeTrue
+    }
+
     It 'keeps Scenario 039 (Entra ID at scale) out of the sweep: a run takes hours, and only runs on request' {
         Test-ScenarioRunsOnItsOwn -ScenarioNumber 39 | Should -BeTrue
     }
@@ -236,7 +240,7 @@ Describe 'Test-ScenarioRunsOnItsOwn' {
     }
 
     It 'leaves every other scenario in the sweep, Scenario 030 (AD FS trust) included' {
-        foreach ($number in (1..41 | Where-Object { $_ -notin 31, 35, 36, 37, 39, 40 })) {
+        foreach ($number in (1..41 | Where-Object { $_ -notin 31, 35, 36, 37, 38, 39, 40 })) {
             Test-ScenarioRunsOnItsOwn -ScenarioNumber $number | Should -BeFalse -Because "Scenario $number is part of -Scenario All"
         }
         Test-ScenarioRunsOnItsOwn -ScenarioNumber $null | Should -BeFalse

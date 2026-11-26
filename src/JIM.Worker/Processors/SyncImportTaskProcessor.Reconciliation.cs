@@ -5,6 +5,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using JIM.Application.Diagnostics;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Models.Activities;
@@ -133,12 +135,21 @@ public partial class SyncImportTaskProcessor
         // the Pending Exports of an object it finds gone (ApplyDeletionCandidatesAsync); left in place, an exported Delete
         // waited for a confirmation reconciliation never gives (it confirms attribute changes, and a Delete has none) and
         // outlived its object once synchronisation deleted it (#3053).
+        //
+        // A Delete JIM sent is confirmed by the deletion, and the object's deletion item records which export it confirms,
+        // as reconciliation records each attribute change it confirms; without it, the walk from the import that caused
+        // the Delete ends at the Delete (#3087).
         if (deletedObjectIds.Count > 0)
         {
-            var clearedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync([.. deletedObjectIds]);
-            if (clearedCount > 0)
+            var cleared = await _syncRepo.DeletePendingExportsOfDeletedObjectsAsync([.. deletedObjectIds]);
+            // Keyed by object, the last report winning, as the run settles a delete a later page reported again.
+            var deletionItems = new Dictionary<Guid, (ActivityRunProfileExecutionItem Item, ConnectedSystemObject Cso)>();
+            foreach (var delete in _connectorReportedDeletes.Where(delete => deletedObjectIds.Contains(delete.Cso.Id)))
+                deletionItems[delete.Cso.Id] = (delete.ExecutionItem, delete.Cso);
+            var confirmedDeletes = RecordDeletesConfirmedByObjectDeletion(cleared, deletionItems);
+            if (cleared.Count > 0)
                 Log.Information("BeginPendingExportReconciliationAsync: Cleared {Count} Pending Export(s) of {DeletedCount} object(s) the Connector " +
-                    "reported deleted, exported Deletes among them", clearedCount, deletedObjectIds.Count);
+                    "reported deleted; the deletions confirmed {ConfirmedDeletes} exported Delete(s)", cleared.Count, deletedObjectIds.Count, confirmedDeletes);
         }
 
         // Asked of the database as the save phase starts, as the Pending Exports were once loaded here: a Pending Export
@@ -768,7 +779,7 @@ public partial class SyncImportTaskProcessor
         var retryAttrNames = string.Join(", ", result.RetryChanges
             .GroupBy(c => c.Attribute?.Name ?? "unknown")
             .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
-        var errorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.";
+        var errorMessage = ActivityMessage.Create(nameof(ActivityMessages.ExportNotConfirmedByImport), ActivityMessage.Plain(result.RetryChanges.Count), retryAttrNames);
 
         if (existingRpei != null)
         {
@@ -782,7 +793,7 @@ public partial class SyncImportTaskProcessor
             if (existingRpei.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
             {
                 existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed;
-                existingRpei.ErrorMessage = errorMessage;
+                existingRpei.ErrorMessageDetail = errorMessage;
             }
             modifiedImportItems.TryAdd(existingRpei.Id, existingRpei);
         }
@@ -795,7 +806,7 @@ public partial class SyncImportTaskProcessor
                 ConnectedSystemObjectId = cso.Id,
                 ObjectChangeType = ObjectChangeType.Updated,
                 ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                ErrorMessage = errorMessage
+                ErrorMessageDetail = errorMessage
             };
             executionItem.SnapshotCsoDisplayFields(cso);
 
@@ -884,7 +895,8 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     private void CompletePendingExportReconciliation(PendingExportReconciliationRun run)
     {
-        _activity.PendingExportsConfirmed = run.ExportsDeleted;
+        // With the Deletes the run's deletions confirmed (#3087), which reconciliation never sees: their objects are gone.
+        _activity.PendingExportsConfirmed = run.ExportsDeleted + _deletesConfirmedByObjectDeletion;
 
         Log.Information("CompletePendingExportReconciliation: Reconciled {Reconciled} Connected System Objects with Pending Exports over {Batches} " +
             "update batch(es): {Held} judged from the values the import held as saved, {Reloaded} reloaded ({ReloadReasons}). Confirmed: {Confirmed}, " +
@@ -919,9 +931,21 @@ public partial class SyncImportTaskProcessor
         if (pendingExport == null)
             return;
 
+        RecordExportConfirmationCause(item, confirmedOutcome, pendingExport.Id, cso);
+    }
+
+    /// <summary>
+    /// Records which export execution a confirmation confirms (#1223), by the Pending Export's id; see the overload above.
+    /// </summary>
+    private void RecordExportConfirmationCause(
+        ActivityRunProfileExecutionItem item,
+        ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome,
+        Guid pendingExportId,
+        ConnectedSystemObject cso)
+    {
         item.CausalEdges.Add(new CausalCause
         {
-            PendingExportId = pendingExport.Id,
+            PendingExportId = pendingExportId,
             ConnectedSystemObjectId = cso.Id,
             // Named from the object being confirmed, so the chain still reads once the Connected System Object
             // is gone; the Pending Export itself is deleted moments from now and can never supply a name.
@@ -929,6 +953,52 @@ public partial class SyncImportTaskProcessor
             ConnectedSystemId = _connectedSystem.Id,
             ConnectedSystemName = _connectedSystem.Name
         }.ToEdge(CausalEdgeType.ExportCausedImportConfirmation, confirmedOutcome));
+    }
+
+    /// <summary>The Deletes this run recorded as confirmed by their objects' deletion (#3087).</summary>
+    private int _deletesConfirmedByObjectDeletion;
+
+    /// <summary>
+    /// Records, on each deleted object's deletion item, the confirmation of the Delete JIM sent it (#3087): an
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed"/> outcome and the edge naming the Pending
+    /// Export it confirms, exactly as reconciliation records a confirmed attribute change. A cleared export the deletion does
+    /// not confirm (<see cref="DeletedPendingExportSummary.IsConfirmedByObjectDeletion"/>), or one whose object has no
+    /// deletion item this run, records nothing.
+    /// </summary>
+    /// <param name="cleared">The Pending Exports cleared from the deleted objects, as they stood.</param>
+    /// <param name="deletionItems">Each object deleted this run, with the execution item that records its deletion.</param>
+    /// <returns>The number of Deletes recorded as confirmed.</returns>
+    /// <remarks>
+    /// Called before the deletion items are saved, so the outcome and the edge are written with them.
+    /// </remarks>
+    private int RecordDeletesConfirmedByObjectDeletion(IReadOnlyList<DeletedPendingExportSummary> cleared,
+        IReadOnlyDictionary<Guid, (ActivityRunProfileExecutionItem Item, ConnectedSystemObject Cso)> deletionItems)
+    {
+        var confirmed = 0;
+        foreach (var export in cleared.Where(export => export.IsConfirmedByObjectDeletion))
+        {
+            if (!deletionItems.TryGetValue(export.ConnectedSystemObjectId, out var deletion))
+            {
+                // An object a previous import already found deleted raises no item now; its Delete is cleared all the same.
+                Log.Debug("RecordDeletesConfirmedByObjectDeletion: Pending Export {PendingExportId} was a Delete awaiting confirmation for " +
+                    "Connected System Object {CsoId}, which has no deletion item this run; no confirmation is recorded for it",
+                    export.Id, export.ConnectedSystemObjectId);
+                continue;
+            }
+
+            ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome = null;
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                confirmedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletion.Item, ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed);
+
+            RecordExportConfirmationCause(deletion.Item, confirmedOutcome, export.Id, deletion.Cso);
+            confirmed++;
+        }
+
+        // Counted in the Activity's confirmed Pending Exports whether or not reconciliation runs, and whether it closes
+        // before or after (CompletePendingExportReconciliation adds the run's total to its own).
+        _deletesConfirmedByObjectDeletion += confirmed;
+        _activity.PendingExportsConfirmed += confirmed;
+        return confirmed;
     }
 
     /// <summary>

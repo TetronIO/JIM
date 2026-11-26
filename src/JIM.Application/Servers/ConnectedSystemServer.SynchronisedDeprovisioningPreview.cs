@@ -205,7 +205,7 @@ public partial class ConnectedSystemServer
             {
                 progress.HeldBack.Add(original.Id);
                 if (mvo != null && objectName != null)
-                    deltas.Add(WouldFailForUndecidableScope(mvo, objectName, undecidableBeforehand, original.Id, pass.ConnectedSystemId));
+                    deltas.Add(WouldFailForUndecidableScope(mvo, objectName, undecidableBeforehand.Message, original.Id, pass.ConnectedSystemId));
                 continue;
             }
 
@@ -319,7 +319,7 @@ public partial class ConnectedSystemServer
         {
             var mvo = ObsoletionPreviewClone.Of(original);
             var objectName = original.NameOrId;
-            var recalledValues = mvo.AttributeValues.Where(av => av.ContributedBySyncRuleId == syncRuleId).ToList();
+            var recalledValues = mvo.AttributeValues.Where(av => av.ContributedBySyncRuleId == syncRuleId && ContributedValueRecall.IsRecallable(av)).ToList();
             if (recalledValues.Count == 0)
                 continue;
 

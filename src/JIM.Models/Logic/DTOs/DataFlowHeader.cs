@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
+
 namespace JIM.Models.Logic.DTOs;
 
 /// <summary>
@@ -79,6 +81,13 @@ public class DataFlowHeader
     /// The Metaverse Attribute an Import flow writes. Null on an Export flow.
     /// </summary>
     public string? TargetMetaverseAttributeName { get; set; }
+
+    /// <summary>
+    /// How the target Metaverse attribute combines its contributors' values: <c>Priority</c>, <c>Accumulate</c> or
+    /// <c>Merge</c>. Under <c>Accumulate</c> and <c>Merge</c> every contributor adds its values and
+    /// <see cref="Priority"/> is not used. Null for an export flow.
+    /// </summary>
+    public AttributeContributionMode? TargetMetaverseAttributeContributionMode { get; set; }
 
     /// <summary>
     /// The Connected System attribute an Export flow writes. Null on an Import flow, where the Connected System side

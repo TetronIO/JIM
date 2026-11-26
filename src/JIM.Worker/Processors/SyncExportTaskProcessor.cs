@@ -246,7 +246,7 @@ public class SyncExportTaskProcessor
             var throughput = new ThroughputTracker();
             var enteredDeferredPass = false;
             ExportExecutionResult result;
-            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, $"Exporting {pendingExportCount:N0} changes");
+            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, ActivityMessage.Create(nameof(ActivityMessages.ProgressExporting), pendingExportCount));
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
             {
                 result = await _syncServer.ExecuteExportsAsync(
@@ -290,7 +290,10 @@ public class SyncExportTaskProcessor
                             return;
                         }
 
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
+                        if (progressInfo.MessageDetail is { } narration)
+                            await _syncRepo.UpdateActivityMessageAsync(_activity, narration);
+                        else
+                            await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,
@@ -476,15 +479,23 @@ public class SyncExportTaskProcessor
                 // A rejected generated value that could not safely be corrected (#242, release 4): named for the
                 // decision it waits on, not as a failed export, and worded in full by the export server.
                 executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
-                executionItem.ErrorMessage = exportItem.GeneratedValueCollision.Message;
+                if (exportItem.GeneratedValueCollision.MessageDetail is { } collisionDetail)
+                    executionItem.ErrorMessageDetail = collisionDetail;
+                else
+                    executionItem.ErrorMessage = exportItem.GeneratedValueCollision.Message;
             }
             else if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
                 executionItem.ErrorType = ToExecutionItemErrorType(exportItem.ErrorType);
+
+                // JIM's own wording is stored as the message it is; another system's words stay the text they are.
+                MessageArgument cause = exportItem.ErrorMessageDetail is { } causeDetail ? causeDetail : exportItem.ErrorMessage;
                 if (exportItem.ErrorCount > 1)
-                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailedAfterAttempts), ActivityMessage.Plain(exportItem.ErrorCount), exportItem.ErrorMessage);
+                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailedAfterAttempts), ActivityMessage.Plain(exportItem.ErrorCount), cause);
                 else if (exportItem.ErrorCount == 1)
-                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailed), exportItem.ErrorMessage);
+                    executionItem.ErrorMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ExportFailed), cause);
+                else if (exportItem.ErrorMessageDetail is { } detail)
+                    executionItem.ErrorMessageDetail = detail;
                 else
                     executionItem.ErrorMessage = exportItem.ErrorMessage;
             }
@@ -494,9 +505,12 @@ public class SyncExportTaskProcessor
                 // no Connected System Object in this system. Reported as the import side reports its own
                 // unresolved references: an Unresolved Reference error on the object, which completes the
                 // Activity with a warning. Only raised under Error handling; see
-                // ExportExecutionServer.BuildUnresolvedReferenceNotesAsync.
+                // ExportExecutionServer.BuildUnresolvedReferenceNotes.
                 executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
+                if (exportItem.UnresolvedReferenceMessageDetail is { } unresolvedDetail)
+                    executionItem.ErrorMessageDetail = unresolvedDetail;
+                else
+                    executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
             }
 
             // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
@@ -508,6 +522,12 @@ public class SyncExportTaskProcessor
                 exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated,
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null,
                     detailMessage: exportItem.GeneratedValueCollision!.Message);
+
+                // The sentence is JIM's own, so it is stored as the message it was written from as well, for the portal
+                // to show in the viewer's language (#3094); the English above stays what the REST API returns.
+                if (exportItem.GeneratedValueCollision.MessageDetail is { } remediatedDetail
+                    && remediatedDetail.ToEnglish() == exportOutcome.DetailMessage)
+                    exportOutcome.DetailMessageDetail = remediatedDetail;
             }
             else if (!stillQueued && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
@@ -619,6 +639,13 @@ public class SyncExportTaskProcessor
         if (_connectedSystem.UnresolvedReferenceHandling == UnresolvedReferenceHandling.Warn && result.UnresolvableReferenceCount > 0)
         {
             AppendActivityWarning(ActivityMessage.Create(nameof(ActivityMessages.UnresolvableReferencesWarning), ActivityMessage.Plain(result.UnresolvableReferenceCount)));
+        }
+
+        // Issue #3078: queued references to a deleted Metaverse Object were withdrawn, whatever the handling, since they are
+        // queued work this run removed rather than references left waiting.
+        if (result.WithdrawnReferenceCount > 0)
+        {
+            AppendActivityWarning(ActivityMessage.Create(nameof(ActivityMessages.WithdrawnReferencesToDeletedObjectsWarning), ActivityMessage.Plain(result.WithdrawnReferenceCount)));
         }
 
         // Run Profile Safeguards (#1618): populated (zero when nothing was withheld) on every Export

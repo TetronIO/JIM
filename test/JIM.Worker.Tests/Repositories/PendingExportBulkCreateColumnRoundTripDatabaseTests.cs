@@ -145,6 +145,7 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
             FailingSince = failingSince,
             LastErrorMessage = "the connector rejected the change",
             LastErrorStackTrace = "at Foo.Bar()",
+            LastErrorMessageDetailJson = "{\"Catalogue\":\"JIM.Application:ActivityMessages\",\"Key\":\"ExportFailedNoReason\",\"Arguments\":[]}",
             SourceMetaverseObjectId = sourceMvoId,
             HasUnresolvedReferences = true,
             CreatedAt = createdAt,
@@ -206,6 +207,8 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedExport.LastAttemptedAt, Is.EqualTo(lastAttemptedAt));
             Assert.That(storedExport.LastErrorMessage, Is.EqualTo("the connector rejected the change"));
             Assert.That(storedExport.LastErrorStackTrace, Is.EqualTo("at Foo.Bar()"));
+            Assert.That(storedExport.LastErrorMessageDetailJson,
+                Is.EqualTo("{\"Catalogue\":\"JIM.Application:ActivityMessages\",\"Key\":\"ExportFailedNoReason\",\"Arguments\":[]}"));
             Assert.That(storedExport.SourceMetaverseObjectId, Is.EqualTo(sourceMvoId));
             Assert.That(storedExport.HasUnresolvedReferences, Is.True);
             Assert.That(storedExport.CreatedAt, Is.EqualTo(createdAt));

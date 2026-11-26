@@ -43,7 +43,7 @@
 
 .PARAMETER SwitchName
     The virtual switch the domain controller attaches to. In the lab that is the Internal switch called Lab: it has an
-    adapter on the host (which serves NTP to the domain controllers) and no uplink, so nothing routes out.
+    adapter on the host (which serves NTP to the domain controllers and NATs outbound traffic), and no physical uplink, so nothing outside can reach it.
 
 .PARAMETER IPAddress
     Static IPv4 address for the domain controller.
@@ -52,12 +52,12 @@
     Prefix length of the subnet.
 
 .PARAMETER Gateway
-    Default gateway. On the lab's Internal switch there is no router; use the host's own address on that switch,
-    which leads nowhere by design.
+    Default gateway. On the lab's Internal switch, use the host's own address on that switch,
+    which NATs outbound traffic.
 
 .PARAMETER DnsForwarder
-    Optional. DNS server the domain controller forwards to. The lab network has no uplink, so leave it out: the
-    domain controller then resolves through itself and is given no forwarder.
+    Optional. DNS server the domain controller forwards to. Leave it out unless the domain controller must resolve
+    names outside its forest (only dc-hybrid does): it then resolves through itself and is given no forwarder.
 
 .PARAMETER NtpServer
     NTP source for w32time. In the lab that is the host's address on the Lab switch, the only NTP-synchronised machine
@@ -363,7 +363,7 @@ try {
         LabRoot                = $guestRoot
         DirectoryExtension     = @($directoryExtensions.Keys)
     }
-    # The lab network has no uplink, so normally there is no forwarder and the setting is left out altogether.
+    # Normally there is no forwarder (only dc-hybrid has one) and the setting is left out altogether.
     if ($null -ne $DnsForwarder) {
         $settings['DnsForwarder'] = $DnsForwarder.ToString()
     }

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -40,9 +41,6 @@ public static class SingleValuedAttributeChangeValidator
         if (contradicted.Count == 0)
             return null;
 
-        return ConnectedSystemExportResult.Failed(
-            $"This export carries more than one change for the single-valued attribute(s) {string.Join(", ", contradicted.Select(name => $"'{name}'"))}, " +
-            "so it does not say which value the object should hold, and JIM has not sent it. A single-valued attribute is exported as one change " +
-            "carrying the value it should hold; check whether more than one Attribute Flow writes to the attribute.");
+        return ConnectedSystemExportResult.Failed(ActivityMessage.ExportSingleValuedContradicted(contradicted));
     }
 }

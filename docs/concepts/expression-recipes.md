@@ -184,6 +184,21 @@ This creates three separate values: `SOFT101`, `SOFT201`, and `SEC101`.
 - Into a single-valued attribute, a list of more than one value flows nothing and the object is reported
 - `Join()` puts the values back together in the same order, so `Join(Split(x, "|"), "|")` gives back `x`
 
+### Keeping an Account Audit Log
+
+To record every account a person has been issued, in every Connected System, and keep the record after the accounts are deleted, create a multi-valued text attribute such as `Account Audit Log`, set it to the **Accumulate** contribution mode (see [Accumulating values from every contributor](attribute-priority.md#accumulating-values-from-every-contributor)), and map it from each Connected System's import Synchronisation Rule with one expression that builds an entry per identifier:
+
+```csharp
+Split("AD|" + cs["objectGUID"] + "|sAMAccountName=" + cs["sAMAccountName"] + ";AD|" + cs["objectGUID"] + "|userPrincipalName=" + cs["userPrincipalName"], ";")
+```
+
+Each entry names the system, the account's unique identifier and one of its names, so the log answers "which accounts has this person had, and what were they called?". A rename adds a new entry beside the old one, and deleting the account removes neither.
+
+**Notes:**
+
+- Give each Connected System its own prefix (`AD|`, `Entra|`), so entries from different systems never collide
+- Entries compare exactly; set the Attribute Flow's case normalisation if a source changes the case of a name
+
 ### Combining a List into a Single Value
 
 When exporting to a system that does not support multi-valued attributes, use `Join()` to combine them into one delimited value.

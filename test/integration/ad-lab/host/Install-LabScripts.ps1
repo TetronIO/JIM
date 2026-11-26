@@ -215,8 +215,8 @@ function Get-LabSettingsExample {
     param()
 
     # 10.99.0.1 is the host's own address on the Internal Lab switch. It serves NTP to the domain controllers
-    # (ntpServer) and is their gateway, which leads nowhere by design: the switch has no uplink. There is no
-    # dnsForwarder, because there is nothing to forward to.
+    # (ntpServer) and is their gateway, which NATs outbound traffic. There is no dnsForwarder, because these domain
+    # controllers resolve nothing outside their own forest (only dc-hybrid forwards, and it is not in settings.json).
     $settings = [ordered]@{
         isoPath                   = 'D:\media\WindowsServer2025.iso'
         cumulativeUpdateDirectory = 'D:\media\updates'

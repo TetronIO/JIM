@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 using JIM.Utilities;
 using Log = Serilog.Log;
 using ILogger = Serilog.ILogger;
@@ -101,6 +102,18 @@ public sealed class ActivityProgressThrottle : IAsyncDisposable
             _activity.MessageDetailJson = null;
         }
 
+        return NoteChangeAsync();
+    }
+
+    /// <summary>
+    /// Records the run's progress with a message the portal shows in the reader's language (#3039): the Activity's message
+    /// and the message's JSON are written together, so they never disagree.
+    /// </summary>
+    /// <param name="message">The Activity's new message.</param>
+    public Task ReportAsync(JimMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        _activity.MessageDetail = message;
         return NoteChangeAsync();
     }
 
@@ -231,7 +244,7 @@ public sealed class ActivityProgressThrottle : IAsyncDisposable
             _lastWriteAt = _time.GetUtcNow();
             var (changed, copies) = _phases.TakeUnwrittenPhaseChanges();
             phaseChanges = changed;
-            progress = new ActivityProgressWrite(_activity.Id, _activity.Message, _activity.ObjectsProcessed, _activity.ObjectsToProcess, copies);
+            progress = new ActivityProgressWrite(_activity.Id, _activity.Message, _activity.ObjectsProcessed, _activity.ObjectsToProcess, copies, _activity.MessageDetailJson);
         }
 
         try
@@ -242,7 +255,10 @@ public sealed class ActivityProgressThrottle : IAsyncDisposable
             }
             else
             {
-                await _syncRepo.UpdateActivityMessageAsync(_activity, progress.Message ?? string.Empty);
+                if (_activity.MessageDetail is { } detail)
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, detail);
+                else
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, progress.Message ?? string.Empty);
                 if (progress.Phases.Count > 0)
                     await _syncRepo.SaveActivityPhasesAsync(progress.Phases);
             }

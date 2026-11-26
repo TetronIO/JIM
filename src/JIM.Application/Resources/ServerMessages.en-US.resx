@@ -56,4 +56,10 @@
   <data name="MatchExpressionNonRepeatable" xml:space="preserve">
     <value>The expression calls {0}, which returns a different value each time it runs, so the same object would match a different identity, or none, on every synchronization.</value>
   </data>
+  <data name="AccumulatedValueRemovalSupplied" xml:space="preserve">
+    <value>'{0}' is still supplied by the Synchronization Rule '{1}' from the Connected System '{2}', so its next synchronization would add it back. Change the value at its source, or take the object out of the rule's scope, first. Nothing was removed.</value>
+  </data>
+  <data name="AccumulatedValueRemovalUndecidable" xml:space="preserve">
+    <value>JIM cannot tell whether the Synchronization Rule '{0}' from the Connected System '{1}' still supplies these values, so nothing was removed: {2}</value>
+  </data>
 </root>

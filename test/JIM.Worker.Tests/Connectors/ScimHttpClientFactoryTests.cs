@@ -185,11 +185,13 @@ public class ScimHttpClientFactoryTests
         using var response = new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable);
 
         var firstAttempt = policy.EvaluateResponse(response, attempt: 1, DateTimeOffset.UnixEpoch);
-        var exhausted = policy.EvaluateResponse(response, attempt: 2, DateTimeOffset.UnixEpoch);
+        var lastRetry = policy.EvaluateResponse(response, attempt: 2, DateTimeOffset.UnixEpoch);
+        var exhausted = policy.EvaluateResponse(response, attempt: 3, DateTimeOffset.UnixEpoch);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(firstAttempt.ShouldRetry, Is.True);
+            Assert.That(lastRetry.ShouldRetry, Is.True, "the second of the two configured retries is still owed.");
             // The configured delay plus the policy's default jitter band of up to 20%.
             Assert.That(firstAttempt.Delay, Is.InRange(TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(300)));
             Assert.That(exhausted.ShouldRetry, Is.False, "the configured maximum of two retries is respected.");

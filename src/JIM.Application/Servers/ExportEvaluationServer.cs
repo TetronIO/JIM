@@ -4,6 +4,7 @@
 using System.Globalization;
 using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
 using JIM.Application.Interfaces;
 using JIM.Application.Staging;
 using JIM.Application.UniqueValues;
@@ -13,6 +14,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -2017,7 +2019,7 @@ public class ExportEvaluationServer
                 catch (ScopingCriterionFailedException scopingEx)
                 {
                     // As on the fast path: nothing is staged for an object whose scope is unknown, and it is reported.
-                    result.ScopingFailures.Add(new ReferenceRecallScopingFailure(referencingMvo.Id, scopingEx.Message));
+                    result.ScopingFailures.Add(new ReferenceRecallScopingFailure(referencingMvo.Id, scopingEx.Message, scopingEx.DetailOf()));
                     continue;
                 }
 
@@ -2262,7 +2264,7 @@ public class ExportEvaluationServer
             }
             catch (ScopingCriterionFailedException scopingEx)
             {
-                result.ScopingFailures.Add(new ReferenceRecallScopingFailure(summary.Id, scopingEx.Message));
+                result.ScopingFailures.Add(new ReferenceRecallScopingFailure(summary.Id, scopingEx.Message, scopingEx.DetailOf()));
                 return false;
             }
         }
@@ -4200,6 +4202,9 @@ public class ExportEvaluationServer
     {
         var ambiguity = matchingFailure as MultipleMatchesException;
         var systemName = exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(CultureInfo.InvariantCulture);
+        var detail = ambiguity == null
+            ? ActivityMessage.ProvisioningMatchFailed(systemName, ActivityMessage.CauseOf(matchingFailure))
+            : ObjectMatchingServer.DescribeProvisioningAmbiguity(ambiguity, systemName, previewing);
         return new ProvisioningMatchError
         {
             MetaverseObjectId = mvo.Id,
@@ -4209,9 +4214,8 @@ public class ExportEvaluationServer
             ErrorType = ambiguity == null
                 ? ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed
                 : ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch,
-            Message = ambiguity == null
-                ? $"Before provisioning to '{systemName}': {matchingFailure.Message}"
-                : ObjectMatchingServer.DescribeProvisioningAmbiguity(ambiguity, systemName, previewing),
+            Message = detail.ToEnglish(),
+            MessageDetail = detail,
             Candidates = ambiguity?.Candidates ?? []
         };
     }

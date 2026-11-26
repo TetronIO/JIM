@@ -421,13 +421,13 @@ public partial class SyncRepository : ISyncRepository
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
-            return Task.FromResult(keysetResult);
+            return Task.FromResult(WithResolvedReferences(keysetResult));
         }
 
         var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        return Task.FromResult(BuildPagedResult(all, page, pageSize));
+        return Task.FromResult(WithResolvedReferences(BuildPagedResult(all, page, pageSize)));
     }
 
     public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
@@ -489,13 +489,13 @@ public partial class SyncRepository : ISyncRepository
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
-            return Task.FromResult(keysetResult);
+            return Task.FromResult(WithResolvedReferences(keysetResult));
         }
 
         var filtered = modified
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
+        return Task.FromResult(WithResolvedReferences(BuildPagedResult(filtered, page, pageSize)));
     }
 
     public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
@@ -1401,6 +1401,7 @@ public partial class SyncRepository : ISyncRepository
             .Where(id => _csos.ContainsKey(id))
             .Select(id => _csos[id])
             .ToList();
+        ResolveReferences(result);
         return Task.FromResult(result);
     }
 
@@ -2316,16 +2317,23 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
     {
         var result = _mvos.Values
-            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId && IsRecallable(av)))
             .Select(mvo => mvo.Id)
             .ToList();
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Mirrors the PostgreSQL selectors' exclusion of Accumulate attributes (#3059); a value loaded without its attribute
+    /// is treated as recallable, as the in-memory store has no attribute table to join to.
+    /// </summary>
+    private static bool IsRecallable(MetaverseObjectAttributeValue av) =>
+        av.Attribute?.ContributionMode != AttributeContributionMode.Accumulate;
+
     public virtual Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId)
     {
         var result = _mvos.Values
-            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId && IsRecallable(av)))
             .Where(mvo => !_csos.Values.Any(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == connectedSystemId))
             .Select(mvo => mvo.Id)
             .ToList();
@@ -2787,6 +2795,20 @@ public partial class SyncRepository : ISyncRepository
             }
         }
         return Task.FromResult(deleted);
+    }
+
+    public Task<IReadOnlyList<DeletedPendingExportSummary>> DeletePendingExportsOfDeletedObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var deleted = new List<DeletedPendingExportSummary>();
+        foreach (var csoId in connectedSystemObjectIds.Distinct())
+        {
+            if (!_pendingExportsByCsoId.TryGetValue(csoId, out var peId) || !_pendingExports.TryGetValue(peId, out var pe))
+                continue;
+
+            deleted.Add(new DeletedPendingExportSummary(pe.Id, csoId, pe.ChangeType, pe.Status));
+            RemovePe(pe);
+        }
+        return Task.FromResult<IReadOnlyList<DeletedPendingExportSummary>>(deleted);
     }
 
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
@@ -4040,6 +4062,21 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public virtual async Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int excludeConnectedSystemId, int maxValuesPerMetaverseObject)
+    {
+        var result = new Dictionary<Guid, List<ConnectedSystemObject>>();
+        foreach (var metaverseObjectId in metaverseObjectIds.Distinct())
+        {
+            var joined = (await GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
+                .Where(cso => cso.ConnectedSystemId != excludeConnectedSystemId)
+                .ToList();
+            if (joined.Sum(cso => cso.AttributeValues.Count) <= maxValuesPerMetaverseObject)
+                result[metaverseObjectId] = joined;
+        }
+        return result;
+    }
+
     // In-memory objects carry their full attribute value lists; the Postgres implementation's
     // lean include shape (external ID attribute values only) cannot be modelled here (see the
     // EF in-memory caveat in test/CLAUDE.md).
@@ -4591,6 +4628,37 @@ public partial class SyncRepository : ISyncRepository
             CurrentPage = page,
             PageSize = pageSize
         };
+    }
+
+    private PagedResultSet<ConnectedSystemObject> WithResolvedReferences(PagedResultSet<ConnectedSystemObject> page)
+    {
+        ResolveReferences(page.Results);
+        return page;
+    }
+
+    /// <summary>
+    /// What the production page loads give each reference value (<c>PopulateReferenceValuesAsync</c>): the Metaverse
+    /// Object, Object Type and creation time of the object it names, as they stand now. Drift detection and attribute flow
+    /// read which Metaverse Object a held member stands for from these; without them every held member looks unjoined,
+    /// a group looks empty, and its target's first synchronisation adds every member again.
+    /// </summary>
+    /// <remarks>
+    /// Set afresh on every load, as a production load reads them afresh, since the store hands out the same instances
+    /// each time and the object named may have joined, left or gone since. A value naming no object is left as it is.
+    /// </remarks>
+    private void ResolveReferences(IEnumerable<ConnectedSystemObject> csos)
+    {
+        foreach (var value in csos.Where(cso => cso.AttributeValues != null).SelectMany(cso => cso.AttributeValues))
+        {
+            var referenceId = value.ReferenceValueId ?? (value.ReferenceValue is { Id: var id } && id != Guid.Empty ? id : null);
+            if (referenceId is not { } named)
+                continue;
+
+            var referenced = _csos.GetValueOrDefault(named);
+            value.ResolvedReferenceMetaverseObjectId = referenced?.MetaverseObjectId;
+            value.ResolvedReferenceTypeId = referenced == null ? null : referenced.TypeId != 0 ? referenced.TypeId : referenced.Type?.Id;
+            value.ResolvedReferenceCreated = referenced?.Created;
+        }
     }
 
     /// <summary>

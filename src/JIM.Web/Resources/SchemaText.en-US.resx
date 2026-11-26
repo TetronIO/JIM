@@ -128,4 +128,7 @@
   <data name="AuxCancelRequested" xml:space="preserve">
     <value>Cancelation requested. What the run has already found is kept.</value>
   </data>
+  <data name="DataFlowPriorityTooltipNoOrder" xml:space="preserve">
+    <value>This Metaverse Attribute uses the {0} contribution mode: every Synchronization Rule that contributes to it adds its values, so the priority order is not used.</value>
+  </data>
 </root>

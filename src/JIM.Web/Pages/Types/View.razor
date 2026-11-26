@@ -88,6 +88,7 @@
                                  SelectedAttributeId="_object.SelectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
                                  SelectedAttributeProvenance="_object.SelectedAttributeProvenance" AttributeInspectorLoading="_object.AttributeInspectorLoading"
                                  OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync"
+                                 OnRemoveAttributeValue="@(_isAdministrator ? EventCallback.Factory.Create<ProvenanceValue>(this, RemoveAccumulatedValueAsync) : default)"
                                  CausalityExplorerHref="@(_isAdministrator ? $"/causality/metaverse-objects/{MetaverseObject.Id}" : null)" />
             }
             else if (_detailViewMode == "tabs")
@@ -898,6 +899,50 @@
     {
         await OpenAttributeInspectorAsync(attributeId);
         UpdateQueryString(("attr", attributeId.ToString()));
+    }
+
+    /// <summary>
+    /// Removes one value of an Accumulate attribute from the inspector (#3059), once the reader confirms. A value a
+    /// Synchronisation Rule still supplies is refused, and the refusal, naming the rule, is shown as it is.
+    /// </summary>
+    private async Task RemoveAccumulatedValueAsync(ProvenanceValue value)
+    {
+        var state = _object;
+        if (MetaverseObject == null || state.SelectedAttributeProvenance is not { } provenance)
+            return;
+
+        var attributeName = provenance.AttributeName;
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = MetaverseText.TvRemoveValueTitle,
+            MarkupMessage = InlineCode.Format(MetaverseText.TvRemoveValueQuestion, value.DisplayValue, attributeName),
+            YesText = MetaverseText.TvRemoveValueConfirm,
+            CancelText = CommonText.Cancel
+        });
+        if (confirmed != true)
+            return;
+
+        AttributeValueRemovalResult result;
+        using (var jim = JimFactory.Create())
+        {
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var current = await jim.Metaverse.GetMetaverseObjectAsync(state.ObjectId);
+            if (current == null || user == null)
+                return;
+            result = await jim.Metaverse.RemoveAccumulatedValuesAsync(current, provenance.AttributeId, [value.Id], [], user);
+        }
+
+        if (result.Outcome != AttributeValueRemovalOutcome.Removed)
+        {
+            Snackbar.Add(result.Refusal.Show(), Severity.Warning);
+            return;
+        }
+
+        Snackbar.Add(InlineCode.Format(MetaverseText.TvValueRemoved, value.DisplayValue, attributeName), Severity.Success);
+        MetaverseObject.AttributeValues.RemoveAll(av => av.Id == value.Id);
+        state.ProvenanceLoaded = false;
+        await EnsureProvenanceLoadedAsync();
+        await OpenAttributeInspectorAsync(provenance.AttributeId);
     }
 
     private Task OnCloseInspectorAsync()

@@ -22,6 +22,9 @@ public class MetaverseAttributeProvenance
 
     public AttributePlurality AttributePlurality { get; set; }
 
+    /// <summary>How the attribute combines its contributors' values (#3059).</summary>
+    public AttributeContributionMode ContributionMode { get; set; }
+
     /// <summary>Current values, capped for multi-valued attributes; see <see cref="CurrentValueTotalCount"/>.</summary>
     public List<ProvenanceValue> CurrentValues { get; set; } = new();
 

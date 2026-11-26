@@ -7,6 +7,7 @@ using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -114,6 +115,13 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
 
             Assert.That(item.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet, Is.True, "a corrected value is not an error");
             Assert.That(item.SyncOutcomes.Select(o => o.OutcomeType), Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated));
+
+            // The outcome's sentence is stored as a message beside its English, so the portal reads it in the viewer's
+            // language (#3094); the English the REST API returns is unchanged.
+            var remediated = item.SyncOutcomes.Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated);
+            Assert.That(remediated.DetailMessageDetail?.Key, Is.EqualTo("CollisionRemediated"));
+            Assert.That(remediated.DetailMessage, Is.EqualTo(remediated.DetailMessageDetail?.ToEnglish()));
+            Assert.That(remediated.DetailMessage, Does.Contain("joe.bloggs").And.Contain("joe.bloggs1"));
 
             Assert.That(logEvents.Where(e => e.Level >= LogEventLevel.Error).Select(e => e.RenderMessage()), Is.Empty, "a handled rejection is logged below Error");
             Assert.That(logEvents.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains("corrected")), Is.True);
@@ -378,6 +386,9 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(assignment.NeedsDecisionActivityRunProfileExecutionItemId, Is.EqualTo(item.Id));
             Assert.That(SyncRepo.PendingExports[export.Id].Status, Is.EqualTo(PendingExportStatus.Parked));
             Assert.That(SyncRepo.PendingExports[export.Id].ErrorCount, Is.Zero);
+            Assert.That(SyncRepo.PendingExports[export.Id].LastErrorMessageDetail?.Key, Is.EqualTo("CollisionNeedsDecision"),
+                "JIM's own wording is kept as a message, so the portal reads it in the viewer's language (#3094)");
+            Assert.That(SyncRepo.PendingExports[export.Id].LastErrorMessage, Is.EqualTo(item.ErrorMessage));
             Assert.That(item.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved));
             Assert.That(item.ObjectChangeType, Is.EqualTo(ObjectChangeType.PendingExport), "a held export wrote nothing; it is still queued");
             Assert.That(item.SyncOutcomes.Select(o => o.OutcomeType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.Exported),

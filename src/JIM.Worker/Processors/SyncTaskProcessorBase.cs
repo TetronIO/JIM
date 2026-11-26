@@ -20,6 +20,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
@@ -85,6 +86,11 @@ public abstract class SyncTaskProcessorBase
     // load can otherwise return distinct instances of the same row) and ClearPageTrackingState below for
     // its lifetime, which must track the EF change tracker's exactly.
     protected readonly MetaverseObjectPageIdentityMap _mvoIdentityMap = new();
+
+    // Contributor re-election's read of a Metaverse Object's joined Connected System Objects, batched a page at a time
+    // once a page has several to re-elect (#3059). Started per page by BeginReElectionPage, alongside the change
+    // tracker's lifetime, since the objects it holds are tracked.
+    private readonly ReElectionSurvivorLookup _reElectionSurvivors;
 
     // Batch collections for deferred MVO persistence and export evaluation
     protected readonly List<MetaverseObject> _pendingMvoCreates = [];
@@ -616,6 +622,12 @@ public abstract class SyncTaskProcessorBase
         _syncEngine = syncEngine;
         _syncServer = syncServer;
         _syncRepo = syncRepository;
+        // The bulk read leaves out this system's own objects, which re-election never takes a survivor from (the leaver's
+        // whole system is excluded), and any object whose others hold more than the value budget, which is read singly.
+        _reElectionSurvivors = new ReElectionSurvivorLookup(
+            syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync,
+            metaverseObjectIds => syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+                metaverseObjectIds, connectedSystem.Id, ReElectionSurvivorLookup.MaxValuesPerObjectInBatch));
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _activity = activity;
@@ -724,12 +736,8 @@ public abstract class SyncTaskProcessorBase
             return;
         }
 
-        foreach (var warning in session.GetRunWarnings())
-        {
-            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-                ? warning
-                : $"{_activity.WarningMessage}\n{warning}";
-        }
+        foreach (var warning in session.GetRunWarningMessages())
+            ActivityMessage.AddWarning(_activity, warning);
 
         // Disposes the host as well: the session owns it once created.
         await session.DisposeAsync();
@@ -1890,7 +1898,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
-            runProfileExecutionItem.ErrorMessage = BuildExpressionEvaluationErrorMessage(expressionEx);
+            ActivityMessage.SetError(runProfileExecutionItem, ActivityMessage.ExpressionEvaluationFailed(expressionEx));
             runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
@@ -1915,7 +1923,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
-            runProfileExecutionItem.ErrorMessage = missingInputEx.DescribeForAdministrator();
+            ActivityMessage.SetError(runProfileExecutionItem, missingInputEx.Describe());
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             // See the identical guard in the ExpressionEvaluationError catch above: the MVO is the page's
@@ -1986,6 +1994,7 @@ public abstract class SyncTaskProcessorBase
 
         mvo.PendingAttributeValueAdditions.Clear();
         mvo.PendingAttributeValueRemovals.Clear();
+        mvo.PendingMergeSupplies.Clear();
     }
 
     /// <summary>
@@ -2060,28 +2069,12 @@ public abstract class SyncTaskProcessorBase
     {
         var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
         runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
-        runProfileExecutionItem.ErrorMessage = $"{scopingEx.Message} Nothing was exported for Metaverse Object {mvo.Id}.";
+        ActivityMessage.SetError(runProfileExecutionItem, ActivityMessage.Create(nameof(ActivityMessages.ExportScopingFailed), ActivityMessage.CauseOf(scopingEx), mvo.Id.ToString()));
         _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
         Log.Warning("EvaluateOutboundExportsAsync: Export scope of MVO {MvoId} could not be decided: {Message}",
             mvo.Id, LogSanitiser.Sanitise(scopingEx.Message));
     }
-
-    private static string BuildExpressionEvaluationErrorMessage(SyncExpressionEvaluationException expressionEx, Guid? metaverseObjectId = null)
-    {
-        var attribute = expressionEx.TargetAttributeName ?? "(unknown)";
-        var expression = LogSanitiser.Sanitise(expressionEx.Expression) ?? "(none)";
-        var reason = expressionEx.InnerException?.Message ?? expressionEx.Message;
-        var subject = metaverseObjectId.HasValue ? $" for Metaverse Object {metaverseObjectId.Value}" : string.Empty;
-        return $"Expression evaluation failed{subject} flowing to attribute '{attribute}'{DescribeDerivedHost(expressionEx.SyncRuleName)}: {reason}. Expression: {expression}";
-    }
-
-    /// <summary>
-    /// Names the Synchronisation Rule hosting a Metaverse-Derived Attribute Flow (#1750) in an error message, so the
-    /// administrator knows which rule to open; empty for an ordinary flow, whose message is unchanged.
-    /// </summary>
-    private static string DescribeDerivedHost(string? syncRuleName) =>
-        syncRuleName == null ? string.Empty : $" (derived by Synchronisation Rule '{syncRuleName}')";
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
@@ -2729,6 +2722,11 @@ public abstract class SyncTaskProcessorBase
             if (_attributePriorityContext != null)
                 _syncEngine.RecallOrphanedContributions(connectedSystemObject, _attributePriorityContext);
 
+            // A Merge value (#3059) one of this object's rules withdrew while another of its rules supplies it passes to
+            // that rule now, whichever order they flowed in; the withdrawal re-election below cannot, since it looks only
+            // beyond this object's Connected System.
+            SyncEngine.CollapseMergeRetags(connectedSystemObject.MetaverseObject);
+
             // Withdrawal re-election (#91): an authoritative source withdrawing a value in place hands the
             // attribute to the next contributor in the same run, rather than leaving it blank until the survivor's
             // system next synchronises. Explicit "Null is a value" assertions write a marker into the additions, so
@@ -2742,15 +2740,19 @@ public abstract class SyncTaskProcessorBase
                     connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions,
                     connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals);
 
+                // A Merge attribute (#3059) is re-elected on any withdrawal, not only a clear: a value this object stopped
+                // supplying stays, credited to its survivor, while another Connected System still supplies it.
                 var withdrawnValues = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals
-                    .Where(av => clearedAttributeIds.Contains(av.AttributeId))
+                    .Where(av => clearedAttributeIds.Contains(av.AttributeId) ||
+                                 av.Attribute?.ContributionMode == AttributeContributionMode.Merge)
                     .ToList();
 
                 if (withdrawnValues.Count > 0)
                 {
                     try
                     {
-                        generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
+                        using (Diagnostics.Sync.StartSpan("WithdrawalReElection"))
+                            generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
                     }
                     catch (ScopingCriterionFailedException)
                     {
@@ -3107,7 +3109,7 @@ public abstract class SyncTaskProcessorBase
             errorRpei.ConnectedSystemObjectId = cso.Id;
             var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: false, targetSystemName: null);
             errorRpei.ErrorType = errorType;
-            errorRpei.ErrorMessage = errorMessage;
+            ActivityMessage.SetError(errorRpei, errorMessage);
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
     }
@@ -3433,11 +3435,11 @@ public abstract class SyncTaskProcessorBase
 
                     case GenerationOutcomeKind.Exhausted:
                     case GenerationOutcomeKind.NoBaseValue:
-                        AddGeneratedValueErrorRpei(cso, ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted, outcome.FailureMessage);
+                        AddGeneratedValueErrorRpei(cso, ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted, outcome.FailureMessage, outcome.FailureDetail);
                         break;
 
                     case GenerationOutcomeKind.WidthExceeded:
-                        AddGeneratedValueErrorRpei(cso, ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded, outcome.FailureMessage);
+                        AddGeneratedValueErrorRpei(cso, ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded, outcome.FailureMessage, outcome.FailureDetail);
                         break;
 
                 }
@@ -3459,15 +3461,22 @@ public abstract class SyncTaskProcessorBase
     /// error RPEI, not a failure on the object's change RPEI, so the object's other attributes still
     /// synchronise and both the change and the error are individually visible.
     /// </summary>
-    private void AddGeneratedValueErrorRpei(ConnectedSystemObject cso, ActivityRunProfileExecutionItemErrorType errorType, string? message)
+    private void AddGeneratedValueErrorRpei(ConnectedSystemObject cso, ActivityRunProfileExecutionItemErrorType errorType, string? message, JimMessage? detail = null)
     {
         var errorRpei = _activity.PrepareRunProfileExecutionItem();
         errorRpei.ConnectedSystemObject = cso;
         errorRpei.ConnectedSystemObjectId = cso.Id;
         errorRpei.ErrorType = errorType;
         errorRpei.ErrorMessage = message;
+        errorRpei.ErrorMessageDetailJson = DetailThatSays(detail, message);
         _activity.RunProfileExecutionItems.Add(errorRpei);
     }
+
+    /// <summary>
+    /// Serialises <paramref name="detail"/> for an error stored beside <paramref name="english"/>, only where it says exactly that.
+    /// </summary>
+    private static string? DetailThatSays(JimMessage? detail, string? english) =>
+        detail != null && detail.ToEnglish() == english ? MessageJson.Serialise(detail) : null;
 
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package G) page-flush lifecycle reconciliation (plan:
@@ -3574,8 +3583,8 @@ public abstract class SyncTaskProcessorBase
         foreach (var loser in losers)
         {
             var mvoId = ((MetaverseObject)loser.Request.CallerState!).Id;
-            var message = $"{loser.Request.AttributeName}'s generated value \"{loser.Value}\" was issued to another object " +
-                "at the same moment as this one; it will be regenerated the next time this object synchronises.";
+            var lostRace = ActivityMessage.GeneratedValueLostRace(loser.Request.AttributeName, loser.Value);
+            var message = lostRace.ToEnglish();
 
             Log.Error("CommitGeneratedValueAssignmentsAsync: {Message} Metaverse Object {MvoId}.", message, mvoId);
 
@@ -3588,6 +3597,7 @@ public abstract class SyncTaskProcessorBase
 
             errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
             errorRpei.ErrorMessage = message;
+            errorRpei.ErrorMessageDetailJson = DetailThatSays(lostRace, message);
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 
@@ -3801,12 +3811,12 @@ public abstract class SyncTaskProcessorBase
                 case GenerationOutcomeKind.Exhausted:
                 case GenerationOutcomeKind.NoBaseValue:
                     pendingExport.AttributeValueChanges.Remove(change);
-                    AddExportGeneratedValueErrorRpei(pendingExport, ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted, outcome.FailureMessage);
+                    AddExportGeneratedValueErrorRpei(pendingExport, ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted, outcome.FailureMessage, outcome.FailureDetail);
                     break;
 
                 case GenerationOutcomeKind.WidthExceeded:
                     pendingExport.AttributeValueChanges.Remove(change);
-                    AddExportGeneratedValueErrorRpei(pendingExport, ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded, outcome.FailureMessage);
+                    AddExportGeneratedValueErrorRpei(pendingExport, ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded, outcome.FailureMessage, outcome.FailureDetail);
                     break;
 
             }
@@ -3877,13 +3887,14 @@ public abstract class SyncTaskProcessorBase
     /// individually visible. Attaches the Pending Export's own Connected System Object id, already known at
     /// resolve time (unlike the import side, which resolves it from the source Connected System Object).
     /// </summary>
-    private void AddExportGeneratedValueErrorRpei(PendingExport pendingExport, ActivityRunProfileExecutionItemErrorType errorType, string? message)
+    private void AddExportGeneratedValueErrorRpei(PendingExport pendingExport, ActivityRunProfileExecutionItemErrorType errorType, string? message, JimMessage? detail = null)
     {
         var errorRpei = _activity.PrepareRunProfileExecutionItem();
         if (pendingExport.ConnectedSystemObjectId.HasValue)
             errorRpei.ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId;
         errorRpei.ErrorType = errorType;
         errorRpei.ErrorMessage = message;
+        errorRpei.ErrorMessageDetailJson = DetailThatSays(detail, message);
         _activity.RunProfileExecutionItems.Add(errorRpei);
     }
 
@@ -3908,11 +3919,11 @@ public abstract class SyncTaskProcessorBase
         foreach (var loser in losers)
         {
             var pendingExport = (PendingExport)loser.Request.CallerState!;
-            var message = $"{loser.Request.AttributeName}'s generated value \"{loser.Value}\" was issued to another object " +
-                "at the same moment as this one; it will be regenerated the next time this object synchronises.";
+            var lostRace = ActivityMessage.GeneratedValueLostRace(loser.Request.AttributeName, loser.Value);
+            var message = lostRace.ToEnglish();
 
             Log.Error("CommitExportGeneratedValueAssignmentsAsync: {Message} Connected System Object {CsoId}.", message, pendingExport.ConnectedSystemObjectId);
-            AddExportGeneratedValueErrorRpei(pendingExport, ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved, message);
+            AddExportGeneratedValueErrorRpei(pendingExport, ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved, message, lostRace);
         }
 
         _pendingExportGeneratedValueAssignmentsToCommit.Clear();
@@ -3968,7 +3979,7 @@ public abstract class SyncTaskProcessorBase
                 // before any pending exports were collected, so no partial export state is persisted.
                 var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
                 runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
-                runProfileExecutionItem.ErrorMessage = BuildExpressionEvaluationErrorMessage(expressionEx, mvo.Id);
+                ActivityMessage.SetError(runProfileExecutionItem, ActivityMessage.ExpressionEvaluationFailed(expressionEx, mvo.Id));
                 runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
                 _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
@@ -3992,9 +4003,7 @@ public abstract class SyncTaskProcessorBase
                 // was collected, so nothing partial is staged for this object; every other object still exports.
                 var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
                 runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
-                runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
-                    $" No Pending Export was generated for Metaverse Object {mvo.Id} on '{_connectedSystem.Name}'. Supply the missing value, " +
-                    "handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+                ActivityMessage.SetError(runProfileExecutionItem, ActivityMessage.ExportMissingInput(missingInputEx, mvo.Id, _connectedSystem.Name));
                 _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
                 Log.Warning("EvaluateOutboundExportsAsync: Expression not evaluated for MVO {MvoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
@@ -4024,7 +4033,7 @@ public abstract class SyncTaskProcessorBase
                 var errorRpei = _activity.PrepareRunProfileExecutionItem();
                 var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: true, targetSystemName: _connectedSystem.Name);
                 errorRpei.ErrorType = errorType;
-                errorRpei.ErrorMessage = errorMessage;
+                ActivityMessage.SetError(errorRpei, errorMessage);
                 _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
@@ -4565,13 +4574,7 @@ public abstract class SyncTaskProcessorBase
         var rpei = _activity.PrepareRunProfileExecutionItem();
         rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject;
         rpei.ConnectedSystemObjectId = conflict.ExistingConnectedSystemObjectId;
-        rpei.ErrorMessage =
-            $"Metaverse Object {conflict.MetaverseObjectId}: Synchronisation Rule '{conflict.SyncRuleName}' targets Connected System " +
-            $"Object Type '{conflict.TargetObjectTypeName}' in '{_connectedSystem.Name}', but this Metaverse Object is already " +
-            $"represented there by a '{conflict.ExistingObjectTypeName}' object. A Metaverse Object can have only one Connected " +
-            "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
-            "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
-            "Object Types their own Connected System over the same target.";
+        ActivityMessage.SetError(rpei, conflict.Describe(_connectedSystem.Name));
         return rpei;
     }
 
@@ -4587,7 +4590,7 @@ public abstract class SyncTaskProcessorBase
         rpei.DisplayNameSnapshot = mvo.NameOrId;
         rpei.ObjectTypeSnapshot = mvo.Type?.Name;
         rpei.ConnectedSystemObjectId = overlap.ExistingConnectedSystemObjectId;
-        rpei.ErrorMessage = overlap.DescribeForAdministrator();
+        ActivityMessage.SetError(rpei, overlap.Describe());
         return rpei;
     }
 
@@ -4600,7 +4603,10 @@ public abstract class SyncTaskProcessorBase
     {
         var rpei = _activity.PrepareRunProfileExecutionItem();
         rpei.ErrorType = error.ErrorType;
-        rpei.ErrorMessage = error.Message;
+        if (error.MessageDetail is { } errorDetail)
+            rpei.ErrorMessageDetail = errorDetail;
+        else
+            rpei.ErrorMessage = error.Message;
         rpei.MetaverseObjectId = mvo.Id;
         rpei.DisplayNameSnapshot = mvo.NameOrId;
         rpei.ObjectTypeSnapshot = mvo.Type?.Name;
@@ -5176,7 +5182,7 @@ public abstract class SyncTaskProcessorBase
                 // The counters carry the reference values; the message names the objects, which the counters no longer do.
                 _activity.ObjectsProcessed = resolvedCount;
                 await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Loading batch {batchIndex + 1} of {totalBatches} ({totalCrossPagesToResolve:N0} objects in all)");
+                    ActivityMessage.Create(nameof(ActivityMessages.ProgressLoadingBatch), ActivityMessage.Plain(batchIndex + 1), ActivityMessage.Plain(totalBatches), totalCrossPagesToResolve));
 
                 // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
                 var csoIds = batch.Select(x => x.CsoId).ToList();
@@ -5378,7 +5384,7 @@ public abstract class SyncTaskProcessorBase
                     resolvedCount += progressUnits[unitIndex];
 
                 _activity.ObjectsProcessed = resolvedCount;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.ProgressSavingChanges)));
 
                 // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
                 // subsequent SaveChangesAsync calls (same pattern as per-page processing).
@@ -6577,7 +6583,7 @@ public abstract class SyncTaskProcessorBase
                     {
                         var failureItem = _activity.PrepareRunProfileExecutionItem();
                         failureItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
-                        failureItem.ErrorMessage = failure.DescribeForAdministrator();
+                        ActivityMessage.SetError(failureItem, failure.Describe());
                         failureItem.DisplayNameSnapshot = recallResult.ReferencingObjectDisplayNames.GetValueOrDefault(failure.MetaverseObjectId);
                         _activity.RunProfileExecutionItems.Add(failureItem);
                         Log.Warning("FlushPendingMvoDeletionsAsync: Reference recall skipped MVO {MvoId}; its export scope could not be decided: {Message}",
@@ -7366,7 +7372,7 @@ public abstract class SyncTaskProcessorBase
         // Rules that find different Metaverse Objects: JIM never chooses between them, so nothing is joined or projected.
         var disagreement = ObjectMatchingServer.DescribeImportRuleDisagreement(matches);
         if (disagreement != null)
-            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.Message)
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.MessageDetail)
             {
                 MatchCandidates = disagreement.Candidates
             };
@@ -7472,7 +7478,7 @@ public abstract class SyncTaskProcessorBase
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {
             // The candidates are recorded with the item, so the message describes the collision rather than listing ids.
-            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguity(ex))
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguityMessage(ex))
             {
                 MatchCandidates = ex.Candidates
             };
@@ -7896,91 +7902,21 @@ public abstract class SyncTaskProcessorBase
     /// <param name="error">The error the flow recorded.</param>
     /// <param name="exporting">True when describing an export, which generates no Pending Export rather than flowing no value.</param>
     /// <param name="targetSystemName">The Connected System being exported to, named in the message; null when importing.</param>
-    private static (ActivityRunProfileExecutionItemErrorType ErrorType, string Message) DescribeAttributeFlowError(
+    private static (ActivityRunProfileExecutionItemErrorType ErrorType, JimMessage Message) DescribeAttributeFlowError(
         AttributeFlowError error, bool exporting, string? targetSystemName)
     {
-        var target = exporting && targetSystemName != null
-            ? $"'{error.TargetAttributeName}' on '{targetSystemName}'"
-            : $"'{error.TargetAttributeName}'{DescribeDerivedHost(error.SyncRuleName)}";
-        var outcome = exporting ? "no Pending Export was generated for this attribute" : "no value was flowed for this attribute";
-
-        switch (error.Kind)
+        var errorType = error.Kind switch
         {
-            case AttributeFlowErrorKind.ExpressionMissingInput:
-                return (ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput,
-                    $"The Expression for target attribute {target} was not evaluated because this object has no value for " +
-                    $"{string.Join(", ", error.MissingInputs)}, so {outcome}; the object's other attributes were unaffected. " +
-                    "Missing Input Behaviour is set to Fail this mapping on this Attribute Flow. Supply the missing value, " +
-                    "handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.");
+            AttributeFlowErrorKind.ExpressionMissingInput => ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput,
+            AttributeFlowErrorKind.GeneratedBaseNotSingleValue => ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+            AttributeFlowErrorKind.ExpressionResultNotConvertible => ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+            AttributeFlowErrorKind.DatesCollapseAtTargetResolution => ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution,
+            AttributeFlowErrorKind.CredentialAttributeTarget => ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported,
+            _ => ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued
+        };
 
-            case AttributeFlowErrorKind.GeneratedBaseNotSingleValue:
-                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
-                    $"The base Expression for the generated value targeting {target} returned more than one value, so {outcome}; " +
-                    "the object's other attributes were unaffected. A generated value's base Expression must produce a single " +
-                    $"text value, not an array: '{error.Expression}'.");
-
-            case AttributeFlowErrorKind.ExpressionResultNotConvertible:
-                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
-                    $"The Expression for target attribute {target} returned '{error.Value}', which a {error.TargetAttributeType} " +
-                    $"attribute cannot hold, so {outcome}; the attribute keeps its current value and the object's other attributes " +
-                    $"were unaffected. Change the Expression so it returns a {error.TargetAttributeType} value: '{error.Expression}'.");
-
-            case AttributeFlowErrorKind.ExpressionResultMultiValued when error.SourceAttributeName != null:
-                // The Expression handed on every value of one attribute (#2053): name it, and how to choose one.
-                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
-                    $"'{error.SourceAttributeName}' has {error.ValueCount} values but target attribute {target} is single-valued, " +
-                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Use Where, " +
-                    $"Join, Count, Min or Max in the Expression to say which value it should have, or map it to a multi-valued attribute: '{error.Expression}'.");
-
-            case AttributeFlowErrorKind.ExpressionResultMultiValued:
-                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
-                    $"The Expression for target attribute {target} returned {error.ValueCount} values but the attribute is single-valued, " +
-                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Change the " +
-                    $"Expression so it returns one value, or map it to a multi-valued attribute: '{error.Expression}'.");
-
-            case AttributeFlowErrorKind.DatesCollapseAtTargetResolution:
-                // Not a failure: the attribute still exports, at the Connected System's resolution (#2153, D2).
-                var collapsedSource = error.SourceAttributeName != null
-                    ? $"'{error.SourceAttributeName}' holds {error.ValueCount} dates"
-                    : $"The Expression for target attribute {target} returned {error.ValueCount} dates";
-                return (ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution,
-                    $"{collapsedSource}, but target attribute {target} holds dates to {DescribeDateTimeResolution(error.TargetDateTimeResolution)}, " +
-                    $"where some of them become the same date, so it is sent {error.TargetValueCount} distinct values. The attribute and the " +
-                    "object's other attributes still export. If the dates must stay apart, keep them further apart than the Connected " +
-                    "System's resolution, or check the attribute's Date Resolution on the Connected System's Schema tab.");
-
-            case AttributeFlowErrorKind.CredentialAttributeTarget:
-                return (ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported,
-                    $"Target attribute {target} holds credentials, so JIM never exports it through an Attribute Flow and {outcome}; " +
-                    "the object's other attributes were unaffected. Remove the Attribute Flow targeting it. JIM delivers passwords only " +
-                    "through Password Synchronisation, on Connected Systems whose Connector supports it.");
-
-            case AttributeFlowErrorKind.MultiValuedToSingleValued:
-            default:
-                var source = exporting
-                    ? $"Multi-valued Metaverse source attribute '{error.SourceAttributeName}'"
-                    : $"Multi-valued source attribute '{error.SourceAttributeName}'";
-                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
-                    $"{source} has {error.ValueCount} values but target attribute {target} is single-valued, so {outcome}. " +
-                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.");
-        }
+        return (errorType, ActivityMessage.DescribeAttributeFlowError(error, exporting, targetSystemName));
     }
-
-    /// <summary>
-    /// A date resolution in words, for an execution item's message: "the second", "the millisecond".
-    /// </summary>
-    private static string DescribeDateTimeResolution(DateTimeResolution? resolution) => resolution switch
-    {
-        DateTimeResolution.TenMicroseconds => "ten microseconds",
-        DateTimeResolution.HundredMicroseconds => "a hundred microseconds",
-        DateTimeResolution.Millisecond => "the millisecond",
-        DateTimeResolution.TenMilliseconds => "ten milliseconds",
-        DateTimeResolution.HundredMilliseconds => "a hundred milliseconds",
-        DateTimeResolution.Second => "the second",
-        DateTimeResolution.Minute => "the minute",
-        DateTimeResolution.Day => "the day",
-        _ => "the microsecond"
-    };
 
     /// <summary>
     /// Does not perform any delta processing. This is for MVO create scenarios where there are not MVO attribute values already.
@@ -7999,6 +7935,20 @@ public abstract class SyncTaskProcessorBase
 
         return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, _attributePriorityContext,
             cannotResolveThisRun);
+    }
+
+    /// <summary>
+    /// Starts a synchronisation page for contributor re-election's joined-object reads (#3059): the objects of the page
+    /// predicted to withdraw a Merge value (<see cref="SyncEngine.MayWithdrawMergeValues"/>) have their joined objects read
+    /// in one query when the first of them is re-elected. Call it once the page and its Metaverse Objects are loaded.
+    /// </summary>
+    protected void BeginReElectionPage(IEnumerable<ConnectedSystemObject> page, IReadOnlyCollection<SyncRule> activeSyncRules)
+    {
+        var importRules = activeSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.ConnectedSystemId == _connectedSystem.Id).ToList();
+        _reElectionSurvivors.BeginPage(page
+            .Where(cso => cso.MetaverseObject != null
+                          && SyncEngine.MayWithdrawMergeValues(cso, importRules.Where(rule => rule.ConnectedSystemObjectTypeId == cso.TypeId)))
+            .Select(cso => cso.MetaverseObject!.Id));
     }
 
     /// <summary>
@@ -8051,7 +8001,8 @@ public abstract class SyncTaskProcessorBase
                 : ContributorReElectionService.AnsweringFrom(survivorScopeAnswers, _syncServer.IsCsoInScopeForImportRule),
             _objectTypes,
             _expressionEvaluator,
-            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo));
+            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo),
+            readJoinedObjects: _reElectionSurvivors.GetAsync);
     }
 
     /// <summary>
@@ -8208,7 +8159,7 @@ public abstract class SyncTaskProcessorBase
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && _attributePriorityContext != null && mvo.Type != null &&
                     await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
                         mvo,
-                        mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id).ToList(),
+                        mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id && ContributedValueRecall.IsRecallable(av)).ToList(),
                         ContributorRecallScope.ForObsoletingConnectedSystemObject(connectedSystemObject),
                         _attributePriorityContext,
                         _syncRepo,
@@ -8371,7 +8322,8 @@ public abstract class SyncTaskProcessorBase
         SyncRule? scopingSyncRule)
     {
         var mvo = connectedSystemObject.MetaverseObject!;
-        var contributed = mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id).ToList();
+        // An Accumulate attribute's values are not withdrawn (#3059).
+        var contributed = mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id && ContributedValueRecall.IsRecallable(av)).ToList();
         if (!connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion || contributed.Count == 0)
         {
             Log.Debug("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of every import rule's scope, but an export rule made its join and " +
@@ -8451,8 +8403,9 @@ public abstract class SyncTaskProcessorBase
         List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
         List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null;
 
+        // An Accumulate attribute's values stay when the object leaves scope (#3059).
         var contributedAttributes = mvo.AttributeValues
-            .Where(av => av.ContributedBySystemId == _connectedSystem.Id)
+            .Where(av => av.ContributedBySystemId == _connectedSystem.Id && ContributedValueRecall.IsRecallable(av))
             .ToList();
 
         foreach (var attributeValue in contributedAttributes)
@@ -8913,12 +8866,6 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Opens the message of an error that stopped Drift Detection checking an object (#2180), so it reads as the reason
-    /// no correction was staged rather than as an export that failed.
-    /// </summary>
-    private const string DriftNotCheckedPrefix = "Drift Detection could not check this object, so no correction was staged. ";
-
-    /// <summary>
     /// Evaluates one object's drift and stages its corrections for the page flush.
     /// </summary>
     /// <param name="cso">The Connected System Object that was just processed.</param>
@@ -8970,7 +8917,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = cso;
             runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
-            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + scopingEx.Message;
+            ActivityMessage.SetError(runProfileExecutionItem, ActivityMessage.DriftNotChecked(ActivityMessage.CauseOf(scopingEx)));
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             Log.Warning("EvaluateDriftAndEnforceState: Enforcing rule scope for CSO {CsoId} could not be decided: {Message}",
@@ -8987,7 +8934,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = cso;
             runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
-            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + BuildExpressionEvaluationErrorMessage(expressionEx, targetMvo.Id);
+            ActivityMessage.SetError(runProfileExecutionItem, ActivityMessage.DriftNotChecked(ActivityMessage.ExpressionEvaluationFailed(expressionEx, targetMvo.Id)));
             runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
@@ -9004,7 +8951,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = cso;
             runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
-            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + missingInputEx.DescribeForAdministrator();
+            ActivityMessage.SetError(runProfileExecutionItem, ActivityMessage.DriftNotChecked(missingInputEx.Describe()));
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             Log.Warning("EvaluateDriftAndEnforceState: Expression not evaluated checking CSO {CsoId} for drift; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
@@ -9023,7 +8970,7 @@ public abstract class SyncTaskProcessorBase
             errorRpei.ConnectedSystemObjectId = cso.Id;
             var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: true, targetSystemName: _connectedSystem.Name);
             errorRpei.ErrorType = errorType;
-            errorRpei.ErrorMessage = errorMessage;
+            ActivityMessage.SetError(errorRpei, errorMessage);
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 

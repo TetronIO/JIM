@@ -2214,8 +2214,9 @@ public class SyncPreviewServer
 
         if (csoType is { RemoveContributedAttributesOnObsoletion: true } && !skipRecallForImmediateDeletion && workingMvo.Type != null)
         {
+            // As the real disconnect: an Accumulate attribute's values stay (#3059).
             var contributedAttributes = workingMvo.AttributeValues
-                .Where(av => av.ContributedBySystemId == context.ConnectedSystemId)
+                .Where(av => av.ContributedBySystemId == context.ConnectedSystemId && ContributedValueRecall.IsRecallable(av))
                 .ToList();
             foreach (var attributeValue in contributedAttributes)
                 workingMvo.PendingAttributeValueRemovals.Add(attributeValue);
@@ -2819,7 +2820,7 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.AmbiguousMatch,
-                    Detail = ObjectMatchingServer.DescribeAmbiguity(ex, previewing: true),
+                    LocalisedDetail = ObjectMatchingServer.DescribeAmbiguityMessage(ex, previewing: true),
                     ConnectedSystemId = cso.ConnectedSystemId,
                     MatchCandidates = [.. ex.Candidates]
                 });
@@ -2847,7 +2848,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.AmbiguousMatch,
-                Detail = disagreement.Message,
+                LocalisedDetail = disagreement.MessageDetail,
                 ConnectedSystemId = cso.ConnectedSystemId,
                 MatchCandidates = [.. disagreement.Candidates]
             });

@@ -7,6 +7,8 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
@@ -275,6 +277,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             BuiltIn = a.BuiltIn,
             Type = a.Type,
             AttributePlurality = a.AttributePlurality,
+            ContributionMode = a.ContributionMode,
             MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
         }).ToListAsync();
     }
@@ -454,6 +457,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             BuiltIn = a.BuiltIn,
             Type = a.Type,
             AttributePlurality = a.AttributePlurality,
+            ContributionMode = a.ContributionMode,
             MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
         });
     }
@@ -658,7 +662,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = b.Id,
             MetaverseObjectTypeId = b.Id,
             MetaverseObjectTypeName = b.Name,
-            Description = $"Object Type binding: {b.Name}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceBinding), b.Name)
         }));
 
         // 2. Import Attribute Flows (mappings whose target is this attribute), scoped to the owning rule's type.
@@ -677,9 +681,9 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = m.Id,
             SyncRuleId = m.SyncRuleId,
             SyncRuleName = m.SyncRuleName,
-            Description = m.SyncRuleName != null
-                ? $"Import Attribute Flow in Synchronisation Rule '{m.SyncRuleName}'"
-                : $"Import Attribute Flow (mapping {m.Id})"
+            DescriptionDetail = m.SyncRuleName != null
+                ? JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceImportFlowInRule), m.SyncRuleName)
+                : JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceImportFlowMapping), m.Id.ToString())
         }));
 
         // 3. Export Attribute Flow sources reading this attribute whose parent mapping survives, scoped to the type.
@@ -703,9 +707,9 @@ public partial class MetaverseRepository : IMetaverseRepository
                 Id = s.SourceId,
                 SyncRuleId = s.SyncRuleId,
                 SyncRuleName = s.SyncRuleName,
-                Description = s.SyncRuleName != null
-                    ? $"Export Attribute Flow source in Synchronisation Rule '{s.SyncRuleName}'"
-                    : $"Export Attribute Flow source (mapping source {s.SourceId})"
+                DescriptionDetail = s.SyncRuleName != null
+                    ? JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportSourceInRule), s.SyncRuleName)
+                    : JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportSourceMapping), s.SourceId.ToString())
             }));
 
         // 4. Export mappings removed as a knock-on because they would be left source-less (already type-scoped above).
@@ -719,9 +723,9 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = m.Id,
             SyncRuleId = m.SyncRuleId,
             SyncRuleName = m.SyncRuleName,
-            Description = m.SyncRuleName != null
-                ? $"Export Attribute Flow in Synchronisation Rule '{m.SyncRuleName}' (removed: it would be left with no sources)"
-                : $"Export Attribute Flow (mapping {m.Id}) removed: it would be left with no sources"
+            DescriptionDetail = m.SyncRuleName != null
+                ? JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportMappingInRuleRemoved), m.SyncRuleName)
+                : JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExportMappingRemoved), m.Id.ToString())
         }));
 
         // 5. Scoping criteria evaluating this attribute. Scoped via the owning rule's criteria-group tree, at any depth
@@ -749,7 +753,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.ScopingCriterion,
             Id = id,
-            Description = $"Scoping criterion {id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceScopingCriterion), id.ToString())
         }));
 
         // 6. Object Matching Rules whose target is this attribute. Scoped to Synchronisation-Rule-owned rules targeting
@@ -769,7 +773,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             Id = r.Id,
             SyncRuleId = r.SyncRuleId,
             SyncRuleName = r.SyncRuleName,
-            Description = $"Object Matching Rule {r.Id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceObjectMatchingRule), r.Id.ToString())
         }));
 
         // 8. Predefined Search display columns showing this attribute, scoped to searches belonging to the type.
@@ -786,7 +790,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.PredefinedSearchAttribute,
             Id = x.Id,
-            Description = $"Predefined Search column in '{x.SearchName}'"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferencePredefinedSearchColumn), x.SearchName)
         }));
 
         // 9. Predefined Search criteria filtering on this attribute, scoped to searches belonging to the type via the
@@ -813,7 +817,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.PredefinedSearchCriterion,
             Id = id,
-            Description = $"Predefined Search criterion {id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferencePredefinedSearchCriterion), id.ToString())
         }));
 
         // 10. Example Data template attributes generating values for this attribute, scoped to templates for the type.
@@ -838,7 +842,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             Kind = AttributeReferenceKind.ExampleDataTemplateAttribute,
             Id = id,
-            Description = $"Example Data template attribute {id}"
+            DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExampleDataAttribute), id.ToString())
         }));
 
         // 11. Example Data template attribute dependencies. These reference the attribute globally (no per-type owning
@@ -853,7 +857,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             {
                 Kind = AttributeReferenceKind.ExampleDataTemplateAttributeDependency,
                 Id = id,
-                Description = $"Example Data template attribute dependency {id}"
+                DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceExampleDataDependency), id.ToString())
             }));
 
             // 12. Service Settings SSO unique-identifier mapping. Global only: an unassign from one type must not clear
@@ -866,7 +870,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             {
                 Kind = AttributeReferenceKind.ServiceSettingsSsoIdentifier,
                 Id = id,
-                Description = "Service Settings SSO unique-identifier mapping (cleared)"
+                DescriptionDetail = JimMessage.Create(MessageCatalogues.MetaverseReferences, nameof(MetaverseReferenceMessages.ReferenceSsoMapping))
             }));
         }
 
@@ -2314,6 +2318,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             .Take(cap)
             .Select(av => new
             {
+                av.Id,
                 av.StringValue,
                 av.IntValue,
                 av.LongValue,
@@ -2338,6 +2343,7 @@ public partial class MetaverseRepository : IMetaverseRepository
 
         var values = rows.Select(r => new ProvenanceValue
         {
+            Id = r.Id,
             DisplayValue = FormatTypedValueForDisplay(
                 r.StringValue, r.IntValue, r.LongValue, r.DecimalValue, r.DateTimeValue, r.GuidValue, r.BoolValue,
                 r.ByteLength, r.ReferenceDisplayName, r.ReferenceValueId),
@@ -2426,9 +2432,10 @@ public partial class MetaverseRepository : IMetaverseRepository
             .Select(vc => new ProvenanceChange
             {
                 ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
+                // A change made outside synchronisation, such as a removal by hand (#3059), has an Activity of its own and no item.
                 ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
-                    : (Guid?)null,
+                    : vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityId,
                 ActivityRunProfileExecutionItemId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItemId,
                 ActivityDescription = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.TargetName
@@ -2504,9 +2511,10 @@ public partial class MetaverseRepository : IMetaverseRepository
                 vc.ContributedByKind,
                 vc.ContributedByClaimType,
                 ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
+                // A change made outside synchronisation, such as a removal by hand (#3059), has an Activity of its own and no item.
                 ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
-                    : (Guid?)null,
+                    : vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityId,
                 ActivityRunProfileExecutionItemId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItemId,
                 ActivityDescription = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.TargetName
@@ -2607,6 +2615,112 @@ public partial class MetaverseRepository : IMetaverseRepository
         Repository.Database.Update(metaverseObject);
         AddCarriedChangeRecords(metaverseObject, newOnly: true);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The object's columns are written by a statement guarded by the row version it was read with, not by an EF save of
+    /// the object: the object comes from another context (the portal loads in one scope and saves in another), and an
+    /// <c>Update</c> would walk its graph. A synchronisation that changed the object since it was read makes the guard
+    /// match nothing, and the whole removal is undone with a <see cref="DbUpdateConcurrencyException"/>.
+    /// </remarks>
+    public async Task RemoveMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject, IReadOnlyCollection<Guid> valueIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObject);
+        ArgumentNullException.ThrowIfNull(valueIds);
+
+        await using var ownTransaction = Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null;
+
+        var metaverseObjectId = metaverseObject.Id;
+        var ids = valueIds.ToList();
+        var deleted = await Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == metaverseObjectId && ids.Contains(av.Id))
+            .ExecuteDeleteAsync();
+        if (deleted != ids.Count)
+        {
+            throw new DbUpdateConcurrencyException(
+                $"Metaverse Object {metaverseObjectId} no longer holds {ids.Count - deleted} of the {ids.Count} value(s) to remove; it changed since it was read.");
+        }
+
+        var rowVersion = metaverseObject.xmin;
+        var updated = await Repository.Database.MetaverseObjects
+            .Where(m => m.Id == metaverseObjectId && m.xmin == rowVersion)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(m => m.ScopeReviewPending, metaverseObject.ScopeReviewPending)
+                .SetProperty(m => m.UnsynchronisedChangesJson, metaverseObject.UnsynchronisedChangesJson)
+                .SetProperty(m => m.CachedDisplayName, metaverseObject.CachedDisplayName));
+        if (updated != 1)
+            throw new DbUpdateConcurrencyException($"Metaverse Object {metaverseObjectId} changed since it was read.");
+
+        AddCarriedChangeRecords(metaverseObject, newOnly: true);
+        await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A contributor is an enabled import rule that flows into the attribute, whose Connected System has a non-obsolete
+    /// object of the rule's type joined to the Metaverse Object. A value is "no longer supplied" when its recorded rule
+    /// is not such a contributor for its object (deleted, disabled, no longer flowing into the attribute, or its
+    /// system's object gone). Values set outside synchronisation (a sign-in claim, JIM itself, a person) are left out:
+    /// no contribution mode affects them. Raw SQL, since the read is one statement over three large tables.
+    /// </remarks>
+    public async Task<ContributionModeImpactCounts> GetContributionModeImpactCountsAsync(int attributeId)
+    {
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"WITH contributors AS (
+                  SELECT DISTINCT c.""MetaverseObjectId"" AS mvo_id, r.""Id"" AS rule_id
+                  FROM ""SyncRules"" r
+                  JOIN ""SyncRuleMappings"" m ON m.""SyncRuleId"" = r.""Id"" AND m.""TargetMetaverseAttributeId"" = @attributeId
+                  JOIN ""ConnectedSystemObjects"" c ON c.""ConnectedSystemId"" = r.""ConnectedSystemId"" AND c.""TypeId"" = r.""ConnectedSystemObjectTypeId""
+                  JOIN ""MetaverseObjects"" mo ON mo.""Id"" = c.""MetaverseObjectId"" AND mo.""TypeId"" = r.""MetaverseObjectTypeId""
+                  WHERE r.""Direction"" = @import AND r.""Enabled"" AND c.""Status"" <> @obsolete
+              ),
+              vals AS (
+                  SELECT v.""MetaverseObjectId"" AS mvo_id, v.""ContributedBySyncRuleId"" AS rule_id,
+                         NOT EXISTS (SELECT 1 FROM contributors k
+                                     WHERE k.mvo_id = v.""MetaverseObjectId"" AND k.rule_id = v.""ContributedBySyncRuleId"") AS stale
+                  FROM ""MetaverseObjectAttributeValues"" v
+                  WHERE v.""AttributeId"" = @attributeId AND NOT v.""NullValue""
+                    AND (v.""ContributedByKind"" IS NULL OR v.""ContributedByKind"" = @syncRuleKind)
+              ),
+              per_object AS (
+                  SELECT mvo_id,
+                         COUNT(*) FILTER (WHERE stale) AS stale_values,
+                         COUNT(DISTINCT rule_id) FILTER (WHERE NOT stale) AS live_rules
+                  FROM vals GROUP BY mvo_id
+              ),
+              joined AS (SELECT mvo_id, COUNT(*) AS joined_rules FROM contributors GROUP BY mvo_id)
+              SELECT
+                  COALESCE((SELECT SUM(stale_values) FROM per_object), 0)::int,
+                  (SELECT COUNT(*) FROM per_object WHERE stale_values > 0)::int,
+                  (SELECT COUNT(*) FROM per_object WHERE live_rules >= 2)::int,
+                  (SELECT COUNT(*) FROM per_object WHERE stale_values > 0 OR live_rules >= 2)::int,
+                  (SELECT COUNT(*) FROM joined j LEFT JOIN per_object p ON p.mvo_id = j.mvo_id
+                   WHERE j.joined_rules >= 2 AND COALESCE(p.live_rules, 0) < j.joined_rules)::int";
+        AddParameter("attributeId", attributeId);
+        AddParameter("import", (int)SyncRuleDirection.Import);
+        AddParameter("obsolete", (int)ConnectedSystemObjectStatus.Obsolete);
+        AddParameter("syncRuleKind", (int)ValueContributorKind.SynchronisationRule);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return new ContributionModeImpactCounts(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+
+        void AddParameter(string name, int value)
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
     }
 
     /// <summary>
@@ -3512,7 +3626,10 @@ public partial class MetaverseRepository : IMetaverseRepository
             : string.Empty;
         var comparison = valueType switch
         {
-            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = ANY(@values)",
+            // The lower-case condition changes no result (an exact match matches in lower case too); it is there so that
+            // whichever text index the planner takes, the values drive the seek (see BuildMatchValueBatchLookupSql).
+            AttributeDataType.Text when caseSensitive =>
+                @"av.""StringValue"" = ANY(@values) AND lower(av.""StringValue"") = ANY(ARRAY(SELECT lower(v) FROM unnest(@values) AS v))",
             AttributeDataType.Text => @"av.""StringValue"" IS NOT NULL",
             AttributeDataType.Number => @"av.""IntValue"" = ANY(@values)",
             AttributeDataType.LongNumber => @"av.""LongValue"" = ANY(@values)",
@@ -3611,6 +3728,14 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// against index probes for the 5,000 values sought). A probe per value costs the same whatever the table holds.
     /// </para>
     /// <para>
+    /// Respecting case, the comparison carries a redundant <c>lower()</c> condition beside the exact one. Either text
+    /// index can serve the lookup (both lead with the attribute), and with statistics taken while the table was empty
+    /// the planner costs them the same. Given the lower-case index, the exact comparison alone could seek on nothing but
+    /// the attribute and read every value it holds once per value sought (70 seconds for a page of 5,000 values against
+    /// 200,000). With both conditions, whichever index it takes seeks on the value. The extra condition changes no
+    /// result: an exact match matches in lower case too.
+    /// </para>
+    /// <para>
     /// Decimal is the exception, and stays a join: no index serves <c>"DecimalValue"</c>, so a probe per value would
     /// read the attribute once per value, where one hash of it per page is the least a lookup can read.
     /// </para>
@@ -3619,7 +3744,7 @@ public partial class MetaverseRepository : IMetaverseRepository
     {
         var comparison = valueType switch
         {
-            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = sought.value",
+            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = sought.value AND lower(av.""StringValue"") = lower(sought.value)",
             AttributeDataType.Text => @"lower(av.""StringValue"") = lower(sought.value) AND av.""StringValue"" IS NOT NULL",
             AttributeDataType.Number => @"av.""IntValue"" = sought.value",
             AttributeDataType.LongNumber => @"av.""LongValue"" = sought.value",
@@ -4597,8 +4722,10 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null)
     {
+        // An Accumulate attribute's values are never recalled, so they are no part of a recall's impact (#3059).
         var query = Repository.Database.MetaverseObjectAttributeValues
-            .Where(av => av.ContributedBySyncRuleId == syncRuleId);
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate);
 
         if (metaverseAttributeId.HasValue)
         {
@@ -4633,8 +4760,10 @@ public partial class MetaverseRepository : IMetaverseRepository
         // Select by the rule-provenance join, not the denormalised ContributedBySystemId: severed values
         // (rule link cleared, system record retained, #1537) are permanently exempt from recall and must
         // not be stated as deprovisioning impact.
+        // Accumulate values are kept by every recall, so they are not deprovisioning impact either (#3059).
         var query = Repository.Database.MetaverseObjectAttributeValues
             .Where(av => av.ContributedBySyncRuleId != null &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate &&
                          Repository.Database.SyncRules
                              .Where(sr => sr.ConnectedSystemId == connectedSystemId)
                              .Select(sr => sr.Id)
@@ -4654,8 +4783,10 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
     {
+        // An object holding only Accumulate values from the rule has nothing to recall (#3059).
         return await Repository.Database.MetaverseObjectAttributeValues
-            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate)
             .Select(av => av.MetaverseObject.Id)
             .Distinct()
             .ToListAsync();
@@ -4669,7 +4800,8 @@ public partial class MetaverseRepository : IMetaverseRepository
         // translates the negated Any() to a parameterised NOT EXISTS; the in-memory test provider cannot
         // honour this faithfully (no real foreign keys), so this method needs RequiresPostgres coverage.
         return await Repository.Database.MetaverseObjectAttributeValues
-            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate)
             .Where(av => !Repository.Database.ConnectedSystemObjects
                 .Any(cso => cso.MetaverseObjectId == av.MetaverseObject.Id && cso.ConnectedSystemId == connectedSystemId))
             .Select(av => av.MetaverseObject.Id)

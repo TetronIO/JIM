@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Sync;
 
 /// <summary>
@@ -49,7 +52,9 @@ public class ExportRuleHandOver
     /// <summary>
     /// Says what happened, for the administrator: the detail of the run's outcome and of the Synchronisation Preview's alike.
     /// </summary>
-    public string DescribeForAdministrator() =>
-        $"Left the scope of '{DepartedSyncRuleName}'. '{CoveringSyncRuleName}' still covers this object, so it now manages the " +
-        "account instead of it being deprovisioned.";
+    public string DescribeForAdministrator() => Describe().ToEnglish();
+
+    /// <summary><see cref="DescribeForAdministrator"/> as a message.</summary>
+    public JimMessage Describe() =>
+        JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExportRuleHandOver), DepartedSyncRuleName, CoveringSyncRuleName);
 }

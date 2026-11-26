@@ -310,7 +310,9 @@ public class ConfirmingImportReconciliationDatabaseTests
     /// Taken from reconciliation as it ran before #2908, with the Object Type correction, and with #3053: the Pending
     /// Exports of the two objects the Connector reported deleted are cleared, as a Full Import's deletion detection clears
     /// those of an object it finds gone. Rosalind's exported Delete is confirmed by her deletion, where it used to wait for
-    /// ever, and Joan's Update is moot, where her item used to promise to reassert it on an object that is gone.
+    /// ever, and Joan's Update is moot, where her item used to promise to reassert it on an object that is gone. With #3087,
+    /// Rosalind's deletion item records that confirmation (an ExportConfirmed outcome and the edge naming her Delete), and
+    /// the Activity counts it; Joan's moot Update records nothing.
     /// </summary>
     private const string ExpectedDeltaSnapshot = """
         Pending Exports:
@@ -362,10 +364,12 @@ public class ConfirmingImportReconciliationDatabaseTests
             edge ExportCausedImportConfirmation reason=NotSet export=hedy:Update object=hedy display=Hedy Lamarr system=Target Directory effect=ExportConfirmed
           joan: Deleted error=NotSet summary=DeletionDetected:1 snapshots=[joan|Joan Clarke|user]
             outcome DeletionDetected ordinal=0 detail=- parent=-
-          rosalind: Deleted error=NotSet summary=DeletionDetected:1 snapshots=[rosalind|Rosalind Franklin|user]
+          rosalind: Deleted error=NotSet summary=DeletionDetected:1,ExportConfirmed:1 snapshots=[rosalind|Rosalind Franklin|user]
             outcome DeletionDetected ordinal=0 detail=- parent=-
+            outcome ExportConfirmed ordinal=1 detail=- parent=-
+            edge ExportCausedImportConfirmation reason=NotSet export=rosalind:Delete object=rosalind display=Rosalind Franklin system=Target Directory effect=ExportConfirmed
         Activity:
-          confirmed=2 errors=0 added=0 updated=3 deleted=2 created=0 processed=7/7
+          confirmed=3 errors=0 added=0 updated=3 deleted=2 created=0 processed=7/7
           message: Import complete: 7 objects (0 created, 3 updated, 2 unchanged, 2 deleted)
         Stat counters:
           ObjectChangeType 2=4
@@ -374,7 +378,7 @@ public class ConfirmingImportReconciliationDatabaseTests
           ObjectTypeName user=5
           OutcomeType 1=3
           OutcomeType 3=2
-          OutcomeType 4=4
+          OutcomeType 4=5
           OutcomeType 5=2
 
         """;

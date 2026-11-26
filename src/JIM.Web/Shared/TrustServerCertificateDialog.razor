@@ -282,7 +282,7 @@
                     return;
 
                 default:
-                    _failureMessage = result.Message ?? ConnectedSystemText.TrustFailedFallback;
+                    _failureMessage = MessageDisplay.Show(result.Detail, result.Message) ?? ConnectedSystemText.TrustFailedFallback;
                     MoveTo(Step.Failed);
                     return;
             }

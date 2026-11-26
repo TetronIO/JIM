@@ -76,7 +76,7 @@ ENV XDG_CACHE_HOME=/tmp/.cache \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:bef136a371963aaa46ec97882845ef6f54dec15728bb4b128b1c2a400ffbc9b4 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:8c6edfb26c85153f236d26efebd9ad349aec403583f343f201ee67838b23658d AS build
 # Corporate networks routinely inspect outbound TLS by re-signing it with their own authority, which
 # breaks certificate validation for every package restore inside the build. Supplying that authority
 # here (base64 of a PEM bundle) lets the build trust it; empty (the default) is a no-op. Build-stage

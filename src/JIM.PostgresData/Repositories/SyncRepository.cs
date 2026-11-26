@@ -1002,6 +1002,46 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
 
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int excludeConnectedSystemId, int maxValuesPerMetaverseObject)
+    {
+        var requested = metaverseObjectIds.Distinct().ToList();
+        if (requested.Count == 0)
+            return [];
+
+        // First the value count behind each object, so one holding more than the budget (a large group) is left to the
+        // single read rather than loaded with the rest of the page.
+        var valueCounts = await _context.ConnectedSystemObjectAttributeValues
+            .Where(av => av.ConnectedSystemObject.MetaverseObjectId != null
+                         && requested.Contains(av.ConnectedSystemObject.MetaverseObjectId.Value)
+                         && av.ConnectedSystemObject.ConnectedSystemId != excludeConnectedSystemId)
+            .GroupBy(av => av.ConnectedSystemObject.MetaverseObjectId!.Value)
+            .Select(group => new { MetaverseObjectId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(entry => entry.MetaverseObjectId, entry => entry.Count);
+
+        var result = requested
+            .Where(id => valueCounts.GetValueOrDefault(id) <= maxValuesPerMetaverseObject)
+            .ToDictionary(id => id, _ => new List<ConnectedSystemObject>());
+        if (result.Count == 0)
+            return result;
+
+        // The single read's include shape, so a re-elected survivor needs no further load. A page is at most a few
+        // hundred objects, so one IN list suffices.
+        var ids = result.Keys.ToList();
+        var joined = await _context.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.MetaverseObjectId != null && ids.Contains(cso.MetaverseObjectId.Value)
+                          && cso.ConnectedSystemId != excludeConnectedSystemId)
+            .ToListAsync();
+
+        foreach (var cso in joined)
+            result[cso.MetaverseObjectId!.Value].Add(cso);
+        return result;
+    }
+
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
         IEnumerable<int> targetConnectedSystemIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);

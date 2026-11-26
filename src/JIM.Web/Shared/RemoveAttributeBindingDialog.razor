@@ -64,7 +64,7 @@
                                 @foreach (var reference in _cascadeReferences)
                                 {
                                     <MudListItem T="string" Icon="@Icons.Material.Filled.Link">
-                                        @reference.Description
+                                        @MessageDisplay.Show(reference.DescriptionDetail, reference.Description)
                                     </MudListItem>
                                 }
                             </MudList>

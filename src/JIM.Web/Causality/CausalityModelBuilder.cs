@@ -11,6 +11,7 @@ using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 using MudBlazor;
 using JimUtilities = JIM.Utilities.Utilities;
@@ -478,7 +479,7 @@ public static class CausalityModelBuilder
             SystemName = systemName,
             Badge = GetBadge(outcome.OutcomeType),
             DetailCount = outcome.DetailCount,
-            DetailMessage = usesIdChannel ? parsedDetail.PlainMessage : outcome.DetailMessage,
+            DetailMessage = usesIdChannel ? parsedDetail.PlainMessage : MessageDisplay.Show(outcome.DetailMessageDetail, outcome.DetailMessage),
             ObjectMatchingRuleDescription = outcome.ObjectMatchingRuleDescriptionSnapshot,
             MatchedValue = outcome.MatchedValue,
             JoinMatchDetail = DescribeJoinMatch(outcome.MatchedValue, outcome.ObjectMatchingRuleDescriptionSnapshot, isSpeculative: false),

@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Exchange;
 
 /// <summary>
@@ -37,33 +40,39 @@ public static class ExchangeRecipientRules
     /// <param name="groupType">The group's <c>groupType</c>, or null when JIM does not know it (not imported and not
     /// flowed). An unknown scope is left to Exchange, which refuses a group that is not universal itself: refusing here
     /// would block every group whose <c>groupType</c> is not selected.</param>
-    public static string? TypeFitRefusal(string objectTypeName, string? declaredRecipientType, long? groupType)
+    public static string? TypeFitRefusal(string objectTypeName, string? declaredRecipientType, long? groupType) =>
+        TypeFitRefusalMessage(objectTypeName, declaredRecipientType, groupType)?.ToEnglish();
+
+    /// <summary>
+    /// <see cref="TypeFitRefusal"/> as a message, one whole sentence per recipient type so each language can give the type
+    /// its own article, gender and case (#3084).
+    /// </summary>
+    public static JimMessage? TypeFitRefusalMessage(string objectTypeName, string? declaredRecipientType, long? groupType)
     {
         ArgumentNullException.ThrowIfNull(objectTypeName);
         var declared = Normalise(declaredRecipientType);
+        var recognised = string.Join(", ", ExchangeRecipientTypes.All);
 
         return declared switch
         {
             ExchangeRecipientTypes.None => null,
-            ExchangeRecipientTypes.Unmanaged =>
-                $"'{ExchangeRecipientTypes.Unmanaged}' cannot be declared: it is what JIM reads for a recipient it does not manage. " +
-                $"Use one of {string.Join(", ", ExchangeRecipientTypes.All)}.",
+            ExchangeRecipientTypes.Unmanaged => Message(nameof(ExchangeMessages.FitUnmanagedDeclared), ExchangeRecipientTypes.Unmanaged, recognised),
             ExchangeRecipientTypes.Mailbox or ExchangeRecipientTypes.SharedMailbox or ExchangeRecipientTypes.RoomMailbox
                 or ExchangeRecipientTypes.EquipmentMailbox => Is(objectTypeName, User)
                     ? null
-                    : $"Only a user can have {Describe(declared)}; this object is a {objectTypeName}.",
+                    : Message("FitUserOnly" + declared, objectTypeName),
             ExchangeRecipientTypes.MailUser => Is(objectTypeName, User)
                 ? null
-                : $"Only a user can be a mail user; this object is a {objectTypeName}.",
+                : Message(nameof(ExchangeMessages.FitUserOnlyMailUser), objectTypeName),
             ExchangeRecipientTypes.MailContact => Is(objectTypeName, Contact)
                 ? null
-                : $"Only a contact can be a mail contact; this object is a {objectTypeName}.",
+                : Message(nameof(ExchangeMessages.FitContactOnly), objectTypeName),
             ExchangeRecipientTypes.MailEnabledGroup => !Is(objectTypeName, Group)
-                ? $"Only a group can be mail-enabled; this object is a {objectTypeName}."
+                ? Message(nameof(ExchangeMessages.FitGroupOnly), objectTypeName)
                 : groupType is { } scope && (scope & UniversalGroupScope) == 0
-                    ? "Only universal groups can be mail-enabled; this group is not universal."
+                    ? Message(nameof(ExchangeMessages.FitGroupNotUniversal))
                     : null,
-            _ => $"'{declared}' is not an Exchange recipient type; use one of {string.Join(", ", ExchangeRecipientTypes.All)}."
+            _ => Message(nameof(ExchangeMessages.FitUnrecognised), declared, recognised)
         };
     }
 
@@ -109,13 +118,12 @@ public static class ExchangeRecipientRules
             return new ExchangeRecipientDecision
             {
                 Kind = ExchangeRecipientDecisionKind.Refused,
-                Reason = $"This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made {Describe(declared)}. " +
-                         "Nothing was changed in Exchange."
+                ReasonDetail = Message("UnmanagedCannotBecome" + declared)
             };
         }
 
-        if (TypeFitRefusal(objectTypeName, declared, groupType) is { } refusal)
-            return new ExchangeRecipientDecision { Kind = ExchangeRecipientDecisionKind.Refused, Reason = refusal };
+        if (TypeFitRefusalMessage(objectTypeName, declared, groupType) is { } refusal)
+            return new ExchangeRecipientDecision { Kind = ExchangeRecipientDecisionKind.Refused, ReasonDetail = refusal };
 
         var change = ClassifyChange(imported, declared);
         if (change == ExchangeRecipientChangeKind.TypeChange)
@@ -123,27 +131,14 @@ public static class ExchangeRecipientRules
             return new ExchangeRecipientDecision
             {
                 Kind = ExchangeRecipientDecisionKind.TypeChangeNotSupported,
-                Reason = $"Changing a recipient's type is not supported in this release: this object is {Describe(imported)} in Exchange, " +
-                         $"and is now declared {(declared == ExchangeRecipientTypes.None ? "not to be a recipient" : Describe(declared))}. " +
-                         "Nothing was changed in Exchange."
+                ReasonDetail = declared == ExchangeRecipientTypes.None
+                    ? Message(nameof(ExchangeMessages.TypeChangeToNoneNotSupported), TypeName(imported))
+                    : Message(nameof(ExchangeMessages.TypeChangeNotSupported), TypeName(imported), TypeName(declared))
             };
         }
 
         return new ExchangeRecipientDecision { Kind = ExchangeRecipientDecisionKind.Stage, Change = change };
     }
-
-    /// <summary>
-    /// A recipient type in a sentence, with its article ("a shared mailbox", "an equipment mailbox"). None reads "not a
-    /// recipient"; an unrecognised type is quoted as it was declared.
-    /// </summary>
-    public static string Describe(string? recipientType) => Normalise(recipientType) switch
-    {
-        ExchangeRecipientTypes.None => "not a recipient",
-        ExchangeRecipientTypes.Unmanaged => "a recipient JIM does not manage",
-        ExchangeRecipientTypes.EquipmentMailbox => $"an {Noun(recipientType)}",
-        var type when ExchangeRecipientTypes.All.Contains(type) => $"a {Noun(type)}",
-        var other => $"'{other}'"
-    };
 
     /// <summary>
     /// A recipient type as a noun in a sentence ("shared mailbox", "mail-enabled group"). None reads "recipient"; an
@@ -162,6 +157,21 @@ public static class ExchangeRecipientRules
         ExchangeRecipientTypes.Unmanaged => "recipient JIM does not manage",
         var other => $"'{other}'"
     };
+
+    /// <summary>
+    /// A recipient type as it is named inside a type-change warning: with its article in English, bare in a language
+    /// whose sentence names it after "of type".
+    /// </summary>
+    private static JimMessage TypeName(string recipientType) => recipientType switch
+    {
+        ExchangeRecipientTypes.None => Message(nameof(ExchangeMessages.TypeNameNone)),
+        ExchangeRecipientTypes.Unmanaged => Message(nameof(ExchangeMessages.TypeNameUnmanaged)),
+        var type when ExchangeRecipientTypes.All.Contains(type) => Message("TypeName" + type),
+        var other => Message(nameof(ExchangeMessages.TypeNameOther), other)
+    };
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(MessageCatalogues.Exchange, key, arguments);
 
     /// <summary>Nothing declared and nothing imported both mean None.</summary>
     private static string Normalise(string? recipientType) =>

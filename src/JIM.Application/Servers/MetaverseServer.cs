@@ -349,6 +349,7 @@ public partial class MetaverseServer
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute}", attribute.Name);
         EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -376,6 +377,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("UpdateMetaverseAttributeAsync() called for {Attribute}", attribute.Name);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -404,6 +406,7 @@ public partial class MetaverseServer
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
         EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -431,6 +434,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("UpdateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -865,11 +869,12 @@ public partial class MetaverseServer
             foreach (var referenceChild in impact.References.Select(reference => new Activity
                      {
                          ParentActivityId = parent.Id,
+                         TargetNameDetail = reference.DescriptionDetail,
                          TargetName = reference.Description,
                          TargetContext = attribute.Name,
                          TargetType = ReferenceActivityTargetType(reference.Kind),
                          TargetOperationType = ActivityTargetOperationType.Delete,
-                         Message = $"Removed {reference.Description} referencing Metaverse Attribute '{attribute.Name}'"
+                         MessageDetail = ActivityMessage.MetaverseAttributeReferenceRemoved(reference, attribute.Name)
                      }))
             {
                 await createActivityAsync(referenceChild);
@@ -883,7 +888,7 @@ public partial class MetaverseServer
                 TargetName = attribute.Name,
                 TargetType = ActivityTargetType.MetaverseAttribute,
                 TargetOperationType = ActivityTargetOperationType.Delete,
-                Message = $"Removed Metaverse Attribute '{attribute.Name}'"
+                MessageDetail = ActivityMessage.MetaverseAttributeRemoved(attribute.Name)
             };
             await createActivityAsync(removalChild);
             await Application.Activities.CompleteActivityAsync(removalChild);
@@ -971,7 +976,7 @@ public partial class MetaverseServer
             TargetContext = impact.MetaverseObjectTypeName,
             TargetType = ActivityTargetType.MetaverseAttribute,
             TargetOperationType = ActivityTargetOperationType.Update,
-            Message = $"Unassigned Metaverse Attribute '{impact.AttributeName}' from Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
+            MessageDetail = ActivityMessage.MetaverseAttributeUnassigned(impact.AttributeName, impact.MetaverseObjectTypeName)
         };
         await createActivityAsync(parent);
 
@@ -982,11 +987,12 @@ public partial class MetaverseServer
             foreach (var referenceChild in impact.References.Select(reference => new Activity
                      {
                          ParentActivityId = parent.Id,
+                         TargetNameDetail = reference.DescriptionDetail,
                          TargetName = reference.Description,
                          TargetContext = impact.AttributeName,
                          TargetType = ReferenceActivityTargetType(reference.Kind),
                          TargetOperationType = ActivityTargetOperationType.Delete,
-                         Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
+                         MessageDetail = ActivityMessage.MetaverseReferenceRemovedScoped(ActivityMessage.DescribedReference(reference), impact.MetaverseObjectTypeName)
                      }))
             {
                 await createActivityAsync(referenceChild);
@@ -1058,6 +1064,7 @@ public partial class MetaverseServer
             throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotChangeType), attribute.Name));
 
         EnsureAttributeCapability(newType, newPlurality);
+        EnsureContributionModeCompatible(attribute.ContributionMode, newType, newPlurality);
 
         var impact = await EvaluateAttributeSchemaChangeAsync(attribute, newType, newPlurality);
 
@@ -1094,6 +1101,28 @@ public partial class MetaverseServer
     {
         if (!AttributeDataTypeCapabilities.IsPermitted(type, plurality))
             throw new UnsupportedAttributePluralityException(type, plurality);
+    }
+
+    /// <summary>
+    /// Refuses a contribution mode the attribute's data type or plurality cannot use (#3059), before anything is created,
+    /// changed or audited. Only Priority is meaningful for a single-valued attribute, since there is only ever one value.
+    /// Accumulate is refused for Reference attributes, because a reference is deleted with the Metaverse Object it points
+    /// to (#1019), which would break Accumulate's promise that values are kept; a text attribute recording the source's
+    /// identifier for the reference is the supported alternative.
+    /// </summary>
+    private static void EnsureContributionModeCompatible(AttributeContributionMode mode, AttributeDataType type, AttributePlurality plurality)
+    {
+        if (AttributeContributionModeRules.IsPermitted(mode, type, plurality))
+            return;
+
+        var detail = plurality != AttributePlurality.MultiValued
+            ? ServerMessage.Create(nameof(ServerMessages.ContributionModeNeedsMultiValued), mode.ToString())
+            : type == AttributeDataType.Reference && mode == AttributeContributionMode.Merge
+                ? ServerMessage.Create(nameof(ServerMessages.ContributionModeMergeNotForReference))
+            : type == AttributeDataType.Reference
+                ? ServerMessage.Create(nameof(ServerMessages.ContributionModeNotForReference), mode.ToString())
+                : ServerMessage.Create(nameof(ServerMessages.ContributionModeUnsupported), mode.ToString(), type.ToString());
+        throw new UnsupportedContributionModeException(mode, type, plurality, detail);
     }
 
     /// <summary>
@@ -1194,7 +1223,7 @@ public partial class MetaverseServer
                          TargetContext = objectType.Name,
                          TargetType = ObjectTypeReferenceActivityTargetType(reference.Kind),
                          TargetOperationType = ActivityTargetOperationType.Delete,
-                         Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{objectType.Name}'"
+                         MessageDetail = ActivityMessage.MetaverseReferenceRemovedScoped(reference.Description, objectType.Name)
                      }))
             {
                 await createActivityAsync(referenceChild);
@@ -1208,7 +1237,7 @@ public partial class MetaverseServer
                 TargetName = objectType.Name,
                 TargetType = ActivityTargetType.MetaverseObjectType,
                 TargetOperationType = ActivityTargetOperationType.Delete,
-                Message = $"Removed Metaverse Object Type '{objectType.Name}'"
+                MessageDetail = ActivityMessage.MetaverseObjectTypeRemoved(objectType.Name)
             };
             await createActivityAsync(removalChild);
             await Application.Activities.CompleteActivityAsync(removalChild);
@@ -1416,6 +1445,34 @@ public partial class MetaverseServer
         MetaverseObjectChangeInitiatorType? changeInitiatorType = null,
         Guid? activityId = null)
     {
+        await StageEditOutsideSynchronisationAsync(metaverseObject, additions, removals, initiatedByType, initiatedById,
+            initiatedByName, changeInitiatorType, activityId);
+
+        await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
+
+        // A direct edit is a write outside any Connected System's synchronisation (#1750 Phase 4, FR 9): nothing has run
+        // a derived pass on the new values, so mark the hosting systems of every derived flow reading a changed
+        // attribute. After the save, so a hosting run that clears the mark has seen the edit.
+        if (additions != null || removals != null)
+            await MarkDerivedInputChangesAsync(metaverseObject, (additions ?? []).Concat(removals ?? []).ToList());
+    }
+
+    /// <summary>
+    /// Everything an edit outside synchronisation sets on the object before it is saved (#3059 shares it with the manual
+    /// removal of Accumulate values): the change record, the cached name, and the scope review flag with the record of
+    /// what changed, so the next synchronisation delivers the edit. Callers apply additions and removals to
+    /// <see cref="MetaverseObject.AttributeValues"/> first.
+    /// </summary>
+    private async Task StageEditOutsideSynchronisationAsync(
+        MetaverseObject metaverseObject,
+        List<MetaverseObjectAttributeValue>? additions,
+        List<MetaverseObjectAttributeValue>? removals,
+        ActivityInitiatorType initiatedByType,
+        Guid? initiatedById,
+        string? initiatedByName,
+        MetaverseObjectChangeInitiatorType? changeInitiatorType,
+        Guid? activityId)
+    {
         // Record change history if additions/removals are provided
         if (additions != null || removals != null)
         {
@@ -1454,14 +1511,6 @@ public partial class MetaverseServer
             metaverseObject.ScopeReviewPending = true;
             RecordUnsynchronisedChanges(metaverseObject, additions, removals);
         }
-
-        await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
-
-        // A direct edit is a write outside any Connected System's synchronisation (#1750 Phase 4, FR 9): nothing has run
-        // a derived pass on the new values, so mark the hosting systems of every derived flow reading a changed
-        // attribute. After the save, so a hosting run that clears the mark has seen the edit.
-        if (additions != null || removals != null)
-            await MarkDerivedInputChangesAsync(metaverseObject, (additions ?? []).Concat(removals ?? []).ToList());
     }
 
     /// <summary>

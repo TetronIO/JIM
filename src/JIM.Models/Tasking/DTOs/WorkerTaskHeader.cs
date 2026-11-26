@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 namespace JIM.Models.Tasking.DTOs;
 
@@ -50,6 +51,13 @@ public class WorkerTaskHeader
     /// The current progress message (from the associated Activity).
     /// </summary>
     public string? ProgressMessage { get; set; }
+
+    /// <summary>
+    /// <see cref="ProgressMessage"/> as a message, as JSON, for the portal to show in the reader's language (#3039).
+    /// Not serialised: the worker task REST API returns the English message as it always has.
+    /// </summary>
+    [JsonIgnore]
+    public string? ProgressMessageDetailJson { get; set; }
 
     /// <summary>
     /// The run's steps and the one running now (#1162), or null where the task is not a Run Profile
@@ -147,6 +155,7 @@ public class WorkerTaskHeader
             ObjectsToProcess != latest.ObjectsToProcess ||
             ObjectsProcessed != latest.ObjectsProcessed ||
             ProgressMessage != latest.ProgressMessage ||
+            ProgressMessageDetailJson != latest.ProgressMessageDetailJson ||
             !StepsEqual(Steps, latest.Steps) ||
             ExecutionMode != latest.ExecutionMode ||
             Started != latest.Started ||
@@ -170,6 +179,7 @@ public class WorkerTaskHeader
         ObjectsToProcess = latest.ObjectsToProcess;
         ObjectsProcessed = latest.ObjectsProcessed;
         ProgressMessage = latest.ProgressMessage;
+        ProgressMessageDetailJson = latest.ProgressMessageDetailJson;
         Steps = latest.Steps;
         ExecutionMode = latest.ExecutionMode;
         Started = latest.Started;

@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -19,63 +22,67 @@ internal static class InitialPasswordStagingMessages
     /// A password change already waiting for the person is the account's first password, carrying the Initial
     /// Password's promises about the account; says what was done to it to get it delivered.
     /// </summary>
-    internal static string Carried(string connectedSystemName, ProvisionedPasswordStagingOutcome outcome)
+    internal static JimMessage Carried(string connectedSystemName, ProvisionedPasswordStagingOutcome outcome)
     {
-        var message = $"Initial password not queued for {connectedSystemName}: a password change already waiting for this person there will be " +
-                      "this Connected System Object's first password instead, keeping its own password and expiry. Its delivery applies this " +
-                      "Synchronisation Rule's Initial Password settings for enabling the Connected System Object and for whether its password never " +
-                      "expires, except where an export has written those itself.";
+        var message = ActivityMessage.Create(nameof(ActivityMessages.InitialPasswordCarried), connectedSystemName);
 
         return outcome.ExistingStatus switch
         {
             PendingPasswordChangeStatus.Parked =>
-                $"{message} It had been parked ({Describe(outcome)}), and is due again now that the Connected System Object exists.",
+                ActivityMessage.Create(nameof(ActivityMessages.InitialPasswordCarriedParked), message, Describe(outcome)),
             PendingPasswordChangeStatus.Delivering =>
-                $"{message} It was being delivered as the Connected System Object was created, and is delivered again with these settings.",
+                ActivityMessage.Create(nameof(ActivityMessages.InitialPasswordCarriedDelivering), message),
             _ when outcome.ExistingFailureReason == PasswordSetFailureReason.TargetObjectNotFound =>
-                $"{message} It was waiting for the Connected System Object to exist, and is due now.",
+                ActivityMessage.Create(nameof(ActivityMessages.InitialPasswordCarriedWaiting), message),
             _ => message
         };
     }
+
+    /// <summary>An Initial Password queued for delivery, with why it replaced a waiting change where it did.</summary>
+    internal static JimMessage Queued(string connectedSystemName, JimMessage? replaced) => replaced == null
+        ? ActivityMessage.Create(nameof(ActivityMessages.InitialPasswordQueued), connectedSystemName)
+        : ActivityMessage.Create(nameof(ActivityMessages.InitialPasswordQueuedReplacing), connectedSystemName, replaced);
+
+    /// <summary>Told to the person's own password change, which lost the Connected System to the Initial Password.</summary>
+    internal static JimMessage NotSet(string connectedSystemName, JimMessage replaced) =>
+        ActivityMessage.Create(nameof(ActivityMessages.PasswordNotSetReplaced), connectedSystemName, replaced);
 
     /// <summary>
     /// Why the Initial Password replaced a password change for the person that was still waiting, ending in a full stop,
     /// or null where the row it replaced owed nothing (expired, cancelled, or an Initial Password for an account that is
     /// gone), which needs no explaining.
     /// </summary>
-    internal static string? ReplacedWaitingChange(string connectedSystemName, ProvisionedPasswordStagingOutcome outcome)
+    internal static JimMessage? ReplacedWaitingChange(string connectedSystemName, ProvisionedPasswordStagingOutcome outcome)
     {
         if (outcome.ExistingHeld)
-            return $"it is held while Password Synchronisation is switched off for {connectedSystemName}, so it had not reached it, " +
-                   "and a Connected System Object's first password is delivered whatever the pause.";
+            return ActivityMessage.Create(nameof(ActivityMessages.PasswordReplacedHeld), connectedSystemName);
 
         if (outcome.ExistingAccountGone)
-            return "it was set on a Connected System Object that no longer exists there, or is no longer this person's.";
+            return ActivityMessage.Create(nameof(ActivityMessages.PasswordReplacedAccountGone));
 
         if (outcome.ExistingForAnotherObjectType)
-            return $"it is for the Object Type that Password Synchronisation sets passwords on in {connectedSystemName}, which this Connected " +
-                   "System Object is not, so it could not reach it, nor any other of this person's there while this one is theirs.";
+            return ActivityMessage.Create(nameof(ActivityMessages.PasswordReplacedOtherObjectType), connectedSystemName);
 
         if (outcome.ExistingStatus == PendingPasswordChangeStatus.Parked && outcome.ExistingOrigin != PendingPasswordChangeOrigin.Provisioned)
-            return $"JIM had stopped trying to deliver it ({Describe(outcome)}).";
+            return ActivityMessage.Create(nameof(ActivityMessages.PasswordReplacedStoppedTrying), Describe(outcome));
 
         return null;
     }
 
-    private static string Describe(ProvisionedPasswordStagingOutcome outcome)
+    private static JimMessage Describe(ProvisionedPasswordStagingOutcome outcome)
     {
         var reason = outcome.ExistingFailureReason switch
         {
-            PasswordSetFailureReason.PolicyRejection => "the password did not meet the system's password policy",
-            PasswordSetFailureReason.ConfigurationFault => "a configuration problem stopped it being set",
-            PasswordSetFailureReason.UnsupportedOperation => "the system cannot set a password on it",
-            PasswordSetFailureReason.TargetObjectNotFound => "the Connected System Object did not exist yet",
-            PasswordSetFailureReason.Transient => "the system could not be reached",
-            _ => "for a reason JIM did not record"
+            PasswordSetFailureReason.PolicyRejection => ActivityMessage.Create(nameof(ActivityMessages.PasswordParkedPolicy)),
+            PasswordSetFailureReason.ConfigurationFault => ActivityMessage.Create(nameof(ActivityMessages.PasswordParkedConfiguration)),
+            PasswordSetFailureReason.UnsupportedOperation => ActivityMessage.Create(nameof(ActivityMessages.PasswordParkedUnsupported)),
+            PasswordSetFailureReason.TargetObjectNotFound => ActivityMessage.Create(nameof(ActivityMessages.PasswordParkedObjectMissing)),
+            PasswordSetFailureReason.Transient => ActivityMessage.Create(nameof(ActivityMessages.PasswordParkedUnreachable)),
+            _ => ActivityMessage.Create(nameof(ActivityMessages.PasswordParkedUnrecorded))
         };
 
         return string.IsNullOrWhiteSpace(outcome.ExistingTargetMessage)
             ? reason
-            : $"{reason}: {outcome.ExistingTargetMessage.Trim()}";
+            : ActivityMessage.Create(nameof(ActivityMessages.PasswordParkedWithTargetMessage), reason, outcome.ExistingTargetMessage.Trim());
     }
 }

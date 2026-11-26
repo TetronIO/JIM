@@ -238,13 +238,10 @@ public class MetaverseMatchValueLookupDatabaseTests
         }
 
         // The value must drive an index condition. Matched by a filter instead, the scan reads every value the
-        // attribute holds before discarding them, whichever index it walks.
-        var planText = string.Join("\n", plan);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(plan.Where(line => line.Contains("Index Cond:")).Any(line => line.Contains("StringValue")), Is.True, planText);
-            Assert.That(plan.Where(line => line.Contains("Filter:")).Any(line => line.Contains("StringValue\" =") || line.Contains("lower(")), Is.False, planText);
-        }
+        // attribute holds before discarding them, whichever index it walks. Respecting case, the lookup carries both an
+        // exact and a lower-case comparison, so the one the chosen index cannot seek on is checked as a filter on the
+        // rows the seek found; that is cheap, and only an index condition without the value is the fault.
+        Assert.That(plan.Where(line => line.Contains("Index Cond:")).Any(line => line.Contains("StringValue")), Is.True, string.Join("\n", plan));
     }
 
     [TestCase(false)]
@@ -353,9 +350,27 @@ public class MetaverseMatchValueLookupDatabaseTests
             var values = Enumerable.Range(0, 5000)
                 .Select(n => (object)(n % 2 == 0 ? $"e{1000000 + n * 37 + 1}" : $"NOBODY{n}"))
                 .ToList();
+
+            // The planned shape first, without running it, so the plan is in the output even if the run below times out:
+            // the sequential-scan plan this test exists to catch is slow enough under ANALYZE to do that (#3067).
+            await using (var plannedOnly = new NpgsqlCommand(
+                $"{TransactionJit.DisableSql};\nEXPLAIN " + MetaverseRepository.BuildMatchValueBatchLookupSql(AttributeDataType.Text, caseSensitive),
+                connection))
+            {
+                MetaverseRepository.AddMatchValueLookupParameters(plannedOnly, seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, values, take: 11);
+                var planned = new List<string>();
+                await using var reader = await plannedOnly.ExecuteReaderAsync();
+                Assert.That(await TransactionJit.SkipDisableResultAsync(reader), Is.True);
+                while (await reader.ReadAsync())
+                    planned.Add(reader.GetString(0));
+                TestContext.Out.WriteLine($"{(caseSensitive ? "Respecting" : "Ignoring")} case, planned:\n{string.Join("\n", planned)}");
+            }
+
             await using var explain = new NpgsqlCommand(
                 $"{TransactionJit.DisableSql};\nEXPLAIN (ANALYZE, BUFFERS) " + MetaverseRepository.BuildMatchValueBatchLookupSql(AttributeDataType.Text, caseSensitive),
                 connection);
+            // Runs the lookup for real over 5,000 values; a slow CI runner must not fail it on Npgsql's default 30 seconds (#3067).
+            explain.CommandTimeout = 300;
             MetaverseRepository.AddMatchValueLookupParameters(explain, seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, values, take: 11);
 
             // Sent as the repository sends it, JIT off first.
@@ -388,6 +403,56 @@ public class MetaverseMatchValueLookupDatabaseTests
                 ALTER TABLE "MetaverseObjectAttributeValues" RESET (autovacuum_enabled);
                 """, connection);
             await restore.ExecuteNonQueryAsync();
+        }
+    }
+
+    /// <summary>
+    /// Respecting case, either text index can serve the lookup, and with statistics taken while the table was empty the
+    /// planner sees no difference between them. Given the lower-case index, a lookup that compared only the stored value
+    /// could seek on nothing but the attribute, and read every value the attribute holds once per value sought: in
+    /// database-tests that was 70 seconds for one page of 5,000 values against 200,000. Whichever index the planner
+    /// takes, each value must drive its seek. The exact-match index is dropped (in a transaction rolled back after) so
+    /// the lower-case index is the only one left to choose.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task CaseSensitiveLookup_OnlyTheLowerCaseIndexAvailable_StillSeeksEachValueAsync(bool batch)
+    {
+        var seeded = await SeedAsync();
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var setup = new NpgsqlCommand("""
+            DROP INDEX "IX_MetaverseObjectAttributeValues_AttributeId_StringValue";
+            SET LOCAL enable_seqscan = off;
+            """, connection, transaction))
+        {
+            await setup.ExecuteNonQueryAsync();
+        }
+
+        var sql = batch
+            ? MetaverseRepository.BuildMatchValueBatchLookupSql(AttributeDataType.Text, caseSensitive: true)
+            : MetaverseRepository.BuildMatchValueLookupSql(AttributeDataType.Text, caseSensitive: true);
+        await using var explain = new NpgsqlCommand("EXPLAIN " + sql, connection, transaction);
+        MetaverseRepository.AddMatchValueLookupParameters(explain, seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, ["E100", "E200"], take: 2);
+
+        var plan = new List<string>();
+        await using (var reader = await explain.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                plan.Add(reader.GetString(0));
+        }
+
+        await transaction.RollbackAsync();
+
+        var planText = string.Join("\n", plan);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Any(line => line.Contains("IX_MetaverseObjectAttributeValues_AttributeId_LowerStringValue")), Is.True,
+                "The lower-case index is the only one left.\n" + planText);
+            Assert.That(plan.Where(line => line.Contains("Index Cond:")).Any(line => line.Contains("StringValue")), Is.True,
+                "Each value must drive the seek, not only the attribute.\n" + planText);
         }
     }
 

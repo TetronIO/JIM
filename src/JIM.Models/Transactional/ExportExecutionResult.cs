@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Transactional;
@@ -66,6 +67,13 @@ public class ExportExecutionResult
     /// System's <see cref="ConnectedSystem.UnresolvedReferenceHandling"/>.
     /// </summary>
     public int UnresolvableReferenceCount { get; set; }
+
+    /// <summary>
+    /// Number of queued reference values withdrawn because the Metaverse Object they referred to has been deleted, so
+    /// they could never be written. A Pending Export left with nothing to export is finished with.
+    /// </summary>
+    /// <remarks>Issue #3078: Metaverse Object deletion does not reach Pending Export changes naming the object.</remarks>
+    public int WithdrawnReferenceCount { get; set; }
 
     /// <summary>
     /// IDs of the Pending Exports that were processed.
@@ -353,6 +361,24 @@ public class ProcessedExportItem
     public string? ErrorMessage { get; set; }
 
     /// <summary>
+    /// <see cref="ErrorMessage"/> as a message, where JIM worded it itself, so the portal shows it in the reader's
+    /// language (#3084). Setting it also sets <see cref="ErrorMessage"/> to its British English. Null where the error is
+    /// another system's own words.
+    /// </summary>
+    public JimMessage? ErrorMessageDetail
+    {
+        get => _errorMessageDetail;
+        set
+        {
+            _errorMessageDetail = value;
+            if (value != null)
+                ErrorMessage = value.ToEnglish();
+        }
+    }
+
+    private JimMessage? _errorMessageDetail;
+
+    /// <summary>
     /// Number of retry attempts if the export failed.
     /// </summary>
     public int ErrorCount { get; set; }
@@ -452,6 +478,23 @@ public class ProcessedExportItem
     /// unresolved reference error, exactly as the import side reports its own.
     /// </summary>
     public string? UnresolvedReferenceMessage { get; set; }
+
+    /// <summary>
+    /// <see cref="UnresolvedReferenceMessage"/> as a message the portal shows in the reader's language (#3084). Setting it
+    /// also sets <see cref="UnresolvedReferenceMessage"/> to its British English.
+    /// </summary>
+    public JimMessage? UnresolvedReferenceMessageDetail
+    {
+        get => _unresolvedReferenceMessageDetail;
+        set
+        {
+            _unresolvedReferenceMessageDetail = value;
+            if (value != null)
+                UnresolvedReferenceMessage = value.ToEnglish();
+        }
+    }
+
+    private JimMessage? _unresolvedReferenceMessageDetail;
 
     /// <summary>
     /// True when this item's Connected System Object row has already been removed by the export server

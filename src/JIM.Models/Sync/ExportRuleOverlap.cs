@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
+
 namespace JIM.Models.Sync;
 
 /// <summary>
@@ -51,12 +54,10 @@ public class ExportRuleOverlap
     /// Says what happened and how to fix it, for the administrator: the error message of the run's execution item and of
     /// the Synchronisation Preview's error alike, so the two read the same.
     /// </summary>
-    public string DescribeForAdministrator()
-    {
-        var ruleNames = string.Join(", ", SyncRuleNames.Select(name => $"'{name}'"));
-        return $"This Metaverse Object is in scope of {SyncRuleNames.Count} export Synchronisation Rules that target " +
-               $"'{ObjectTypeName}' in '{ConnectedSystemName}': {ruleNames}. Only one export rule may manage an object, so " +
-               "nothing is exported to that Connected System for it. Give the rules scopes that never overlap, or combine " +
-               "them into one rule.";
-    }
+    public string DescribeForAdministrator() => Describe().ToEnglish();
+
+    /// <summary><see cref="DescribeForAdministrator"/> as a message.</summary>
+    public JimMessage Describe() =>
+        JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExportRuleOverlap), SyncRuleNames.Count, ObjectTypeName, ConnectedSystemName,
+            string.Join(", ", SyncRuleNames.Select(name => $"'{name}'")));
 }

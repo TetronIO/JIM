@@ -32,6 +32,15 @@ public class CreateMetaverseAttributeRequest
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
     /// <summary>
+    /// How the values of several import Synchronisation Rules are combined. Defaults to <c>Priority</c>, where the
+    /// highest-priority contributor supplies the values. <c>Accumulate</c> adds every value any contributor supplies and
+    /// never removes one through synchronisation. <c>Merge</c> also adds every contributor's values, and removes a value
+    /// once no contributor supplies it. <c>Accumulate</c> and <c>Merge</c> are refused for a single-valued or a
+    /// Reference attribute.
+    /// </summary>
+    public AttributeContributionMode ContributionMode { get; set; } = AttributeContributionMode.Priority;
+
+    /// <summary>
     /// Optional list of Metaverse Object Type IDs to bind this attribute to on creation. Empty or omitted creates it
     /// unbound.
     /// </summary>
@@ -44,10 +53,10 @@ public class CreateMetaverseAttributeRequest
 }
 
 /// <summary>
-/// Request DTO for updating a custom Metaverse Attribute's name, rendering configuration and Standard Mappings.
-/// Type and plurality are changed via the dedicated schema endpoint (they are gated by stored values); Object Type
-/// bindings are changed via the bind / unassign endpoints. At least one of <see cref="Name"/>,
-/// <see cref="RenderingHint"/> or <see cref="StandardMappings"/> must be supplied.
+/// Request DTO for updating a custom Metaverse Attribute's name, rendering configuration, contribution mode and
+/// Standard Mappings. Type and plurality are changed via the dedicated schema endpoint (they are gated by stored values);
+/// Object Type bindings are changed via the bind / unassign endpoints. At least one of <see cref="Name"/>,
+/// <see cref="RenderingHint"/>, <see cref="ContributionMode"/> or <see cref="StandardMappings"/> must be supplied.
 /// </summary>
 public class UpdateMetaverseAttributeRequest
 {
@@ -62,6 +71,19 @@ public class UpdateMetaverseAttributeRequest
     /// The updated rendering hint for multi-valued attributes. Omitted (or null) leaves it unchanged.
     /// </summary>
     public AttributeRenderingHint? RenderingHint { get; set; }
+
+    /// <summary>
+    /// The new contribution mode. Omitted (or null) leaves it unchanged. <c>Accumulate</c> and <c>Merge</c> are refused
+    /// for a single-valued or a Reference attribute. The change applies to each Metaverse Object at its next synchronisation.
+    /// </summary>
+    public AttributeContributionMode? ContributionMode { get; set; }
+
+    /// <summary>
+    /// Must be true to change an Accumulate attribute to another mode. At each Metaverse Object's next synchronisation,
+    /// the values Accumulate kept that no contributor supplies any more are removed, and exports remove them from target
+    /// systems. Ignored for any other change.
+    /// </summary>
+    public bool ConfirmLeavingAccumulate { get; set; }
 
     /// <summary>
     /// The attribute's full set of Standard Mappings. Omitted (or null) leaves them unchanged; a supplied list

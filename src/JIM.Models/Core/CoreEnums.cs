@@ -457,3 +457,53 @@ public enum AttributeRenderingHint
     /// </summary>
     List = 3
 }
+
+/// <summary>
+/// How a multi-valued Metaverse attribute combines the values of the import Synchronisation Rules that contribute to it
+/// (#3059). Stored on <see cref="MetaverseAttribute"/>; the same mode applies on every Metaverse Object Type that uses
+/// the attribute.
+/// </summary>
+public enum AttributeContributionMode
+{
+    /// <summary>
+    /// The highest-priority applicable contributor supplies the whole value set; the others are ignored. The only mode
+    /// for single-valued attributes, and the default.
+    /// </summary>
+    Priority = 0,
+
+    /// <summary>
+    /// Every value a contributor supplies is added and kept. Synchronisation never removes a value, whatever happens to
+    /// the contributor; only an administrator can. Not available for Reference attributes, because a reference cannot
+    /// outlive the Metaverse Object it points to.
+    /// </summary>
+    Accumulate = 1,
+
+    /// <summary>
+    /// Every applicable contributor adds its values, and a value is removed only when no contributor still supplies it.
+    /// Not available for Reference attributes.
+    /// </summary>
+    Merge = 2
+}
+
+/// <summary>
+/// What became of a request to remove values from an Accumulate attribute by hand (#3059).
+/// </summary>
+public enum AttributeValueRemovalOutcome
+{
+    /// <summary>The values were removed, and the removal recorded.</summary>
+    Removed = 0,
+
+    /// <summary>The attribute is not in Accumulate mode, or is not one of the object's; nothing was removed.</summary>
+    NotAccumulate = 1,
+
+    /// <summary>A named value is not held by the object, or no value was named; nothing was removed.</summary>
+    ValueNotHeld = 2,
+
+    /// <summary>A Synchronisation Rule still supplies a named value, so the next synchronisation would add it back;
+    /// nothing was removed.</summary>
+    SuppliedByContributor = 3,
+
+    /// <summary>Whether a Synchronisation Rule still supplies a named value cannot be decided (its scope or an expression
+    /// could not be evaluated); nothing was removed.</summary>
+    SupplyUndecidable = 4
+}

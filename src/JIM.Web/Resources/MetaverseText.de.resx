@@ -1059,6 +1059,27 @@
   <data name="EchRecipientFallback" xml:space="preserve">
     <value>Exchange-Empfänger</value>
   </data>
+  <data name="EchTitleMailbox" xml:space="preserve">
+    <value>Postfach</value>
+  </data>
+  <data name="EchTitleSharedMailbox" xml:space="preserve">
+    <value>Freigegebenes Postfach</value>
+  </data>
+  <data name="EchTitleRoomMailbox" xml:space="preserve">
+    <value>Raumpostfach</value>
+  </data>
+  <data name="EchTitleEquipmentMailbox" xml:space="preserve">
+    <value>Gerätepostfach</value>
+  </data>
+  <data name="EchTitleMailUser" xml:space="preserve">
+    <value>E-Mail-Benutzer</value>
+  </data>
+  <data name="EchTitleMailContact" xml:space="preserve">
+    <value>E-Mail-Kontakt</value>
+  </data>
+  <data name="EchTitleMailEnabledGroup" xml:space="preserve">
+    <value>E-Mail-aktivierte Gruppe</value>
+  </data>
   <data name="EchPillQueued" xml:space="preserve">
     <value>In Warteschlange</value>
   </data>
@@ -1760,5 +1781,20 @@
   </data>
   <data name="SpdPasswordsTabOperations" xml:space="preserve">
     <value>Registerkarte „Kennwörter“ unter „Betrieb“</value>
+  </data>
+  <data name="MaiRemoveValue" xml:space="preserve">
+    <value>Wert entfernen</value>
+  </data>
+  <data name="TvRemoveValueTitle" xml:space="preserve">
+    <value>Wert entfernen?</value>
+  </data>
+  <data name="TvRemoveValueQuestion" xml:space="preserve">
+    <value>{0} aus {1} entfernen? „Akkumulieren“ behält jeden Wert, den seine Beitragenden geliefert haben, bis jemand ihn entfernt. Das Entfernen wird im Änderungsverlauf dieses Objekts festgehalten und erreicht die verbundenen Systeme, in die {1} exportiert wird, bei deren nächster Synchronisierung.</value>
+  </data>
+  <data name="TvRemoveValueConfirm" xml:space="preserve">
+    <value>Entfernen</value>
+  </data>
+  <data name="TvValueRemoved" xml:space="preserve">
+    <value>{0} wurde aus {1} entfernt.</value>
   </data>
 </root>

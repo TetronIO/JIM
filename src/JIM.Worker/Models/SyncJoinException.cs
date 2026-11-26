@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 
 namespace JIM.Worker.Models;
 
@@ -10,7 +11,7 @@ namespace JIM.Worker.Models;
 /// join, a failed Object Matching Rule, or projecting rules that disagree on the Metaverse Object Type (#2823).
 /// Carries the error type and message for recording in the activity execution item.
 /// </summary>
-public class SyncJoinException : Exception
+public class SyncJoinException : Exception, IJimMessageCarrier
 {
     /// <summary>
     /// The type of error that occurred during the join attempt.
@@ -23,9 +24,22 @@ public class SyncJoinException : Exception
     /// </summary>
     public IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates { get; init; } = [];
 
+    /// <summary>
+    /// The error as a message, for the portal to show in the viewer's language (#3094); null where the exception carries
+    /// English only. Its English is <see cref="Exception.Message"/>.
+    /// </summary>
+    public JimMessage? Detail { get; }
+
     public SyncJoinException(ActivityRunProfileExecutionItemErrorType errorType, string message)
         : base(message)
     {
         ErrorType = errorType;
+    }
+
+    public SyncJoinException(ActivityRunProfileExecutionItemErrorType errorType, JimMessage detail)
+        : base(detail.ToEnglish())
+    {
+        ErrorType = errorType;
+        Detail = detail;
     }
 }

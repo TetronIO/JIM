@@ -109,7 +109,8 @@ public class PendingExportReleaseDatabaseTests
 
         // One state with every nullable column set, one with every nullable column null, so the write is proven not to
         // confuse "no value" with a default.
-        var populated = new PendingExportRetryState(ids[0], PendingExportStatus.Pending, 2, failingSince, lastAttemptedAt, "an earlier failure", "at Earlier()");
+        var populated = new PendingExportRetryState(ids[0], PendingExportStatus.Pending, 2, failingSince, lastAttemptedAt, "an earlier failure", "at Earlier()",
+            "{\"Catalogue\":\"JIM.Application:ActivityMessages\",\"Key\":\"ExportFailedNoReason\",\"Arguments\":[]}");
         var empty = new PendingExportRetryState(ids[1], PendingExportStatus.ExportNotConfirmed, 0, null, null, null, null);
 
         IReadOnlySet<Guid> released;

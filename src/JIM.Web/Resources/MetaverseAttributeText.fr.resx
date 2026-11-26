@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ContributionModeLabel" xml:space="preserve">
+    <value>Mode de contribution</value>
+  </data>
+  <data name="ContributionModePriority" xml:space="preserve">
+    <value>Priorité</value>
+  </data>
+  <data name="ContributionModeAccumulate" xml:space="preserve">
+    <value>Accumuler</value>
+  </data>
+  <data name="ContributionModeHelper" xml:space="preserve">
+    <value>Façon dont les valeurs de plusieurs règles de synchronisation sont combinées. « Priorité » les prend au contributeur de plus haute priorité ; « Accumuler » ajoute chaque valeur et la synchronisation n’en retire jamais aucune ; « Fusionner » ajoute chaque valeur et en retire une dès qu’aucun contributeur ne la fournit plus.</value>
+  </data>
+  <data name="ContributionModeReferenceHelper" xml:space="preserve">
+    <value>« Accumuler » et « Fusionner » ne sont pas disponibles pour un attribut de référence, car une référence est supprimée avec l’objet Metaverse vers lequel elle pointe. Pour conserver un historique des références, enregistrez-les sous forme de texte dans un attribut distinct.</value>
+  </data>
+  <data name="AccumulateNotice" xml:space="preserve">
+    <value>À partir de la prochaine synchronisation de chaque objet Metaverse, chaque contributeur ajoute ses valeurs à cet attribut, et la synchronisation n’en retire jamais aucune, même après la suppression du compte qui l’a fournie.</value>
+  </data>
+  <data name="LeaveAccumulateNotice" xml:space="preserve">
+    <value>Lors de la prochaine synchronisation de chaque objet Metaverse, les valeurs conservées par cet attribut qu’aucun contributeur ne fournit plus sont retirées, et les exportations les retirent des systèmes cibles.</value>
+  </data>
+  <data name="LeaveAccumulateDialogTitle" xml:space="preserve">
+    <value>Arrêter d’accumuler les valeurs de « {0} » ?</value>
+  </data>
+  <data name="LeaveAccumulateWarning" xml:space="preserve">
+    <value>Passer {0} en « {1} » retire, lors de la prochaine synchronisation de chaque objet Metaverse, les valeurs qu’aucun contributeur ne fournit plus, puis les exportations les retirent des systèmes cibles. Elles ne peuvent pas être récupérées.</value>
+  </data>
+  <data name="LeaveAccumulateConfirm" xml:space="preserve">
+    <value>Arrêter d’accumuler</value>
+  </data>
+  <data name="PriorityListAccumulateNotice" xml:space="preserve">
+    <value>Cet attribut utilise le mode de contribution « Accumuler » : chaque règle de synchronisation ci-dessous ajoute ses valeurs et aucune n’est privilégiée. Il n’y a donc pas d’ordre à définir, et « Null est une valeur » est sans effet.</value>
+  </data>
+  <data name="PendingContributorThisMapping" xml:space="preserve">
+    <value>ce flux, une fois enregistré</value>
+  </data>
+  <data name="ColumnConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="ColumnSynchronisationRule" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="NullIsValueAccumulateTooltip" xml:space="preserve">
+    <value>« Null est une valeur » est sans effet sur un attribut en mode « Accumuler » : chaque contributeur ajoute ses valeurs, il n’y a donc pas de gagnant qu’une valeur absente pourrait remplacer.</value>
+  </data>
+  <data name="ExportAccumulateAdvisory" xml:space="preserve">
+    <value>Cet attribut Metaverse accumule des valeurs : ce flux d’attributs exporte donc chaque valeur conservée, y compris celles de comptes supprimés depuis.</value>
+  </data>
+  <data name="ContributionModeMerge" xml:space="preserve">
+    <value>Fusionner</value>
+  </data>
+  <data name="MergeNotice" xml:space="preserve">
+    <value>À partir de la prochaine synchronisation de chaque objet Metaverse, chaque contributeur ajoute ses valeurs à cet attribut, et une valeur n’est retirée que lorsqu’aucun contributeur ne la fournit plus.</value>
+  </data>
+  <data name="PriorityListMergeNotice" xml:space="preserve">
+    <value>Cet attribut utilise le mode de contribution « Fusionner » : chaque règle de synchronisation ci-dessous ajoute ses valeurs et aucune n’est privilégiée. Il n’y a donc pas d’ordre à définir, et « Null est une valeur » est sans effet.</value>
+  </data>
+  <data name="NullIsValueMergeTooltip" xml:space="preserve">
+    <value>« Null est une valeur » est sans effet sur un attribut en mode « Fusionner » : chaque contributeur ajoute ses valeurs, il n’y a donc pas de gagnant qu’une valeur absente pourrait remplacer.</value>
+  </data>
+  <data name="ImpactLosingOne" xml:space="preserve">
+    <value>Au moins {0} objet Metaverse perdra des valeurs lors de sa prochaine synchronisation.</value>
+  </data>
+  <data name="ImpactLosingOther" xml:space="preserve">
+    <value>Au moins {0} objets Metaverse perdront des valeurs lors de leur prochaine synchronisation.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOne" xml:space="preserve">
+    <value>Au moins {0} objet Metaverse perdra des valeurs lors de sa prochaine synchronisation, dont {1} valeurs qu’aucun contributeur ne fournit plus.</value>
+  </data>
+  <data name="ImpactLosingWithValuesOther" xml:space="preserve">
+    <value>Au moins {0} objets Metaverse perdront des valeurs lors de leur prochaine synchronisation, dont {1} valeurs qu’aucun contributeur ne fournit plus.</value>
+  </data>
+  <data name="ImpactKeepingOneOne" xml:space="preserve">
+    <value>{0} objet Metaverse contient des valeurs de plusieurs contributeurs et ne conservera que celles du contributeur le plus prioritaire.</value>
+  </data>
+  <data name="ImpactKeepingOneOther" xml:space="preserve">
+    <value>{0} objets Metaverse contiennent des valeurs de plusieurs contributeurs et ne conserveront que celles du contributeur le plus prioritaire.</value>
+  </data>
+  <data name="ImpactGainingOne" xml:space="preserve">
+    <value>{0} objet Metaverse recevra des valeurs de contributeurs dont il ne contient aucune valeur aujourd’hui.</value>
+  </data>
+  <data name="ImpactGainingOther" xml:space="preserve">
+    <value>{0} objets Metaverse recevront des valeurs de contributeurs dont ils ne contiennent aucune valeur aujourd’hui.</value>
+  </data>
+  <data name="ImpactNone" xml:space="preserve">
+    <value>Aucune valeur d’objet Metaverse ne change.</value>
+  </data>
+</root>

@@ -1631,6 +1631,13 @@ public interface ISyncRepository
     Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Deletes the Pending Exports of the given objects, as <see cref="DeletePendingExportsByConnectedSystemObjectIdsAsync"/>
+    /// does, and returns each one as it stood. An import that finds objects deleted in the target uses it to clear their
+    /// exports and to know which of those exports the deletion confirms (#3087), in the one statement that deletes them.
+    /// </summary>
+    Task<IReadOnlyList<DeletedPendingExportSummary>> DeletePendingExportsOfDeletedObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Deletes Connected System Objects by id, without requiring a tracked entity graph.
     /// <para>
     /// Used for a successful Delete export against a Connected System Object whose provisioning was never
@@ -2336,6 +2343,21 @@ public interface ISyncRepository
     /// Used during MVO deletion to find all provisioned CSOs for delete exports.
     /// </summary>
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
+    /// The Connected System Objects of every Connected System but <paramref name="excludeConnectedSystemId"/> joined to
+    /// each of <paramref name="metaverseObjectIds"/>, keyed by Metaverse Object id, with the same type and attribute values
+    /// as <see cref="GetConnectedSystemObjectsByMetaverseObjectIdAsync"/>. Contributor re-election reads a synchronisation
+    /// page's objects this way once it has several to re-elect (#3059); it never re-elects from the system being
+    /// synchronised, so that system's objects, already loaded and possibly with only some of their values, are left alone.
+    /// </summary>
+    /// <param name="metaverseObjectIds">The Metaverse Objects to read for.</param>
+    /// <param name="excludeConnectedSystemId">The Connected System whose objects are left out.</param>
+    /// <param name="maxValuesPerMetaverseObject">A Metaverse Object whose joined objects hold more values than this in
+    /// total is left out of the result, to be read singly, so a page of large groups cannot load every member value at
+    /// once. Every other requested id has an entry, empty when nothing else is joined to it.</param>
+    Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int excludeConnectedSystemId, int maxValuesPerMetaverseObject);
 
     /// <summary>
     /// Gets all CSOs joined to any of the given MVOs across all Connected Systems, in one query,

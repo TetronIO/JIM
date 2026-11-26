@@ -53,6 +53,19 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>What went wrong, in words; null when the object did not fail.</summary>
     public string? ErrorMessage { get; set; }
 
+    /// <summary>
+    /// The key of the error message, for rendering it in another language, such as
+    /// <c>ActivityMessages.ExportFailed</c>. Null when the object did not fail, or for an error recorded before keys
+    /// were stored.
+    /// </summary>
+    public string? ErrorMessageKey { get; set; }
+
+    /// <summary>The values placed into the error message, in order. Null whenever the key is.</summary>
+    public List<MessageArgumentDto>? ErrorMessageArguments { get; set; }
+
+    /// <summary>For a counted error message, the count that chooses its singular or plural form; null otherwise.</summary>
+    public long? ErrorMessageCount { get; set; }
+
     /// <summary>The stack trace, when the failure came from an exception.</summary>
     public string? ErrorStackTrace { get; set; }
 
@@ -164,6 +177,9 @@ public class ActivityRunProfileExecutionItemDetailDto
             ObjectTypeSnapshot = entity.ObjectTypeSnapshot,
             ErrorType = entity.ErrorType,
             ErrorMessage = entity.ErrorMessage,
+            ErrorMessageKey = ApiMessage.KeyOf(entity.ErrorMessageDetail),
+            ErrorMessageArguments = ApiMessage.ArgumentsOf(entity.ErrorMessageDetail),
+            ErrorMessageCount = ApiMessage.CountOf(entity.ErrorMessageDetail),
             ErrorStackTrace = entity.ErrorStackTrace,
             AttributeFlowCount = entity.AttributeFlowCount,
             UnresolvedReferenceCount = entity.UnresolvedReferenceCount,

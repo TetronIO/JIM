@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Staging;
 
 /// <summary>
@@ -19,6 +21,13 @@ public class ConnectedSystemExportResult
     /// Error message if the export failed. Should be human-readable.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// <see cref="ErrorMessage"/> as a message the portal shows in the viewer's language, where JIM worded the failure
+    /// itself (#3094); null where the text is another system's own, which stays as it wrote it. Its English is
+    /// <see cref="ErrorMessage"/>.
+    /// </summary>
+    public JimMessage? ErrorMessageDetail { get; set; }
 
     /// <summary>
     /// Classifies the type of error when the export failed.
@@ -143,6 +152,25 @@ public class ConnectedSystemExportResult
             Success = false,
             ErrorMessage = errorMessage,
             ErrorType = ConnectedSystemExportErrorType.General
+        };
+
+    /// <summary>
+    /// Creates a failed result whose reason JIM worded itself, as a message the portal can show in the viewer's language;
+    /// <see cref="ErrorMessage"/> is its British English (#3094).
+    /// </summary>
+    public static ConnectedSystemExportResult Failed(JimMessage errorMessage) =>
+        Failed(errorMessage, ConnectedSystemExportErrorType.General);
+
+    /// <summary>
+    /// Creates a failed result with a specific error classification, whose reason JIM worded itself (#3094).
+    /// </summary>
+    public static ConnectedSystemExportResult Failed(JimMessage errorMessage, ConnectedSystemExportErrorType errorType) =>
+        new()
+        {
+            Success = false,
+            ErrorMessage = errorMessage.ToEnglish(),
+            ErrorMessageDetail = errorMessage,
+            ErrorType = errorType
         };
 
     /// <summary>
