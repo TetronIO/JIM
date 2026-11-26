@@ -864,12 +864,14 @@ public class ExportEvaluationServer
         var accountIds = page.Select(entry => entry.ConnectedSystemObjectId).ToHashSet();
         var recordedAt = DateTime.UtcNow;
         var coverages = new List<ExportRuleCoverage>();
-        foreach (var mvo in mvos.Where(mvo => mvo.Type?.Id == rule.MetaverseObjectTypeId))
+        var candidates = mvos
+            .Where(mvo => mvo.Type?.Id == rule.MetaverseObjectTypeId)
+            .Select(mvo => (Mvo: mvo, Account: cache.CsoLookup.TryGetValue((mvo.Id, rule.ConnectedSystemId), out var account) ? account : null))
+            .Where(candidate => candidate.Account != null && accountIds.Contains(candidate.Account.Id) &&
+                                SyncEngine.ManagingExportRuleId(candidate.Account) != rule.Id)
+            .Select(candidate => (candidate.Mvo, Account: candidate.Account!));
+        foreach (var (mvo, account) in candidates)
         {
-            if (!cache.CsoLookup.TryGetValue((mvo.Id, rule.ConnectedSystemId), out var account) || !accountIds.Contains(account.Id) ||
-                SyncEngine.ManagingExportRuleId(account) == rule.Id)
-                continue;
-
             bool inScope;
             try
             {
@@ -898,12 +900,14 @@ public class ExportEvaluationServer
     private static void RecordProvisionedAccountsCoverage(IReadOnlyList<ExportGroupPlan> groups, ExportEvaluationResult result)
     {
         var recordedAt = DateTime.UtcNow;
-        foreach (var account in result.ProvisioningCsosToCreate)
+        var provisionedAccounts = result.ProvisioningCsosToCreate
+            .Select(account => (Account: account, Group: groups.FirstOrDefault(g => g.ConnectedSystemId == account.ConnectedSystemId &&
+                                                                                   g.ConnectedSystemObjectTypeId == account.TypeId)))
+            .Where(provisioned => provisioned.Group != null)
+            .Select(provisioned => (provisioned.Account, Group: provisioned.Group!))
+            .ToList();
+        foreach (var (account, group) in provisionedAccounts)
         {
-            var group = groups.FirstOrDefault(g => g.ConnectedSystemId == account.ConnectedSystemId && g.ConnectedSystemObjectTypeId == account.TypeId);
-            if (group == null)
-                continue;
-
             var creatingRuleId = SyncEngine.ManagingExportRuleId(account)
                 ?? (result.ProvisioningSyncRulesByCsoId.TryGetValue(account.Id, out var creatingRule) ? creatingRule.Id : (int?)null);
             result.CoverageStarted.AddRange(group.OrderedRules
