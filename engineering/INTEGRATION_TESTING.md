@@ -109,6 +109,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-039-EntraIdScale" -Template Large -DirectoryType OpenLDAP  # The Entra ID Connector at scale against the test tenant (#3053); on request only, and hours at the largest sizes
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-040-EntraIdScaleStandIn" -Template Scale1m80Groups -DirectoryType OpenLDAP  # The Entra ID Connector reading up to a million objects from the stand-in Graph service (#3053); on request only
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-032-IntraTypeReferences" -DirectoryType OpenLDAP -Template Medium  # Managers and nested groups through the cross-page reference step (#2492, OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-041-SeveralExportRules" -DirectoryType OpenLDAP  # A base and an add-on export rule covering one account (#2826, OpenLDAP only)
 
 # Short forms resolve to the full name: the number, Scenario-NNN, or the descriptive part
 ./test/integration/Run-IntegrationTests.ps1 -Scenario 005                # Scenario-005-MatchingRules
@@ -235,6 +236,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario-039-EntraIdScale` | The Microsoft Entra ID Connector at scale ([#3053](https://github.com/TetronIO/JIM/issues/3053)), against the JIM test tenant at the run's template: provision, changes confirmed by Delta Import, leavers deleted, a Full Import of everything, each timed; on request only, never in `All` |
 | `Scenario-040-EntraIdScaleStandIn` | The Microsoft Entra ID Connector reading a tenant of up to a million objects ([#3053](https://github.com/TetronIO/JIM/issues/3053)), from the stand-in Graph service: Full Import, Delta Import of changes and deletions, an idle Delta Import and a Full Import of everything, each timed; on request only, never in `All` |
 | `Scenario-032-IntraTypeReferences` | The Full Synchronisation's cross-page reference step end to end ([#2492](https://github.com/TetronIO/JIM/issues/2492)): users with managers and groups nesting groups, references within one Object Type that no type order can resolve in the page loop, exported to an empty target and asserted manager by manager and member by member; also the step's measurement scenario (duration and reference-value count) | openldap-primary |
+| `Scenario-041-SeveralExportRules` | Several export Synchronisation Rules covering one account ([#2826](https://github.com/TetronIO/JIM/issues/2826)): a base rule that provisions and an add-on rule that does not, each writing its own attributes; one Create carrying both, a full send when the add-on starts covering an account, an attribute both write exported by neither and reported, and drift corrected only by the rule that writes the attribute and enforces state | openldap-primary |
 
 **Available Templates (`-Template` parameter):**
 

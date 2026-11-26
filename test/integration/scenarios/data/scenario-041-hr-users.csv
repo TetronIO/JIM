@@ -1,0 +1,4 @@
+"employeeId","firstName","lastName","email","department","title","company","pronouns","samAccountName","displayName","status","userPrincipalName","employeeType","employeeEndDate"
+"EMP041001","Ana","Base","ana.base@panoply.local","Information Technology","Engineer","Panoply","","ana.base","Ana Base","Active","ana.base@panoply.local","Employee","2099-12-31T00:00:00Z"
+"EMP041002","Ben","Lead","ben.lead@panoply.local","Operations","Operations Manager","Panoply","","ben.lead","Ben Lead","Active","ben.lead@panoply.local","Contractor","2099-12-31T00:00:00Z"
+"EMP041003","Cat","Mover","cat.mover@panoply.local","Information Technology","Analyst","Panoply","","cat.mover","Cat Mover","Active","cat.mover@panoply.local","Employee","2099-12-31T00:00:00Z"
