@@ -13,6 +13,7 @@ using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using System.Runtime.CompilerServices;
 
@@ -448,11 +449,14 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                     continue;
                 }
 
-                // Covered by another export rule: it takes the account over, so this is a scope exit and nothing more. A
-                // sibling whose scope cannot be decided leaves the account untouched too.
-                if (siblingExportRules.Any(sibling => Decide(() =>
+                // Another rule manages the account, or keeps it by taking it over (#2822, #2826): a scope exit and nothing
+                // more, as in the run. A sibling whose scope cannot be decided leaves the account untouched too.
+                var coveringSiblings = siblingExportRules
+                    .Where(sibling => Decide(() =>
                         _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, sibling, asAt, connections)) is var answer &&
-                        (answer.Failure != null || answer.InScope)))
+                        (answer.Failure != null || answer.InScope))
+                    .ToList();
+                if (SyncEngine.DecideExportScopeExit(rule, targetObject, coveringSiblings).Outcome != ExportScopeExitOutcome.Deprovision)
                 {
                     yield return MetaverseScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope,
                         rule, mvo, targetObject, InScopeValue, OutOfScopeValue);

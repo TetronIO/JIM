@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 The LDAP Connector's **Delete Behaviour** and **Disable Attribute** settings are removed: a delete always deletes. To disable leavers instead, set the export Synchronisation Rule's Deprovisioning Action to **Disable**. (#2085)
+- 🔄 The export Synchronisation Rule that provisioned or matched an account now alone decides its fate: another rule covering it never deletes it, and only a rule that also provisions can keep it once the managing rule stops covering the person. (#2826)
 - 🔄 `Register-JIMIdentityProvider -Provider EntraId` signs you in through your browser, so it works in tenants whose Conditional Access blocks device code sign-in, as Microsoft recommends; add `-UseDeviceCode` on a computer with no browser. (#3021)
 
 ### Fixed

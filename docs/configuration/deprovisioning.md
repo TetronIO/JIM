@@ -28,11 +28,11 @@ What happens on leaving depends first on whether JIM ever sent the account:
 ```jim-diagram
 archetype: decision
 title: What happens when a Metaverse Object leaves an export rule's scope
-desc: 'When a Metaverse Object leaves an export rule''s scope or is deleted, it matters first whether a Create was ever sent for its Connected System Object. If not, JIM cancels the provisioning: the unsent Create Pending Export and the Connected System Object are removed, and nothing is exported. If it was, the Deprovisioning Action decides, and the strongest wins when several export rules cover the object: Delete, then Disable, then Disconnect. Disconnect, the default, breaks the join and leaves the object in place in the Connected System; Disable queues a disable, and once the next export run has disabled the object JIM breaks the join; Delete queues a delete that removes it on the next export run.'
+desc: 'When a Metaverse Object leaves an export rule''s scope or is deleted, it matters first whether a Create was ever sent for its Connected System Object. If not, JIM cancels the provisioning: the unsent Create Pending Export and the Connected System Object are removed, and nothing is exported. If it was, the Deprovisioning Action decides: that of the export rule that manages the account, or, for an account no export rule manages, the strongest of the rules covering it: Delete, then Disable, then Disconnect. Disconnect, the default, breaks the join and leaves the object in place in the Connected System; Disable queues a disable, and once the next export run has disabled the object JIM breaks the join; Delete queues a delete that removes it on the next export run.'
 start: {label: Leaves scope or is deleted}
 questions:
 - {id: sent, label: 'Create sent?', sub: confirmed or not}
-- {id: action, label: Deprovisioning Action, sub: the strongest wins across export rules}
+- {id: action, label: Deprovisioning Action, sub: "the managing rule's, else the strongest"}
 outcomes:
 - {id: cancelled, label: Provisioning cancelled, sub: unsent Create and object removed}
 - {id: disconnected, label: Disconnected, sub: join broken; object left in place}
@@ -52,7 +52,7 @@ answers:
 
 A Run Profile's **Max Deletes** limit counts disables as well as deletes.
 
-The action applies regardless of how the object came to be joined: it makes no difference whether JIM provisioned it or matched (joined) a pre-existing object. If several export rules cover the same object with different actions, the strongest wins: Delete, then Disable, then Disconnect.
+**Which rule's action applies** depends on whether an export rule manages the account. The export rule that provisioned it, or matched it on export, manages it, and only that rule's Deprovisioning Action applies to it, both when its Metaverse Object leaves the rule's scope and when its Metaverse Object is deleted. Another export rule covering the same account never deprovisions it, whatever its own action says. Nor can it keep the account once the managing rule stops covering it, unless it provisions too: then it takes the account over (see [Several rules for the same objects](scoping-criteria.md#several-rules-for-the-same-objects)). An account no export rule manages, such as one an import rule joined, is deprovisioned when no export rule covers it any more, and if the rules it leaves carry different actions, the strongest wins: Delete, then Disable, then Disconnect.
 
 **Changing the action** reaches objects that have already left the rule's scope at the next synchronisation (see [below](#when-a-change-to-an-export-rule-takes-effect)), not only future leavers. Switching from Delete or Disable to Disconnect withdraws each delete or disable the rule queued that has not been exported yet, including one waiting to be retried after a failure, and disconnects the object instead, so its account stays as it is. One already exported, or being exported at that moment, goes ahead as queued. Switching between Delete and Disable replaces a queued delete or disable not yet exported with the other. Switching from Disconnect to Delete or Disable queues deletes or disables for joined objects already outside the rule's scope.
 

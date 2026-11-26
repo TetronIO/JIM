@@ -228,32 +228,89 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// The export rules that stand alone for this Metaverse Object: each in-scope rule that no other in-scope rule shares a
-    /// Connected System and Object Type with. Only these may stage anything for the object; the rest are reported by
-    /// <see cref="FindExportRuleOverlaps"/>.
+    /// The export rule that manages a Connected System Object: the one recorded on its join, when an export rule made the
+    /// join by provisioning the object or matching it on export (#2826). Only that rule decides whether the account exists;
+    /// every other export rule covering it only adds attributes. Null for a join an import rule made, and for one whose
+    /// managing rule was deleted (the join record's rule is cleared then), so such an account is managed by no export rule.
     /// </summary>
-    /// <summary>
-    /// The export Synchronisation Rule that still covers a Metaverse Object leaving <paramref name="departingRule"/>'s scope
-    /// (#2822): another in-scope rule on the same Connected System and Connected System Object Type. While one exists, the
-    /// departing rule deprovisions nothing; the covering rule manages the object. Several covering rules are an overlap,
-    /// which #2820 reports, and still leave the object covered.
-    /// </summary>
-    internal static SyncRule? FindCoveringExportRule(SyncRule departingRule, IReadOnlyList<SyncRule> inScopeExportRules) =>
-        inScopeExportRules.FirstOrDefault(rule => rule.Id != departingRule.Id &&
-                                                  rule.ConnectedSystemId == departingRule.ConnectedSystemId &&
-                                                  rule.ConnectedSystemObjectTypeId == departingRule.ConnectedSystemObjectTypeId);
+    public static int? ManagingExportRuleId(ConnectedSystemObject connectedSystemObject) =>
+        IsJoinMadeByExportRule(connectedSystemObject) ? connectedSystemObject.JoinSyncRuleId : null;
 
     /// <summary>
-    /// Whether <paramref name="coveringRule"/> takes over the Metaverse Object's Connected System Object (#2822): the object
-    /// is joined to it and of the rule's Object Type, an export rule made the join (provisioning or export matching), and
-    /// the rule recorded as managing it is another export rule on the same system and type that no longer covers the
-    /// Metaverse Object. A join an import rule made, or one recording no rule, is never re-pointed.
+    /// What <paramref name="departingRule"/> leaving a Metaverse Object's scope does to <paramref name="account"/>, the
+    /// object of the rule's type the Metaverse Object holds in the rule's Connected System (#2822, #2826):
+    /// <list type="bullet">
+    /// <item>Another export rule manages the account: the departing rule only added attributes, so it deprovisions nothing,
+    /// whatever its Deprovisioning Action says. The managing rule's own scope decides.</item>
+    /// <item>The departing rule manages the account: another covering rule keeps it only if it provisions, by taking it
+    /// over. A rule that only adds attributes never keeps an account alive.</item>
+    /// <item>No export rule manages the account (an import rule joined it): any covering rule keeps it, as before.</item>
+    /// </list>
+    /// Otherwise the departing rule's Deprovisioning Action applies.
+    /// </summary>
+    /// <param name="coveringCandidates">The export rules that still cover the Metaverse Object (in scope, or whose scope a
+    /// preview cannot decide). Rules for another Connected System or Object Type, and the departing rule, are ignored.</param>
+    public static ExportScopeExitDecision DecideExportScopeExit(SyncRule departingRule, ConnectedSystemObject account,
+        IReadOnlyList<SyncRule> coveringCandidates) =>
+        DecideExportScopeExit(departingRule, ManagingExportRuleId(account), coveringCandidates);
+
+    /// <summary>
+    /// <see cref="DecideExportScopeExit(SyncRule, ConnectedSystemObject, IReadOnlyList{SyncRule})"/>, given the account's
+    /// managing rule as it stood before anything acted on it. Several rules can leave in one evaluation, and the first to
+    /// disconnect the account clears its join record; every one of them must still be judged against the rule that managed it.
+    /// </summary>
+    public static ExportScopeExitDecision DecideExportScopeExit(SyncRule departingRule, int? managingRuleId,
+        IReadOnlyList<SyncRule> coveringCandidates)
+    {
+        if (managingRuleId.HasValue && managingRuleId.Value != departingRule.Id)
+            return new ExportScopeExitDecision(ExportScopeExitOutcome.ManagedByAnotherRule);
+
+        var coveringRule = coveringCandidates.FirstOrDefault(rule =>
+            rule.Id != departingRule.Id &&
+            rule.ConnectedSystemId == departingRule.ConnectedSystemId &&
+            rule.ConnectedSystemObjectTypeId == departingRule.ConnectedSystemObjectTypeId &&
+            (!managingRuleId.HasValue || rule.ProvisionToConnectedSystem == true));
+
+        return coveringRule != null
+            ? new ExportScopeExitDecision(ExportScopeExitOutcome.KeptByCoveringRule, coveringRule)
+            : new ExportScopeExitDecision(ExportScopeExitOutcome.Deprovision);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="account"/> is being deprovisioned because the export rule that manages it no longer covers its
+    /// Metaverse Object and no rule that provisions takes it over (#2826). While it is, the add-on rules still covering the
+    /// Metaverse Object stage nothing for it: their changes would be sent to an account that is being disconnected or deleted,
+    /// and would collide with the deprovisioning export on the account's one Pending Export.
+    /// </summary>
+    /// <param name="exportRules">The enabled export rules for the Metaverse Object's type. A disabled managing rule is not among
+    /// them; it is paused, and deprovisions nothing.</param>
+    /// <param name="inScopeExportRules">The enabled export rules that have the Metaverse Object in scope.</param>
+    public static bool IsLeavingWithItsManagingRule(ConnectedSystemObject? account, IReadOnlyList<SyncRule> exportRules,
+        IReadOnlyList<SyncRule> inScopeExportRules)
+    {
+        if (account == null || ManagingExportRuleId(account) is not { } managingRuleId)
+            return false;
+
+        var managingRule = exportRules.FirstOrDefault(rule => rule.Id == managingRuleId);
+        if (managingRule == null || inScopeExportRules.Any(rule => rule.Id == managingRuleId))
+            return false;
+
+        return DecideExportScopeExit(managingRule, account, inScopeExportRules).Outcome == ExportScopeExitOutcome.Deprovision;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="coveringRule"/> takes over the Metaverse Object's Connected System Object (#2822): the covering
+    /// rule provisions (#2826: a rule that only adds attributes never takes an account over), the object is joined to it and
+    /// of the rule's Object Type, an export rule made the join (provisioning or export matching), and the rule recorded as
+    /// managing it is another export rule on the same system and type that no longer covers the Metaverse Object. A join an
+    /// import rule made, or one recording no rule, is never re-pointed.
     /// </summary>
     /// <returns>The hand-over, or null when the object stays with the rule that manages it.</returns>
     internal static ExportRuleHandOver? FindExportRuleHandOver(MetaverseObject mvo, SyncRule coveringRule, ConnectedSystemObject? existingCso,
         IReadOnlyList<SyncRule> exportRules, IReadOnlyList<SyncRule> inScopeExportRules)
     {
-        if (existingCso is not { JoinSyncRuleId: { } managingRuleId } ||
+        if (coveringRule.ProvisionToConnectedSystem != true ||
+            existingCso is not { JoinSyncRuleId: { } managingRuleId } ||
             existingCso.MetaverseObjectId != mvo.Id ||
             existingCso.TypeId != coveringRule.ConnectedSystemObjectTypeId ||
             managingRuleId == coveringRule.Id ||
@@ -278,6 +335,11 @@ public partial class SyncEngine
         };
     }
 
+    /// <summary>
+    /// The export rules that stand alone for this Metaverse Object: each in-scope rule that no other in-scope rule shares a
+    /// Connected System and Object Type with. Only these may stage anything for the object; the rest are reported by
+    /// <see cref="FindExportRuleOverlaps"/>.
+    /// </summary>
     internal static List<SyncRule> StandaloneExportRules(IReadOnlyList<SyncRule> inScopeExportRules) =>
         inScopeExportRules
             .Where(rule => inScopeExportRules.Count(other =>

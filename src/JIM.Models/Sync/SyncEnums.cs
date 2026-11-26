@@ -26,14 +26,33 @@ public enum MvoDeletionExportReason
 {
     /// <summary>The Metaverse Object carries no Type, so no export Synchronisation Rule can be matched. The remedy is the object, not the rules.</summary>
     NoMetaverseObjectType,
-    /// <summary>No enabled export Synchronisation Rule matches the CSO's (Connected System, Connected System Object Type) pair.</summary>
+    /// <summary>No enabled export Synchronisation Rule matches the CSO's (Connected System, Connected System Object Type) pair; or the
+    /// export rule that manages the CSO is disabled, so no rule decides (#2826).</summary>
     NoMatchingExportRule,
-    /// <summary>Rules match, and every one of them says Disconnect rather than Delete.</summary>
+    /// <summary>Rules match, and every one that decides says Disconnect rather than Delete: the managing rule alone, for a CSO an
+    /// export rule manages (#2826), otherwise every matching rule.</summary>
     MatchingRulesDeclineDeletion,
     /// <summary>A matching rule with OutboundDeprovisionAction.Delete won; Delete beats Disable and Disconnect when rules conflict (#655).</summary>
     DeleteRuleWon,
     /// <summary>A matching rule with OutboundDeprovisionAction.Disable won, no matching rule saying Delete; Disable beats Disconnect (#2085).</summary>
     DisableRuleWon
+}
+
+/// <summary>
+/// What an export Synchronisation Rule leaving a Metaverse Object's scope does to the account it finds in the rule's
+/// Connected System (#2822, #2826). The rule that manages the account, by having provisioned it or matched it on export,
+/// decides whether it exists; an account no export rule manages is kept by any export rule still covering it.
+/// </summary>
+public enum ExportScopeExitOutcome
+{
+    /// <summary>Nothing keeps the account: the departing rule's Deprovisioning Action applies.</summary>
+    Deprovision,
+    /// <summary>Another export rule on the same Connected System and Object Type still covers the account and keeps it. For
+    /// an account an export rule manages, only a rule that provisions can, by taking the account over.</summary>
+    KeptByCoveringRule,
+    /// <summary>Another export rule manages the account. A rule that only adds attributes to it never deprovisions it; the
+    /// managing rule's own scope decides.</summary>
+    ManagedByAnotherRule
 }
 
 /// <summary>

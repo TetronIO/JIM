@@ -541,6 +541,58 @@ public class SyncRuleScopingPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowingOfTheManagingRuleWhileOnlyARuleThatDoesNotProvisionCovers_ReportsTheDeleteAsync()
+    {
+        // #2826: the edited rule manages the account, and a rule that does not provision cannot keep it.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        _rules.Add(AddOnSibling());
+        var mvo = GivenMvoWithTargetObject("Sales");
+        mvo.ConnectedSystemObjects.Single().RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, _rule, DateTime.UtcNow);
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        Assert.That(deltas.Select(d => d.TransitionType), Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport));
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowingOfAnAddOnRuleOnAnAccountAnotherRuleManages_ReportsAScopeExitOnlyAsync()
+    {
+        // #2826: the edited rule only adds attributes to an account the sibling manages, so its Delete never applies.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        var manager = AddOnSibling();
+        manager.ProvisionToConnectedSystem = true;
+        GivenRuleScopedToSales(manager);
+        manager.ObjectScopingCriteriaGroups.Single().Criteria.Single().StringValue = "Nobody";
+        _rules.Add(manager);
+        var mvo = GivenMvoWithTargetObject("Sales");
+        mvo.ConnectedSystemObjects.Single().RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, manager, DateTime.UtcNow);
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType), Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope));
+            Assert.That(deltas.Select(d => d.TransitionType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport));
+        }
+    }
+
+    private static SyncRule AddOnSibling() => new()
+    {
+        Id = SiblingRuleId,
+        Name = "Manager Attributes",
+        ConnectedSystemId = SystemId,
+        ConnectedSystemObjectTypeId = CsoTypeId,
+        MetaverseObjectTypeId = MvoTypeId,
+        Direction = SyncRuleDirection.Export,
+        Enabled = true,
+        ProvisionToConnectedSystem = false
+    };
+
+    [Test]
     public async Task EvaluateDeltasAsync_ExportNarrowedToPeopleWithAnHrAccount_DecidesFromEachIdentitysJoinsAsync()
     {
         // A connection criterion (#2021) reads the joins the stream already carries: the identity joined to an HR account
