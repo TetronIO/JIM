@@ -286,7 +286,10 @@ public class SyncExportTaskProcessor
                         // to one of the steps it declared, so it advances the stepper too (#454).
                         if (!string.IsNullOrEmpty(progressInfo.ConnectorPhaseKey))
                         {
-                            await _phases.EnterConnectorPhaseAsync(progressInfo.ConnectorPhaseKey, progressInfo.Message);
+                            if (progressInfo.MessageDetail is { } stepNarration)
+                                await _phases.EnterConnectorPhaseAsync(progressInfo.ConnectorPhaseKey, stepNarration);
+                            else
+                                await _phases.EnterConnectorPhaseAsync(progressInfo.ConnectorPhaseKey, progressInfo.Message);
                             return;
                         }
 

@@ -805,6 +805,11 @@ public class Worker : BackgroundService
                                             {
                                                 newWorkerTask.Activity.Message = message;
                                                 await taskJim.Activities.UpdateActivityAsync(newWorkerTask.Activity);
+                                            },
+                                            reportMessageDetail: async message =>
+                                            {
+                                                newWorkerTask.Activity.MessageDetail = message;
+                                                await taskJim.Activities.UpdateActivityAsync(newWorkerTask.Activity);
                                             });
 
                                         var run = await taskJim.ConnectedSystems.RunAuxiliaryClassDiscoveryAsync(

@@ -123,6 +123,13 @@ public sealed class ActivityPhaseReporter
         EnterCoreAsync(ActivityPhase.QualifyConnectorKey(connectorPhaseKey), message, null);
 
     /// <summary>
+    /// Moves the run to one of the Connector's declared phases with narration the Connector wrote in its own catalogue
+    /// (#3103); the Activity stores the message beside its British English.
+    /// </summary>
+    public Task EnterConnectorPhaseAsync(string connectorPhaseKey, JimMessage message) =>
+        EnterCoreAsync(ActivityPhase.QualifyConnectorKey(connectorPhaseKey), message.ToEnglish(), message);
+
+    /// <summary>
     /// Finishes whichever step the Connector was running, leaving the JIM step that called it
     /// running. Call it as soon as the Connector's call returns: its steps are only true while it
     /// is working, and until this was called a Connector that handed everything over in one call
@@ -237,6 +244,10 @@ public sealed class ActivityPhaseReporter
     /// How a narration message reaches the Activity; the import path writes it straight to the
     /// Activity message.
     /// </param>
+    /// <param name="reportMessageDetail">
+    /// How narration the Connector wrote as a message in its own catalogue reaches the Activity (#3103), or null to
+    /// write its British English through <paramref name="reportMessage"/>.
+    /// </param>
     /// <param name="reportExpectedObjectCount">
     /// How a Connector's statement of the run's total object count reaches the Activity, or null
     /// where the caller has nowhere to put it.
@@ -248,11 +259,16 @@ public sealed class ActivityPhaseReporter
     public IConnectorProgress CreateConnectorProgress(
         Func<string, Task> reportMessage,
         Func<int, Task>? reportExpectedObjectCount = null,
-        Func<int, Task>? reportObjectsRead = null) =>
+        Func<int, Task>? reportObjectsRead = null,
+        Func<JimMessage, Task>? reportMessageDetail = null) =>
         new ConnectorProgress(
             report: reportMessage,
             reportExpectedObjectCount: reportExpectedObjectCount,
             reportObjectsRead: reportObjectsRead,
+            reportMessage: reportMessageDetail,
+            enterPhaseMessage: _phases == null
+                ? null
+                : async (phaseKey, message) => await EnterConnectorPhaseAsync(phaseKey, message),
             // A reporter that records nothing hands over no phase delegate, so that a Connector's
             // narration still reaches the Activity through the message path rather than being lost
             // because it arrived attached to a phase change.

@@ -1,6 +1,6 @@
 # Connector Message Catalogues
 
-- **Status:** Doing (Phases 1-2 complete; contract message slots next)
+- **Status:** Doing (Phases 1-3 complete; declared text next)
 - **Created:** 2026-11-25
 - **Author:** Jay Van der Zant (drafted with Claude)
 - **Issue:** #3103

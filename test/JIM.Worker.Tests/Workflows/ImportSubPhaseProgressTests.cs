@@ -1,13 +1,16 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.TestSupport;
 using JIM.Worker.Processors;
 using NUnit.Framework;
 using Serilog;
@@ -110,6 +113,76 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
             "Reading CSV file...",
             "Parsed 10,000 rows..."
         }));
+    }
+
+    [Test]
+    public async Task FullImport_CallConnectorNarratesInItsOwnCatalogue_TheActivityReadsInTheAdministratorsLanguageAsync()
+    {
+        // #3103: narration written as a message in the Connector's catalogue is stored beside its English.
+        using var catalogue = TestMessageCatalogue.Register("test.example",
+            ("ReadingRegion", "Reading the {0} region...", "Lecture de la région {0}..."));
+        var connectedSystem = await CreateConnectedSystemAsync("HR System");
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(connectedSystem.Id, csoType, mvType, "HR Import");
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Full Import", ConnectedSystemRunType.FullImport);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.FullImport);
+
+        string? english = null;
+        JimMessage? detail = null;
+        var mockConnector = new MockSubPhaseReportingConnector(csoType, async progress =>
+        {
+            await progress.ReportAsync(catalogue.Message("ReadingRegion", "EMEA"));
+            (english, detail) = (activity.Message, activity.MessageDetail);
+        });
+
+        await new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            mockConnector, connectedSystem, runProfile,
+            CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity),
+            new CancellationTokenSource()).PerformImportAsync();
+
+        AssertReadsInBothLanguages(english, detail, "Reading the EMEA region...", "Lecture de la région EMEA...");
+    }
+
+    [Test]
+    public async Task FullImport_FileConnectorNarratesInItsOwnCatalogue_TheActivityReadsInTheAdministratorsLanguageAsync()
+    {
+        using var catalogue = TestMessageCatalogue.Register("test.example",
+            ("ReadingFile", "Reading {0}...", "Lecture de {0}..."));
+        var connectedSystem = await CreateConnectedSystemAsync("HR File");
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(connectedSystem.Id, csoType, mvType, "HR File Import");
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Full Import", ConnectedSystemRunType.FullImport);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.FullImport);
+
+        string? english = null;
+        JimMessage? detail = null;
+        var mockConnector = new MockSubPhaseReportingFileConnector(async progress =>
+        {
+            await progress.ReportAsync(catalogue.Message("ReadingFile", "hr-users.csv"));
+            (english, detail) = (activity.Message, activity.MessageDetail);
+        });
+
+        await new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            mockConnector, connectedSystem, runProfile,
+            CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity),
+            new CancellationTokenSource()).PerformImportAsync();
+
+        AssertReadsInBothLanguages(english, detail, "Reading hr-users.csv...", "Lecture de hr-users.csv...");
+    }
+
+    private static void AssertReadsInBothLanguages(string? english, JimMessage? detail, string expectedEnglish, string expectedFrench)
+    {
+        var french = CultureInfo.GetCultureInfo("fr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(english, Is.EqualTo(expectedEnglish));
+            Assert.That(detail, Is.Not.Null, "the narration must be stored as a message beside its English");
+            Assert.That(MessageRenderer.Render(detail!, french, french), Is.EqualTo(expectedFrench));
+        }
     }
 
     [Test]

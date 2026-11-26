@@ -1,13 +1,16 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.TestSupport;
 using JIM.Worker.Processors;
 using NUnit.Framework;
 using Serilog;
@@ -163,6 +166,50 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
         Assert.That(csoCount, Is.EqualTo(1), "The healthy object should still import");
     }
 
+    [Test]
+    public async Task FullImport_ConnectorReportedErrorAsAMessage_RecordsItsEnglishAndReadsInTheAdministratorsLanguageAsync()
+    {
+        // A Connector writes its error in its own catalogue (#3103): the item keeps the English the REST API returns,
+        // and the message beside it, so the portal can show it in French.
+        using var catalogue = TestMessageCatalogue.Register("test.example",
+            ("RowUnreadable", "The row for {0} could not be read.", "La ligne de {0} n’a pas pu être lue."));
+        var context = await ArrangeAsync();
+        var flagged = BuildImportObject(context.CsoType, "EXT-000002");
+        flagged.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
+        flagged.ErrorMessageDetail = catalogue.Message("RowUnreadable", "EXT-000002");
+
+        await RunImportAsync(context, [BuildImportObject(context.CsoType, "EXT-000001"), flagged]);
+
+        var errored = SingleErroredRpei(context.Activity);
+        var french = CultureInfo.GetCultureInfo("fr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errored.ErrorMessage, Is.EqualTo("The row for EXT-000002 could not be read."));
+            Assert.That(errored.ErrorMessageDetail, Is.Not.Null, "the message must be stored beside its English");
+            Assert.That(MessageRenderer.Render(errored.ErrorMessageDetail!, french, french), Is.EqualTo("La ligne de EXT-000002 n’a pas pu être lue."));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ConnectorReportedWarningAsAMessage_RecordsItOnTheActivityInBothLanguagesAsync()
+    {
+        using var catalogue = TestMessageCatalogue.Register("test.example",
+            ("FellBackToFull", "No watermark was held, so every object was read.", "Aucun filigrane n’était conservé : tous les objets ont donc été lus."));
+        var context = await ArrangeAsync();
+
+        await RunImportAsync(context, [BuildImportObject(context.CsoType, "EXT-000001")],
+            warning: catalogue.Message("FellBackToFull"));
+
+        var french = CultureInfo.GetCultureInfo("fr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.Activity.WarningMessage, Is.EqualTo("No watermark was held, so every object was read."));
+            Assert.That(context.Activity.WarningMessageDetail, Is.Not.Null, "the message must be stored beside its English");
+            Assert.That(MessageRenderer.Render(context.Activity.WarningMessageDetail!, french, french),
+                Is.EqualTo("Aucun filigrane n’était conservé : tous les objets ont donc été lus."));
+        }
+    }
+
     #region Helpers
 
     private sealed record ImportContext(
@@ -186,9 +233,9 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
         return new ImportContext(connectedSystem, csoType, runProfile, activity);
     }
 
-    private async Task RunImportAsync(ImportContext context, List<ConnectedSystemImportObject> importObjects)
+    private async Task RunImportAsync(ImportContext context, List<ConnectedSystemImportObject> importObjects, JimMessage? warning = null)
     {
-        var connector = new MockErrorReportingConnector(importObjects);
+        var connector = new MockErrorReportingConnector(importObjects, warning);
         var workerTask = new SynchronisationWorkerTask(context.ConnectedSystem.Id, context.RunProfile.Id)
         {
             Id = Guid.NewGuid(),
@@ -251,7 +298,7 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
     /// Returns a single page of caller-supplied import objects, some of which may carry Connector-reported
     /// errors, exactly as the File and LDAP Connectors do.
     /// </summary>
-    private class MockErrorReportingConnector(List<ConnectedSystemImportObject> importObjects)
+    private class MockErrorReportingConnector(List<ConnectedSystemImportObject> importObjects, JimMessage? warning = null)
         : IConnector, IConnectorImportUsingCalls
     {
         public string Identifier => "test.connector";
@@ -272,7 +319,10 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
             CancellationToken cancellationToken,
             IConnectorProgress progress)
         {
-            return Task.FromResult(new ConnectedSystemImportResult { ImportObjects = importObjects });
+            var result = new ConnectedSystemImportResult { ImportObjects = importObjects };
+            if (warning != null)
+                result.WarningMessageDetail = warning;
+            return Task.FromResult(result);
         }
     }
 

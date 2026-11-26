@@ -1,15 +1,19 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.TestSupport;
 using JIM.Worker.Processors;
 using JIM.Worker.Tests.Workflows;
 using Moq;
@@ -90,6 +94,58 @@ public class ExportPhaseWiringTests : WorkflowTestBase
         Assert.That(WritePhase().Name, Is.EqualTo("Writing objects"));
     }
 
+    [Test]
+    public async Task Export_ConnectorNarratesItsStepInItsOwnCatalogue_TheActivityReadsInTheAdministratorsLanguageAsync()
+    {
+        // #3103: the step's narration, written in the Connector's catalogue, reaches the Activity as a message.
+        using var catalogue = TestMessageCatalogue.Register("test.example",
+            ("WritingBatch", "Writing batch {0}...", "Écriture du lot {0}..."));
+        var (connectedSystem, runProfile, activity) = await ArrangeExportAsync();
+        var connector = new MockPhaseDeclaringExportConnector();
+        var reporter = await ActivityPhaseReporter.StartAsync(SyncRepo, activity, connector, connectedSystem, runProfile);
+
+        // Read as it stood once the narration landed: the run's own closing message replaces it afterwards.
+        string? english = null;
+        JimMessage? detail = null;
+        await BuildProcessor(
+                StubSyncServer(catalogue.Message("WritingBatch", "A"), () => (english, detail) = (activity.Message, activity.MessageDetail)).Object,
+                connector, connectedSystem, runProfile, activity, reporter)
+            .PerformExportAsync();
+
+        var french = CultureInfo.GetCultureInfo("fr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(english, Is.EqualTo("Writing batch A..."));
+            Assert.That(detail, Is.Not.Null, "the narration must be stored as a message beside its English");
+            Assert.That(MessageRenderer.Render(detail!, french, french), Is.EqualTo("Écriture du lot A..."));
+        }
+    }
+
+    [Test]
+    public async Task ExportConnectorProgress_ConnectorNarratesInItsOwnCatalogue_CarriesTheMessageToTheProgressReportAsync()
+    {
+        // The export relays a Connector's narration to the Worker as a progress report; the message must survive it.
+        var reports = new List<ExportProgressInfo>();
+        var message = JimMessage.Create("connector:test.example/Messages", "WritingBatch", "A");
+        using var progress = ExportExecutionServer.CreateConnectorProgress(
+            info =>
+            {
+                reports.Add(info);
+                return Task.CompletedTask;
+            },
+            text => new ExportProgressInfo { Phase = ExportPhase.Executing, Message = text });
+
+        await progress.ReportAsync(message);
+        await progress.EnterPhaseAsync(ConnectorWritePhaseKey, message);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reports.Select(r => r.MessageDetail), Is.EqualTo(new[] { message, message }));
+            Assert.That(reports.Select(r => r.ConnectorPhaseKey), Is.EqualTo(new[] { null, ConnectorWritePhaseKey }));
+            Assert.That(reports.Select(r => r.Message), Is.All.EqualTo(message.ToEnglish()));
+        }
+    }
+
     #region Helpers
 
     private ActivityPhase WritePhase() =>
@@ -137,7 +193,7 @@ public class ExportPhaseWiringTests : WorkflowTestBase
     /// An <see cref="ISyncServer"/> that performs no export of its own, but narrates one: it reports
     /// the Connector entering its declared step, exactly as a real export relays it, and returns.
     /// </summary>
-    private static Mock<ISyncServer> StubSyncServer()
+    private static Mock<ISyncServer> StubSyncServer(JimMessage? narration = null, Action? afterNarrating = null)
     {
         var syncServer = new Mock<ISyncServer>();
 
@@ -178,8 +234,10 @@ public class ExportPhaseWiringTests : WorkflowTestBase
                     {
                         Phase = ExportPhase.Executing,
                         ConnectorPhaseKey = ConnectorWritePhaseKey,
-                        Message = "Writing objects"
+                        Message = "Writing objects",
+                        MessageDetail = narration
                     });
+                    afterNarrating?.Invoke();
                 }
 
                 return new ExportExecutionResult { CompletedAt = DateTime.UtcNow };

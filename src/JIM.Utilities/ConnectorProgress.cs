@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using Serilog;
 
 namespace JIM.Utilities;
@@ -28,6 +29,8 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
     private readonly Func<string, string?, Task>? _enterPhase;
     private readonly Func<int, Task>? _reportExpectedObjectCount;
     private readonly Func<int, Task>? _reportObjectsRead;
+    private readonly Func<JimMessage, Task>? _reportMessage;
+    private readonly Func<string, JimMessage, Task>? _enterPhaseMessage;
     private readonly SemaphoreSlim? _gate;
     private readonly bool _ownsGate;
     private readonly ILogger _logger;
@@ -40,6 +43,14 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
     /// <paramref name="report"/> if a message was supplied, so nothing is lost.
     /// </param>
     /// <param name="logger">Optional logger for reporting failures; defaults to the global Serilog logger.</param>
+    /// <param name="reportMessage">
+    /// Records narration a Connector wrote as a message in its own catalogue (#3103). When null, the message's British
+    /// English goes to <paramref name="report"/> instead.
+    /// </param>
+    /// <param name="enterPhaseMessage">
+    /// Moves to a declared phase with narration written as a message. When null, the message's British English goes to
+    /// <paramref name="enterPhase"/>, or, without phase tracking, the message is narrated as <c>ReportAsync</c> would.
+    /// </param>
     /// <param name="sharedGate">
     /// Optional semaphore owned by the caller. Pass the caller's own progress gate when the caller
     /// also reports progress concurrently, so that both kinds of emit serialise against each other.
@@ -51,15 +62,20 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
         ILogger? logger = null,
         SemaphoreSlim? sharedGate = null,
         Func<int, Task>? reportExpectedObjectCount = null,
-        Func<int, Task>? reportObjectsRead = null)
+        Func<int, Task>? reportObjectsRead = null,
+        Func<JimMessage, Task>? reportMessage = null,
+        Func<string, JimMessage, Task>? enterPhaseMessage = null)
     {
         _report = report;
+        _reportMessage = reportMessage;
+        _enterPhaseMessage = enterPhaseMessage;
         _enterPhase = enterPhase;
         _reportExpectedObjectCount = reportExpectedObjectCount;
         _reportObjectsRead = reportObjectsRead;
         _logger = logger ?? Log.ForContext<ConnectorProgress>();
 
-        if (report == null && enterPhase == null && reportExpectedObjectCount == null && reportObjectsRead == null)
+        if (report == null && enterPhase == null && reportExpectedObjectCount == null && reportObjectsRead == null &&
+            reportMessage == null && enterPhaseMessage == null)
             return;
 
         _gate = sharedGate ?? new SemaphoreSlim(1, 1);
@@ -92,6 +108,35 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
             return Task.CompletedTask;
 
         return GuardAsync(() => _report(message));
+    }
+
+    /// <inheritdoc />
+    public Task EnterPhaseAsync(string phaseKey, JimMessage message)
+    {
+        // like a blank message, a missing one is ignored: narration must never fail a run
+        if (message is null || string.IsNullOrWhiteSpace(phaseKey))
+            return Task.CompletedTask;
+
+        if (_enterPhaseMessage != null)
+            return GuardAsync(() => _enterPhaseMessage(phaseKey, message));
+
+        if (_enterPhase != null)
+            return EnterPhaseAsync(phaseKey, message.ToEnglish());
+
+        // No phase tracking on this path: the narration is still worth showing.
+        return ReportAsync(message);
+    }
+
+    /// <inheritdoc />
+    public Task ReportAsync(JimMessage message)
+    {
+        if (message is null)
+            return Task.CompletedTask;
+
+        if (_reportMessage == null)
+            return ReportAsync(message.ToEnglish());
+
+        return GuardAsync(() => _reportMessage(message));
     }
 
     /// <inheritdoc />

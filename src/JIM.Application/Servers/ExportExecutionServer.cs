@@ -531,7 +531,7 @@ public class ExportExecutionServer
     /// call site's current counts.</param>
     /// <param name="sharedGate">The call site's own progress gate, where it has one, so that connector
     /// emits and JIM's own emits serialise against each other rather than racing on a shared DbContext.</param>
-    private static ConnectorProgress CreateConnectorProgress(
+    internal static ConnectorProgress CreateConnectorProgress(
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<string, ExportProgressInfo> infoFactory,
         SemaphoreSlim? sharedGate = null)
@@ -547,7 +547,22 @@ public class ExportExecutionServer
                 info.ConnectorPhaseKey = phaseKey;
                 await progressCallback(info);
             },
-            sharedGate: sharedGate);
+            sharedGate: sharedGate,
+            // Narration the Connector wrote in its own catalogue travels as the message, so the Activity can show it
+            // in the administrator's language (#3103).
+            reportMessage: async message =>
+            {
+                var info = infoFactory(message.ToEnglish());
+                info.MessageDetail = message;
+                await progressCallback(info);
+            },
+            enterPhaseMessage: async (phaseKey, message) =>
+            {
+                var info = infoFactory(message.ToEnglish());
+                info.MessageDetail = message;
+                info.ConnectorPhaseKey = phaseKey;
+                await progressCallback(info);
+            });
     }
 
     /// <summary>
