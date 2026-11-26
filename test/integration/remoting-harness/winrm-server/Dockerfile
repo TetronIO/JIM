@@ -15,7 +15,7 @@ FROM ${BASE_IMAGE} AS krb5-build
 ARG EXTRA_CA_CERTS_BASE64=""
 RUN if [ -n "$EXTRA_CA_CERTS_BASE64" ]; then echo "$EXTRA_CA_CERTS_BASE64" | base64 -d > /usr/local/share/ca-certificates/extra.crt && update-ca-certificates; fi
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3-dev=3.12.3-0ubuntu2.1 python3-pip=24.0+dfsg-1ubuntu1.3 gcc=4:13.2.0-7ubuntu1 libkrb5-dev=1.20.1-6ubuntu2.10 \
+    && apt-get install -y --no-install-recommends python3-dev=3.12.3-0ubuntu2.1 python3-pip=24.0+dfsg-1ubuntu1.3 gcc=4:13.2.0-7ubuntu1 libkrb5-dev=1.20.1-6ubuntu2.12 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements-build.txt requirements-sdist.txt /build/
 RUN pip3 install --break-system-packages --no-cache-dir --require-hashes -r /build/requirements-build.txt
@@ -27,7 +27,7 @@ ARG EXTRA_CA_CERTS_BASE64=""
 RUN if [ -n "$EXTRA_CA_CERTS_BASE64" ]; then echo "$EXTRA_CA_CERTS_BASE64" | base64 -d > /usr/local/share/ca-certificates/extra.crt && update-ca-certificates; fi
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3=3.12.3-0ubuntu2.1 python3-pip=24.0+dfsg-1ubuntu1.3 \
-        python3-gssapi=1.8.2-1ubuntu1 python3-cryptography=41.0.7-4ubuntu0.4 libkrb5-3=1.20.1-6ubuntu2.10 \
+        python3-gssapi=1.8.2-1ubuntu1 python3-cryptography=41.0.7-4ubuntu0.4 libkrb5-3=1.20.1-6ubuntu2.12 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=krb5-build /build/wheels /wheels
 COPY requirements.txt /app/
