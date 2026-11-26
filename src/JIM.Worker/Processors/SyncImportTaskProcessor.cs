@@ -692,7 +692,8 @@ public partial class SyncImportTaskProcessor
                     var connectorProgress = _phases.CreateConnectorProgress(
                         message => ReportProgressAsync(message),
                         ReportExpectedObjectCountAsync,
-                        ReportObjectsReadAsync);
+                        ReportObjectsReadAsync,
+                        reportMessageDetail: message => ReportProgressAsync(message));
 
                     // Keep track of the original persisted data at the START of the import.
                     // This is critical for delta imports where subsequent pages must use the SAME
@@ -703,6 +704,7 @@ public partial class SyncImportTaskProcessor
                     _activity.ImportWatermarkFrom = originalPersistedData;
                     string? newPersistedData = null;
                     string? connectorWarningMessage = null;
+                    JimMessage? connectorWarningDetail = null;
 
                     // A Connector handing over a page at a time reports progress several times per page; written as
                     // reported, that was a commit each, thousands of them at scale (#2521). While the pages are read, the
@@ -797,6 +799,7 @@ public partial class SyncImportTaskProcessor
                             if (result.WarningMessage != null && connectorWarningMessage == null)
                             {
                                 connectorWarningMessage = result.WarningMessage;
+                                connectorWarningDetail = result.WarningMessageDetail;
                             }
 
                             AccumulateExclusionDiscards(result, entriesDiscardedByExclusion);
@@ -845,7 +848,11 @@ public partial class SyncImportTaskProcessor
                     // with no CSO association inflates error counts and pollutes the RPEI list.
                     if (connectorWarningMessage != null)
                     {
-                        _activity.WarningMessage = connectorWarningMessage;
+                        // a warning the Connector wrote in its own catalogue reads in the administrator's language (#3103)
+                        if (connectorWarningDetail != null)
+                            _activity.WarningMessageDetail = connectorWarningDetail;
+                        else
+                            _activity.WarningMessage = connectorWarningMessage;
                         Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
                     }
 
@@ -914,7 +921,8 @@ public partial class SyncImportTaskProcessor
                 var connectorProgress = _phases.CreateConnectorProgress(
                     async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
                     ReportExpectedObjectCountAsync,
-                    ReportObjectsReadAsync);
+                    ReportObjectsReadAsync,
+                    reportMessageDetail: async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message));
 
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
@@ -3753,6 +3761,8 @@ public partial class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ErrorType = MapConnectorImportError(importObject.ErrorType.Value);
                     if (importObject.AttributeValueErrors is { Count: > 0 } unreadableValues)
                         activityRunProfileExecutionItem.ErrorMessageDetail = ActivityMessage.UnreadableAttributeValues(unreadableValues);
+                    else if (importObject.ErrorMessageDetail != null)
+                        activityRunProfileExecutionItem.ErrorMessageDetail = importObject.ErrorMessageDetail;
                     else
                         activityRunProfileExecutionItem.ErrorMessage = importObject.ErrorMessage;
 

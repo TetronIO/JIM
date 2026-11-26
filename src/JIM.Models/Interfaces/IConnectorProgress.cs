@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Interfaces;
 
 /// <summary>
@@ -37,6 +39,13 @@ public interface IConnectorProgress
     Task EnterPhaseAsync(string phaseKey, string? message = null);
 
     /// <summary>
+    /// Moves to one of this Connector's declared phases, narrating it with a message from the Connector's own catalogue
+    /// (<c>connector:&lt;identifier&gt;/Messages</c>), so the step reads in the administrator's language (#3103).
+    /// JIM keeps the message's British English beside it for the REST API and logs.
+    /// </summary>
+    Task EnterPhaseAsync(string phaseKey, JimMessage message) => EnterPhaseAsync(phaseKey, message.ToEnglish());
+
+    /// <summary>
     /// Narrates progress within the phase currently running, without moving to another one. Use it
     /// for a phase that takes a while and has something to say the object counts cannot ("Reading
     /// the EMEA region...").
@@ -49,6 +58,12 @@ public interface IConnectorProgress
     /// so a message repeating any of them says the same thing twice.
     /// </remarks>
     Task ReportAsync(string message);
+
+    /// <summary>
+    /// Narrates progress with a message from the Connector's own catalogue (<c>connector:&lt;identifier&gt;/Messages</c>),
+    /// so it reads in the administrator's language (#3103). Everything said of <see cref="ReportAsync(string)"/> applies.
+    /// </summary>
+    Task ReportAsync(JimMessage message) => ReportAsync(message.ToEnglish());
 
     /// <summary>
     /// States how many objects this Connector will hand over in total for this run, once it knows.

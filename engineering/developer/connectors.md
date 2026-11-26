@@ -272,6 +272,7 @@ Rules worth following:
 
 - **Emit on phase and page boundaries, never per object.**<br /> Each emit writes to the Activity. A phase that is naturally repetitive should pace itself: JIM's File Connector reports every 10,000 rows read, and its LDAP Connector reports once per page fetched.
 - **The vocabulary is yours.**<br /> JIM owns the orchestration phase and the counts and does not interpret your message. Say what you are doing in the administrator's language, not your internal one: "Loading existing export file..." rather than "LoadExistingFileContent".
+- **Write it in your catalogue, so it reads in the administrator's language.**<br /> Both methods take a `JimMessage` as well as a string: `progress.ReportAsync(JimMessage.Create(BuiltInConnectorCatalogues.Ldap, nameof(LdapConnectorMessages.ReadingRegion), region))`. JIM keeps the British English beside it for the REST API and logs; a string still works and is shown as written (see "Naming your Connector").
 - **Say what the counts cannot.**<br /> How many objects have arrived, how fast, and how long is left are all shown from the counts below; a message that repeats them says the same thing twice. "Fetching User objects from Employees (page 3)..." earns its place, "Parsed 50,000 rows..." does not.
 - **Entering a step you did not declare still works.**<br /> It is appended to the stepper rather than dropped, so nothing you narrate is lost; it just cannot be shown in advance.
 - **Do not depend on it succeeding.**<br /> JIM serialises the emits (safe to call from parallel internal work) and swallows any failure to record one, because narration must never fail a synchronisation run. Blank messages are ignored rather than clearing the Activity message.
@@ -326,7 +327,7 @@ Finishing the whole batch regardless of the token is also compliant; it only mak
 
 ### Reporting a single object that failed to import
 
-Set `ErrorType` and `ErrorMessage` on the `ConnectedSystemImportObject` and return it in the result as normal. Each flagged object becomes a Run Profile Execution Item carrying your message, and the Activity completes with a warning (or fails, if every object was flagged).
+Set `ErrorType` and `ErrorMessage` on the `ConnectedSystemImportObject` and return it in the result as normal. Prefer `ErrorMessageDetail`, a `JimMessage` from your catalogue, to `ErrorMessage`: it sets `ErrorMessage` to its British English and lets the item read in the administrator's language. Each flagged object becomes a Run Profile Execution Item carrying your message, and the Activity completes with a warning (or fails, if every object was flagged).
 
 **JIM honours the severity your classification implies**, so choose it deliberately:
 
@@ -357,7 +358,7 @@ Do not use this channel for a problem that affects the whole run; throw instead,
 
 ### Reporting something the whole run should carry
 
-Set `ConnectedSystemImportResult.WarningMessage` (with an optional `WarningErrorType`) for a non-fatal operational note about **how** the run was performed. The run completes, and the warning is recorded on the Activity.
+Set `ConnectedSystemImportResult.WarningMessage` (with an optional `WarningErrorType`) for a non-fatal operational note about **how** the run was performed. The run completes, and the warning is recorded on the Activity. As with an object's error, prefer `WarningMessageDetail`, a `JimMessage` from your catalogue, which sets `WarningMessage` to its British English.
 
 The canonical example is JIM's LDAP Connector: when a Partition a Delta Import reads has no usable watermark, it reads every object in the run's Partitions instead and says so, naming the Partitions, rather than failing or silently returning a surprising number of objects.
 

@@ -1,6 +1,6 @@
 # Connector Message Catalogues: Implementation Plan
 
-- **Status:** Doing (Phases 1-2 complete; contract message slots next)
+- **Status:** Doing (Phases 1-3 complete; declared text next)
 - **Issue:** [#3103](https://github.com/TetronIO/JIM/issues/3103)
 - **PRD:** [PRD_CONNECTOR_MESSAGE_CATALOGUES.md](../../prd/doing/PRD_CONNECTOR_MESSAGE_CATALOGUES.md)
 
@@ -87,12 +87,12 @@ Each phase is test-first, ships its own PR, and leaves the build green.
 - No per-Connector helper class: call sites use `JimMessage.Create(BuiltInConnectorCatalogues.Ldap, nameof(LdapConnectorMessages.X), ...)`, the same shape as JIM's own catalogues, and the generated accessor still makes a mistyped key a build error.
 - `ApiMessage.KeyOf` keeps a Connector catalogue's whole name (`connector:jim.ldap/Messages.Key`); `PublishedMessageKeyTests` publishes the built-in Connector files under it.
 
-### Phase 3: Contract message slots
+### Phase 3: Contract message slots ✅
 
-- `ConnectedSystemImportObject.ErrorMessageDetail` and `ConnectedSystemImportResult.WarningMessageDetail`, each setting the English as `Activity.MessageDetail` does.
-- `IConnectorProgress.ReportAsync(JimMessage)` and `EnterPhaseAsync(string, JimMessage)`, implemented by `ConnectorProgress` through the existing message path in `ActivityProgressThrottle` and `ActivityPhaseReporter` (#3039).
-- Worker carries them through: import errors via `ActivityMessage.SetError`, import warnings onto the Activity's `WarningMessageDetail`, narration onto progress `MessageDetail`.
-- Tests: each slot stored with its English and rendered in French.
+- `ConnectedSystemImportObject.ErrorMessageDetail` and `ConnectedSystemImportResult.WarningMessageDetail`, each setting the English as `Activity.MessageDetail` does; the import carries them onto the item's and the Activity's message detail.
+- `IConnectorProgress.ReportAsync(JimMessage)` and `EnterPhaseAsync(string, JimMessage)`, as default interface methods that fall back to the British English, so every implementation keeps working. `ConnectorProgress` takes `reportMessage` and `enterPhaseMessage` delegates; without them a message falls back to the text delegates, and without phase tracking a phase's message is narrated.
+- Carried through `ActivityPhaseReporter` (`CreateConnectorProgress(reportMessageDetail:)`, `EnterConnectorPhaseAsync(string, JimMessage)`), both import paths, auxiliary class discovery, and the export (`ExportExecutionServer` sets `ExportProgressInfo.MessageDetail`; `SyncExportTaskProcessor` enters the Connector's step with it).
+- Tests: `TestMessageCatalogue` (JIM.TestSupport) registers an in-memory Connector catalogue with French; each slot is asserted stored with its English and rendered in French (`ImportConnectorReportedErrorTests`, `ImportSubPhaseProgressTests`, `ExportPhaseWiringTests`, `ConnectorProgressTests`).
 
 ### Phase 4: Declared text from Connector catalogues
 

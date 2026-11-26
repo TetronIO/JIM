@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Enums;
+using JIM.Models.Localisation;
 namespace JIM.Models.Staging;
 
 /// <summary>
@@ -40,6 +41,22 @@ public class ConnectedSystemImportObject
     /// Where the object carries <see cref="AttributeValueErrors"/>, JIM writes the Activity's message from those instead.
     /// </remarks>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// The error as a message in the Connector's own catalogue (#3103), so it reads in the administrator's language.
+    /// Setting it also sets <see cref="ErrorMessage"/> to its British English, which is what the REST API and logs show.
+    /// </summary>
+    public JimMessage? ErrorMessageDetail
+    {
+        get => _errorMessageDetail;
+        set
+        {
+            _errorMessageDetail = value;
+            ErrorMessage = value?.ToEnglish();
+        }
+    }
+
+    private JimMessage? _errorMessageDetail;
 
     /// <summary>
     /// Every value the Connector found on this object but could not read as its attribute's type (#2066); null when

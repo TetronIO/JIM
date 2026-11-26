@@ -51,8 +51,9 @@ public class ExportProgressInfo
     public string Message { get; set; } = string.Empty;
 
     /// <summary>
-    /// <see cref="Message"/> as a message the portal shows in the reader's language (#3039), where it is JIM's own wording;
-    /// null for a Connector's. Setting it also sets <see cref="Message"/> to its British English.
+    /// <see cref="Message"/> as a message the portal shows in the reader's language (#3039): JIM's own wording, or a
+    /// Connector's written in its own catalogue (#3103); null for narration recorded as English only. Setting it also
+    /// sets <see cref="Message"/> to its British English.
     /// </summary>
     public JimMessage? MessageDetail
     {

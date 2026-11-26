@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 
 namespace JIM.Utilities.Tests;
 
@@ -273,6 +274,106 @@ public class ConnectorProgressTests
     public void ConnectorProgress_ImplementsTheConnectorFacingContract()
     {
         Assert.That(new ConnectorProgress(report: null), Is.InstanceOf<IConnectorProgress>());
+    }
+
+    // A Connector's narration as a message in its own catalogue (#3103), so the Activity can show it in the
+    // administrator's language.
+    private static readonly JimMessage ReadingRegion =
+        JimMessage.Create("connector:test.example/Messages", "ReadingRegion", "EMEA");
+
+    [Test]
+    public async Task ReportAsync_Message_WithAMessageDelegate_ForwardsTheMessageAsync()
+    {
+        var messages = new List<JimMessage>();
+        using var progress = new ConnectorProgress(
+            report: _ => Task.CompletedTask,
+            reportMessage: message =>
+            {
+                messages.Add(message);
+                return Task.CompletedTask;
+            });
+
+        await progress.ReportAsync(ReadingRegion);
+
+        Assert.That(messages, Is.EqualTo(new[] { ReadingRegion }));
+    }
+
+    [Test]
+    public async Task ReportAsync_Message_WithOnlyATextDelegate_ForwardsItsEnglishAsync()
+    {
+        // A caller with nowhere to keep a message still gets the narration, in English.
+        var texts = new List<string>();
+        using var progress = new ConnectorProgress(text =>
+        {
+            texts.Add(text);
+            return Task.CompletedTask;
+        });
+
+        await progress.ReportAsync(ReadingRegion);
+
+        Assert.That(texts, Is.EqualTo(new[] { ReadingRegion.ToEnglish() }));
+    }
+
+    [Test]
+    public async Task EnterPhaseAsync_Message_WithAPhaseMessageDelegate_ForwardsTheKeyAndTheMessageAsync()
+    {
+        var entered = new List<(string Key, JimMessage Message)>();
+        using var progress = new ConnectorProgress(
+            report: _ => Task.CompletedTask,
+            enterPhase: (_, _) => Task.CompletedTask,
+            enterPhaseMessage: (key, message) =>
+            {
+                entered.Add((key, message));
+                return Task.CompletedTask;
+            });
+
+        await progress.EnterPhaseAsync("read", ReadingRegion);
+
+        Assert.That(entered, Is.EqualTo(new[] { ("read", ReadingRegion) }));
+    }
+
+    [Test]
+    public async Task EnterPhaseAsync_Message_WithoutPhaseTracking_NarratesTheMessageAsync()
+    {
+        var messages = new List<JimMessage>();
+        using var progress = new ConnectorProgress(
+            report: _ => Task.CompletedTask,
+            reportMessage: message =>
+            {
+                messages.Add(message);
+                return Task.CompletedTask;
+            });
+
+        await progress.EnterPhaseAsync("read", ReadingRegion);
+
+        Assert.That(messages, Is.EqualTo(new[] { ReadingRegion }), "the narration is still worth showing");
+    }
+
+    [Test]
+    public async Task EnterPhaseAsync_Message_WithOnlyATextPhaseDelegate_ForwardsItsEnglishAsync()
+    {
+        var entered = new List<(string Key, string? Message)>();
+        using var progress = new ConnectorProgress(
+            report: _ => Task.CompletedTask,
+            enterPhase: (key, message) =>
+            {
+                entered.Add((key, message));
+                return Task.CompletedTask;
+            });
+
+        await progress.EnterPhaseAsync("read", ReadingRegion);
+
+        Assert.That(entered, Is.EqualTo(new[] { ("read", (string?)ReadingRegion.ToEnglish()) }));
+    }
+
+    [Test]
+    public async Task ReportAsync_Message_WhenReportingFails_DoesNotThrowAsync()
+    {
+        using var progress = new ConnectorProgress(
+            report: _ => Task.CompletedTask,
+            reportMessage: _ => throw new InvalidOperationException("the Activity could not be written"));
+
+        Assert.That(async () => await progress.ReportAsync(ReadingRegion), Throws.Nothing);
     }
 
     private static void InterlockedMax(ref int target, int value)

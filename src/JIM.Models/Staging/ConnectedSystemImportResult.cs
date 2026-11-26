@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Staging;
 
@@ -78,6 +79,22 @@ public class ConnectedSystemImportResult
     /// issues to the administrator (e.g., a delta import that fell back to a full import).
     /// </summary>
     public string? WarningMessage { get; set; }
+
+    /// <summary>
+    /// The warning as a message in the Connector's own catalogue (#3103), so it reads in the administrator's language.
+    /// Setting it also sets <see cref="WarningMessage"/> to its British English, which is what the REST API and logs show.
+    /// </summary>
+    public JimMessage? WarningMessageDetail
+    {
+        get => _warningMessageDetail;
+        set
+        {
+            _warningMessageDetail = value;
+            WarningMessage = value?.ToEnglish();
+        }
+    }
+
+    private JimMessage? _warningMessageDetail;
 
     /// <summary>
     /// Optional error type classification for the warning. When <see cref="WarningMessage"/> is set,
