@@ -27,6 +27,9 @@ public static class MessageCatalogueSources
         return new Registration(source);
     }
 
+    /// <summary>Whether any registered source serves <paramref name="catalogue"/>.</summary>
+    public static bool Serves(string catalogue) => Volatile.Read(ref _sources).Any(source => source.Serves(catalogue));
+
     /// <summary>
     /// The template for <paramref name="key"/> in <paramref name="language"/> from the first source that serves the
     /// catalogue, or null when no source serves it or the one that does holds no such key.

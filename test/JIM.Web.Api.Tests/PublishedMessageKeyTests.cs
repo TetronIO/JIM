@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using JIM.Connectors;
 using NUnit.Framework;
 
 namespace JIM.Web.Api.Tests;
@@ -53,6 +54,18 @@ public class PublishedMessageKeyTests
     }
 
     [Test]
+    public void EveryBuiltInConnectorCatalogue_IsAFileThisGuardReads()
+    {
+        // Otherwise a Connector's keys would be published without ever being pinned here.
+        var folder = Path.Combine(RepositoryRoot(), "src", "JIM.Connectors", "Resources");
+        var missing = BuiltInConnectorCatalogues.ResourceFiles.Values
+            .Where(file => !File.Exists(Path.Combine(folder, file + ".resx")))
+            .ToList();
+
+        Assert.That(missing, Is.Empty);
+    }
+
+    [Test]
     public void EveryCurrentKey_IsPublished()
     {
         // Keeps the list complete, so a key added and then renamed before anyone writes it down is still caught.
@@ -79,7 +92,7 @@ public class PublishedMessageKeyTests
         {
             foreach (var resx in Directory.GetFiles(Path.Combine(root, folder), "*.resx").Where(IsNeutral))
             {
-                var catalogue = Path.GetFileNameWithoutExtension(resx);
+                var catalogue = PublishedCatalogueName(Path.GetFileNameWithoutExtension(resx));
                 var names = XDocument.Load(resx).Root!.Elements("data")
                     .Select(d => (string)d.Attribute("name")!)
                     .ToHashSet(StringComparer.Ordinal);
@@ -94,6 +107,11 @@ public class PublishedMessageKeyTests
 
         return keys;
     }
+
+    // A built-in Connector's catalogue is published under its whole name (connector:jim.ldap/Messages), the way
+    // ApiMessage.KeyOf writes it; JIM's own are published under the file's name.
+    private static string PublishedCatalogueName(string fileName) =>
+        BuiltInConnectorCatalogues.ResourceFiles.SingleOrDefault(entry => entry.Value == fileName).Key ?? fileName;
 
     private static string? CountedStem(string name, HashSet<string> names)
     {

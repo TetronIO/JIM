@@ -141,6 +141,7 @@ public class SynchronisationControllerHierarchyTests
 
     private sealed class StubPartitionsConnector(List<ConnectorPartition> partitions) : IConnector, IConnectorPartitions
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub Partitions Connector";
         public string? Description => null;
         public string? Url => null;

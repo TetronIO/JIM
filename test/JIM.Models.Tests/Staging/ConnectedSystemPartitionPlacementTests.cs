@@ -121,6 +121,7 @@ public class ConnectedSystemPartitionPlacementTests
 
     private sealed class ConnectorWithoutPlacement : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => "Plain Connector";
         public string? Description => null;
         public string? Url => null;

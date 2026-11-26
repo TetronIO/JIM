@@ -165,6 +165,7 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
         ConnectedSystemObjectType csoType,
         Func<IConnectorProgress, Task> narrate) : IConnector, IConnectorImportUsingCalls
     {
+        public string Identifier => "test.connector";
         public string Name => "MockConnector";
         public string? Description => null;
         public string? Url => null;
@@ -200,6 +201,7 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
     private class MockSubPhaseReportingFileConnector(Func<IConnectorProgress, Task> narrate)
         : IConnector, IConnectorImportUsingFiles
     {
+        public string Identifier => "test.connector";
         public string Name => "MockFileConnector";
         public string? Description => null;
         public string? Url => null;

@@ -254,6 +254,7 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
     private class MockErrorReportingConnector(List<ConnectedSystemImportObject> importObjects)
         : IConnector, IConnectorImportUsingCalls
     {
+        public string Identifier => "test.connector";
         public string Name => "MockConnector";
         public string? Description => null;
         public string? Url => null;

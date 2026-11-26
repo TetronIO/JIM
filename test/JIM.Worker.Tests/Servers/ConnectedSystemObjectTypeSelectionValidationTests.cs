@@ -244,6 +244,7 @@ public class ConnectedSystemObjectTypeSelectionValidationTests
     /// </summary>
     private sealed class StubSelectionValidatingConnector : IConnector, IConnectorObjectTypeSelectionValidation
     {
+        public string Identifier => "test.connector";
         private string? _refusedObjectType;
         private string? _refusalMessage;
 
@@ -273,6 +274,7 @@ public class ConnectedSystemObjectTypeSelectionValidationTests
 
     private sealed class StubPlainConnector : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub Plain Connector";
         public string? Description => null;
         public string? Url => null;

@@ -20,6 +20,7 @@ internal sealed class PartitionWatermarkTestConnector(List<List<ConnectedSystemI
     string? firstPageWatermark = null, Action<int>? beforePage = null, string? closeReturn = null)
     : IConnector, IConnectorImportUsingCalls, IConnectorPartitionWatermarks
 {
+    public string Identifier => "test.connector";
     private int _nextPage;
     private IReadOnlyDictionary<int, string?>? _watermarks;
 

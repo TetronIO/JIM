@@ -7,6 +7,13 @@ JIM runs only the Connectors built into it: `ConnectorFactory` (`src/JIM.Connect
 
 <!-- TODO: Guide for implementing custom connectors: IConnector interface, capability interfaces (IConnectorImportUsingCalls, IConnectorExportUsingCalls), ConnectorCapabilities, registration, and packaging -->
 
+## Naming your Connector
+
+Every Connector declares an `Identifier` on `IConnector` beside its `Name`: lower case, a publisher then a name, separated by full stops (`jim.ldap`, `jim.scim.client`, `jim.entraid`). The built-in Connectors' identifiers are constants in `ConnectorConstants`, and `ConnectorIdentifierTests` checks every Connector's against that pattern and against each other's.
+
+- **Never change an identifier once the Connector has shipped.** It names the Connector's message catalogue, `connector:<identifier>/Messages`, and every record the Connector writes stores that name; a changed identifier leaves those records readable in their stored English only. The `Name` is free to change.
+- **The catalogue is yours.** A built-in Connector's is a resource file of its own under `src/JIM.Connectors/Resources/` (`LdapConnectorMessages.resx` for `jim.ldap`), listed in `BuiltInConnectorCatalogues`; write a message in it with `JimMessage.Create(BuiltInConnectorCatalogues.Ldap, nameof(LdapConnectorMessages.SomeKey), ...)`. The design is `engineering/plans/doing/CONNECTOR_MESSAGE_CATALOGUES.md`.
+
 ## Respecting the scope an administrator manages
 
 Implement `IConnectorManagedScope` when your Connected System has a containment model your Connector understands. JIM calls `SetManagedScope` before an export, passing the external identifiers of the containers the administrator has selected, and your Connector refuses to write anything outside their subtrees.

@@ -10,7 +10,8 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 /// <remarks>
 /// A key is the catalogue's name and the message's key joined by a full stop (<c>ActivityMessages.RoleMemberAdded</c>):
-/// the catalogue's assembly is an implementation detail and is left out. Every key that can reach the API is pinned by
+/// the catalogue's assembly is an implementation detail and is left out. A Connector's catalogue keeps its whole name
+/// (<c>connector:jim.ldap/Messages.PermissionMissing</c>), since that is what says which Connector the message is from. Every key that can reach the API is pinned by
 /// <c>PublishedMessageKeyTests</c>, because renaming one would break a client that renders it.
 /// </remarks>
 public static class ApiMessage
@@ -43,6 +44,9 @@ public static class ApiMessage
 
     private static string CatalogueName(string catalogue)
     {
+        if (ConnectorCatalogueNames.IsConnectorCatalogue(catalogue))
+            return catalogue;
+
         var separator = catalogue.IndexOf(':');
         return separator < 0 ? catalogue : catalogue[(separator + 1)..];
     }

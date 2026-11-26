@@ -151,6 +151,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private LdapDirectoryType? _exportDiscoveredDirectoryTypeForPin;
 
     #region IConnector members
+    public string Identifier => ConnectorConstants.LdapConnectorIdentifier;
+
     public string Name => ConnectorConstants.LdapConnectorName;
 
     public string? Description => "Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory, OpenLDAP, and Samba AD.";

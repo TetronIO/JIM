@@ -262,6 +262,7 @@ public class PasswordDeliveryCoreTests
 
     private sealed class RecordingPasswordConnector : IConnector, IConnectorPasswordManagement
     {
+        public string Identifier => "test.connector";
         public string Name => "Recording Password Connector";
         public string? Description => null;
         public string? Url => null;

@@ -1657,6 +1657,7 @@ internal class SeedingServer
         var connectorDefinition = new ConnectorDefinition
         {
             Name = connector.Name,
+            Identifier = connector.Identifier,
             Description = connector.Description,
             Url = connector.Url,
             BuiltIn = true
@@ -1704,6 +1705,15 @@ internal class SeedingServer
             existingDefinition.Settings.Remove(duplicate);
             hasChanges = true;
             Log.Information($"SyncConnectorDefinitionAsync: Removed duplicate setting '{duplicate.Name}' from '{connector.Name}'");
+        }
+
+        // A definition created before Connectors declared an identifier gains it here. The identifier never changes
+        // once shipped, so a mismatch means the definition predates it rather than the Connector having moved on.
+        if (existingDefinition.Identifier != connector.Identifier)
+        {
+            existingDefinition.Identifier = connector.Identifier;
+            hasChanges = true;
+            Log.Information($"SyncConnectorDefinitionAsync: Recorded identifier '{connector.Identifier}' for '{connector.Name}'");
         }
 
         // Update the Connector's own declarations (capability flags and schema standard)

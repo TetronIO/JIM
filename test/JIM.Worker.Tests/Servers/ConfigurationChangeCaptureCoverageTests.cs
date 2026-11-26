@@ -398,6 +398,7 @@ public class ConfigurationChangeCaptureCoverageTests
     /// <summary>A connector test double that reports container-creation support for the auto-selection path.</summary>
     private sealed class FakeContainerCreatingConnector : IConnector, IConnectorContainerCreation
     {
+        public string Identifier => "test.connector";
         public string Name => "Fake Directory";
         public string? Description => null;
         public string? Url => null;

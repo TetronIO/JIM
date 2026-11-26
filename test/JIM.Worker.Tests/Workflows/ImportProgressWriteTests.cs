@@ -190,6 +190,7 @@ public class ImportProgressWriteTests : WorkflowTestBase
     private sealed class PagingConnector(ConnectedSystemObjectType csoType, int pages, int? stopOnPage = null, Action? stop = null, Action? onCall = null)
         : IConnector, IConnectorImportUsingCalls, IConnectorPhases
     {
+        public string Identifier => "test.connector";
         private const int ObjectsPerPage = 5;
         private int _pagesReturned;
 

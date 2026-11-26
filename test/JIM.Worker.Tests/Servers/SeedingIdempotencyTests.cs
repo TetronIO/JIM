@@ -218,7 +218,7 @@ public class SeedingIdempotencyTests
     {
         foreach (var connector in SeedingServer.BuiltInConnectors())
         {
-            var definition = new ConnectorDefinition { Id = _harness.ConnectorDefinitions.Count + 1, Name = connector.Name, BuiltIn = true };
+            var definition = new ConnectorDefinition { Id = _harness.ConnectorDefinitions.Count + 1, Name = connector.Name, Identifier = connector.Identifier, BuiltIn = true };
             SeedingServer.ApplyConnectorDeclarations((IConnectorCapabilities)connector, definition);
             _harness.Jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition((IConnectorSettings)connector, definition);
             _harness.ConnectorDefinitions[connector.Name] = definition;
@@ -228,6 +228,42 @@ public class SeedingIdempotencyTests
 
         Assert.That(_harness.CreatedConnectorDefinitions, Is.Empty, "an existing definition must never be re-created");
         Assert.That(_harness.CreatedActivities, Is.Empty, "a converged sync must record no Activities at all");
+    }
+
+    [Test]
+    public async Task SyncBuiltInConnectorDefinitionsAsync_DefinitionMissing_RecordsTheConnectorsIdentifierAsync()
+    {
+        await _harness.Jim.Seeding.SyncBuiltInConnectorDefinitionsAsync();
+
+        var expected = SeedingServer.BuiltInConnectors().ToDictionary(c => c.Name, c => c.Identifier);
+        Assert.That(_harness.CreatedConnectorDefinitions.ToDictionary(d => d.Name, d => d.Identifier), Is.EquivalentTo(expected),
+            "the identifier names the Connector's message catalogue, so the stored definition must carry it");
+    }
+
+    [Test]
+    public async Task SyncBuiltInConnectorDefinitionsAsync_DefinitionPredatesIdentifiers_RecordsItAsAnAuditedUpdateAsync()
+    {
+        foreach (var connector in SeedingServer.BuiltInConnectors())
+        {
+            // A deployment whose definitions were created before Connectors declared an identifier.
+            var definition = new ConnectorDefinition { Id = _harness.ConnectorDefinitions.Count + 1, Name = connector.Name, BuiltIn = true };
+            SeedingServer.ApplyConnectorDeclarations((IConnectorCapabilities)connector, definition);
+            _harness.Jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition((IConnectorSettings)connector, definition);
+            _harness.ConnectorDefinitions[connector.Name] = definition;
+        }
+
+        await _harness.Jim.Seeding.SyncBuiltInConnectorDefinitionsAsync();
+
+        var expected = SeedingServer.BuiltInConnectors().ToDictionary(c => c.Name, c => c.Identifier);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_harness.ConnectorDefinitions.Values.ToDictionary(d => d.Name, d => d.Identifier), Is.EquivalentTo(expected),
+                "an existing deployment must gain the identifiers, or its Connectors' records never read in another language");
+            Assert.That(_harness.CreatedConnectorDefinitions, Is.Empty);
+            Assert.That(_harness.CreatedActivities.Count(a => a.TargetType == ActivityTargetType.ConnectorDefinition &&
+                a.TargetOperationType == ActivityTargetOperationType.Update), Is.EqualTo(expected.Count),
+                "filling in the identifier is a change to the definition, so it is recorded in its history");
+        }
     }
 
     [Test]
@@ -246,7 +282,7 @@ public class SeedingIdempotencyTests
     {
         foreach (var connector in SeedingServer.BuiltInConnectors())
         {
-            var definition = new ConnectorDefinition { Id = _harness.ConnectorDefinitions.Count + 1, Name = connector.Name, BuiltIn = true };
+            var definition = new ConnectorDefinition { Id = _harness.ConnectorDefinitions.Count + 1, Name = connector.Name, Identifier = connector.Identifier, BuiltIn = true };
             SeedingServer.ApplyConnectorDeclarations((IConnectorCapabilities)connector, definition);
             _harness.Jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition((IConnectorSettings)connector, definition);
             _harness.ConnectorDefinitions[connector.Name] = definition;

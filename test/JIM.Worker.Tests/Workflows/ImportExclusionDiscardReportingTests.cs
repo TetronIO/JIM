@@ -109,6 +109,7 @@ public class ImportExclusionDiscardReportingTests : WorkflowTestBase
     private class MockDiscardReportingConnector(IReadOnlyList<List<ExclusionDiscardCount>> discardsPerPage)
         : IConnector, IConnectorImportUsingCalls
     {
+        public string Identifier => "test.connector";
         private int _pagesReturned;
 
         public string Name => "MockDiscardReportingConnector";

@@ -108,6 +108,7 @@ public class ConnectedSystemExchangeHoldTests
 
     private sealed class StubPlainConnector : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub";
         public string? Description => null;
         public string? Url => null;
@@ -115,6 +116,7 @@ public class ConnectedSystemExchangeHoldTests
 
     private sealed class StubExchangeConnector(bool managing) : IConnector, IConnectorExchangeRecipients
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub";
         public string? Description => null;
         public string? Url => null;

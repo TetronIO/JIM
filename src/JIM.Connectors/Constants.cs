@@ -19,4 +19,13 @@ public static class ConnectorConstants
     // synchronises Microsoft Entra ID through the Microsoft Graph API (#361). Named for the system administrators connect
     // to rather than the API it speaks, which is how they look for it.
     public static string GraphConnectorName => "JIM Microsoft Entra ID Connector";
+
+    // A Connector's identifier names its message catalogue ("connector:jim.ldap/Messages") and, once Connectors can be
+    // installed, its package (#3103). Unlike the name it never changes: records already written name their catalogue by it.
+    public const string LdapConnectorIdentifier = "jim.ldap";
+    public const string FileConnectorIdentifier = "jim.file";
+    public const string ScimClientConnectorIdentifier = "jim.scim.client";
+    public const string ScimServiceProviderConnectorIdentifier = "jim.scim.serviceprovider";
+    public const string SqlConnectorIdentifier = "jim.sql";
+    public const string GraphConnectorIdentifier = "jim.entraid";
 }

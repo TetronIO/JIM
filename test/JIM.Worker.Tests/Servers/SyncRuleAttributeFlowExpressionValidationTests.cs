@@ -276,6 +276,7 @@ public class SyncRuleAttributeFlowExpressionValidationTests
 
     private sealed class StubPlainConnector : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub Plain Connector";
         public string? Description => null;
         public string? Url => null;

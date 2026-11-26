@@ -796,6 +796,7 @@ public class MetaverseControllerSetPasswordTests
     /// </summary>
     private sealed class PasswordCapableConnector : IConnector, IConnectorPasswordManagement
     {
+        public string Identifier => "test.connector";
         public string Name => "Password Capable Connector";
         public string? Description => null;
         public string? Url => null;
@@ -822,6 +823,7 @@ public class MetaverseControllerSetPasswordTests
 
     private sealed class PasswordlessConnector : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => "Passwordless Connector";
         public string? Description => null;
         public string? Url => null;

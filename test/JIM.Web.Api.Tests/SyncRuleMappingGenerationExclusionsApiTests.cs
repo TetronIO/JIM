@@ -413,6 +413,7 @@ public class SyncRuleMappingGenerationExclusionsApiTests
 
     private sealed class ProbingConnector(string name) : IConnector, IConnectorUniquenessProbe
     {
+        public string Identifier => "test.connector";
         public string Name => name;
         public string? Description => null;
         public string? Url => null;

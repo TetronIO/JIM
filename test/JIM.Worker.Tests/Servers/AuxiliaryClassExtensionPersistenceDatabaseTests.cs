@@ -361,6 +361,7 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
     /// </summary>
     private sealed class StubSchemaConnector(ConnectorSchema schema) : IConnector, IConnectorSchema
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub Schema Connector";
         public string? Description => null;
         public string? Url => null;
@@ -856,6 +857,7 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
     /// </summary>
     private sealed class ThrowingUsageConnector(CancellationTokenSource cancellation) : IConnector, IConnectorObjectClassUsage
     {
+        public string Identifier => "test.connector";
         public string Name => "Throwing Test Connector";
         public string? Description => null;
         public string? Url => null;
@@ -871,6 +873,7 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
 
     private sealed class UsagelessConnector : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => "Usageless Test Connector";
         public string? Description => null;
         public string? Url => null;

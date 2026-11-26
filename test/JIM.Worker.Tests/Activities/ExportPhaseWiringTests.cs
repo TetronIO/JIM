@@ -210,6 +210,7 @@ public class ExportPhaseWiringTests : WorkflowTestBase
     /// </summary>
     private class MockPhaseDeclaringExportConnector : IConnector, IConnectorExportUsingCalls, IConnectorPhases
     {
+        public string Identifier => "test.connector";
         public string Name => "MockPhaseDeclaringExportConnector";
         public string? Description => null;
         public string? Url => null;

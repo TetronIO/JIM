@@ -507,6 +507,7 @@ public class ExchangeDeliveryTests
 
     private sealed class FakeExchangeConnector : IConnector, IConnectorExchangeRecipients
     {
+        public string Identifier => "test.connector";
         public string Name => "Fake Exchange Connector";
         public string? Description => null;
         public string? Url => null;

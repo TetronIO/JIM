@@ -43,6 +43,16 @@ public class ActivityMessageKeyDtoTests
     }
 
     [Test]
+    public void KeyOf_ConnectorMessage_KeepsTheConnectorsCatalogueName()
+    {
+        // A JIM catalogue's assembly is an implementation detail and is dropped; a Connector's catalogue name is the
+        // only thing that says which Connector a message is from, so a client needs all of it (#3103).
+        var message = JimMessage.Create(ConnectorCatalogueNames.For("jim.ldap"), "PermissionMissing", "User.ReadWrite");
+
+        Assert.That(ApiMessage.KeyOf(message), Is.EqualTo("connector:jim.ldap/Messages.PermissionMissing"));
+    }
+
+    [Test]
     public void Header_ActivityRecordedBeforeMessagesWereStored_HasNoKeyOrArguments()
     {
         var header = ActivityHeader.FromEntity(new Activity { Message = "Sync complete" });

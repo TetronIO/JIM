@@ -474,6 +474,7 @@ public class ConnectedSystemServerGeneratedValueExclusionsTests
 
     private sealed class RecordingProbeConnector(string name, HashSet<string> unprobedAttributes) : IConnector, IConnectorUniquenessProbe
     {
+        public string Identifier => "test.connector";
         public string Name => name;
         public string? Description => null;
         public string? Url => null;

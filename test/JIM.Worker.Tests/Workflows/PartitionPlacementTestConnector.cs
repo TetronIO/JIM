@@ -17,6 +17,7 @@ namespace JIM.Worker.Tests.Workflows;
 internal sealed class PartitionPlacementTestConnector(List<List<ConnectedSystemImportObject>> pages, IReadOnlyList<bool>? completeReadByPage = null)
     : IConnector, IConnectorImportUsingCalls, IConnectorPartitionPlacement
 {
+    public string Identifier => "test.connector";
     private readonly PagedImportConnector _pages = new(pages, completeReadByPage: completeReadByPage);
 
     public string Name => "MockConnector";

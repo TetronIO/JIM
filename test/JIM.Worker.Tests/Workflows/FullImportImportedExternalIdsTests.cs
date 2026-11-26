@@ -96,6 +96,7 @@ public class FullImportImportedExternalIdsTests : WorkflowTestBase
     private sealed class GeneratedPagesConnector(int pageCount, Func<int, List<ConnectedSystemImportObject>> page, Action<int> beforePage)
         : IConnector, IConnectorImportUsingCalls
     {
+        public string Identifier => "test.connector";
         private int _nextPage;
 
         public string Name => "MockConnector";

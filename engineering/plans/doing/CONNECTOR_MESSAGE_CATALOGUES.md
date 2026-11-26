@@ -1,6 +1,6 @@
 # Connector Message Catalogues: Implementation Plan
 
-- **Status:** Doing (Phase 1 in progress)
+- **Status:** Doing (Phases 1-2 complete; contract message slots next)
 - **Issue:** [#3103](https://github.com/TetronIO/JIM/issues/3103)
 - **PRD:** [PRD_CONNECTOR_MESSAGE_CATALOGUES.md](../../prd/doing/PRD_CONNECTOR_MESSAGE_CATALOGUES.md)
 
@@ -79,12 +79,13 @@ Each phase is test-first, ships its own PR, and leaves the build green.
 - Correct `MessageRenderer`'s comment, which names a test that does not exist.
 - Tests: missing catalogue, missing key, bad template, each rendering the stored English; existing localisation suites unchanged.
 
-### Phase 2: Connector identity and per-Connector catalogues
+### Phase 2: Connector identity and per-Connector catalogues ✅
 
-- `IConnector.Identifier` on every built-in Connector; pattern test over all `IConnector` implementations.
-- `ConnectorDefinition.Identifier` column and migration; seeding fills it; round-trip database test.
-- `ConnectorResxSource`; one empty catalogue per built-in Connector under `JIM.Connectors/Resources/<Connector>/`; `ConnectorMessage` helper per Connector (`LdapMessage.Create(nameof(LdapConnectorMessages.X), ...)`) so a mistyped key fails the build.
-- `ApiMessage.KeyOf` and `PublishedMessageKeyTests` taught the `connector:` naming.
+- `IConnector.Identifier` on every Connector (`jim.ldap`, `jim.file`, `jim.scim.client`, `jim.scim.serviceprovider`, `jim.sql`, `jim.entraid`; the mocks `jim.mock.call` and `jim.mock.file`), constants in `ConnectorConstants`; `ConnectorIdentifierTests` checks the pattern and uniqueness over every `IConnector` implementation and pins the built-in identifiers.
+- `ConnectorDefinition.Identifier`: nullable column with a filtered unique index; seeding sets it on create and records it as an audited update on a definition that predates it; the configuration snapshot carries it. Not exposed through the REST API yet. Real-PostgreSQL test in `SeedingIdempotencyDatabaseTests`.
+- `ConnectorCatalogueNames` (JIM.Models) names a Connector catalogue, `connector:<identifier>/Messages`, whichever source serves it. `BuiltInConnectorCatalogueSource` serves the built-in Connectors' catalogues, one empty resource file each, flat in `JIM.Connectors/Resources/` (`LdapConnectorMessages.resx`; the Entra ID Connector's is `GraphConnectorMessages.resx` after its class). `JimApplication`'s static constructor registers it, so every host and test has it.
+- No per-Connector helper class: call sites use `JimMessage.Create(BuiltInConnectorCatalogues.Ldap, nameof(LdapConnectorMessages.X), ...)`, the same shape as JIM's own catalogues, and the generated accessor still makes a mistyped key a build error.
+- `ApiMessage.KeyOf` keeps a Connector catalogue's whole name (`connector:jim.ldap/Messages.Key`); `PublishedMessageKeyTests` publishes the built-in Connector files under it.
 
 ### Phase 3: Contract message slots
 

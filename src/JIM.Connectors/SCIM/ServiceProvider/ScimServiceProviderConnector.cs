@@ -57,6 +57,8 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
     internal Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
 
     #region IConnector members
+    public string Identifier => ConnectorConstants.ScimServiceProviderConnectorIdentifier;
+
     public string Name => ConnectorConstants.ScimServiceProviderConnectorName;
 
     public string? Description => "Lets SCIM 2.0 clients provision into JIM. JIM acts as the SCIM service provider: clients write Users and Groups to JIM's own SCIM endpoint, and this Connector imports what they wrote.";

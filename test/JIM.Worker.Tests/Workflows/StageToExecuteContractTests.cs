@@ -1346,6 +1346,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
     /// </summary>
     private sealed class StubFileExportConnector(bool supportsAutoConfirmExport) : IConnector, IConnectorCapabilities, IConnectorExportUsingFiles
     {
+        public string Identifier => "test.connector";
         private readonly List<PendingExport> _exportedItems = [];
 
         public string Name => "Stub File Export Connector";
