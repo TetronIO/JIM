@@ -47,7 +47,7 @@ RUN echo "apt refresh: ${APT_REFRESH}" \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
         libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
-        libgssapi-krb5-2=1.20.1-6ubuntu2.10 \
+        libgssapi-krb5-2=1.20.1-6ubuntu2.12 \
     && apt-get install -y --no-install-recommends \
         iputils-ping \
         curl \
