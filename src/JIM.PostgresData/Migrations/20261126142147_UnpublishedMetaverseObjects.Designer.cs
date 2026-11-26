@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261125182106_UnpublishedMetaverseObjects")]
+    [Migration("20261126142147_UnpublishedMetaverseObjects")]
     partial class UnpublishedMetaverseObjects
     {
         /// <inheritdoc />
@@ -597,6 +597,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("DetailMessage")
                         .HasColumnType("text");
 
+                    b.Property<string>("DetailMessageDetailJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("MatchedValue")
                         .HasColumnType("text");
 
@@ -756,6 +759,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<bool>("BuiltIn")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("ContributionMode")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
@@ -5202,6 +5208,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("LastErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastErrorMessageDetailJson")
                         .HasColumnType("text");
 
                     b.Property<string>("LastErrorStackTrace")
