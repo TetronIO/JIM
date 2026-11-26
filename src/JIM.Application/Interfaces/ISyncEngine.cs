@@ -386,13 +386,16 @@ public interface ISyncEngine
     /// <param name="existingPendingExport">The Pending Export already attached to <paramref name="existingCso"/>,
     /// if any, resolved by the caller only for a PendingProvisioning CSO (from the run's in-memory batch first,
     /// the database second). Tells a never-sent Create apart from one already sent and awaiting confirmation.</param>
+    /// <param name="groupCreateStagedThisEvaluation">True when another rule covering the same account staged its Create in
+    /// this evaluation (#2826), so this rule contributes every attribute it writes, whichever changed.</param>
     OutboundStagingDecision DecideOutboundStaging(
         MetaverseObject mvo,
         SyncRule exportRule,
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes,
         bool recallSemantics,
-        PendingExport? existingPendingExport);
+        PendingExport? existingPendingExport,
+        bool groupCreateStagedThisEvaluation = false);
 
     /// <summary>
     /// Merges newly evaluated attribute changes into a Pending Export this run has already staged for the

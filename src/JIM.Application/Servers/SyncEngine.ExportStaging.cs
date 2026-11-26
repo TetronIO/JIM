@@ -47,13 +47,17 @@ public partial class SyncEngine
     /// the run's in-memory batch first and the database second. Distinguishes a Create that has never been
     /// sent (<see cref="IsProvisioningNeverExported"/>) from one that has already been sent (or auto-confirmed
     /// away): a change arriving after the Create is sent must stage an Update, never a second Create.</param>
+    /// <param name="groupCreateStagedThisEvaluation">True when another rule covering the same account staged its Create
+    /// in this evaluation (#2826): the account is being created now, so this rule contributes every attribute it writes,
+    /// whichever changed.</param>
     public OutboundStagingDecision DecideOutboundStaging(
         MetaverseObject mvo,
         SyncRule exportRule,
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes,
         bool recallSemantics,
-        PendingExport? existingPendingExport)
+        PendingExport? existingPendingExport,
+        bool groupCreateStagedThisEvaluation = false)
     {
         // #1331: the Metaverse Object's one CSO in this system may be of a different Object Type than the
         // rule targets; exporting onto it would write this rule's attribute values to the wrong object.
@@ -87,7 +91,10 @@ public partial class SyncEngine
             };
         }
 
-        if (exportRule.ProvisionToConnectedSystem != true)
+        // A rule that does not provision stages nothing for an account that does not exist yet, unless another rule
+        // manages it (#2826): then the account is that rule's to create, and this rule adds its attributes to it.
+        if (exportRule.ProvisionToConnectedSystem != true &&
+            !(existingCso != null && ManagingExportRuleId(existingCso) is { } managingRuleId && managingRuleId != exportRule.Id))
             return new OutboundStagingDecision { Outcome = OutboundStagingOutcome.ProvisioningDeclined };
 
         if (existingCso == null)
@@ -102,7 +109,7 @@ public partial class SyncEngine
         // Reuse the existing PendingProvisioning CSO only when the changes are relevant to this rule:
         // restaging an identical Create export would misattribute it to this synchronisation in the
         // causality tree. Applies whether the Create is still unsent or has already gone out, below.
-        if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
+        if (!groupCreateStagedThisEvaluation && !HasRelevantChangedAttributes(changedAttributes, exportRule))
             return new OutboundStagingDecision { Outcome = OutboundStagingOutcome.PendingProvisioningChangesIrrelevant };
 
         // The Create is still unsent (never attempted): absorb the change into it in place, still a
@@ -193,39 +200,44 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Finds the groups of export Synchronisation Rules that all have the Metaverse Object in scope for the same Connected
-    /// System and Connected System Object Type (#2820). A Metaverse Object holds one Connected System Object there and only
-    /// one rule may manage it, so every rule in such a group is held back for this object and the overlap is reported.
-    /// Rules targeting different Object Types in one system are not an overlap here: that is the Object Type conflict
-    /// (#1331), decided per rule.
+    /// Finds the attributes two or more export Synchronisation Rules covering the Metaverse Object both write, in the same
+    /// Connected System and Connected System Object Type (#2826). The rules share the one Connected System Object the
+    /// Metaverse Object holds there; a contested attribute is staged by neither of them, and is reported. Rules writing
+    /// different attributes are not an overlap. Rules targeting different Object Types in one system are not either: that is
+    /// the Object Type conflict (#1331), decided per rule.
     /// </summary>
     /// <param name="mvo">The Metaverse Object being evaluated.</param>
     /// <param name="inScopeExportRules">The enabled export rules that have the Metaverse Object in scope, in evaluation order.</param>
     /// <param name="existingCsoInSystem">Returns the Connected System Object the Metaverse Object holds in a Connected System, if any.</param>
-    /// <returns>One overlap per group of two or more rules; empty when every rule stands alone.</returns>
+    /// <returns>One overlap per Connected System and Object Type with a contested attribute; empty when nothing is contested.</returns>
     internal static List<ExportRuleOverlap> FindExportRuleOverlaps(
         MetaverseObject mvo,
         IReadOnlyList<SyncRule> inScopeExportRules,
-        Func<int, ConnectedSystemObject?> existingCsoInSystem)
-    {
-        return inScopeExportRules
-            .GroupBy(rule => (rule.ConnectedSystemId, rule.ConnectedSystemObjectTypeId))
-            .Where(group => group.Count() > 1)
+        Func<int, ConnectedSystemObject?> existingCsoInSystem) =>
+        DescribeExportRuleOverlaps(mvo, PlanExportGroups(inScopeExportRules, existingCsoInSystem), existingCsoInSystem);
+
+    /// <summary>
+    /// The overlaps <paramref name="groups"/> record: one for each group with a contested attribute (#2826).
+    /// </summary>
+    internal static List<ExportRuleOverlap> DescribeExportRuleOverlaps(MetaverseObject mvo, IReadOnlyList<ExportGroupPlan> groups,
+        Func<int, ConnectedSystemObject?> existingCsoInSystem) =>
+        groups
+            .Where(group => group.ClashedAttributeIds.Count > 0)
             .Select(group =>
             {
-                var first = group.First();
+                var first = group.OrderedRules[0];
                 return new ExportRuleOverlap
                 {
                     MetaverseObjectId = mvo.Id,
-                    ConnectedSystemId = first.ConnectedSystemId,
-                    ConnectedSystemName = first.ConnectedSystem?.Name ?? first.ConnectedSystemId.ToString(CultureInfo.InvariantCulture),
-                    ObjectTypeName = first.ConnectedSystemObjectType?.Name ?? first.ConnectedSystemObjectTypeId.ToString(CultureInfo.InvariantCulture),
-                    SyncRuleNames = group.Select(rule => rule.Name).ToList(),
-                    ExistingConnectedSystemObjectId = existingCsoInSystem(first.ConnectedSystemId)?.Id
+                    ConnectedSystemId = group.ConnectedSystemId,
+                    ConnectedSystemName = first.ConnectedSystem?.Name ?? group.ConnectedSystemId.ToString(CultureInfo.InvariantCulture),
+                    ObjectTypeName = first.ConnectedSystemObjectType?.Name ?? group.ConnectedSystemObjectTypeId.ToString(CultureInfo.InvariantCulture),
+                    SyncRuleNames = group.ClashingRules.Select(rule => rule.Name).ToList(),
+                    AttributeNames = group.ClashedAttributeNames.ToList(),
+                    ExistingConnectedSystemObjectId = existingCsoInSystem(group.ConnectedSystemId)?.Id
                 };
             })
             .ToList();
-    }
 
     /// <summary>
     /// The export rule that manages a Connected System Object: the one recorded on its join, when an export rule made the
@@ -333,6 +345,62 @@ public partial class SyncEngine
             CoveringSyncRuleId = coveringRule.Id,
             CoveringSyncRuleName = coveringRule.Name
         };
+    }
+
+    /// <summary>
+    /// Groups the export rules covering a Metaverse Object by Connected System and Connected System Object Type, the one
+    /// account they share there, and plans how they stage into it together (#2826): which rule goes first, and which target
+    /// attributes more than one of them writes. A Metaverse Object holds one Connected System Object per Connected System,
+    /// so every rule in a group writes to the same object and its changes merge into the object's one Pending Export.
+    /// </summary>
+    /// <param name="inScopeExportRules">The enabled export rules that have the Metaverse Object in scope.</param>
+    /// <param name="accountInSystem">Returns the Connected System Object the Metaverse Object holds in a Connected System,
+    /// if any, so the rule that manages it can lead its group.</param>
+    public static List<ExportGroupPlan> PlanExportGroups(IReadOnlyList<SyncRule> inScopeExportRules,
+        Func<int, ConnectedSystemObject?> accountInSystem)
+    {
+        return inScopeExportRules
+            .GroupBy(rule => (rule.ConnectedSystemId, rule.ConnectedSystemObjectTypeId))
+            .Select(group =>
+            {
+                var account = accountInSystem(group.Key.ConnectedSystemId);
+                var managingRuleId = account != null && account.TypeId == group.Key.ConnectedSystemObjectTypeId
+                    ? ManagingExportRuleId(account)
+                    : null;
+                var byId = group.OrderBy(rule => rule.Id).ToList();
+                var lead = byId.FirstOrDefault(rule => rule.Id == managingRuleId)
+                           ?? byId.FirstOrDefault(rule => rule.ProvisionToConnectedSystem == true)
+                           ?? byId[0];
+                var orderedRules = byId.Where(rule => rule != lead).Prepend(lead).ToList();
+
+                var writesByAttributeId = orderedRules
+                    .SelectMany(rule => rule.AttributeFlowRules
+                        .Where(mapping => mapping.Enabled)
+                        .Select(mapping => (Rule: rule, AttributeId: mapping.ResolveTargetConnectedSystemAttributeId(),
+                            Name: mapping.TargetConnectedSystemAttribute?.Name)))
+                    .Where(write => write.AttributeId.HasValue)
+                    .GroupBy(write => write.AttributeId!.Value)
+                    .ToDictionary(writes => writes.Key, writes => writes.ToList());
+                var clashed = writesByAttributeId
+                    .Where(pair => pair.Value.Select(write => write.Rule).Distinct().Count() > 1)
+                    .OrderBy(pair => pair.Key)
+                    .ToList();
+                var clashingRules = clashed.SelectMany(pair => pair.Value.Select(write => write.Rule)).ToHashSet();
+
+                return new ExportGroupPlan
+                {
+                    ConnectedSystemId = group.Key.ConnectedSystemId,
+                    ConnectedSystemObjectTypeId = group.Key.ConnectedSystemObjectTypeId,
+                    OrderedRules = orderedRules,
+                    ClashedAttributeIds = clashed.Select(pair => pair.Key).ToHashSet(),
+                    ClashedAttributeNames = clashed
+                        .Select(pair => pair.Value.Select(write => write.Name).FirstOrDefault(name => name != null)
+                                        ?? pair.Key.ToString(CultureInfo.InvariantCulture))
+                        .ToList(),
+                    ClashingRules = orderedRules.Where(clashingRules.Contains).ToList()
+                };
+            })
+            .ToList();
     }
 
     /// <summary>
