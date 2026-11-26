@@ -1,10 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Collections.Concurrent;
 using System.Globalization;
-using System.Reflection;
-using System.Resources;
 
 namespace JIM.Models.Localisation;
 
@@ -18,8 +15,6 @@ public static class MessageRenderer
     /// <summary>The language JIM's own records and machine-facing text are written in.</summary>
     public static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-GB");
 
-    private static readonly ConcurrentDictionary<string, ResourceManager> Catalogues = new(StringComparer.Ordinal);
-
     /// <summary>The message in British English, with British formats.</summary>
     public static string ToEnglish(this JimMessage message) => Render(message, English, English);
 
@@ -28,56 +23,87 @@ public static class MessageRenderer
         Render(message, CultureInfo.CurrentUICulture, CultureInfo.CurrentCulture);
 
     /// <summary>
-    /// The message in <paramref name="language"/>, with values formatted for <paramref name="formats"/>. A key the
-    /// catalogue lacks renders its English (a translation missing for one language), and a catalogue or key missing
-    /// altogether renders the key itself, which <c>JimMessageConventionTests</c> stops reaching a build.
+    /// The message in <paramref name="language"/>, with values formatted for <paramref name="formats"/>. Never throws: a
+    /// message <see cref="TryRender"/> cannot render renders in the catalogue's English where it can, and otherwise as
+    /// its key. A caller holding the English stored beside the message should show that instead (the portal's
+    /// <c>MessageDisplay.Show(detail, english)</c> does), since a key is no use to a reader.
     /// </summary>
     public static string Render(JimMessage message, CultureInfo language, CultureInfo formats)
     {
         ArgumentNullException.ThrowIfNull(message);
 
+        if (TryRender(message, language, formats, out var text))
+            return text;
+        if (!Equals(language, English) && TryRender(message, English, formats, out var english))
+            return english;
+        return message.Key;
+    }
+
+    /// <summary>
+    /// Renders the message, and every message nested in its arguments, in <paramref name="language"/> (#3103). False when
+    /// any of them cannot be: no registered source serves its catalogue, the catalogue holds no such key (one renamed or
+    /// removed since the record was written), or its template's placeholders do not fit its arguments. A language's
+    /// malformed template falls back to the catalogue's English before giving up.
+    /// </summary>
+    public static bool TryRender(JimMessage message, CultureInfo language, CultureInfo formats, out string text)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        text = string.Empty;
+
         var key = message.PluralCount is { } count
             ? message.Key + (PluralRules.IsOne(language, count) ? "One" : "Other")
             : message.Key;
 
-        var template = CatalogueFor(message.Catalogue)?.GetString(key, language) ?? key;
-        if (message.Arguments.Count == 0)
-            return template;
+        var template = MessageCatalogueSources.Template(message.Catalogue, key, language);
+        if (template == null)
+            return false;
 
-        var values = message.Arguments.Select(argument => Format(argument, language, formats)).ToArray<object?>();
-        return string.Format(formats, template, values);
+        if (message.Arguments.Count == 0)
+        {
+            text = template;
+            return true;
+        }
+
+        var values = new object?[message.Arguments.Count];
+        for (var i = 0; i < values.Length; i++)
+        {
+            if (!TryFormat(message.Arguments[i], language, formats, out var value))
+                return false;
+            values[i] = value;
+        }
+
+        if (TryFill(template, formats, values, out text))
+            return true;
+
+        var englishTemplate = Equals(language, English) ? null : MessageCatalogueSources.Template(message.Catalogue, key, English);
+        return englishTemplate != null && TryFill(englishTemplate, formats, values, out text);
     }
 
-    /// <summary>The resource file a catalogue names, or null when the assembly or file does not exist.</summary>
-    public static ResourceManager? CatalogueFor(string catalogue)
+    private static bool TryFill(string template, CultureInfo formats, object?[] values, out string text)
     {
-        if (Catalogues.TryGetValue(catalogue, out var known))
-            return known;
-
-        var separator = catalogue.IndexOf(':', StringComparison.Ordinal);
-        if (separator <= 0)
-            return null;
-
-        var assemblyName = catalogue[..separator];
-        var fileName = catalogue[(separator + 1)..];
-        Assembly assembly;
         try
         {
-            assembly = Assembly.Load(assemblyName);
+            text = string.Format(formats, template, values);
+            return true;
         }
-        catch (FileNotFoundException)
+        catch (FormatException)
         {
-            return null;
+            text = string.Empty;
+            return false;
         }
-
-        var manager = new ResourceManager($"{assemblyName}.Resources.{fileName}", assembly);
-        return Catalogues.GetOrAdd(catalogue, manager);
     }
 
-    private static string Format(MessageArgument argument, CultureInfo language, CultureInfo formats)
+    private static bool TryFormat(MessageArgument argument, CultureInfo language, CultureInfo formats, out string value)
     {
         if (argument.Message is { } inner)
-            return Render(inner, language, formats);
+            return TryRender(inner, language, formats, out value);
+
+        value = Format(argument, formats);
+        return true;
+    }
+
+    private static string Format(MessageArgument argument, CultureInfo formats)
+    {
         if (argument.Number is { } number)
             return number.ToString("N0", formats);
         if (argument.Utc is { } utc)
