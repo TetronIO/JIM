@@ -17,6 +17,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
@@ -71,6 +72,10 @@ public class SynchronisationControllerMappingTests
 
         // The duplicate-target check (#1532) reads the Synchronisation Rule's existing mappings on every
         // mapping create/update. Default to none; the duplicate-target tests override this per-test.
+        // An export mapping save looks for other export rules writing the same attribute (#2826); there are none here.
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>()))
+            .ReturnsAsync(new List<SyncRuleHeader>());
         _mockConnectedSystemRepo
             .Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<SyncRuleMapping>());

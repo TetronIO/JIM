@@ -292,6 +292,62 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task CreateSyncRuleMappingAsync_AMappingForAnAttributeAnotherRuleWrites_WarnsNamingItAndTheAttributeAsync()
+    {
+        // The REST API and PowerShell add a mapping on its own, not through the whole-rule save (#2826).
+        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        var managersRule = DbContext.SyncRules.Single(r => r.Name == "AD Manager Accounts");
+        var displayName = arrangement.AdType.Attributes.Single(a => a.Name == "DisplayName");
+        var mapping = new SyncRuleMapping
+        {
+            SyncRule = managersRule,
+            SyncRuleId = managersRule.Id,
+            TargetConnectedSystemAttribute = displayName,
+            TargetConnectedSystemAttributeId = displayName.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = PersonType().Attributes.First(a => a.Name == "EmployeeId"),
+                MetaverseAttributeId = PersonType().Attributes.First(a => a.Name == "EmployeeId").Id } }
+        };
+
+        await Jim.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, await AdministratorAsync());
+
+        Assert.That(mapping.SaveWarnings.Where(w => w.Contains("AD Base Accounts")).ToList(), Has.One.Contains("'DisplayName'"));
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_TheOtherRuleWritingTheAttributeIsDisabled_DoesNotWarnAsync()
+    {
+        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        DbContext.SyncRules.Single(r => r.Name == "AD Base Accounts").Enabled = false;
+        await DbContext.SaveChangesAsync();
+        var managersRule = DbContext.SyncRules.Single(r => r.Name == "AD Manager Accounts");
+        var displayName = arrangement.AdType.Attributes.Single(a => a.Name == "DisplayName");
+        var mapping = new SyncRuleMapping
+        {
+            SyncRule = managersRule,
+            SyncRuleId = managersRule.Id,
+            TargetConnectedSystemAttribute = displayName,
+            TargetConnectedSystemAttributeId = displayName.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = PersonType().Attributes.First(a => a.Name == "EmployeeId"),
+                MetaverseAttributeId = PersonType().Attributes.First(a => a.Name == "EmployeeId").Id } }
+        };
+
+        await Jim.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, await AdministratorAsync());
+
+        Assert.That(mapping.SaveWarnings.Where(w => w.Contains("AD Base Accounts")), Is.Empty);
+    }
+
+    private async Task<MetaverseObject> AdministratorAsync()
+    {
+        var administrator = new MetaverseObject
+        {
+            Id = Guid.NewGuid(), Type = DbContext.MetaverseObjectTypes.First(), Created = DateTime.UtcNow, CachedDisplayName = "Test Administrator"
+        };
+        DbContext.MetaverseObjects.Add(administrator);
+        await DbContext.SaveChangesAsync();
+        return administrator;
+    }
+
+    [Test]
     public async Task CreateOrUpdateSyncRuleAsync_AnotherEnabledExportRuleWritesOtherAttributesOfTheSameObjectType_DoesNotWarnAsync()
     {
         // #2826: rules writing different attributes of one account each export their own, so there is nothing to warn of.

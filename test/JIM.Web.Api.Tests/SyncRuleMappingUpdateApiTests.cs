@@ -17,6 +17,7 @@ using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -60,6 +61,10 @@ public class SyncRuleMappingUpdateApiTests
     {
         var mockRepository = new Mock<IRepository>();
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
+        // An export mapping save looks for other export rules writing the same attribute (#2826); there are none here.
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>()))
+            .ReturnsAsync(new List<SyncRuleHeader>());
         var mockMetaverseRepo = new Mock<IMetaverseRepository>();
         var mockActivityRepo = new Mock<IActivityRepository>();
         var mockApiKeyRepo = new Mock<IApiKeyRepository>();
