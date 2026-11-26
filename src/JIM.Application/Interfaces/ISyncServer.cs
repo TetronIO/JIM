@@ -251,7 +251,8 @@ public interface ISyncServer
         AttributePriorityContext? priorityContext = null,
         UniqueValueResolveOptions? generatedValueAssignments = null,
         IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null,
-        MetaverseObjectConnections? connections = null);
+        MetaverseObjectConnections? connections = null,
+        IReadOnlyList<SyncRule>? coveringExportRules = null);
 
     /// <summary>
     /// The Metaverse Objects' connections to the Object Types the export rules' connection criteria name (#2021), read

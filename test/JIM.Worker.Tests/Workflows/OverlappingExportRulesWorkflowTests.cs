@@ -109,6 +109,55 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullSync_DriftOnAnAccountTwoEnforcingRulesWritingDifferentAttributesCover_CorrectsEachInOnePendingExportAsync()
+    {
+        // #2826: each enforcing rule corrects the attributes it writes, and an account has one Pending Export.
+        var (directory, cso, description) = await ArrangeEnforcingRulesAsync(staffScope: null, contractorScope: null, contractorTarget: "Department");
+        var department = AttributeOf(cso, "Department");
+
+        var activity = await RunHrFullSyncAsync(directory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Where(i => i.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap), Is.Empty);
+            Assert.That(CorrectionsFor(cso, description), Is.EqualTo(new[] { "Staff" }));
+            Assert.That(CorrectionsFor(cso, department), Is.EqualTo(new[] { "Contractor" }));
+            Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ConnectedSystemObjectId == cso.Id), Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_DriftOnAnAttributeAnEnforcingAndANonEnforcingRuleBothWrite_CorrectsNothingAndReportsTheClashAsync()
+    {
+        // Which value is right is not the enforcing rule's to decide while another rule covering the account writes the same
+        // attribute (#2826), whether or not that rule enforces.
+        var (directory, cso, description) = await ArrangeEnforcingRulesAsync(staffScope: null, contractorScope: null, contractorEnforces: false);
+
+        var activity = await RunHrFullSyncAsync(directory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap), Is.EqualTo(1));
+            Assert.That(CorrectionsFor(cso, description), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_OfADriftedAccountTwoEnforcingRulesWritingDifferentAttributesCover_ProposesBothCorrectionsAsync()
+    {
+        var (directory, cso, description) = await ArrangeEnforcingRulesAsync(staffScope: null, contractorScope: null, contractorTarget: "Department");
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(directory.Id, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preview.Errors.Where(e => e.Code == SyncPreviewMessageCode.ExportRuleOverlap), Is.Empty);
+            Assert.That(ProposedValuesFor(preview, description), Is.EqualTo(new[] { "Staff" }));
+            Assert.That(ProposedValuesFor(preview, AttributeOf(cso, "Department")), Is.EqualTo(new[] { "Contractor" }));
+        }
+    }
+
+    [Test]
     public async Task FullSync_DriftOnAnAccountWithEnforcingRulesThatNeverOverlap_EnforcesOnlyTheRuleCoveringItAsync()
     {
         var (directory, cso, description) = await ArrangeEnforcingRulesAsync(staffScope: Jane, contractorScope: Raj);
@@ -432,14 +481,16 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
     /// one Employee ID or, when the scope is null, unscoped. Jane's account holds a drifted Description.
     /// </summary>
     private async Task<(ConnectedSystem Directory, ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute Description)> ArrangeEnforcingRulesAsync(
-        string? staffScope, string? contractorScope, bool withContractorRule = true)
+        string? staffScope, string? contractorScope, bool withContractorRule = true, string contractorTarget = "Description",
+        bool contractorEnforces = true)
     {
         var directory = await CreateConnectedSystemAsync("Directory");
         var externalId = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
         var displayName = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
         var employeeId = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
         var description = new ConnectedSystemObjectTypeAttribute { Name = "Description", Type = AttributeDataType.Text, Selected = true };
-        var userType = await CreateCsoTypeAsync(directory.Id, "user", [externalId, displayName, employeeId, description]);
+        var department = new ConnectedSystemObjectTypeAttribute { Name = "Department", Type = AttributeDataType.Text, Selected = true };
+        var userType = await CreateCsoTypeAsync(directory.Id, "user", [externalId, displayName, employeeId, description, department]);
 
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvEmployeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -450,18 +501,24 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
 
         await AddEnforcingRuleAsync(directory, userType, mvType, "Directory Staff Policy", "Staff", staffScope, mvEmployeeId, description);
         if (withContractorRule)
-            await AddEnforcingRuleAsync(directory, userType, mvType, "Directory Contractor Policy", "Contractor", contractorScope, mvEmployeeId, description);
+            await AddEnforcingRuleAsync(directory, userType, mvType, "Directory Contractor Policy", "Contractor", contractorScope, mvEmployeeId,
+                contractorTarget == "Department" ? department : description, contractorEnforces);
 
         var cso = await CreateCsoAsync(directory.Id, userType, "Jane Smith", Jane);
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(), AttributeId = description.Id, Attribute = description, StringValue = "Drifted", ConnectedSystemObject = cso
         });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = department.Id, Attribute = department, StringValue = "Drifted", ConnectedSystemObject = cso
+        });
         return (directory, cso, description);
     }
 
     private async Task AddEnforcingRuleAsync(ConnectedSystem directory, ConnectedSystemObjectType userType, MetaverseObjectType mvType, string name,
-        string enforcedDescription, string? scope, MetaverseAttribute mvEmployeeId, ConnectedSystemObjectTypeAttribute description)
+        string enforcedDescription, string? scope, MetaverseAttribute mvEmployeeId, ConnectedSystemObjectTypeAttribute description,
+        bool enforceState = true)
     {
         var rule = new SyncRule
         {
@@ -469,7 +526,7 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
             Name = name,
             Direction = SyncRuleDirection.Export,
             Enabled = true,
-            EnforceState = true,
+            EnforceState = enforceState,
             ConnectedSystemObjectTypeId = userType.Id,
             ConnectedSystemObjectType = userType,
             MetaverseObjectTypeId = mvType.Id,
@@ -488,6 +545,9 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
         await DbContext.SaveChangesAsync();
         SyncRepo.SeedSyncRule(rule);
     }
+
+    private static ConnectedSystemObjectTypeAttribute AttributeOf(ConnectedSystemObject cso, string name) =>
+        cso.AttributeValues.Select(v => v.Attribute).OfType<ConnectedSystemObjectTypeAttribute>().First(a => a.Name == name);
 
     private List<string?> CorrectionsFor(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute description) =>
         SyncRepo.PendingExports.Values

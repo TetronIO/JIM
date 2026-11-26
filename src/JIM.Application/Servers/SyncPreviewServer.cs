@@ -1474,8 +1474,11 @@ public class SyncPreviewServer
         DriftDetectionResult drift;
         try
         {
+            // Every export rule writing to the account, enforcing or not, so an attribute two of them write is left as the
+            // run leaves it (#2826).
             drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
-                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, connections: context.Cache.Connections);
+                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, connections: context.Cache.Connections,
+                coveringExportRules: [.. context.Cache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules)]);
         }
         catch (ScopingCriterionFailedException scopingEx)
         {
@@ -1527,13 +1530,10 @@ public class SyncPreviewServer
             };
         }));
 
-        // Two or more enforcing rules cover the object (#2820): the run corrects nothing and records the overlap once,
-        // however many of its paths find it.
+        // An attribute several rules covering the object write (#2826): the run leaves it uncorrected, corrects the rest,
+        // and records the overlap once, however many of its paths find it.
         if (drift.RuleOverlap != null)
-        {
             AddExportRuleOverlapError(result, drift.RuleOverlap);
-            return 0;
-        }
 
         if (!drift.HasDrift)
             return 0;

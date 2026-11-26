@@ -65,6 +65,7 @@ public abstract class SyncTaskProcessorBase
 
     // Cache of export rules for drift detection (filtered to EnforceState = true)
     protected List<SyncRule>? _driftDetectionExportRules;
+    protected List<SyncRule>? _driftCoveringExportRules;
 
     // Per-run attribute priority context (#91): contributors per (Metaverse Object Type, Metaverse Attribute) across
     // all Connected Systems, backing the inline incumbent-comparison gate in the attribute-flow engine. Null until
@@ -8814,6 +8815,12 @@ public abstract class SyncTaskProcessorBase
                         sr.ConnectedSystemId == _connectedSystem.Id)
             .ToList();
 
+        // Every enabled export rule into this system, enforcing or not: an attribute two rules covering an account write is
+        // corrected by neither (#2826).
+        _driftCoveringExportRules = currentSystemSyncRules
+            .Where(sr => sr.Enabled && sr.Direction == SyncRuleDirection.Export && sr.ConnectedSystemId == _connectedSystem.Id)
+            .ToList();
+
         Log.Debug("BuildDriftDetectionCache: Built import mapping cache with {ImportMappings} entries from all systems, " +
             "{ExportRules} export rules with EnforceState=true for system {SystemId}",
             _importMappingCache.Count, _driftDetectionExportRules.Count, _connectedSystem.Id);
@@ -9196,7 +9203,8 @@ public abstract class SyncTaskProcessorBase
                 _attributePriorityContext,
                 _uniqueValueResolveOptions,
                 heldReferenceAnswers,
-                connections);
+                connections,
+                _driftCoveringExportRules);
         }
         catch (ScopingCriterionFailedException scopingEx)
         {
@@ -9263,15 +9271,10 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 
-        // Two or more enforcing rules cover the object (#2820): nothing was corrected. Reported once per object and system per run,
-        // since export evaluation reports the same overlap when the object's exports are evaluated.
-        if (result.RuleOverlap != null)
-        {
-            if (_exportRuleOverlapsReported.Add((targetMvo.Id, result.RuleOverlap.ConnectedSystemId)))
-                _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(targetMvo, result.RuleOverlap));
-            span.SetSuccess();
-            return;
-        }
+        // An attribute several rules covering the object write (#2826): left uncorrected, the rest corrected. Reported once per
+        // object and system per run, since export evaluation reports the same overlap when the object's exports are evaluated.
+        if (result.RuleOverlap != null && _exportRuleOverlapsReported.Add((targetMvo.Id, result.RuleOverlap.ConnectedSystemId)))
+            _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(targetMvo, result.RuleOverlap));
 
         if (heldPendingExport != null)
         {
