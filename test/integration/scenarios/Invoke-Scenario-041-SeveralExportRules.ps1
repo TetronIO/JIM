@@ -112,7 +112,9 @@ function Invoke-ExportAndConfirm {
     Assert-ExportSuccess -ActivityId $export.activityId -Name "$Label LDAP Export"
     Start-Sleep -Seconds 2
     $import = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaImportProfileId -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $import.activityId -Name "$Label LDAP Delta Import (confirming)"
+    # The first Delta Import has no watermark yet, so it falls back to a Full Import and says so.
+    Assert-ActivitySuccess -ActivityId $import.activityId -Name "$Label LDAP Delta Import (confirming)" `
+        -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
     $sync = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaSyncProfileId -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $sync.activityId -Name "$Label LDAP Delta Sync"
 }
@@ -310,7 +312,8 @@ try {
         Set-DirectoryUserAttributes -UserDn $benDn -Label "Drift" -Values @{ mail = 'edited.by.hand@panoply.local'; employeeType = 'Edited by hand' }
 
         $import = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $import.activityId -Name "Drift LDAP Delta Import"
+        Assert-ActivitySuccess -ActivityId $import.activityId -Name "Drift LDAP Delta Import" `
+            -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
         $sync = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $sync.activityId -Name "Drift LDAP Delta Sync"
 
