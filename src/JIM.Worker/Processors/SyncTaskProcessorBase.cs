@@ -1249,6 +1249,28 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Runs <paramref name="writes"/> in one transaction, so they land together or not at all: one batch's state in the
+    /// passes after the page loop (#3085), as <see cref="FlushPageStateAsync"/> writes a page's. Commit before handing the
+    /// batch's history off, which the history writer refuses while a transaction is open; then removes any Pending Export
+    /// the batch staged across parallel connections and did not make live. On the in-memory test store there is no
+    /// transaction, and each write lands as it is made.
+    /// </summary>
+    private async Task WriteInOneTransactionAsync(Func<Task> writes)
+    {
+        try
+        {
+            await using var transaction = await _syncRepo.BeginTransactionAsync();
+            await writes();
+            if (transaction != null)
+                await transaction.CommitAsync();
+        }
+        finally
+        {
+            await RemovePageStagedPendingExportsAsync();
+        }
+    }
+
+    /// <summary>
     /// Creates the page's projected Metaverse Objects ahead of its transaction, recorded as unpublished (#2848); see
     /// <see cref="FlushPageStateAsync"/>. Leaves <see cref="PersistPendingMetaverseObjectsAsync"/> nothing to create.
     /// </summary>
@@ -5363,11 +5385,12 @@ public abstract class SyncTaskProcessorBase
             var resolvedCount = 0;
             var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
 
-            // Collect IDs of removed MVO attribute values across all batches for explicit raw SQL deletion.
-            // When ClearChangeTracker() runs between batches, EF loses knowledge of attribute values
+            // Collect IDs of removed MVO attribute values for explicit raw SQL deletion, each batch's in its own
+            // transaction (#3085). When ClearChangeTracker() runs between batches, EF loses knowledge of attribute values
             // removed from MVO.AttributeValues collections (ApplyPendingAttributeChanges). Without this,
             // the removed rows persist in the database and member removals are never exported.
             var removedMvoAttributeValueIds = new List<Guid>();
+            var removedMvoAttributeValueCount = 0;
 
             for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
             {
@@ -5621,43 +5644,61 @@ public abstract class SyncTaskProcessorBase
                     updatedExistingRpeis.Clear();
                 }
 
-                // Flush this batch (same sequence as per-page processing)
-                await PersistPendingMetaverseObjectsAsync();
-
-                // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
-                // flush sequence, deletions before commit (#242 Scenario 023 bug fix). In practice always a
-                // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
-                // generated mapping never targets a Reference attribute, so nothing this pass resolves or
-                // reconciles ever has anything queued to commit or delete.
-                await FlushGeneratedValueAssignmentDeletionsAsync();
-                await CommitGeneratedValueAssignmentsAsync();
-
-                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
-                await EvaluateQueuedDriftAsync();
-
-                // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
-                // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
-                // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
-                // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
-                // batch instead, since deleting rows whose replacements were never staged would lose their changes.
-                var pendingExportBatchFlushed = false;
-                _syncRepo.BeginPendingExportBatch();
-                try
+                // The batch's state in one transaction (#3085), so a run that stops part-way leaves none of it behind. The
+                // Metaverse Objects are written before the Pending Exports that carry their references, and the
+                // re-evaluation replaces each object's queued export (deleting the old row, writing the new one): while each
+                // step committed on its own, a stop between them left a provisioned object with no export, or with one
+                // missing the references, and the next run found the references already flowed and staged nothing.
+                await WriteInOneTransactionAsync(async () =>
                 {
-                    await EvaluatePendingExportsAsync(prefetchPendingExports: true);
-                    await _syncRepo.FlushPendingExportBatchAsync();
-                    pendingExportBatchFlushed = true;
-                }
-                finally
-                {
-                    if (!pendingExportBatchFlushed)
-                        _syncRepo.AbandonPendingExportBatch();
-                }
+                    await PersistPendingMetaverseObjectsAsync();
 
-                await FlushPendingExportOperationsAsync();
+                    // The reference values this batch removed, now its objects are written (see the collection above).
+                    if (removedMvoAttributeValueIds.Count > 0)
+                    {
+                        await _syncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedMvoAttributeValueIds);
+                        Log.Debug("ResolveCrossPageReferences: Explicitly deleted {Count} removed MVO attribute values via raw SQL",
+                            removedMvoAttributeValueIds.Count);
+                        removedMvoAttributeValueCount += removedMvoAttributeValueIds.Count;
+                        removedMvoAttributeValueIds.Clear();
+                    }
 
-                // Record any RPEIs generated during the flush sequence, and the batch's MVO change records, before clearing
-                // the change tracker
+                    // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
+                    // flush sequence, deletions before commit (#242 Scenario 023 bug fix). In practice always a
+                    // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
+                    // generated mapping never targets a Reference attribute, so nothing this pass resolves or
+                    // reconciles ever has anything queued to commit or delete.
+                    await FlushGeneratedValueAssignmentDeletionsAsync();
+                    await CommitGeneratedValueAssignmentsAsync();
+
+                    await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
+                    await EvaluateQueuedDriftAsync();
+
+                    // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
+                    // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
+                    // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
+                    // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
+                    // batch instead, since deleting rows whose replacements were never staged would lose their changes.
+                    var pendingExportBatchFlushed = false;
+                    _syncRepo.BeginPendingExportBatch();
+                    try
+                    {
+                        await EvaluatePendingExportsAsync(prefetchPendingExports: true);
+                        await _syncRepo.FlushPendingExportBatchAsync();
+                        pendingExportBatchFlushed = true;
+                    }
+                    finally
+                    {
+                        if (!pendingExportBatchFlushed)
+                            _syncRepo.AbandonPendingExportBatch();
+                    }
+
+                    await FlushPendingExportOperationsAsync();
+                });
+
+                // Record any RPEIs generated during the flush sequence, and the batch's MVO change records, once the batch's
+                // state has committed (the history writer refuses to run while the run's repository holds a transaction),
+                // before clearing the change tracker
                 await FlushHistoryAsync();
 
                 // Update activity progress
@@ -5673,17 +5714,9 @@ public abstract class SyncTaskProcessorBase
                     ClearPageTrackingState();
             }
 
-            // Explicitly delete removed MVO attribute values via raw SQL.
-            // ClearChangeTracker between batches erases EF's knowledge of attribute values removed
-            // from MVO.AttributeValues collections (by ApplyPendingAttributeChanges). Without this
-            // explicit deletion, the removed rows persist in the database — member removals would
-            // never be exported to target systems.
-            if (removedMvoAttributeValueIds.Count > 0)
-            {
-                await _syncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedMvoAttributeValueIds);
+            if (removedMvoAttributeValueCount > 0)
                 Log.Information("ResolveCrossPageReferences: Explicitly deleted {Count} removed MVO attribute values via raw SQL",
-                    removedMvoAttributeValueIds.Count);
-            }
+                    removedMvoAttributeValueCount);
 
             Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
                 totalCrossPagesToResolve);
@@ -6192,9 +6225,15 @@ public abstract class SyncTaskProcessorBase
             _syncRepo.SetAutoDetectChangesEnabled(false);
             try
             {
-                await EvaluatePendingExportsAsync();
-                await FlushPendingExportOperationsAsync();
-                await ResolvePendingExportReferenceSnapshotsAsync();
+                // The batch's state in one transaction (#3085): provisioning writes each object's Connected System Object,
+                // then its Pending Export. While each committed on its own, a stop between them left an account with no
+                // export, which the next review, finding it already provisioned and nothing changed, never staged.
+                await WriteInOneTransactionAsync(async () =>
+                {
+                    await EvaluatePendingExportsAsync();
+                    await FlushPendingExportOperationsAsync();
+                    await ResolvePendingExportReferenceSnapshotsAsync();
+                });
 
                 // Keep an item only for an object the review changed (#1925). A configuration change flags every
                 // object of the rule's type, and an item for each one the review found already right would bury
@@ -6378,9 +6417,15 @@ public abstract class SyncTaskProcessorBase
             _syncRepo.SetAutoDetectChangesEnabled(false);
             try
             {
-                await EvaluatePendingExportsAsync();
-                await FlushPendingExportOperationsAsync();
-                await ResolvePendingExportReferenceSnapshotsAsync();
+                // The batch's state in one transaction (#3085): carrying the value replaces each object's queued Pending
+                // Export, deleting the old row and writing the new. While each committed on its own, a stop between them
+                // lost the queued export, and the next drain staged only the revised value in its place.
+                await WriteInOneTransactionAsync(async () =>
+                {
+                    await EvaluatePendingExportsAsync();
+                    await FlushPendingExportOperationsAsync();
+                    await ResolvePendingExportReferenceSnapshotsAsync();
+                });
 
                 // Every revision's item is kept, unlike the scope review's: it carries the causal edge back to the
                 // rejection, which must land even where the evaluation merged the value into an export already queued
