@@ -95,10 +95,10 @@
     private static MarkupString Describe(SqlRelatedTableDocument relatedTable)
     {
         var joinColumns = string.Join(", ", (relatedTable.JoinColumns ?? []).OfType<string>()
-            .Where(c => c.Length > 0).Select(Code));
+            .Where(c => c.Length > 0).Select(InlineCode.Markup));
         var description = string.Format(CultureInfo.CurrentCulture, SqlText.RelatedTableDescribe,
-            Code(relatedTable.AttributeName ?? SqlText.UnnamedAttribute),
-            Code($"{SqlObjectTypesEditorModel.Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}"),
+            InlineCode.Markup(relatedTable.AttributeName ?? SqlText.UnnamedAttribute),
+            InlineCode.Markup($"{SqlObjectTypesEditorModel.Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}"),
             joinColumns);
 
         if (!string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType))
@@ -106,12 +106,9 @@
                 System.Net.WebUtility.HtmlEncode(relatedTable.ReferencesObjectType));
 
         if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
-            description += string.Format(CultureInfo.CurrentCulture, SqlText.RelatedTableWatermark, Code(relatedTable.WatermarkColumn));
+            description += string.Format(CultureInfo.CurrentCulture, SqlText.RelatedTableWatermark, InlineCode.Markup(relatedTable.WatermarkColumn));
 
         return new MarkupString(description);
     }
 
-    /// <summary>A name as inline code, HTML-encoded: the editor names attributes, tables and columns this way.</summary>
-    private static string Code(string? text) =>
-        $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(text)}</code>";
 }

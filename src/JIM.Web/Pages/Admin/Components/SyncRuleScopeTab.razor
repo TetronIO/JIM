@@ -23,13 +23,13 @@ else
         @if (SyncRule.Direction == SyncRuleDirection.Export)
         {
             <MudText Class="mt-2">
-                @((MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ScopeDefaultExport, CodeSpan(SyncRule.MetaverseObjectType.Name)))
+                @InlineCode.Format(SyncRuleText.ScopeDefaultExport, SyncRule.MetaverseObjectType.Name)
             </MudText>
         }
         else
         {
             <MudText Class="mt-2">
-                @((MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ScopeDefaultImport, CodeSpan(SyncRule.ConnectedSystemObjectType.Name)))
+                @InlineCode.Format(SyncRuleText.ScopeDefaultImport, SyncRule.ConnectedSystemObjectType.Name)
             </MudText>
         }
 
@@ -126,10 +126,6 @@ else
         // initialise scoping filter state based on existing criteria
         _syncRuleScopingFiltered = SyncRule.ObjectScopingCriteriaGroups.Count > 0;
     }
-
-    /// <summary>A name shown in code formatting inside a sentence, HTML-encoded because it is schema data.</summary>
-    private static string CodeSpan(string name) =>
-        $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
 
     private async Task NotifyChangedAsync()
     {

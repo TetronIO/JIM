@@ -1550,12 +1550,10 @@
     /// </summary>
     private async Task<bool> ConfirmObjectTypeRemovalAsync(ConnectedSystemObjectType connectedSystemObjectType)
     {
-        // HTML-encode the name: it is interpolated into a MarkupString, which bypasses Razor's auto-encoding.
-        var encodedName = System.Net.WebUtility.HtmlEncode(connectedSystemObjectType.Name);
         var options = new MessageBoxOptions
         {
             Title = SchemaText.RemoveObjectTypeQuestion,
-            MarkupMessage = (MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.RemoveObjectTypeMessage, $"<code class=\"jim-code-inline\">{encodedName}</code>"),
+            MarkupMessage = InlineCode.Format(SchemaText.RemoveObjectTypeMessage, connectedSystemObjectType.Name),
             YesText = CommonText.Remove,
             CancelText = CommonText.Cancel
         };

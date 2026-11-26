@@ -76,7 +76,7 @@
                 <MudText Class="mb-2">
                     @((MarkupString)(_model.ReadsFromStatement
                         ? SqlText.AnchorIntroStatement
-                        : string.Format(CultureInfo.CurrentCulture, SqlText.AnchorIntroTable, Code(SqlObjectTypesEditorModel.Qualified(_model.ObjectType.Schema, _model.ObjectType.Table ?? string.Empty)))))
+                        : string.Format(CultureInfo.CurrentCulture, SqlText.AnchorIntroTable, InlineCode.Markup(SqlObjectTypesEditorModel.Qualified(_model.ObjectType.Schema, _model.ObjectType.Table ?? string.Empty)))))
                 </MudText>
                 @if (_readingSource)
                 {
@@ -197,10 +197,6 @@
         new(false, SqlText.TableOrView),
         new(true, SqlText.SourceSelectStatement)
     ];
-
-    /// <summary>A name as inline code, HTML-encoded: the editor names tables and columns this way in running text.</summary>
-    private static string Code(string? text) =>
-        $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(text)}</code>";
 
     private IEnumerable<string> SchemaOptions => CatalogueObjects.Select(o => o.SchemaName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
 

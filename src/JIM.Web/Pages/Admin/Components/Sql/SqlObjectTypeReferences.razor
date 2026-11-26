@@ -37,7 +37,7 @@
             @if (suggestion.Kind == SqlObjectTypeSuggestionKind.Reference)
             {
                 <span class="jim-sql-inline-alert-text">@((MarkupString)string.Format(CultureInfo.CurrentCulture, SqlText.ReferenceSuggestion,
-                        Code(suggestion.ColumnName), System.Net.WebUtility.HtmlEncode(suggestion.ReferencedObjectTypeName),
+                        InlineCode.Markup(suggestion.ColumnName), System.Net.WebUtility.HtmlEncode(suggestion.ReferencedObjectTypeName),
                         System.Net.WebUtility.HtmlEncode(suggestion.ReferencedObjectTypeName)))</span>
                 <span class="jim-sql-inline-alert-actions">
                     <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => OnAccept.InvokeAsync(suggestion))"
@@ -47,9 +47,9 @@
             }
             else
             {
-                <span class="jim-sql-inline-alert-text">@((MarkupString)string.Format(CultureInfo.CurrentCulture, SqlText.ForeignKeySuggestion,
-                        Code(suggestion.ColumnName),
-                        Code(SqlObjectTypesEditorModel.Qualified(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName))))</span>
+                <span class="jim-sql-inline-alert-text">@InlineCode.Format(SqlText.ForeignKeySuggestion,
+                        suggestion.ColumnName,
+                        SqlObjectTypesEditorModel.Qualified(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName))</span>
                 <span class="jim-sql-inline-alert-actions">
                     <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => OnAddObjectType.InvokeAsync(suggestion))"
                                  data-testid="jim-sql-add-object-type-suggestion-accept">@SqlText.AddObjectTypeForIt</AlertButton>
@@ -87,10 +87,6 @@
 
     [Parameter]
     public EventCallback OnChanged { get; set; }
-
-    /// <summary>A name as inline code, HTML-encoded, for the suggestion sentences.</summary>
-    private static string Code(string? text) =>
-        $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(text)}</code>";
 
     private async Task SetAsync(Action change)
     {

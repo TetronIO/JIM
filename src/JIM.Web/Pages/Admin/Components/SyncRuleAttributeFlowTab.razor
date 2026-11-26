@@ -1611,12 +1611,10 @@
     /// </summary>
     private MarkupString GetStandardMappingSuggestionText(List<StandardMappingSuggestion> suggestions)
     {
-        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
-
         var first = suggestions[0];
         // The picker's compact "SCIM 2.0 · LDAP/AD" label does not read as prose; spell the conjunction out.
         var standard = System.Net.WebUtility.HtmlEncode(first.StandardLabel.Replace(" · ", SyncRuleText.ListAnd, StringComparison.Ordinal));
-        var targets = string.Join(SyncRuleText.ListAnd, suggestions.Select(s => Code(s.TargetName)));
+        var targets = string.Join(SyncRuleText.ListAnd, suggestions.Select(s => InlineCode.Markup(s.TargetName)));
         var notes = string.Join(" ", suggestions
             .Select(s => s.Notes)
             .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -1626,9 +1624,9 @@
         var sentence = SyncRule.Direction == SyncRuleDirection.Import
             ? string.Format(System.Globalization.CultureInfo.CurrentCulture,
                 PluralRules.Choose(suggestions.Count, SyncRuleText.StandardMappingImportOne, SyncRuleText.StandardMappingImportOther),
-                standard, Code(first.CounterpartName), targets)
+                standard, InlineCode.Markup(first.CounterpartName), targets)
             : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.StandardMappingExport,
-                standard, Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name), targets);
+                standard, InlineCode.Markup(_attributeFlowMappingSource?.MetaverseAttribute?.Name), targets);
 
         return (MarkupString)(string.IsNullOrEmpty(notes)
             ? sentence
@@ -1642,8 +1640,6 @@
     /// </summary>
     private MarkupString GetUnavailableCorrespondenceText(StandardMappingSuggestion suggestion, bool continuesFromSuggestion)
     {
-        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
-
         var standard = System.Net.WebUtility.HtmlEncode(suggestion.StandardLabel.Replace(" · ", SyncRuleText.ListAnd, StringComparison.Ordinal));
         var sourceName = SyncRule.Direction == SyncRuleDirection.Import
             ? _attributeFlowMappingSource?.ConnectedSystemAttribute?.Name
@@ -1652,9 +1648,9 @@
         // Following a sentence that has already named the standard and the source, repeating both reads as boilerplate.
         var sentence = continuesFromSuggestion
             ? string.Format(System.Globalization.CultureInfo.CurrentCulture,
-                UnavailableAlsoTemplate(suggestion.Status), Code(suggestion.TargetName))
+                UnavailableAlsoTemplate(suggestion.Status), InlineCode.Markup(suggestion.TargetName))
             : string.Format(System.Globalization.CultureInfo.CurrentCulture,
-                UnavailableFirstTemplate(suggestion.Status), standard, Code(sourceName), Code(suggestion.TargetName));
+                UnavailableFirstTemplate(suggestion.Status), standard, InlineCode.Markup(sourceName), InlineCode.Markup(suggestion.TargetName));
 
         var notes = string.IsNullOrWhiteSpace(suggestion.Notes) ? null : System.Net.WebUtility.HtmlEncode(suggestion.Notes.Trim());
         return (MarkupString)(notes == null
@@ -1785,18 +1781,16 @@
     /// </summary>
     private MarkupString GetMvaToSvaWarningText()
     {
-        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
-
         if (SyncRule.Direction == SyncRuleDirection.Import)
         {
-            var source = Code(_attributeFlowMappingSource?.ConnectedSystemAttribute?.Name);
-            var target = Code(_attributeFlowMapping?.TargetMetaverseAttribute?.Name);
-            return (MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.MvaToSvaWarningImport, source, target);
+            return InlineCode.Format(SyncRuleText.MvaToSvaWarningImport,
+                _attributeFlowMappingSource?.ConnectedSystemAttribute?.Name,
+                _attributeFlowMapping?.TargetMetaverseAttribute?.Name);
         }
 
-        var mvSource = Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name);
-        var csTarget = Code(_attributeFlowMapping?.TargetConnectedSystemAttribute?.Name);
-        return (MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.MvaToSvaWarningExport, mvSource, csTarget);
+        return InlineCode.Format(SyncRuleText.MvaToSvaWarningExport,
+            _attributeFlowMappingSource?.MetaverseAttribute?.Name,
+            _attributeFlowMapping?.TargetConnectedSystemAttribute?.Name);
     }
 
     /// <summary>
