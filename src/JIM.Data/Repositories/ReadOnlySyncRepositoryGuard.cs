@@ -693,6 +693,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => throw new PreviewWriteAttemptedException(nameof(CreateMetaverseObjectsAsync));
 
+    public Task CreateUnpublishedMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects, Guid activityId)
+        => throw new PreviewWriteAttemptedException(nameof(CreateUnpublishedMetaverseObjectsAsync));
+
+    public Task PublishMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(PublishMetaverseObjectsAsync));
+
+    public Task<UnpublishedMetaverseObjectRemoval> RemoveUnpublishedMetaverseObjectsAsync(IReadOnlyCollection<Guid>? metaverseObjectIds = null)
+        => throw new PreviewWriteAttemptedException(nameof(RemoveUnpublishedMetaverseObjectsAsync));
+
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => throw new PreviewWriteAttemptedException(nameof(UpdateMetaverseObjectsAsync));
 
@@ -934,6 +943,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<ISyncRepositoryTransaction?> BeginTransactionAsync()
         => throw new PreviewWriteAttemptedException(nameof(BeginTransactionAsync));
+
+    public Task<ISyncRepositorySavepoint?> CreateSavepointAsync()
+        => throw new PreviewWriteAttemptedException(nameof(CreateSavepointAsync));
+
+    public Task<int> RemovePendingExportsStagedForTransactionAsync()
+        => throw new PreviewWriteAttemptedException(nameof(RemovePendingExportsStagedForTransactionAsync));
 
     public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
         => throw new PreviewWriteAttemptedException(nameof(ReleaseExecutingPendingExportsAsync));

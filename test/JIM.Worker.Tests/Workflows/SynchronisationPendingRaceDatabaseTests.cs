@@ -641,4 +641,74 @@ public class SynchronisationPendingRaceDatabaseTests
             Assert.That(stillMarked, Is.Zero, "every processed object's mark was cleared");
         }
     }
+
+    #region A run interrupted inside its page flush (#2848)
+
+    /// <summary>Stands in for a Worker that stops at an exact point in a page flush.</summary>
+    private sealed class SimulatedWorkerStopException() : Exception("Simulated Worker stop inside the page flush.");
+
+    /// <summary>
+    /// Wraps the run's repository so the page flush stops just before the join-state write, after the page's Metaverse
+    /// Objects are written.
+    /// </summary>
+    private static ISyncRepository StopBeforeJoinStateWrite(ISyncRepository repository) =>
+        InterceptingSyncRepositoryProxy.Create(repository, nameof(ISyncRepository.UpdateConnectedSystemObjectJoinStatesAsync),
+            () => throw new SimulatedWorkerStopException());
+
+    private async Task<(int MetaverseObjects, int Joined)> CountMetaverseObjectsAndJoinsAsync()
+    {
+        await using var ctx = NewContext();
+        return (await ctx.MetaverseObjects.AsNoTracking().CountAsync(),
+            await ctx.ConnectedSystemObjects.AsNoTracking().CountAsync(c => c.MetaverseObjectId != null));
+    }
+
+    /// <summary>
+    /// A run that stops between the page's Metaverse Object creates and its join-state write leaves neither behind: the
+    /// page's writes share one transaction. While each step committed on its own, the stop left projected Metaverse Objects
+    /// with nothing joined to them, and since nothing can match a projection-only Synchronisation Rule's objects to them, the
+    /// next run, processing the still-marked objects again, projected each a second time.
+    /// </summary>
+    [Test]
+    public async Task FullSync_InterruptedBetweenProjectionAndJoinWrite_NextRunDoesNotProjectAgainAsync()
+    {
+        await CreateObjectsAsync(1, 2);
+
+        Assert.That(async () => await RunAsync(ConnectedSystemRunType.FullSynchronisation, wrapRepository: StopBeforeJoinStateWrite),
+            Throws.Exception, "precondition: the run stopped inside its page flush");
+        var interrupted = await CountMetaverseObjectsAndJoinsAsync();
+        Assert.That(interrupted, Is.EqualTo((0, 0)), "the stopped page left nothing: its projections went with its joins");
+
+        await RunAsync(ConnectedSystemRunType.FullSynchronisation);
+
+        var recovered = await CountMetaverseObjectsAndJoinsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recovered.Joined, Is.EqualTo(2), "the next run joined every object");
+            Assert.That(recovered.MetaverseObjects, Is.EqualTo(2), "one Metaverse Object per object, none left with nothing joined");
+        }
+    }
+
+    /// <summary>The Delta Synchronisation counterpart of the test above, for objects created since the last run.</summary>
+    [Test]
+    public async Task DeltaSync_InterruptedBetweenProjectionAndJoinWrite_NextRunDoesNotProjectAgainAsync()
+    {
+        await ArrangeSynchronisedObjectsAsync(2);
+        await CreateObjectsAsync(3, 4);
+
+        Assert.That(async () => await RunAsync(ConnectedSystemRunType.DeltaSynchronisation, wrapRepository: StopBeforeJoinStateWrite),
+            Throws.Exception, "precondition: the run stopped inside its page flush");
+        var interrupted = await CountMetaverseObjectsAndJoinsAsync();
+        Assert.That(interrupted, Is.EqualTo((2, 2)), "the stopped page left nothing: its projections went with its joins");
+
+        await RunAsync(ConnectedSystemRunType.DeltaSynchronisation);
+
+        var recovered = await CountMetaverseObjectsAndJoinsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recovered.Joined, Is.EqualTo(4), "the next run joined every object");
+            Assert.That(recovered.MetaverseObjects, Is.EqualTo(4), "one Metaverse Object per object, none left with nothing joined");
+        }
+    }
+
+    #endregion
 }

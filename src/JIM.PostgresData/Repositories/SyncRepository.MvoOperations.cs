@@ -43,7 +43,10 @@ public partial class SyncRepository
     /// Scale750k40kGroups. Code that does save through EF on this context must not walk a graph that can reach a
     /// new object (<c>DbSet.Update</c>, <c>Remove</c> on a detached root), or it inserts or updates it a second time.
     /// </remarks>
-    public async Task CreateMetaverseObjectsBulkAsync(List<MetaverseObject> metaverseObjects)
+    /// <param name="metaverseObjects">The objects to create.</param>
+    /// <param name="unpublishedByActivityId">When given, each object is also recorded as unpublished by this synchronisation
+    /// Activity (#2848), in the same transaction as its own row, so an object is never committed without its record.</param>
+    public async Task CreateMetaverseObjectsBulkAsync(List<MetaverseObject> metaverseObjects, Guid? unpublishedByActivityId = null)
     {
         using var span = MvoActivitySource.StartActivity("Mvo.Create");
         span?.SetTag("attributeValueCount", metaverseObjects.Sum(mvo => mvo.AttributeValues.Count));
@@ -80,7 +83,7 @@ public partial class SyncRepository
             var parallelism = ConnectionsForWrite(metaverseObjects.Count + attributeValueRows.Count);
             if (parallelism == 1)
             {
-                await CreateMvosOnSingleConnectionAsync(metaverseObjects, attributeValueRows);
+                await CreateMvosOnSingleConnectionAsync(metaverseObjects, attributeValueRows, unpublishedByActivityId);
             }
             else
             {
@@ -118,6 +121,8 @@ public partial class SyncRepository
                         {
                             await using var transaction = await connection!.BeginTransactionAsync();
                             await BulkInsertMvosOnConnectionAsync(connection, transaction, partition);
+                            if (unpublishedByActivityId is { } activityId)
+                                await BulkInsertUnpublishedRecordsOnConnectionAsync(connection, partition, activityId);
                             await transaction.CommitAsync();
                             foreach (var mvo in partition)
                                 committedMvoIds.Enqueue(mvo.Id);
@@ -168,24 +173,57 @@ public partial class SyncRepository
     /// </summary>
     private async Task CreateMvosOnSingleConnectionAsync(
         List<MetaverseObject> metaverseObjects,
-        IReadOnlyList<(Guid OwnerId, MetaverseObjectAttributeValue Value)> attributeValueRows)
+        IReadOnlyList<(Guid OwnerId, MetaverseObjectAttributeValue Value)> attributeValueRows,
+        Guid? unpublishedByActivityId)
     {
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        // The rows and their values in one transaction; a caller already holding one (a synchronisation page, #2848)
+        // keeps it, and commits them with the rest of its writes.
+        await using var ownTransaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
 
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
         var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
 
         await BulkInsertMvosOnConnectionAsync(npgsqlConn, npgsqlTx, metaverseObjects);
+        if (unpublishedByActivityId is { } activityId)
+            await BulkInsertUnpublishedRecordsOnConnectionAsync(npgsqlConn, metaverseObjects, activityId);
 
         if (attributeValueRows.Count > 0)
             await BulkInsertMvoAttributeValuesOnConnectionAsync(npgsqlConn, npgsqlTx, attributeValueRows);
 
-        await transaction.CommitAsync();
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
+    }
+
+    /// <summary>
+    /// Records the given Metaverse Objects as unpublished by a synchronisation Activity (#2848), by COPY on the connection
+    /// and in the transaction that wrote the objects, so each object is committed with its record or not at all.
+    /// </summary>
+    private static async Task BulkInsertUnpublishedRecordsOnConnectionAsync(
+        NpgsqlConnection connection,
+        IReadOnlyList<MetaverseObject> objects,
+        Guid activityId)
+    {
+        var created = DateTime.UtcNow;
+        await using var writer = await connection.BeginBinaryImportAsync(
+            $"""COPY "UnpublishedMetaverseObjects" ({BulkSqlHelpers.ToQuotedList(UnpublishedMetaverseObjectBulkColumns.UnpublishedMetaverseObjects)}) FROM STDIN (FORMAT binary)""");
+
+        // Writer order below MUST match UnpublishedMetaverseObjectBulkColumns.UnpublishedMetaverseObjects exactly.
+        foreach (var mvo in objects)
+        {
+            await writer.StartRowAsync();
+            await writer.WriteAsync(mvo.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(activityId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(created, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+        }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>
@@ -460,8 +498,11 @@ public partial class SyncRepository
         try
         {
             // One transaction per batch: the row update, attribute-value inserts and deletes commit atomically,
-            // so a Metaverse Object is never left half-updated (Synchronisation Integrity: no partial state).
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            // so a Metaverse Object is never left half-updated (Synchronisation Integrity: no partial state). A caller
+            // already holding one (a synchronisation page, #2848) keeps it, and commits them with the rest of its writes.
+            await using var ownTransaction = _context.Database.CurrentTransaction == null
+                ? await _context.Database.BeginTransactionAsync()
+                : null;
 
             // 1. Update the MetaverseObjects rows (scalar columns), keyed by Id, with no xmin predicate.
             await BulkUpdateMvoRowsViaEfAsync(metaverseObjects);
@@ -519,7 +560,8 @@ public partial class SyncRepository
             if (provenanceUpdates.Count > 0)
                 await BulkUpdateMvoAttributeValueProvenanceViaEfAsync(provenanceUpdates);
 
-            await transaction.CommitAsync();
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
         }
         finally
         {

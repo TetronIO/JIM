@@ -78,6 +78,16 @@ public partial class SyncRepository : ISyncRepository
             callerHoldsTransaction: _context.Database.CurrentTransaction != null, ParallelWriteRowThreshold, ParallelWriteRowsPerConnection);
 
     /// <summary>
+    /// The connections a Pending Export create of <paramref name="rowCount"/> rows stages across while the caller holds a
+    /// transaction (#2848): what <see cref="ConnectionsForWrite"/> would give it with no transaction open. Only that writer
+    /// may ask: it stages rows no reader sees and nothing else holds, and makes them live in the caller's transaction (see
+    /// <see cref="CreatePendingExportsAsync"/>), which no other writer does.
+    /// </summary>
+    private int ConnectionsForStagingBesideCallerTransaction(int rowCount)
+        => ParallelBatchWriter.ConnectionsForWrite(rowCount, WriteParallelism, ConnectionStringForParallelWrites,
+            callerHoldsTransaction: false, ParallelWriteRowThreshold, ParallelWriteRowsPerConnection);
+
+    /// <summary>
     /// Whether a bulk write of <paramref name="rowCount"/> rows goes across parallel connections (#2872): whether
     /// <see cref="ConnectionsForWrite"/> gives it more than one.
     /// </summary>
@@ -466,6 +476,101 @@ public partial class SyncRepository : ISyncRepository
 
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
+
+    public Task CreateUnpublishedMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects, Guid activityId)
+        => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList(), activityId);
+
+    public async Task PublishMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return;
+
+        // On the context's connection, so inside the page's transaction: the records go when the joins commit.
+        await _context.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""UnpublishedMetaverseObjects"" WHERE ""MetaverseObjectId"" = ANY({0})", metaverseObjectIds.ToArray());
+    }
+
+    public async Task<UnpublishedMetaverseObjectRemoval> RemoveUnpublishedMetaverseObjectsAsync(IReadOnlyCollection<Guid>? metaverseObjectIds = null)
+    {
+        if (_context.Database.CurrentTransaction != null)
+            throw new InvalidOperationException(
+                "RemoveUnpublishedMetaverseObjectsAsync runs in a transaction of its own; it must be called once the page's transaction has rolled back.");
+        if (metaverseObjectIds is { Count: 0 })
+            return UnpublishedMetaverseObjectRemoval.None;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        // The records to settle, locked so two removals never settle the same one. All of them at the Worker's start; a
+        // failed page's otherwise.
+        var unpublished = new List<Guid>();
+        await using (var select = new NpgsqlCommand(
+            metaverseObjectIds == null
+                ? @"SELECT ""MetaverseObjectId"" FROM ""UnpublishedMetaverseObjects"" FOR UPDATE"
+                : @"SELECT ""MetaverseObjectId"" FROM ""UnpublishedMetaverseObjects"" WHERE ""MetaverseObjectId"" = ANY(@ids) FOR UPDATE",
+            connection, transaction))
+        {
+            if (metaverseObjectIds != null)
+                select.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = metaverseObjectIds.ToArray() });
+            await using var reader = await select.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                unpublished.Add(reader.GetGuid(0));
+        }
+
+        if (unpublished.Count == 0)
+        {
+            await transaction.CommitAsync();
+            return UnpublishedMetaverseObjectRemoval.None;
+        }
+
+        // Of those, the objects nothing is joined to, locked against a join being written to them meanwhile (a join's
+        // foreign key check takes a key-share lock on the object, which waits for this one).
+        var orphaned = new List<Guid>();
+        await using (var select = new NpgsqlCommand(
+            @"SELECT m.""Id"" FROM ""MetaverseObjects"" m
+              WHERE m.""Id"" = ANY(@ids)
+                AND NOT EXISTS (SELECT 1 FROM ""ConnectedSystemObjects"" c WHERE c.""MetaverseObjectId"" = m.""Id"")
+              FOR UPDATE OF m",
+            connection, transaction))
+        {
+            select.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = unpublished.ToArray() });
+            await using var reader = await select.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                orphaned.Add(reader.GetGuid(0));
+        }
+
+        if (orphaned.Count > 0)
+        {
+            // Their values first, and any value that refers to one of them (a group created on the same page naming a
+            // member), whose foreign key would otherwise refuse the delete. Then the objects; their records and anything
+            // else that hangs off them go by cascade.
+            await using var deleteValues = new NpgsqlCommand(
+                @"DELETE FROM ""MetaverseObjectAttributeValues"" WHERE ""MetaverseObjectId"" = ANY(@ids) OR ""ReferenceValueId"" = ANY(@ids)",
+                connection, transaction);
+            deleteValues.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = orphaned.ToArray() });
+            await deleteValues.ExecuteNonQueryAsync();
+
+            await using var deleteObjects = new NpgsqlCommand(
+                @"DELETE FROM ""MetaverseObjects"" WHERE ""Id"" = ANY(@ids)", connection, transaction);
+            deleteObjects.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = orphaned.ToArray() });
+            await deleteObjects.ExecuteNonQueryAsync();
+        }
+
+        // The objects something joined meanwhile are kept, as ordinary Metaverse Objects from now on.
+        var orphanedSet = orphaned.ToHashSet();
+        var kept = unpublished.Where(id => !orphanedSet.Contains(id)).ToList();
+        if (kept.Count > 0)
+        {
+            await using var deleteRecords = new NpgsqlCommand(
+                @"DELETE FROM ""UnpublishedMetaverseObjects"" WHERE ""MetaverseObjectId"" = ANY(@ids)", connection, transaction);
+            deleteRecords.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = kept.ToArray() });
+            await deleteRecords.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+        return new UnpublishedMetaverseObjectRemoval(orphaned, kept);
+    }
 
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => UpdateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
@@ -1250,6 +1355,95 @@ public partial class SyncRepository : ISyncRepository
             return null;
 
         return new SyncRepositoryTransaction(await _context.Database.BeginTransactionAsync());
+    }
+
+    /// <summary>Numbers this repository's savepoints, so each has a name of its own within its transaction.</summary>
+    private int _savepointSequence;
+
+    /// <inheritdoc />
+    public async Task<ISyncRepositorySavepoint?> CreateSavepointAsync()
+    {
+        var transaction = _context.Database.CurrentTransaction;
+        if (transaction == null || !_context.Database.IsRelational())
+            return null;
+
+        // Generated here and never from input, so it is always a plain identifier.
+        var name = $"jim_savepoint_{++_savepointSequence}";
+        var trackedJoins = CaptureTrackedJoinState(_context);
+        await transaction.CreateSavepointAsync(name);
+        return new SyncRepositorySavepoint(_context, transaction, name, trackedJoins);
+    }
+
+    /// <summary>
+    /// The join state of every Connected System Object the context tracks, for a savepoint to put back on rollback. Change
+    /// detection is suppressed while enumerating, for the reason given on <see cref="DetachTrackedEntities{T}"/>.
+    /// </summary>
+    private static List<TrackedJoinState> CaptureTrackedJoinState(DbContext context)
+    {
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            return context.ChangeTracker.Entries<ConnectedSystemObject>()
+                .Select(e => new TrackedJoinState(e.Entity, e.Entity.MetaverseObject, e.Entity.MetaverseObjectId, e.Entity.JoinType,
+                    e.Entity.DateJoined, e.Entity.JoinMethod, e.Entity.JoinSyncRuleId, e.Entity.JoinSyncRuleName,
+                    e.Entity.JoinObjectMatchingRuleId, e.Entity.JoinMatchValue))
+                .ToList();
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+    }
+
+    /// <summary>A tracked Connected System Object's join, as it stood when a savepoint was created.</summary>
+    private sealed record TrackedJoinState(
+        ConnectedSystemObject Cso, MetaverseObject? MetaverseObject, Guid? MetaverseObjectId, ConnectedSystemObjectJoinType JoinType,
+        DateTime? DateJoined, ConnectedSystemObjectJoinMethod? JoinMethod, int? JoinSyncRuleId, string? JoinSyncRuleName,
+        int? JoinObjectMatchingRuleId, string? JoinMatchValue)
+    {
+        public void Restore()
+        {
+            Cso.MetaverseObject = MetaverseObject;
+            Cso.MetaverseObjectId = MetaverseObjectId;
+            Cso.JoinType = JoinType;
+            Cso.DateJoined = DateJoined;
+            Cso.JoinMethod = JoinMethod;
+            Cso.JoinSyncRuleId = JoinSyncRuleId;
+            Cso.JoinSyncRuleName = JoinSyncRuleName;
+            Cso.JoinObjectMatchingRuleId = JoinObjectMatchingRuleId;
+            Cso.JoinMatchValue = JoinMatchValue;
+        }
+    }
+
+    /// <summary>
+    /// A savepoint in the context's open transaction (#2848). Rolling back to it undoes the database's writes since, and
+    /// puts back the tracked join state the raw-SQL join writers (the deletion disconnect and the Metaverse Object delete)
+    /// fixed up to match them. Nothing else the tracker holds needs it: a step that rolls back retries the same objects,
+    /// whose deletion brings the tracker and the database back into line, and a page's tracker is cleared once it is
+    /// written.
+    /// </summary>
+    private sealed class SyncRepositorySavepoint(
+        DbContext context, IDbContextTransaction transaction, string name, List<TrackedJoinState> trackedJoins) : ISyncRepositorySavepoint
+    {
+        public async Task RollbackAsync()
+        {
+            await transaction.RollbackToSavepointAsync(name);
+
+            var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+            context.ChangeTracker.AutoDetectChangesEnabled = false;
+            try
+            {
+                foreach (var join in trackedJoins)
+                    join.Restore();
+            }
+            finally
+            {
+                context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+            }
+        }
+
+        public Task ReleaseAsync() => transaction.ReleaseSavepointAsync(name);
     }
 
     /// <summary>

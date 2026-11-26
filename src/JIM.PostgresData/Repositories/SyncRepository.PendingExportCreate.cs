@@ -24,10 +24,11 @@ namespace JIM.PostgresData.Repositories;
 /// <para>
 /// No caller needs to stay on one connection, so there is no opt-out (unlike <see cref="PersistCsoChangesAsync"/>, whose
 /// export callers write several batches at once and would each take the parallelism's share of the pool). Every caller
-/// is a Worker task writing one thing at a time on its own context: none runs this beside another parallel writer, and a
-/// synchronisation's history writer, the one other connection a run holds, is waited for before the page's state writes
-/// begin. A call therefore holds the context's connection plus the parallel connections, as every other parallel writer
-/// does. Export execution, whose batches do run at once, never creates Pending Exports.
+/// is a Worker task writing one thing at a time on its own context: none runs this beside another parallel writer. A
+/// synchronisation's history writer holds one more connection while a page's state is written (#2924), so a call holds
+/// the context's connection plus the parallel connections, beside that one. Export execution, whose batches do run at
+/// once, never creates Pending Exports. A caller holding a transaction keeps the parallel path too (#2848): see
+/// <see cref="CreatePendingExportsBesideCallerTransactionAsync"/>.
 /// </para>
 /// </remarks>
 public partial class SyncRepository
@@ -45,8 +46,9 @@ public partial class SyncRepository
             return;
 
         // Inserted after any queued delete for the same objects (the Pending Export batch scope, #2492). That delete runs
-        // on the context's connection and commits now unless the caller holds a transaction, in which case the call
-        // stays on that connection, so the unique index on ConnectedSystemObjectId sees it gone either way.
+        // on the context's connection and commits now unless the caller holds a transaction. Either way the unique index on
+        // ConnectedSystemObjectId sees it gone: a row staged on another connection holds no object until it is made live on
+        // the context's.
         await ExecuteQueuedDeletesForAsync(exports.Select(pe => pe.ConnectedSystemObjectId));
 
         // Time-ordered, so the rows land on the growing end of each index keyed on them (#2929).
@@ -66,11 +68,20 @@ public partial class SyncRepository
         // Gated on every row the call writes, as the other bulk writers are (#2872). Each parallel step then takes the
         // connections its own rows earn (#2669), so a people page's 5,500 changes take four, a group page's every one, and
         // either page's few hundred exports one: spread across five, a people page's exports cost 23 ms for a 2.2 ms COPY.
-        var connections = ConnectionsForWrite(exports.Count + changeRows.Count);
+        // A caller holding a transaction (a synchronisation page, #2848) is no reason to stay on one connection here, as it
+        // is for every other bulk writer: the exports are staged on the parallel connections as Incomplete, which nothing
+        // reads, and made live in the caller's transaction (CreatePendingExportsBesideCallerTransactionAsync).
+        var callerHoldsTransaction = _context.Database.CurrentTransaction != null;
+        var connections = callerHoldsTransaction
+            ? ConnectionsForStagingBesideCallerTransaction(exports.Count + changeRows.Count)
+            : ConnectionsForWrite(exports.Count + changeRows.Count);
         if (connections > 1)
         {
             span?.SetTag("connections", connections);
-            await CreatePendingExportsInParallelAsync(exports, changeRows, connections);
+            if (callerHoldsTransaction)
+                await CreatePendingExportsBesideCallerTransactionAsync(exports, connections);
+            else
+                await CreatePendingExportsInParallelAsync(exports, changeRows, connections);
             return;
         }
 
@@ -112,6 +123,94 @@ public partial class SyncRepository
 
         if (transaction != null)
             await transaction.CommitAsync();
+    }
+
+    /// <summary>
+    /// The Pending Exports this repository staged across parallel connections for a transaction it holds (#2848), whatever
+    /// became of them: made live with the transaction, rolled back with it to Incomplete, or never made live because their
+    /// staging failed. <see cref="RemovePendingExportsStagedForTransactionAsync"/> removes those still Incomplete once the
+    /// transaction has ended.
+    /// </summary>
+    private readonly List<Guid> _pendingExportIdsStagedForTransaction = [];
+
+    /// <summary>
+    /// How long a connection staging exports beside a caller's transaction waits for a lock before giving up (#2848). It
+    /// should never wait at all: it writes rows under fresh ids that nothing else can hold. The one thing it could wait on
+    /// is an id the caller's transaction deleted moments ago and has not committed, which would wait for good; an export
+    /// reusing a replaced export's id is written on the caller's connection for that reason (see
+    /// <see cref="PendingExport.ReusesReplacedExportId"/>), and this bounds the wait for any that is not.
+    /// </summary>
+    private const string StagingLockTimeout = "5s";
+
+    /// <summary>
+    /// A call large enough to gain from parallel connections, made while the caller holds a transaction (a synchronisation
+    /// page, #2848). Exports that keep a replaced export's id are written on the caller's connection, in its transaction,
+    /// since the row they replace was deleted in it. The rest are staged as <see cref="CreatePendingExportsInParallelAsync"/>
+    /// stages them, across the parallel connections as Incomplete, and made live in the caller's transaction, so they come
+    /// into effect when it commits, and a rollback leaves them Incomplete for
+    /// <see cref="RemovePendingExportsStagedForTransactionAsync"/> to remove. Should a staging connection meet a lock all
+    /// the same (an id reused without the mark), what it staged is removed and the call is written on the caller's
+    /// connection instead, rather than waiting on the caller for good.
+    /// </summary>
+    private async Task CreatePendingExportsBesideCallerTransactionAsync(List<PendingExport> exports, int parallelism)
+    {
+        var reusingIds = exports.Where(pe => pe.ReusesReplacedExportId).ToList();
+        var staged = reusingIds.Count == 0 ? exports : exports.Where(pe => !pe.ReusesReplacedExportId).ToList();
+
+        if (reusingIds.Count > 0)
+            await CreatePendingExportsInOneTransactionAsync(reusingIds, ChangeRowsOf(reusingIds));
+        if (staged.Count == 0)
+            return;
+
+        var stagedChangeRows = ChangeRowsOf(staged);
+        var connections = Math.Min(parallelism, ConnectionsForStagingBesideCallerTransaction(staged.Count + stagedChangeRows.Count));
+        if (connections < 2)
+        {
+            await CreatePendingExportsInOneTransactionAsync(staged, stagedChangeRows);
+            return;
+        }
+
+        _pendingExportIdsStagedForTransaction.AddRange(staged.Select(pe => pe.Id));
+        try
+        {
+            await CreatePendingExportsInParallelAsync(staged, stagedChangeRows, connections, besideCallerTransaction: true);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+        {
+            Log.Warning(ex, "CreatePendingExportsAsync: Staging {Count} Pending Exports beside the caller's transaction waited on a lock (an export " +
+                "reusing a replaced export's id without the mark?); writing them on the transaction's connection instead", staged.Count);
+
+            // Nothing of the call is live: what the other connections staged is Incomplete and locked by nobody.
+            await RemoveRowsOfFailedParallelWriteAsync(ConnectionStringForParallelWrites!, nameof(CreatePendingExportsAsync),
+                IncompletePendingExportRemovals([.. staged.Select(pe => pe.Id)]));
+            await CreatePendingExportsInOneTransactionAsync(staged, stagedChangeRows);
+        }
+    }
+
+    private static List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> ChangeRowsOf(List<PendingExport> exports) =>
+        exports.SelectMany(pe => pe.AttributeValueChanges.Select(change => (PendingExportId: pe.Id, Change: change))).ToList();
+
+    /// <summary>
+    /// Removes the Pending Exports this repository staged for a transaction it held that the transaction did not make live
+    /// (#2848): all of them once it has rolled back, and any whose staging failed once it has committed. Call when the
+    /// transaction has ended, whichever way: before then its locks would hold this up.
+    /// </summary>
+    /// <returns>The Pending Exports removed.</returns>
+    public async Task<int> RemovePendingExportsStagedForTransactionAsync()
+    {
+        if (_pendingExportIdsStagedForTransaction.Count == 0)
+            return 0;
+        if (_context.Database.CurrentTransaction != null)
+            throw new InvalidOperationException(
+                "RemovePendingExportsStagedForTransactionAsync must be called once the transaction the exports were staged for has ended.");
+
+        var ids = _pendingExportIdsStagedForTransaction.ToArray();
+        _pendingExportIdsStagedForTransaction.Clear();
+
+        // One statement, the changes going by their foreign key's cascade, as RemoveIncompletePendingExportsAsync removes
+        // them; only those still Incomplete, so an export the transaction made live is left alone.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """DELETE FROM "PendingExports" WHERE "Id" = ANY({0}) AND "Status" = {1}""", ids, (int)PendingExportStatus.Incomplete);
     }
 
     /// <summary>
@@ -162,12 +261,24 @@ public partial class SyncRepository
     /// that stops part-way leaves Incomplete rows no reader sees; <see cref="RemoveIncompletePendingExportsAsync"/>
     /// removes them when it next starts.
     /// </remarks>
+    /// <param name="exports">The exports to write.</param>
+    /// <param name="changeRows">Their changes, each beside its export's id.</param>
+    /// <param name="parallelism">The most connections the call may use.</param>
+    /// <param name="besideCallerTransaction">Whether the caller holds a transaction the exports are made live in (#2848):
+    /// see <see cref="CreatePendingExportsBesideCallerTransactionAsync"/>. The staging connections then give up on any lock
+    /// after <see cref="StagingLockTimeout"/>, and a failure leaves the call's Incomplete rows to
+    /// <see cref="RemovePendingExportsStagedForTransactionAsync"/>, since the caller's transaction may hold locks on them
+    /// that a removal from here would wait on.</param>
     private async Task CreatePendingExportsInParallelAsync(
         List<PendingExport> exports,
         List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changeRows,
-        int parallelism)
+        int parallelism,
+        bool besideCallerTransaction = false)
     {
         var connectionString = ConnectionStringForParallelWrites!;
+        // Beside a caller's transaction, each step sizes itself as it would with none open; ConnectionsForWrite would keep
+        // it on one connection.
+        Func<int, int> connectionsFor = besideCallerTransaction ? ConnectionsForStagingBesideCallerTransaction : ConnectionsForWrite;
         Log.Information("CreatePendingExportsAsync: Writing {Count} Pending Exports and {ChangeCount} attribute value changes across {Parallelism} parallel connections",
             exports.Count, changeRows.Count, parallelism);
 
@@ -178,12 +289,14 @@ public partial class SyncRepository
             {
                 // Still on connections of its own, never the context's: each change's foreign key names its export, and
                 // the changes are written on other connections, so every export must be committed first.
-                var exportConnections = Math.Min(parallelism, ConnectionsForWrite(exports.Count));
+                var exportConnections = Math.Min(parallelism, connectionsFor(exports.Count));
                 exportsSpan?.SetTag("rowCount", exports.Count);
                 exportsSpan?.SetTag("connections", exportConnections);
                 await ParallelBatchWriter.ExecuteAsync(exports, exportConnections, connectionString, async (connection, partition) =>
                 {
                     await using var transaction = await connection!.BeginTransactionAsync();
+                    if (besideCallerTransaction)
+                        await SetStagingLockTimeoutAsync(connection, transaction);
                     await BulkInsertPendingExportsOnConnectionAsync(connection, transaction, partition, incomplete: true);
                     await transaction.CommitAsync();
                 });
@@ -195,12 +308,14 @@ public partial class SyncRepository
             {
                 // Every export is committed now, so a change may belong to one any connection wrote.
                 using var changesSpan = MvoActivitySource.StartActivity("PendingExport.Create.Changes");
-                var changeConnections = Math.Min(parallelism, ConnectionsForWrite(changeRows.Count));
+                var changeConnections = Math.Min(parallelism, connectionsFor(changeRows.Count));
                 changesSpan?.SetTag("rowCount", changeRows.Count);
                 changesSpan?.SetTag("connections", changeConnections);
                 await ParallelBatchWriter.ExecuteAsync(changeRows, changeConnections, connectionString, async (connection, partition) =>
                 {
                     await using var transaction = await connection!.BeginTransactionAsync();
+                    if (besideCallerTransaction)
+                        await SetStagingLockTimeoutAsync(connection, transaction);
                     await BulkInsertPendingExportAttributeValueChangesOnConnectionAsync(connection, transaction, partition);
                     await transaction.CommitAsync();
                 });
@@ -211,14 +326,14 @@ public partial class SyncRepository
             using (var liveSpan = MvoActivitySource.StartActivity("PendingExport.Create.Live"))
             {
                 liveSpan?.SetTag("rowCount", exports.Count);
-                await MakeIncompletePendingExportsLiveAsync(exports);
+                await MakeIncompletePendingExportsLiveAsync(exports, besideCallerTransaction);
             }
 
             written = true;
         }
         finally
         {
-            if (!written)
+            if (!written && !besideCallerTransaction)
             {
                 await StepReachedAsync(StepRemovingFailedCall);
                 await RemoveRowsOfFailedParallelWriteAsync(connectionString, nameof(CreatePendingExportsAsync),
@@ -228,6 +343,12 @@ public partial class SyncRepository
     }
 
     private Task StepReachedAsync(string step) => PendingExportCreateStepReached?.Invoke(step) ?? Task.CompletedTask;
+
+    private static async Task SetStagingLockTimeoutAsync(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    {
+        await using var command = new NpgsqlCommand($"SET LOCAL lock_timeout = '{StagingLockTimeout}'", connection, transaction);
+        await command.ExecuteNonQueryAsync();
+    }
 
     /// <summary>
     /// The last step of a parallel create: on the context's connection, in one transaction, every Incomplete export of the
@@ -242,11 +363,15 @@ public partial class SyncRepository
     /// one per export per parallel call, cheap beside the changes on a group page, but a call with many exports and few
     /// changes (a deprovisioning wave of Deletes) passes the row gate too and pays it for every export.
     /// </remarks>
-    private async Task MakeIncompletePendingExportsLiveAsync(List<PendingExport> exports)
+    /// <param name="exports">The call's exports.</param>
+    /// <param name="inCallerTransaction">Whether to make them live in the transaction the caller holds (#2848), to come
+    /// into effect when it commits, rather than in one of the call's own.</param>
+    private async Task MakeIncompletePendingExportsLiveAsync(List<PendingExport> exports, bool inCallerTransaction)
     {
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        await using var ownTransaction = inCallerTransaction ? null : await _context.Database.BeginTransactionAsync();
         var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
-        var npgsqlTransaction = (NpgsqlTransaction)transaction.GetDbTransaction();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var npgsqlTransaction = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
 
         // A status mark and the one foreign key withheld while incomplete, set from values the call holds: the
         // targeted-mutation exemption of the raw SQL column-list rules, not a PendingExportBulkColumns writer.
@@ -279,7 +404,8 @@ public partial class SyncRepository
                 "waiting; nothing of the call is kept.");
 
         await StepReachedAsync(StepMakingLive);
-        await transaction.CommitAsync();
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
     }
 
     /// <summary>

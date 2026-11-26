@@ -214,6 +214,13 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
+    public void UnpublishedMetaverseObjectBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.UnpublishedMetaverseObject), "UnpublishedMetaverseObjects",
+            UnpublishedMetaverseObjectBulkColumns.UnpublishedMetaverseObjects);
+    }
+
+    [Test]
     public void MatchCandidateBulkColumns_MatchMappedColumnsExactly()
     {
         AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityRunProfileExecutionItemMatchCandidate),

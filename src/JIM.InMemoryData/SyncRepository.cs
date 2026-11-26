@@ -2521,6 +2521,38 @@ public partial class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    // The objects a synchronisation page projected and has not yet published (#2848), as the PostgreSQL store's
+    // UnpublishedMetaverseObjects table records them.
+    private readonly HashSet<Guid> _unpublishedMvoIds = [];
+
+    public async Task CreateUnpublishedMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects, Guid activityId)
+    {
+        var objects = metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList();
+        await CreateMetaverseObjectsAsync(objects);
+        _unpublishedMvoIds.UnionWith(objects.Select(mvo => mvo.Id));
+    }
+
+    public Task PublishMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        _unpublishedMvoIds.ExceptWith(metaverseObjectIds);
+        return Task.CompletedTask;
+    }
+
+    public Task<UnpublishedMetaverseObjectRemoval> RemoveUnpublishedMetaverseObjectsAsync(IReadOnlyCollection<Guid>? metaverseObjectIds = null)
+    {
+        var candidates = metaverseObjectIds == null
+            ? _unpublishedMvoIds.ToList()
+            : metaverseObjectIds.Where(_unpublishedMvoIds.Contains).ToList();
+        var joinedIds = _csos.Values.Where(cso => cso.MetaverseObjectId.HasValue).Select(cso => cso.MetaverseObjectId!.Value).ToHashSet();
+
+        var removed = candidates.Where(id => !joinedIds.Contains(id)).ToList();
+        var kept = candidates.Where(joinedIds.Contains).ToList();
+        foreach (var id in removed)
+            _mvos.Remove(id);
+        _unpublishedMvoIds.ExceptWith(candidates);
+        return Task.FromResult(new UnpublishedMetaverseObjectRemoval(removed, kept));
+    }
+
     // Virtual so tests can simulate a persistence failure partway through a batch (the #1537 recall task's
     // failure-mode coverage), matching the DeleteMetaverseObjectAsync spy precedent above.
     public virtual Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
@@ -4830,6 +4862,12 @@ public partial class SyncRepository : ISyncRepository
     /// </summary>
     // The in-memory store has no transaction to hold; its writes land as they are made.
     public Task<ISyncRepositoryTransaction?> BeginTransactionAsync() => Task.FromResult<ISyncRepositoryTransaction?>(null);
+
+    // No transaction, so no savepoint: a step's writes land as they are made, as they always have here.
+    public Task<ISyncRepositorySavepoint?> CreateSavepointAsync() => Task.FromResult<ISyncRepositorySavepoint?>(null);
+
+    // Nothing is staged across connections here: every write lands as it is made.
+    public Task<int> RemovePendingExportsStagedForTransactionAsync() => Task.FromResult(0);
 
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);

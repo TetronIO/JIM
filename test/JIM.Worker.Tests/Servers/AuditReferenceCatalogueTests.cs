@@ -119,6 +119,8 @@ public class AuditReferenceCatalogueTests
             "An object's own values, deleted with it by cascade.",
         ["MetaverseObjectAttributeValues.ReferenceValueId -> MetaverseObjects"] =
             "A live reference between objects (a Manager, a member); MetaverseReferenceRowCleanup deletes or clears it.",
+        ["UnpublishedMetaverseObjects.MetaverseObjectId -> MetaverseObjects"] =
+            "A synchronisation page's record that it projected the object and has not yet joined it, deleted with it by cascade.",
         ["MetaverseObjectRole.StaticMembersId -> MetaverseObjects"] =
             "Role membership, deleted with the object by cascade.",
         ["PendingExchangeChanges.MetaverseObjectId -> MetaverseObjects"] =

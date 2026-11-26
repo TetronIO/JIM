@@ -3,6 +3,7 @@
 
 using JIM.Application.Resources;
 using JIM.Application.Localisation;
+using System.Data.Common;
 using System.Globalization;
 using JIM.Application;
 using JIM.Application.Diagnostics;
@@ -94,6 +95,10 @@ public abstract class SyncTaskProcessorBase
 
     // Batch collections for deferred MVO persistence and export evaluation
     protected readonly List<MetaverseObject> _pendingMvoCreates = [];
+
+    // The Metaverse Objects this page created ahead of its transaction and has not yet published (#2848): what the page
+    // publishes as it commits, or removes if it fails. See FlushPageStateAsync.
+    private readonly List<Guid> _pageUnpublishedMvoIds = [];
     protected readonly List<MetaverseObject> _pendingMvoUpdates = [];
 
     // Side index for QueueMvoForUpdate's Id membership check: a page can hold thousands of Metaverse
@@ -1119,6 +1124,191 @@ public abstract class SyncTaskProcessorBase
             _historyWriter = null;
         }
     }
+
+    /// <summary>
+    /// Writes everything a page changed (its Metaverse Objects, their joins, generated values, Pending Exports, provisioned
+    /// and departed Connected System Objects, and deleted Metaverse Objects) so that a run that stops part-way leaves none of
+    /// the page behind, and the next run synchronises its objects whole (#2848), the page loop of Full and Delta
+    /// Synchronisation alike. While each step committed on its own, a stop after the page's projections left Metaverse
+    /// Objects nothing was joined to, which the next run projected again, and a stop after its joins (whose write clears the
+    /// synchronisation-pending mark) left provisioned accounts with no Pending Export, which a Delta Synchronisation never
+    /// revisited.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The page's new Metaverse Objects are written first, before the transaction opens, so a large page can write them
+    /// across parallel connections, which cannot join a transaction: written inside it, on one connection, they cost a
+    /// third more on the 500k Source Full Synchronisation. Each is recorded as unpublished with its own row, and the
+    /// transaction publishes them as it commits. A page that fails removes them once its transaction has rolled back
+    /// (<see cref="RemovePageUnpublishedMetaverseObjectsAsync"/>), and the Worker removes any a stopped Worker left when it
+    /// next starts. Everything else the page writes is in the transaction.
+    /// </para>
+    /// <para>
+    /// The transaction commits before the page's history is handed to the history writer, which refuses to run while the
+    /// run's repository holds one, and before progress is written, which must not wait on the page. While it is open, the
+    /// bulk writers stay on the run's connection (<c>ConnectionsForWrite</c>). A step that falls back from a failed
+    /// set-based write to one object at a time does so through savepoints (<see cref="FlushPendingMvoDeletionsAsync"/>),
+    /// since a failed statement aborts the transaction. On the in-memory test store there is no transaction, and each
+    /// step's writes land as they are made, as before.
+    /// </para>
+    /// <para>
+    /// Progress is written only at page boundaries: persisting it mid-page would make EF walk the tracked page's
+    /// navigations (relationship fix-up links each joined Connected System Object into its Metaverse Object's collection)
+    /// and attach entities the page loaded untracked, failing with "another instance with the same key is already
+    /// tracked". Finer-grained progress would need a context of its own.
+    /// </para>
+    /// </remarks>
+    /// <param name="activeSyncRules">The run's active Synchronisation Rules, for the Metaverse Object change records.</param>
+    protected async Task FlushPageStateAsync(List<SyncRule> activeSyncRules)
+    {
+        await CreatePageMetaverseObjectsAsync();
+
+        var committed = false;
+        try
+        {
+            await using (var transaction = await _syncRepo.BeginTransactionAsync())
+            {
+                await PersistPendingMetaverseObjectsAsync();
+
+                // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle reconciliation
+                // (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs, THEN commit this page's
+                // generated assignments now the objects have real ids. Deletion must run first because a stale assignment
+                // being removed can share its (object, attribute) key with the fresh one about to be inserted for the same
+                // request; see FlushGeneratedValueAssignmentDeletionsAsync. Both are no-ops for a run with no generated
+                // mappings, or a page with nothing to commit or delete.
+                using (Diagnostics.Sync.StartSpan("FlushGeneratedValueAssignmentDeletions"))
+                    await FlushGeneratedValueAssignmentDeletionsAsync();
+                using (Diagnostics.Sync.StartSpan("CommitGeneratedValueAssignments"))
+                    await CommitGeneratedValueAssignmentsAsync();
+
+                // Metaverse Object change records, once the objects are persisted and have their ids.
+                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
+
+                // Queued drift detection: after the objects are persisted, so corrective Pending Exports capture real
+                // Metaverse Object ids, and before the export flush persists them.
+                await EvaluateQueuedDriftAsync();
+
+                // Export evaluation for every Metaverse Object the page changed, then the Pending Export writes it decided.
+                await EvaluatePendingExportsAsync();
+                await FlushPendingExportOperationsAsync();
+
+                // Pending Export reference snapshots that per-object processing could not resolve (a group processed before
+                // its member users on this page, say): after the export flush has written the Connected System Objects, and
+                // before the page's history records the items that carry the snapshots.
+                using (Diagnostics.Sync.StartSpan("ResolvePendingExportReferenceSnapshots"))
+                    await ResolvePendingExportReferenceSnapshotsAsync();
+
+                using (Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations"))
+                    await FlushObsoleteCsoOperationsAsync();
+
+                // Metaverse Objects marked for immediate deletion (no grace period).
+                await FlushPendingMvoDeletionsAsync();
+
+                // The page's projections, published with the joins that make them whole.
+                await _syncRepo.PublishMetaverseObjectsAsync(_pageUnpublishedMvoIds);
+
+                if (transaction != null)
+                {
+                    using (Diagnostics.Sync.StartSpan("PageStateCommit"))
+                        await transaction.CommitAsync();
+                }
+            }
+
+            committed = true;
+        }
+        finally
+        {
+            // The transaction has rolled back by now (it is disposed above), so nothing of the page holds a lock on what
+            // the removal deletes.
+            if (!committed)
+                await RemovePageUnpublishedMetaverseObjectsAsync();
+            _pageUnpublishedMvoIds.Clear();
+            await RemovePageStagedPendingExportsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Removes the Pending Exports the page staged across parallel connections that its transaction did not make live
+    /// (#2848): all of them when it rolled back, and only any whose staging failed when it committed. They are Incomplete,
+    /// so no reader sees them meanwhile. A removal that fails is logged and left to the Worker's next start, which removes
+    /// every Incomplete export, so it never hides the failure that stopped the page.
+    /// </summary>
+    private async Task RemovePageStagedPendingExportsAsync()
+    {
+        try
+        {
+            var removed = await _syncRepo.RemovePendingExportsStagedForTransactionAsync();
+            if (removed > 0)
+                Log.Information("RemovePageStagedPendingExportsAsync: Removed {Count} Pending Export(s) the page staged and never made live", removed);
+        }
+        catch (DbException ex)
+        {
+            Log.Error(ex, "RemovePageStagedPendingExportsAsync: Could not remove the Pending Exports the page staged and never made live; " +
+                "the Worker removes them when it next starts");
+        }
+    }
+
+    /// <summary>
+    /// Creates the page's projected Metaverse Objects ahead of its transaction, recorded as unpublished (#2848); see
+    /// <see cref="FlushPageStateAsync"/>. Leaves <see cref="PersistPendingMetaverseObjectsAsync"/> nothing to create.
+    /// </summary>
+    private async Task CreatePageMetaverseObjectsAsync()
+    {
+        if (_pendingMvoCreates.Count == 0)
+            return;
+
+        ThrowIfAnyPendingGenerationUnresolved(_pendingMvoCreates);
+
+        using (Diagnostics.Sync.StartSpan("CreateMetaverseObjects").SetTag("count", _pendingMvoCreates.Count))
+        {
+            await _syncRepo.CreateUnpublishedMetaverseObjectsAsync(_pendingMvoCreates, _activity.Id);
+        }
+        Log.Verbose("CreatePageMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
+
+        // Register each newly-Id'd MVO with the page identity map (#1612) so a later same-page load of the same row (a
+        // rejoin further down the page, or cross-page reference resolution) resolves onto this instance rather than
+        // treating it as unseen.
+        foreach (var created in _pendingMvoCreates)
+            _mvoIdentityMap.Register(created);
+
+        _pageUnpublishedMvoIds.AddRange(_pendingMvoCreates.Select(mvo => mvo.Id));
+        _pendingMvoCreates.Clear();
+    }
+
+    /// <summary>
+    /// Removes the Metaverse Objects a failed page projected and never published (#2848), once its transaction has rolled
+    /// back. An object something has joined since (another Connected System's synchronisation, running at the same time) is
+    /// kept, and named in a warning: its source is projected again by the next run. A removal that fails is logged and
+    /// left to the Worker's next start, so it never hides the failure that stopped the page.
+    /// </summary>
+    private async Task RemovePageUnpublishedMetaverseObjectsAsync()
+    {
+        if (_pageUnpublishedMvoIds.Count == 0)
+            return;
+
+        try
+        {
+            var removal = await _syncRepo.RemoveUnpublishedMetaverseObjectsAsync(_pageUnpublishedMvoIds);
+            Log.Information("RemovePageUnpublishedMetaverseObjectsAsync: The page failed; removed {Removed} Metaverse Object(s) it projected and never published",
+                removal.RemovedIds.Count);
+            if (removal.KeptJoinedIds.Count > 0)
+                Log.Warning("RemovePageUnpublishedMetaverseObjectsAsync: Kept {Count} Metaverse Object(s) the failed page projected, because another " +
+                    "synchronisation joined them meanwhile; their sources will be projected again: {MvoIds}",
+                    removal.KeptJoinedIds.Count, removal.KeptJoinedIds.Take(20));
+        }
+        catch (DbException ex)
+        {
+            LogUnpublishedRemovalFailure(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogUnpublishedRemovalFailure(ex);
+        }
+    }
+
+    private void LogUnpublishedRemovalFailure(Exception ex) =>
+        Log.Error(ex, "RemovePageUnpublishedMetaverseObjectsAsync: Could not remove the {Count} Metaverse Object(s) the failed page projected; " +
+            "the Worker removes them when it next starts", _pageUnpublishedMvoIds.Count);
 
     /// <summary>
     /// Records a page's history at the end of its page loop iteration (#2874). Overlapped, the history is prepared and
@@ -4595,6 +4785,24 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package G) integrity guard: every pending generation must already be
+    /// resolved (ResolvePendingGeneratedValuesAsync clears it, on every exit path, in a finally) before an object reaches a
+    /// write. A leftover here means a code path flowed a generated mapping without resolving it, and persisting the object
+    /// now would silently drop the value: fail fast and hard rather than corrupt data (Synchronisation Integrity).
+    /// </summary>
+    private static void ThrowIfAnyPendingGenerationUnresolved(IEnumerable<MetaverseObject> metaverseObjects)
+    {
+        var leftoverGeneration = metaverseObjects.FirstOrDefault(mvo => mvo.PendingGeneratedValues.Count > 0);
+        if (leftoverGeneration == null)
+            return;
+
+        var attributeId = leftoverGeneration.PendingGeneratedValues[0].AttributeId;
+        throw new InvalidOperationException(
+            $"Metaverse Object {leftoverGeneration.Id} still has an unresolved pending generated value for attribute {attributeId}. " +
+            "A code path flowed a generated mapping without resolving it before persistence; persisting now would silently drop the value.");
+    }
+
+    /// <summary>
     /// The item recording that export matching stopped a Metaverse Object before provisioning (#2052), on the Metaverse
     /// Object itself (there is no Connected System Object: none was joined or provisioned), listing the objects an
     /// ambiguous match found.
@@ -4621,20 +4829,7 @@ public abstract class SyncTaskProcessorBase
             _pendingHeldBackMarks.Count == 0)
             return;
 
-        // Unique Value Generation (#242, Phase 2 work package G) integrity guard: every pending generation
-        // must already be resolved (ResolvePendingGeneratedValuesAsync clears it, on every exit path, in a
-        // finally) before an object reaches this batch. A leftover here means a code path flowed a generated
-        // mapping without resolving it, and persisting the object now would silently drop the value: fail fast
-        // and hard rather than corrupt data (Synchronisation Integrity).
-        var leftoverGeneration = _pendingMvoCreates.Concat(_pendingMvoUpdates)
-            .FirstOrDefault(mvo => mvo.PendingGeneratedValues.Count > 0);
-        if (leftoverGeneration != null)
-        {
-            var attributeId = leftoverGeneration.PendingGeneratedValues[0].AttributeId;
-            throw new InvalidOperationException(
-                $"Metaverse Object {leftoverGeneration.Id} still has an unresolved pending generated value for attribute {attributeId}. " +
-                "A code path flowed a generated mapping without resolving it before persistence; persisting now would silently drop the value.");
-        }
+        ThrowIfAnyPendingGenerationUnresolved(_pendingMvoCreates.Concat(_pendingMvoUpdates));
 
         using var span = Diagnostics.Sync.StartSpan("PersistPendingMetaverseObjects");
         span.SetTag("createCount", _pendingMvoCreates.Count);
@@ -4711,9 +4906,9 @@ public abstract class SyncTaskProcessorBase
             // database until FlushObsoleteCsoOperationsAsync deletes them later in the flush sequence. The
             // filtered unique index IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique
             // rejects the new join written below if an obsolete CSO still occupies the same
-            // (Connected System, Metaverse Object) slot when that join commits; each flush step
-            // auto-commits separately, so the duplicate is a committed state, not a within-transaction
-            // transient the index would tolerate. Persist the null join state the engine already holds in
+            // (Connected System, Metaverse Object) slot when that join is written. The page's writes share one
+            // transaction (#2848), but the index is not deferrable, so it is checked as each statement runs
+            // and a duplicate is refused even though the deletion would follow in the same transaction. Persist the null join state the engine already holds in
             // memory for those CSOs first, vacating the slot so a re-matching join has somewhere to land.
             // Only CSOs whose in-memory FK is already null are released here, so a CSO kept joined under
             // "once managed, always managed" (InboundOutOfScopeAction=RemainJoined) is left untouched.
@@ -6471,6 +6666,12 @@ public abstract class SyncTaskProcessorBase
 
         var deletedMvoIds = new List<Guid>();
         var retirements = new List<GeneratedValueRetirement>();
+
+        // Inside the page's transaction (#2848) a failed statement aborts every statement after it, so the set-based path
+        // runs from a savepoint the fallback first rolls back to. Null on the in-memory store, whose writes land as they
+        // are made. Taken outside the try: a savepoint that cannot be created leaves nothing to fall back from.
+        var bulkSavepoint = deletionsToProcess.Count > 0 ? await _syncRepo.CreateSavepointAsync() : null;
+        var bulkDeleted = false;
         try
         {
             // Set-based fast path (issue #993): one bulk deletion evaluation (delete Pending
@@ -6507,27 +6708,41 @@ public abstract class SyncTaskProcessorBase
                 deletedMvoIds.AddRange(deletionsToProcess.Select(d => d.Mvo.Id));
                 Log.Information(
                     "FlushPendingMvoDeletionsAsync: Deleted {Count} MVO(s) in bulk", deletionsToProcess.Count);
+                bulkDeleted = true;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The set-based path failed for the batch as a whole; fall back to per-MVO processing
             // so one bad object cannot sink the entire page's deletions, and each failure can be
-            // isolated, reported and marked for housekeeping retry. Both paths are idempotent per
-            // object (delete PE ensure reuses existing Delete PEs; FK cleanup re-runs are no-ops),
-            // so re-processing objects the bulk attempt already touched is safe. Cancellation is
-            // excluded: an aborting run must propagate, not grind through a per-MVO fallback.
+            // isolated, reported and marked for housekeeping retry. Cancellation is excluded: an
+            // aborting run must propagate, not grind through a per-MVO fallback.
             Log.Warning(ex,
                 "FlushPendingMvoDeletionsAsync: Bulk deletion of {Count} MVO(s) failed; falling back to per-MVO deletion for error isolation",
                 deletionsToProcess.Count);
 
-            // The bulk attempt's staged Pending Exports are kept, not discarded: when the bulk evaluation
-            // succeeded and only the delete failed, its CSO disconnects are already persisted, so the
-            // fallback's re-evaluation finds no joined CSOs and returns nothing. Anything the fallback does
-            // stage is merged over the top, deduplicated by Pending Export id.
+            if (bulkSavepoint != null)
+            {
+                // Inside the page's transaction (#2848): undo the bulk attempt, whose Delete Pending Exports and disconnects
+                // are then gone from the database, and forget them here too, so the fallback stages each object's afresh
+                // rather than reusing exports that no longer exist. The savepoint puts back the tracked join state the
+                // attempt's raw-SQL writes fixed up.
+                await bulkSavepoint.RollbackAsync();
+                deletePendingExports.Clear();
+                exportEvaluationWorkingSet = new ExportEvaluationWorkingSet();
+            }
+
+            // Without a transaction (the in-memory store) the bulk attempt's writes stand: its staged Pending Exports
+            // are kept, and when only the delete failed its disconnects are already persisted, so the fallback's
+            // re-evaluation finds no joined CSOs and returns nothing. Either way, anything the fallback stages is merged
+            // over the top, deduplicated by Pending Export id; re-processing an object is idempotent (delete PE ensure
+            // reuses existing Delete PEs; FK cleanup re-runs are no-ops).
             deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(
                 deletionsToProcess, deletePendingExports, exportEvaluationWorkingSet, retirements));
         }
+
+        if (bulkDeleted && bulkSavepoint != null)
+            await bulkSavepoint.ReleaseAsync();
 
         // Retired values register (#242, Phase 6): each generated value the deletions retired is recorded under the
         // MvoDeleted outcome that caused it, so the Activity and the causality view show the value going.
@@ -7170,14 +7385,23 @@ public abstract class SyncTaskProcessorBase
     /// pre-#993 behaviour. A failed object is marked with <c>LastConnectorDisconnectedDate</c> so
     /// housekeeping retries it. Returns the IDs of the MVOs that were actually deleted.
     /// </summary>
+    /// <remarks>
+    /// Inside the page's transaction (#2848) each object runs from savepoints of its own, so a failure undoes that
+    /// object's writes alone and leaves the transaction usable for the rest: one before its deprovisioning is evaluated,
+    /// and one before it is deleted, so an object whose deletion fails keeps the deprovisioning it staged, as it did when
+    /// each write committed on its own. Its evaluation records into a working set of its own, merged into the flush's only
+    /// once the evaluation stands, so a rolled-back evaluation leaves nothing behind it to report. Without a transaction
+    /// (the in-memory store) there are no savepoints, every write lands as it is made, and the evaluation records into the
+    /// flush's working set directly, as it always has.
+    /// </remarks>
     /// <param name="deletionsToProcess">The deletion candidates and their pre-recall attribute value snapshots.</param>
     /// <param name="deletePendingExports">Collects the delete Pending Exports this path ensures, keyed by Pending
     /// Export id, so the caller can report them on the Activity (#1044). A Pending Export ensured for an object
     /// whose deletion then failed is still collected: the export is staged and pending, so an administrator must
     /// see it.</param>
-    /// <param name="exportEvaluationWorkingSet">The flush's working set (#288 Phase 1a), carrying the Delete
-    /// Pending Exports the failed bulk attempt already staged so this fallback reuses them without re-reading
-    /// the flush's own writes from the database.</param>
+    /// <param name="exportEvaluationWorkingSet">The flush's working set (#288 Phase 1a). Without a transaction it carries
+    /// the Delete Pending Exports the failed bulk attempt already staged, so this fallback reuses them without re-reading
+    /// the flush's own writes from the database; inside one the bulk attempt was rolled back, and it starts empty.</param>
     private async Task<List<Guid>> ProcessMvoDeletionsIndividuallyAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess,
         Dictionary<Guid, PendingExport> deletePendingExports,
@@ -7187,21 +7411,36 @@ public abstract class SyncTaskProcessorBase
         var deletedMvoIds = new List<Guid>();
         foreach (var (mvo, finalAttributeValues) in deletionsToProcess)
         {
+            var evaluationSavepoint = await _syncRepo.CreateSavepointAsync();
+            var objectWorkingSet = evaluationSavepoint == null ? exportEvaluationWorkingSet : new ExportEvaluationWorkingSet();
+            ISyncRepositorySavepoint? deletionSavepoint = null;
+            var stagedExportIds = new List<Guid>();
             try
             {
                 // Create delete Pending Exports for CSOs whose export Synchronisation Rule action
                 // is Delete (issue #655). This handles WhenAuthoritativeSourceDisconnected where
                 // target CSOs still exist. Recall cache: Q3 does not apply to deletions.
                 var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(
-                    mvo, _recallExportEvaluationCache, exportEvaluationWorkingSet);
+                    mvo, _recallExportEvaluationCache, objectWorkingSet);
                 if (deleteExports.Count > 0)
                 {
                     foreach (var deleteExport in deleteExports)
+                    {
                         deletePendingExports[deleteExport.Id] = deleteExport;
+                        stagedExportIds.Add(deleteExport.Id);
+                    }
 
                     Log.Information(
                         "ProcessMvoDeletionsIndividuallyAsync: Created {Count} delete Pending Exports for MVO {MvoId}",
                         deleteExports.Count, mvo.Id);
+                }
+
+                if (evaluationSavepoint != null)
+                {
+                    // The evaluation stands: what it recorded joins the flush's working set, and the deletion gets a
+                    // savepoint of its own, so its failure keeps the deprovisioning staged above.
+                    exportEvaluationWorkingSet.MergeFrom(objectWorkingSet);
+                    deletionSavepoint = await _syncRepo.CreateSavepointAsync();
                 }
 
                 // Delete the MVO, passing initiator info and the snapshotted final attribute values
@@ -7212,13 +7451,27 @@ public abstract class SyncTaskProcessorBase
                     "ProcessMvoDeletionsIndividuallyAsync: Deleted MVO {MvoId}",
                     mvo.Id);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Log error but continue with other deletions
                 // Set LastConnectorDisconnectedDate as fallback so housekeeping can retry
                 Log.Error(ex,
                     "ProcessMvoDeletionsIndividuallyAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
                     mvo.Id);
+
+                if (deletionSavepoint != null)
+                {
+                    await deletionSavepoint.RollbackAsync();
+                }
+                else if (evaluationSavepoint != null)
+                {
+                    // The evaluation itself failed: undo it, and with it any Delete Pending Export it staged before the
+                    // failure, which no longer exists to report.
+                    await evaluationSavepoint.RollbackAsync();
+                    foreach (var stagedExportId in stagedExportIds)
+                        deletePendingExports.Remove(stagedExportId);
+                }
+
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
                 await _syncRepo.SetMetaverseObjectLastConnectorDisconnectedDateAsync(mvo.Id, mvo.LastConnectorDisconnectedDate.Value);
             }

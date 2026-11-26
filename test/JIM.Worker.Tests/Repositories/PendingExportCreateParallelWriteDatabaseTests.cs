@@ -997,45 +997,156 @@ public class PendingExportCreateParallelWriteDatabaseTests
 
     #endregion
 
-    #region Caller transaction
+    #region Caller transaction (#2848)
 
     /// <summary>
-    /// A caller holding a transaction keeps the exports inside it, however large the call: rows committed on connections
-    /// of their own would survive the caller's rollback. Inside it the rows are visible to the caller and to no other
-    /// session; rolled back, nothing remains.
+    /// A repository whose writes may go parallel however few the rows: the caller-transaction tests decide the path by
+    /// whether they hold a transaction, not by the gate.
+    /// </summary>
+    private SyncRepository ParallelRepository(JimDbContext context)
+    {
+        var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+        sync.ConnectionStringForParallelWrites = _connectionString;
+        sync.WriteParallelismOverride = Parallelism;
+        sync.ParallelWriteRowThreshold = 0;
+        sync.ParallelWriteRowsPerConnection = 1;
+        return sync;
+    }
+
+    private async Task<(long Live, long Incomplete)> CountByLivenessAsync(IEnumerable<Guid> exportIds)
+    {
+        var ids = exportIds.ToList();
+        var all = await CountAsync("PendingExports", "Id", ids);
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""SELECT count(*) FROM "PendingExports" WHERE "Id" = ANY(@ids) AND "Status" = @incomplete""", connection);
+        command.Parameters.AddWithValue("ids", ids.ToArray());
+        command.Parameters.AddWithValue("incomplete", (int)PendingExportStatus.Incomplete);
+        var incomplete = (long)(await command.ExecuteScalarAsync())!;
+        return (all - incomplete, incomplete);
+    }
+
+    /// <summary>
+    /// A caller holding a transaction (a synchronisation page) still gets the parallel path: the exports are staged on
+    /// connections of their own as Incomplete, which no reader acts on, and made live in the caller's transaction. Rolled
+    /// back, they are Incomplete again, and the removal the caller makes once its transaction has ended takes them all.
     /// </summary>
     [Test]
-    public async Task CreatePendingExportsAsync_CallerHoldsTransaction_WritesInsideItSoARollbackLeavesNothingAsync()
+    public async Task CreatePendingExportsAsync_CallerHoldsTransactionThatRollsBack_StagesInParallelAndTheRemovalLeavesNothingAsync()
     {
         var s = await SeedAsync();
         var exports = BuildBatch(s);
 
         await using (var context = NewContext())
         {
-            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
-            sync.ConnectionStringForParallelWrites = _connectionString;
-            sync.WriteParallelismOverride = Parallelism;
-            sync.ParallelWriteRowThreshold = 0;
-
-            await using var transaction = await context.Database.BeginTransactionAsync();
-            Assert.That(sync.ShouldWriteInParallel(Rows(exports)), Is.False, "sanity: the gate keeps a caller's transaction on its connection");
-            await sync.CreatePendingExportsAsync(exports);
-            using (Assert.EnterMultipleScope())
+            var sync = ParallelRepository(context);
+            await using (var transaction = await context.Database.BeginTransactionAsync())
             {
-                Assert.That(await context.PendingExportAttributeValueChanges.CountAsync(), Is.EqualTo(ChangeIds(exports).Count),
-                    "the caller sees every change inside its transaction");
-                Assert.That(await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id)), Is.Zero,
-                    "and no other session sees any of it: nothing was written on another connection");
+                await sync.CreatePendingExportsAsync(exports);
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(await context.PendingExportAttributeValueChanges.CountAsync(), Is.EqualTo(ChangeIds(exports).Count),
+                        "the caller sees every change inside its transaction");
+                    Assert.That(await CountByLivenessAsync(exports.Select(pe => pe.Id)), Is.EqualTo((0L, (long)exports.Count)),
+                        "another session sees them only as Incomplete: staged on other connections, live only in the caller's transaction");
+                    Assert.That(await CountWritingTransactionsAsync("PendingExportAttributeValueChanges", ChangeIds(exports)), Is.GreaterThan(1),
+                        "the changes were written on several connections");
+                }
+
+                await transaction.RollbackAsync();
             }
 
-            await transaction.RollbackAsync();
+            Assert.That(await sync.RemovePendingExportsStagedForTransactionAsync(), Is.EqualTo(exports.Count),
+                "the removal takes every export the rolled-back transaction would have made live");
         }
 
         var after = await SnapshotAsync();
         using (Assert.EnterMultipleScope())
         {
             foreach (var table in PendingExportTables)
-                Assert.That(after[table], Is.Empty, $"the rollback takes every row of {table} with it");
+                Assert.That(after[table], Is.Empty, $"nothing of the call is left in {table}");
+        }
+    }
+
+    /// <summary>
+    /// Committed, the caller's transaction makes every staged export live, with every change, and the removal after it finds
+    /// nothing to remove.
+    /// </summary>
+    [Test]
+    public async Task CreatePendingExportsAsync_CallerHoldsTransactionThatCommits_MakesEveryExportLiveAsync()
+    {
+        var s = await SeedAsync();
+        var exports = BuildBatch(s);
+
+        await using (var context = NewContext())
+        {
+            var sync = ParallelRepository(context);
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                await sync.CreatePendingExportsAsync(exports);
+                await transaction.CommitAsync();
+            }
+
+            Assert.That(await sync.RemovePendingExportsStagedForTransactionAsync(), Is.Zero, "nothing staged is left Incomplete");
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountByLivenessAsync(exports.Select(pe => pe.Id)), Is.EqualTo(((long)exports.Count, 0L)), "every export is live");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(exports)), Is.EqualTo(ChangeIds(exports).Count),
+                "with every change");
+        }
+    }
+
+    /// <summary>
+    /// A replacement that keeps the id of an export the caller's transaction has just deleted (#2100) cannot be staged on
+    /// another connection, which would wait on that transaction for good. Marked, it is written on the caller's connection,
+    /// at once; unmarked, the staging connection gives up on the lock and the call is written on the caller's connection
+    /// all the same. Either way the call completes and the replacement is the export's one row.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task CreatePendingExportsAsync_ReplacementReusesAnIdTheCallerDeleted_CompletesWithoutWaitingOnTheCallerAsync(bool marked)
+    {
+        var s = await SeedAsync();
+        var replaced = (await WriteAnotherCallAsync(s))[0];
+        var replacement = new PendingExport
+        {
+            Id = replaced.Id, ReusesReplacedExportId = marked, ConnectedSystemId = s.SystemId,
+            ConnectedSystemObjectId = replaced.ConnectedSystemObjectId, ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending, CreatedAt = StagedAt,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                    { Id = Guid.NewGuid(), AttributeId = s.Name.Id, StringValue = "Replaced", ChangeType = PendingExportAttributeChangeType.Update }
+            ]
+        };
+        var exports = BuildBatch(s);
+        exports.Add(replacement);
+
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        await using (var context = NewContext())
+        {
+            var sync = ParallelRepository(context);
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                await sync.DeletePendingExportsByConnectedSystemObjectIdsAsync([replaced.ConnectedSystemObjectId!.Value]);
+                await sync.CreatePendingExportsAsync(exports);
+                await transaction.CommitAsync();
+            }
+
+            await sync.RemovePendingExportsStagedForTransactionAsync();
+        }
+        elapsed.Stop();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountByLivenessAsync(exports.Select(pe => pe.Id)), Is.EqualTo(((long)exports.Count, 0L)),
+                "every export of the call is live, the replacement among them");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "PendingExportId", [replaced.Id]), Is.EqualTo(1),
+                "the replacement holds its own change, and none of the export it replaced");
+            if (marked)
+                Assert.That(elapsed.Elapsed, Is.LessThan(TimeSpan.FromSeconds(4)), "a marked replacement never waits on the caller");
         }
     }
 

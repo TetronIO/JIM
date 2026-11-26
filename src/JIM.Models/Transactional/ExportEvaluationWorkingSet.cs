@@ -101,4 +101,22 @@ public class ExportEvaluationWorkingSet
     /// queued, so this is the only record a caller has that the evaluation changed anything.
     /// </summary>
     public IReadOnlyList<OutboundDisconnection> Disconnections => _disconnections;
+
+    /// <summary>
+    /// Adds everything <paramref name="other"/> recorded to this working set, its entries replacing any this one holds for
+    /// the same Connected System Object. For an evaluation whose writes may yet be rolled back (one object's deletion inside
+    /// a synchronisation page's transaction, #2848): it records into a working set of its own, merged into the run's only
+    /// once its writes stand, so a rollback cannot leave the run's working set claiming writes that no longer exist.
+    /// </summary>
+    public void MergeFrom(ExportEvaluationWorkingSet other)
+    {
+        foreach (var (csoId, decision) in other._deleteDecisionsByCsoId)
+            _deleteDecisionsByCsoId[csoId] = decision;
+        foreach (var (csoId, pendingExport) in other._stagedDeleteExportsByCsoId)
+            _stagedDeleteExportsByCsoId[csoId] = pendingExport;
+        foreach (var (csoId, syncRule) in other._deprovisioningRulesByCsoId)
+            _deprovisioningRulesByCsoId[csoId] = syncRule;
+        _cancelledProvisionings.AddRange(other._cancelledProvisionings);
+        _disconnections.AddRange(other._disconnections);
+    }
 }

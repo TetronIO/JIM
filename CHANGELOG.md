@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Following an import's consequences, in the Causality Explorer or with `Get-JIMActivityExecutionItem -Consequences`, now reaches the confirmation of a Delete JIM exported: an import that found the object gone confirmed the Delete without recording which export it confirmed, so the trail stopped at the Delete. (#3087)
 - 🐛 A queued group membership change or other reference to a Metaverse Object deleted before it was exported is now withdrawn at the next export, rather than holding its Pending Export open and being reported as awaiting provisioning on every run. (#3078)
 - 🐛 Behind an outbound proxy, the SCIM Connector now reads a service provider's certificate through the proxy, so **Fetch certificate** and a failed connection test show the certificate a TLS-inspecting proxy presents, ready to trust.
+- 🐛 A synchronisation that stops part-way, because the Worker stopped or a database write failed, no longer leaves duplicate Metaverse Objects or provisioned accounts with nothing queued to export: each page of objects is now saved whole or not at all, and the next run picks it up. (#2848)
 - 🐛 The SCIM 2.0 Client Connector's **Maximum Retries** now retries as many times as it says: set to 3, a throttled or briefly unavailable request was retried only twice. (#3023)
 
 ## [1.0.0] - 2026-11-20
