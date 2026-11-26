@@ -106,8 +106,22 @@ function Invoke-HrCycle {
     return $sync.activityId
 }
 
+# While two rules write one attribute, every synchronisation that visits the account reports the clash (#2826). A run
+# that visits only that account then has nothing but the overlap among its items, so it records Failed With Error; any
+# other error still fails the step.
+function Assert-OnlyOverlaps {
+    param([string]$ActivityId, [string]$Name)
+    $activity = Get-JIMActivity -Id $ActivityId
+    $errored = @(Get-JIMActivity -Id $ActivityId -ExecutionItems | Where-Object { $_.errorType -and $_.errorType -ne 'NotSet' })
+    $others = @($errored | Where-Object { $_.errorType -ne 'ExportRuleOverlap' })
+    if ($others.Count -gt 0 -or "$($activity.status)" -eq 'Failed') {
+        throw "Activity '$Name' ended $($activity.status) with errors other than Export Rules Overlap: $(($others | ForEach-Object { $_.errorType }) -join ', ')"
+    }
+    Write-Host "  ✓ $Name completed; its only errors are Export Rules Overlap ($($errored.Count))" -ForegroundColor Green
+}
+
 function Invoke-ExportAndConfirm {
-    param([hashtable]$Config, [string]$Label)
+    param([hashtable]$Config, [string]$Label, [switch]$AllowOverlap)
     $export = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
     Assert-ExportSuccess -ActivityId $export.activityId -Name "$Label LDAP Export"
     Start-Sleep -Seconds 2
@@ -116,7 +130,12 @@ function Invoke-ExportAndConfirm {
     Assert-ActivitySuccess -ActivityId $import.activityId -Name "$Label LDAP Delta Import (confirming)" `
         -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
     $sync = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaSyncProfileId -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $sync.activityId -Name "$Label LDAP Delta Sync"
+    if ($AllowOverlap) {
+        Assert-OnlyOverlaps -ActivityId $sync.activityId -Name "$Label LDAP Delta Sync"
+    }
+    else {
+        Assert-ActivitySuccess -ActivityId $sync.activityId -Name "$Label LDAP Delta Sync"
+    }
 }
 
 # The Pending Exports staged for one person's account, each with the attribute names it carries.
@@ -293,7 +312,7 @@ try {
         $overlaps = @(Get-JIMActivity -Id $syncActivityId -ExecutionItems | Where-Object { $_.errorType -eq 'ExportRuleOverlap' })
         Assert-Equal -Expected 1 -Actual $overlaps.Count -Message "One Export Rules Overlap item"
 
-        Invoke-ExportAndConfirm -Config $config -Label "Clash"
+        Invoke-ExportAndConfirm -Config $config -Label "Clash" -AllowOverlap
         Assert-Equal -Expected 'Operations Director' -Actual (Get-DirectoryValue -AccountName $people.Ben.AccountName -AttributeName 'title') `
             -Message "Ben's title keeps the value the directory held"
         Assert-Equal -Expected 'Leader' -Actual (Get-DirectoryValue -AccountName $people.Ben.AccountName -AttributeName 'sn') `
