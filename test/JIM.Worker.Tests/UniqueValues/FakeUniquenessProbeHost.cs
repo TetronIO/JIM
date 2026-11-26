@@ -93,6 +93,7 @@ internal sealed class FakeUniquenessProbeHost : IUniquenessProbeSessionHost
 /// </summary>
 internal sealed class FakeProbingConnector : IConnector, IConnectorUniquenessProbe, IDisposable
 {
+    public string Identifier => "test.connector";
     private readonly HashSet<string> _held = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
 

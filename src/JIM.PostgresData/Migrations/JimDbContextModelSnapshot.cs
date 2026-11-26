@@ -4529,6 +4529,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("ExternalIdsUniqueAcrossObjectTypes")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Identifier")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
@@ -4606,6 +4609,10 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Identifier")
+                        .IsUnique()
+                        .HasFilter("\"Identifier\" IS NOT NULL");
 
                     b.ToTable("ConnectorDefinitions");
                 });

@@ -1821,6 +1821,13 @@ public class JimDbContext : DbContext
             .WithOne()
             .OnDelete(DeleteBehavior.Cascade);
 
+        // A Connector's identifier names its message catalogue, so two definitions may not claim the same one. Definitions
+        // no Connector has declared an identifier for hold none, and any number of them may.
+        modelBuilder.Entity<ConnectorDefinition>()
+            .HasIndex(cd => cd.Identifier)
+            .IsUnique()
+            .HasFilter("\"Identifier\" IS NOT NULL");
+
         // An Example Data Set owns its values; the set is nothing but its values.
         modelBuilder.Entity<ExampleDataSet>()
             .HasMany(ds => ds.Values)

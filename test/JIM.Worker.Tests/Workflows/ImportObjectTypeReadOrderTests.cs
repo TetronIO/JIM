@@ -128,6 +128,7 @@ public class ImportObjectTypeReadOrderTests : WorkflowTestBase
 
     private sealed class ReadOrderTestConnector : IConnector, IConnectorImportUsingCalls, IConnectorObjectTypeReadOrder
     {
+        public string Identifier => "test.connector";
         public string Name => "MockConnector";
         public string? Description => null;
         public string? Url => null;

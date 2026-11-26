@@ -133,6 +133,30 @@ public class MessageCatalogueSourceTests
         }
     }
 
+    [Test]
+    public void ConnectorCatalogueName_IsNamedForTheConnectorsIdentifier()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ConnectorCatalogueNames.For("jim.ldap"), Is.EqualTo("connector:jim.ldap/Messages"));
+            Assert.That(ConnectorCatalogueNames.IsConnectorCatalogue("connector:jim.ldap/Messages"), Is.True);
+            Assert.That(ConnectorCatalogueNames.IsConnectorCatalogue(JimCatalogue), Is.False);
+        }
+    }
+
+    [Test]
+    public void Serves_OnlyCataloguesASourceAnswersFor()
+    {
+        using var registration = MessageCatalogueSources.Register(new FixedSource(ConnectorCatalogue, new()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(MessageCatalogueSources.Serves(ConnectorCatalogue), Is.True);
+            Assert.That(MessageCatalogueSources.Serves(JimCatalogue), Is.True, "JIM's own catalogues are always served");
+            Assert.That(MessageCatalogueSources.Serves("connector:uninstalled.example/Messages"), Is.False);
+        }
+    }
+
     /// <summary>A catalogue held in memory, keyed by "language/key", as a stored catalogue would be.</summary>
     private sealed class FixedSource(string catalogue, Dictionary<string, string> templates) : IMessageCatalogueSource
     {

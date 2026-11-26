@@ -307,6 +307,7 @@ public class RunProfilePhaseWiringTests : WorkflowTestBase
         string? undeclaredPhaseKey = null,
         bool throwOnGetPhases = false) : IConnector, IConnectorImportUsingFiles, IConnectorPhases
     {
+        public string Identifier => "test.connector";
         public string Name => "MockPhaseDeclaringFileConnector";
         public string? Description => null;
         public string? Url => null;
@@ -345,6 +346,7 @@ public class RunProfilePhaseWiringTests : WorkflowTestBase
     private class MockPagingConnector(ConnectedSystemObjectType csoType, int pages, Action? onImport = null)
         : IConnector, IConnectorImportUsingCalls
     {
+        public string Identifier => "test.connector";
         private int _pagesReturned;
 
         public string Name => "MockPagingConnector";

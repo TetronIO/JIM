@@ -29,7 +29,7 @@ public sealed class AssemblyResxCatalogueSource : IMessageCatalogueSource
     {
         // A Connector catalogue ("connector:jim.ldap/Messages") is another source's, and is never an assembly name.
         var separator = catalogue.IndexOf(':', StringComparison.Ordinal);
-        if (separator <= 0 || catalogue.StartsWith("connector:", StringComparison.Ordinal))
+        if (separator <= 0 || ConnectorCatalogueNames.IsConnectorCatalogue(catalogue))
             return null;
 
         var assemblyName = catalogue[..separator];

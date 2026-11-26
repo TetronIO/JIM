@@ -19,6 +19,8 @@ namespace JIM.Connectors.Mock;
 /// </summary>
 public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement
 {
+    public string Identifier => "jim.mock.call";
+
     public string Name => "Mock Call Connector";
     public string? Description => "Enables workflow and integration testing with call-based import/export.";
     public string? Url => "https://github.com/TetronIO/JIM";

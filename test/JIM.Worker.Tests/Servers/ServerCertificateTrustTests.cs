@@ -663,6 +663,7 @@ public class ServerCertificateTrustTests
 
     private class StubConnector(bool trustAnchorMustBeRoot = false) : IConnector, IConnectorSecureEndpoint
     {
+        public string Identifier => "test.connector";
         public const string SecureConnectorName = "Stub Secure Connector";
         public const string PlainConnectorName = "Stub Plain Connector";
         public const string RootOnlyConnectorName = "Stub Root-Only Connector";
@@ -691,6 +692,7 @@ public class ServerCertificateTrustTests
     /// </summary>
     private class StubPlainConnector : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => StubConnector.PlainConnectorName;
 
         public string? Description => null;

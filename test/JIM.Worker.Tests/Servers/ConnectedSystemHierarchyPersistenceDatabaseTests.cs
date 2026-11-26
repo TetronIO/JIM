@@ -1398,6 +1398,7 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     /// </summary>
     private sealed class StubPartitionsConnector(List<ConnectorPartition> partitions, Func<Task>? whileReadingAsync = null) : IConnector, IConnectorPartitions
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub Partitions Connector";
         public string? Description => null;
         public string? Url => null;

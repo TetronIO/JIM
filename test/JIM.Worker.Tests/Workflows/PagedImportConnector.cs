@@ -24,6 +24,7 @@ internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject
     IReadOnlyList<bool>? completeReadByPage = null, Action<int>? beforePage = null,
     IReadOnlyList<Dictionary<int, string?>?>? partitionWatermarksByPage = null, int? expectedObjectCount = null) : IConnector, IConnectorImportUsingCalls
 {
+    public string Identifier => "test.connector";
     private int _nextPage;
 
     public string Name => "MockConnector";

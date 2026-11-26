@@ -672,6 +672,7 @@ public class SetPasswordRequestTests
     /// </summary>
     private sealed class PasswordlessConnector : IConnector
     {
+        public string Identifier => "test.connector";
         public string Name => "Passwordless Connector";
         public string? Description => null;
         public string? Url => null;

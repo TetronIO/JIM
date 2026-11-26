@@ -92,6 +92,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     internal TimeSpan ExportInFlightGracePeriod { get; init; } = SqlConnectorExport.DefaultInFlightGracePeriod;
 
     #region IConnector members
+    public string Identifier => ConnectorConstants.SqlConnectorIdentifier;
+
     public string Name => ConnectorConstants.SqlConnectorName;
 
     public string? Description => "Enables bi-directional synchronisation with relational databases, including Microsoft SQL Server and Oracle Database.";

@@ -170,6 +170,7 @@ public class ImportObjectCountReportingTests : WorkflowTestBase
         int pages,
         Func<IConnectorProgress, Task> report) : IConnector, IConnectorImportUsingCalls
     {
+        public string Identifier => "test.connector";
         private int _pagesReturned;
 
         public string Name => "MockCountReportingConnector";

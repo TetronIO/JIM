@@ -56,6 +56,8 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
     private ScimConnectorUniquenessProbe? _uniquenessProbe;
 
     #region IConnector members
+    public string Identifier => ConnectorConstants.ScimClientConnectorIdentifier;
+
     public string Name => ConnectorConstants.ScimClientConnectorName;
 
     public string? Description => "Enables bi-directional synchronisation with any system that exposes a SCIM 2.0 service provider interface. JIM acts as the SCIM client, connecting out to the service provider.";

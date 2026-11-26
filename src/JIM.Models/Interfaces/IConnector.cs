@@ -6,6 +6,14 @@ namespace JIM.Models.Interfaces;
 public interface IConnector
 {
     /// <summary>
+    /// A stable identifier for the Connector, of the form <c>publisher.connector</c> in lower case (for example
+    /// <c>jim.ldap</c>). It names the Connector's message catalogue (<c>connector:jim.ldap/Messages</c>), so records the
+    /// Connector wrote read in an administrator's language, and it must never change once the Connector has shipped,
+    /// even when <see cref="Name"/> does.
+    /// </summary>
+    public string Identifier { get; }
+
+    /// <summary>
     /// The name of the Connector. This will be shown when an administrator wants to configure a new instance of the Connector.
     /// The administrator will be able to provide their own name for an instance of the Connector.
     /// </summary>

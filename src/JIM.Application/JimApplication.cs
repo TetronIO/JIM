@@ -16,6 +16,10 @@ namespace JIM.Application;
 
 public class JimApplication : IDisposable
 {
+    // The built-in Connectors' message catalogues (#3103) are part of JIM, so every host that runs JIM (the portal, the
+    // Worker and the Scheduler) and every test that builds one serves them, with nothing for a host to remember.
+    static JimApplication() => BuiltInConnectorCatalogues.EnsureRegistered();
+
     /// <summary>
     /// The data access layer. Internal by design: JIM's N-tier rule says presentation (JIM.Web) and the service
     /// hosts (JIM.Worker, JIM.Scheduler) must only call the application-layer servers on this facade, never

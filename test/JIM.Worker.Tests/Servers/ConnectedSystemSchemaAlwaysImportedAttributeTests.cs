@@ -252,6 +252,7 @@ public class ConnectedSystemSchemaAlwaysImportedAttributeTests
     /// </summary>
     private sealed class StubSchemaConnector : IConnector, IConnectorSchema
     {
+        public string Identifier => "test.connector";
         public string Name => "Stub Schema Connector";
 
         public string? Description => null;

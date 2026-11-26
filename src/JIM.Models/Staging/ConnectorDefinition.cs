@@ -12,6 +12,12 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
 
     public string Name { get; set; } = null!;
 
+    /// <summary>
+    /// The Connector's stable identifier, such as <c>jim.ldap</c>, which names its message catalogue
+    /// (<c>connector:jim.ldap/Messages</c>). Null for a definition no installed Connector has declared one for.
+    /// </summary>
+    public string? Identifier { get; set; }
+
     public string? Description { get; set; }
 
     public string? Url { get; set; }

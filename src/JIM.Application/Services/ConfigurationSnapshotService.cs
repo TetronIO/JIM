@@ -1283,6 +1283,7 @@ public class ConfigurationSnapshotService
 
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "name", definition.Name, "Name");
+        Add(children, "identifier", definition.Identifier, "Identifier");
         Add(children, "description", definition.Description, "Description");
         Add(children, "url", definition.Url, "URL");
         Add(children, "builtIn", Render(definition.BuiltIn), "Built-in");

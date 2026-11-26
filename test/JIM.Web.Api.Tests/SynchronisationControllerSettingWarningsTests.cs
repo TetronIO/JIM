@@ -166,6 +166,7 @@ public class SynchronisationControllerSettingWarningsTests
 
     private sealed class StubWarningConnector : IConnector, IConnectorSettings
     {
+        public string Identifier => "test.connector";
         public const string ConnectorName = "Stub Warning Connector";
 
         public string Name => ConnectorName;

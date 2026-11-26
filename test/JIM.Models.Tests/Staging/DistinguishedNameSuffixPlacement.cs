@@ -20,6 +20,7 @@ namespace JIM.Models.Tests.Staging;
 /// </remarks>
 internal sealed class DistinguishedNameSuffixPlacement : IConnector, IConnectorPartitionPlacement
 {
+    public string Identifier => "test.connector";
     public string Name => "Suffix Placement Connector";
     public string? Description => null;
     public string? Url => null;

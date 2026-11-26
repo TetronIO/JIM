@@ -327,6 +327,7 @@ public class ImportCancellationTests : WorkflowTestBase
     /// </summary>
     private class MockPaginatedConnector : IConnector, IConnectorImportUsingCalls
     {
+        public string Identifier => "test.connector";
         private readonly ConnectedSystemObjectType _csoType;
         private readonly int _objectsPerPage;
         private readonly int _totalPages;

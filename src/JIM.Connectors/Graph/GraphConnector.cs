@@ -43,6 +43,8 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     private GraphConnectorExport? _export;
 
     #region IConnector members
+    public string Identifier => ConnectorConstants.GraphConnectorIdentifier;
+
     public string Name => ConnectorConstants.GraphConnectorName;
 
     public string? Description => "Enables bi-directional synchronisation of users and groups with Microsoft Entra ID, through the Microsoft Graph API.";

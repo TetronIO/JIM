@@ -18,6 +18,8 @@ namespace JIM.Connectors.File;
 public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingFiles, IConnectorExportUsingFiles, IConnectorPhases
 {
     #region IConnector members
+    public string Identifier => ConnectorConstants.FileConnectorIdentifier;
+
     public string Name => ConnectorConstants.FileConnectorName;
 
     public string? Description => "Enables bi-directional synchronisation with files, i.e. CSV.";

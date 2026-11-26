@@ -166,6 +166,35 @@ public class SeedingIdempotencyDatabaseTests
     }
 
     [Test]
+    public async Task SyncBuiltInConnectorDefinitionsAsync_DefinitionsSeededBeforeIdentifiers_GainAndKeepThemAsync()
+    {
+        // The upgrade case for #3103: definitions created before Connectors declared an identifier hold none.
+        await SeedAsync();
+        await using (var ctx = NewContext())
+            await ctx.Database.ExecuteSqlRawAsync(@"UPDATE ""ConnectorDefinitions"" SET ""Identifier"" = NULL");
+
+        await SyncConnectorDefinitionsAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var stored = await ctx.ConnectorDefinitions.ToDictionaryAsync(d => d.Name, d => d.Identifier);
+            var expected = JIM.Application.Servers.SeedingServer.BuiltInConnectors().ToDictionary(c => c.Name, c => (string?)c.Identifier);
+
+            Assert.That(stored, Is.EquivalentTo(expected), "every built-in definition must gain its Connector's identifier");
+        }
+
+        // and two definitions may not claim one identifier, which is what lets a catalogue name a Connector
+        await using (var ctx = NewContext())
+        {
+            var claimTwice = async () => await ctx.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectorDefinitions"" SET ""Identifier"" = 'jim.ldap' WHERE ""Name"" = 'JIM SQL Connector'");
+
+            Assert.That(claimTwice, Throws.InstanceOf<Npgsql.PostgresException>()
+                .With.Property(nameof(Npgsql.PostgresException.SqlState)).EqualTo("23505"));
+        }
+    }
+
+    [Test]
     public async Task SyncBuiltInConnectorDefinitionsAsync_ConnectedSystemMissingASettingOrItsDefault_BringsItIntoLineAsync()
     {
         // The upgrade case for settings: a Connected System created before its Connector gained a setting has no

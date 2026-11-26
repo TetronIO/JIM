@@ -12,6 +12,8 @@ namespace JIM.Connectors.Mock;
 /// </summary>
 public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorImportUsingFiles
 {
+    public string Identifier => "jim.mock.file";
+
     public string Name => "Mock Connector";
     public string? Description => "Enables unit testing of synchronisation functionality.";
     public string? Url => "https://github.com/TetronIO/JIM";

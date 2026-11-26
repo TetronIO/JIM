@@ -174,6 +174,7 @@ public class ConnectedSystemSettingsCheckTests
     /// <summary>A Connector with both kinds of validation, returning whatever the test arranges.</summary>
     private sealed class StubCheckingConnector : IConnector, IConnectorSettings, IConnectorSettingsCheck, IDisposable
     {
+        public string Identifier => "test.connector";
         public const string ConnectorName = "Stub Checking Connector";
 
         public string Name => ConnectorName;

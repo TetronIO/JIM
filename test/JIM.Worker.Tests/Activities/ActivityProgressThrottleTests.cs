@@ -292,6 +292,7 @@ public class ActivityProgressThrottleTests
 
     private sealed class PhaseDeclaringConnector : IConnector, IConnectorPhases
     {
+        public string Identifier => "test.connector";
         public string Name => "PhaseDeclaringConnector";
         public string? Description => null;
         public string? Url => null;
