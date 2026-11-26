@@ -1455,6 +1455,7 @@ SettingValidationMessages.GroupExactly
 SettingValidationMessages.GroupOnly
 SettingValidationMessages.SupplyAValue
 SyncMessages.ExportObjectTypeConflict
+SyncMessages.ExportRuleAttributeClash
 SyncMessages.ExportRuleHandOver
 SyncMessages.ExportRuleOverlap
 SyncMessages.ExpressionEvaluationFailed

@@ -8,6 +8,7 @@ using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Worker.Processors;
 using NUnit.Framework;
@@ -130,13 +131,246 @@ public class SeveralExportRulesPerObjectWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task FullSync_NewStarterBothRulesCover_RecordsTheAddOnRulesCoverageButNotTheManagingRulesAsync()
+    {
+        var arrangement = await ArrangeAsync();
+
+        await RunHrFullSyncAsync(arrangement, "Joiner");
+
+        Assert.That(CoverageOf(AdAccount(arrangement)), Is.EquivalentTo(new[] { arrangement.AddOnRule.Id }),
+            "the account's join names the managing rule; the coverage record lists the rules it does not");
+    }
+
+    [Test]
+    public async Task FullSync_AnAddOnRuleStartsCoveringAnAccount_SendsEveryAttributeItWritesAsync()
+    {
+        // The add-on rule is switched on once Jane's account exists. Its EmployeeId has not changed, yet it has never been
+        // written to the account, so the rule's first evaluation sends it along with the DisplayName change that triggered it.
+        var arrangement = await ArrangeAsync(addOnEnabled: false);
+        await ProvisionAndConfirmAsync(arrangement);
+        arrangement.AddOnRule.Enabled = true; // the run reads the rule the in-memory repository holds
+
+        SetHrValue(arrangement, "DisplayName", "Jane Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Rename");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ChangedAttributeNames(AdPendingExports(arrangement).Single()), Is.EquivalentTo(new[] { "DisplayName", "EmployeeId" }));
+            Assert.That(CoverageOf(AdAccount(arrangement)), Is.EquivalentTo(new[] { arrangement.AddOnRule.Id }));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_AnAddOnRuleStartsCoveringAnAccountThatHoldsItsValue_SendsNothingForItAsync()
+    {
+        var arrangement = await ArrangeAsync(addOnEnabled: false);
+        await ProvisionAndConfirmAsync(arrangement);
+        HoldAdValue(arrangement, "EmployeeId", "EMP001");
+        arrangement.AddOnRule.Enabled = true;
+
+        SetHrValue(arrangement, "DisplayName", "Jane Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Rename");
+
+        Assert.That(ChangedAttributeNames(AdPendingExports(arrangement).Single()), Is.EquivalentTo(new[] { "DisplayName" }),
+            "the full send still drops a value the account already holds");
+    }
+
+    [Test]
+    public async Task FullSync_ACoverageAlreadyRecorded_SendsOnlyWhatChangedAsync()
+    {
+        var arrangement = await ArrangeAsync(addOnEnabled: false);
+        await ProvisionAndConfirmAsync(arrangement);
+        arrangement.AddOnRule.Enabled = true;
+        SetHrValue(arrangement, "DisplayName", "Jane Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Rename");
+        await SyncRepo.DeletePendingExportsAsync(AdPendingExports(arrangement));
+
+        SetHrValue(arrangement, "DisplayName", "Jane Q Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Second rename");
+
+        Assert.That(ChangedAttributeNames(AdPendingExports(arrangement).Single()), Is.EquivalentTo(new[] { "DisplayName" }),
+            "a rule sends everything once, when it starts covering the account");
+    }
+
+    [Test]
+    public async Task FullSync_ARuleFromBeforeTheCoverageRecord_RecordsItsCoverageWithoutSendingAsync()
+    {
+        // A rule that existed before the upgrade cannot tell an account it has always covered from one it has just started
+        // covering, so it records the coverage and sends only what changed, as it always has.
+        var arrangement = await ArrangeAsync(addOnEnabled: false, addOnCoverageRecorded: false);
+        await ProvisionAndConfirmAsync(arrangement);
+        arrangement.AddOnRule.Enabled = true;
+
+        SetHrValue(arrangement, "DisplayName", "Jane Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Rename");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ChangedAttributeNames(AdPendingExports(arrangement).Single()), Is.EquivalentTo(new[] { "DisplayName" }));
+            Assert.That(CoverageOf(AdAccount(arrangement)), Is.EquivalentTo(new[] { arrangement.AddOnRule.Id }));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_AnAddOnRuleStopsCoveringAnAccount_RemovesItsCoverageAsync()
+    {
+        var arrangement = await ArrangeAsync(addOnScope: "EMP001");
+        await ProvisionAndConfirmAsync(arrangement);
+        Assert.That(CoverageOf(AdAccount(arrangement)), Is.EquivalentTo(new[] { arrangement.AddOnRule.Id }), "precondition: the coverage was recorded");
+
+        SetHrValue(arrangement, "EmployeeId", "EMP009");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Out of the add-on's scope");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CoverageOf(AdAccount(arrangement)), Is.Empty);
+            Assert.That(AdAccount(arrangement).MetaverseObjectId, Is.EqualTo(JaneMvoId()), "the managing rule still covers Jane");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_ADisabledAddOnRule_KeepsItsCoverageAsync()
+    {
+        // Switching a rule off is a pause: what it covered is still recorded when it is switched back on.
+        var arrangement = await ArrangeAsync();
+        await ProvisionAndConfirmAsync(arrangement);
+        arrangement.AddOnRule.Enabled = false;
+
+        SetHrValue(arrangement, "DisplayName", "Jane Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Rename");
+
+        Assert.That(CoverageOf(AdAccount(arrangement)), Is.EquivalentTo(new[] { arrangement.AddOnRule.Id }));
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ANewExportRule_RecordsWhenItsCoverageRecordBeganAsync()
+    {
+        var arrangement = await ArrangeAsync();
+        var rule = new SyncRule
+        {
+            Name = "AD Location Attributes",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemId = arrangement.Ad.Id,
+            ConnectedSystem = arrangement.Ad,
+            ConnectedSystemObjectTypeId = arrangement.BaseRule.ConnectedSystemObjectTypeId,
+            ConnectedSystemObjectType = arrangement.BaseRule.ConnectedSystemObjectType,
+            MetaverseObjectTypeId = arrangement.BaseRule.MetaverseObjectTypeId,
+            MetaverseObjectType = arrangement.BaseRule.MetaverseObjectType
+        };
+
+        Assert.That(await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, await AdministratorAsync()), Is.True);
+
+        Assert.That(rule.CoverageRecordedAt, Is.Not.Null, "a rule created now sends everything when it starts covering an account");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_AnExportRuleFromBeforeTheCoverageRecord_IsLeftUnrecordedAsync()
+    {
+        var arrangement = await ArrangeAsync(addOnCoverageRecorded: false);
+        var rule = await Jim.ConnectedSystems.GetSyncRuleAsync(arrangement.AddOnRule.Id)
+            ?? throw new InvalidOperationException("arrange: the add-on rule loads");
+
+        Assert.That(await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, await AdministratorAsync()), Is.True);
+
+        Assert.That(rule.CoverageRecordedAt, Is.Null, "editing a rule does not tell JIM which accounts it already covers");
+    }
+
+    [Test]
+    public async Task AdvanceExportRuleCoverageBaselineAsync_ARuleFromBeforeTheRecord_RecordsWhatItCoversThenSendsAsANewRuleAsync()
+    {
+        var arrangement = await ArrangeAsync(addOnCoverageRecorded: false);
+        await ProvisionAndConfirmAsync(arrangement);
+        await ForgetCoverageAsync(); // as the upgrade finds it: the record starts empty
+
+        await RunCoverageBaselineAsync(pageSize: 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CoverageOf(AdAccount(arrangement)), Is.EquivalentTo(new[] { arrangement.AddOnRule.Id }),
+                "the add-on rule covers the account; the managing rule is never recorded");
+            Assert.That(arrangement.AddOnRule.CoverageRecordedAt, Is.Not.Null, "from now on the rule behaves as a new one");
+        }
+    }
+
+    [Test]
+    public async Task AdvanceExportRuleCoverageBaselineAsync_AnAccountOutsideTheRulesScope_RecordsNothingForItAsync()
+    {
+        var arrangement = await ArrangeAsync(addOnCoverageRecorded: false, addOnScope: "EMP999");
+        await ProvisionAndConfirmAsync(arrangement);
+
+        await RunCoverageBaselineAsync(pageSize: 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CoverageOf(AdAccount(arrangement)), Is.Empty);
+            Assert.That(arrangement.AddOnRule.CoverageRecordedAt, Is.Not.Null);
+        }
+    }
+
+    [Test]
+    public async Task AdvanceExportRuleCoverageBaselineAsync_EveryRuleRecorded_HasNoWorkAsync()
+    {
+        await ArrangeAsync();
+
+        var workRemains = await Jim.ExportEvaluation.AdvanceExportRuleCoverageBaselineAsync(new ExportRuleCoverageBaselineCursor(), pageSize: 10);
+
+        Assert.That(workRemains, Is.False);
+    }
+
+    [Test]
+    public async Task AdvanceExportRuleCoverageBaselineAsync_ThenTheRuleStartsCoveringAnAccount_SendsEveryAttributeItWritesAsync()
+    {
+        // The baseline over, the rule is told apart from one it has always covered: Jane joins its scope afterwards, by a
+        // rename, and its EmployeeId goes with the base rule's DisplayName though it did not change.
+        var arrangement = await ArrangeAsync(addOnCoverageRecorded: false, addOnDisplayNameScope: "Jane Doe");
+        await ProvisionAndConfirmAsync(arrangement);
+        await RunCoverageBaselineAsync(pageSize: 10);
+
+        SetHrValue(arrangement, "DisplayName", "Jane Doe");
+        await ModifyCsoAsync(arrangement.JaneHrObject);
+        await RunHrFullSyncAsync(arrangement, "Into the add-on's scope");
+
+        Assert.That(ChangedAttributeNames(AdPendingExports(arrangement).Single()), Is.EquivalentTo(new[] { "DisplayName", "EmployeeId" }));
+    }
+
+    private async Task RunCoverageBaselineAsync(int pageSize)
+    {
+        var cursor = new ExportRuleCoverageBaselineCursor();
+        for (var advances = 0; await Jim.ExportEvaluation.AdvanceExportRuleCoverageBaselineAsync(cursor, pageSize); advances++)
+            Assert.That(advances, Is.LessThan(100), "the baseline finishes");
+    }
+
+    private Task ForgetCoverageAsync() =>
+        SyncRepo.DeleteExportRuleCoveragesAsync(SyncRepo.ExportRuleCoverages.Select(c => (c.ConnectedSystemObjectId, c.SyncRuleId)).ToList());
+
+    private async Task<MetaverseObject> AdministratorAsync()
+    {
+        var administrator = new MetaverseObject
+        {
+            Id = Guid.NewGuid(), Type = DbContext.MetaverseObjectTypes.First(), Created = DateTime.UtcNow, CachedDisplayName = "Test Administrator"
+        };
+        DbContext.MetaverseObjects.Add(administrator);
+        await DbContext.SaveChangesAsync();
+        return administrator;
+    }
+
     private sealed record Arrangement(ConnectedSystem Hr, ConnectedSystemObject JaneHrObject, ConnectedSystem Ad, SyncRule BaseRule, SyncRule AddOnRule);
 
     /// <summary>
     /// HR projects Jane. Both AD rules cover everyone. "AD Base Accounts" provisions and writes DisplayName; "AD Manager
     /// Attributes" writes EmployeeId (and DisplayName too, from EmployeeId, when <paramref name="addOnAlsoWritesDisplayName"/>).
     /// </summary>
-    private async Task<Arrangement> ArrangeAsync(bool addOnAlsoWritesDisplayName = false, bool addOnProvisions = false)
+    private async Task<Arrangement> ArrangeAsync(bool addOnAlsoWritesDisplayName = false, bool addOnProvisions = false,
+        bool addOnEnabled = true, bool addOnCoverageRecorded = true, string? addOnScope = null, string? addOnDisplayNameScope = null)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvDisplayName = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -162,6 +396,14 @@ public class SeveralExportRulesPerObjectWorkflowTests : WorkflowTestBase
         AddExportFlow(addOnRule, adType, "EmployeeId", mvEmployeeId);
         if (addOnAlsoWritesDisplayName)
             AddExportFlow(addOnRule, adType, "DisplayName", mvEmployeeId);
+        if (addOnScope != null)
+            ScopeTo(addOnRule, mvEmployeeId, addOnScope);
+        if (addOnDisplayNameScope != null)
+            ScopeTo(addOnRule, mvDisplayName, addOnDisplayNameScope);
+        // A rule created since the coverage record began sends everything when it starts covering an account (#2826).
+        baseRule.CoverageRecordedAt = DateTime.UtcNow;
+        addOnRule.CoverageRecordedAt = addOnCoverageRecorded ? DateTime.UtcNow : null;
+        addOnRule.Enabled = addOnEnabled;
         await DbContext.SaveChangesAsync();
 
         return new Arrangement(hr, jane, ad, baseRule, addOnRule);
@@ -174,6 +416,39 @@ public class SeveralExportRulesPerObjectWorkflowTests : WorkflowTestBase
         account.Status = ConnectedSystemObjectStatus.Normal;
         await SyncRepo.DeletePendingExportsAsync(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == account.Id).ToList());
     }
+
+    private HashSet<int> CoverageOf(ConnectedSystemObject account) =>
+        SyncRepo.ExportRuleCoverages.Where(c => c.ConnectedSystemObjectId == account.Id).Select(c => c.SyncRuleId).ToHashSet();
+
+    private void HoldAdValue(Arrangement arrangement, string attributeName, string value)
+    {
+        var account = AdAccount(arrangement);
+        var attribute = arrangement.BaseRule.ConnectedSystemObjectType!.Attributes.Single(a => a.Name == attributeName);
+        account.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = account,
+            Attribute = attribute,
+            AttributeId = attribute.Id,
+            StringValue = value
+        });
+    }
+
+    private static void ScopeTo(SyncRule rule, MetaverseAttribute attribute, string value) =>
+        rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria =
+            [
+                new SyncRuleScopingCriteria
+                {
+                    MetaverseAttribute = attribute,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = value,
+                    CaseSensitive = true
+                }
+            ]
+        });
 
     private static void SetHrValue(Arrangement arrangement, string attributeName, string value) =>
         arrangement.JaneHrObject.AttributeValues.Single(v => v.Attribute?.Name == attributeName).StringValue = value;

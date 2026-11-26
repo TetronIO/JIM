@@ -448,6 +448,8 @@ public interface ISyncEngine
     /// <param name="mvAttributeDictionary">Optional pre-built MVO attribute dictionary for expression evaluation.</param>
     /// <param name="preResolvedReferenceValues">Optional pre-resolved reference values (reference recall, #908).</param>
     /// <param name="flowErrors">Optional collector for Attribute Flow errors (multi-valued to single-valued truncation).</param>
+    /// <param name="stageEveryMapping">True for a rule that has just started covering an account it did not create
+    /// (#2826): an Update stages every mapping, as a Create would, still dropping what the account already holds.</param>
     List<PendingExportAttributeValueChange> ComputeAttributeValueChanges(
         MetaverseObject mvo,
         SyncRule exportRule,
@@ -461,7 +463,8 @@ public interface ISyncEngine
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedReferenceValues = null,
         List<AttributeFlowError>? flowErrors = null,
-        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null);
+        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null,
+        bool stageEveryMapping = false);
 
     /// <summary>
     /// Decides the removal change a reference recall stages for one matched target row (#908/#1003). The shape

@@ -95,6 +95,8 @@ public class AuditReferenceCatalogueTests
             "A live reference between objects (a group's member); the deletion clears it before the delete.",
         ["DeferredReferences.SourceCsoId -> ConnectedSystemObjects"] =
             "Queued reference work for the object, deleted with it by cascade.",
+        ["ExportRuleCoverages.ConnectedSystemObjectId -> ConnectedSystemObjects"] =
+            "Which export rules cover the object, live data deleted with it by cascade.",
         ["GeneratedValueAssignments.ConnectedSystemObjectId -> ConnectedSystemObjects"] =
             "A generated value the object holds, retired and then deleted with it by cascade.",
         ["MetaverseObjectAttributeValues.UnresolvedReferenceValueId -> ConnectedSystemObjects"] =

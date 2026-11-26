@@ -99,4 +99,15 @@ public class ExportEvaluationResult
     /// executors (#2011) record each as a Pending Export Changes Withdrawn outcome on the object's execution item.
     /// </summary>
     public List<PendingExportChangesWithdrawal> Withdrawals { get; set; } = [];
+
+    /// <summary>
+    /// Export rules that started covering an account in this evaluation besides the rule managing it (#2826), for the page
+    /// flush to record once any account this evaluation creates exists.
+    /// </summary>
+    public List<ExportRuleCoverage> CoverageStarted { get; set; } = [];
+
+    /// <summary>
+    /// Export rules that no longer cover an account they were recorded as covering (#2826), for the page flush to remove.
+    /// </summary>
+    public List<(Guid ConnectedSystemObjectId, int SyncRuleId)> CoverageEnded { get; set; } = [];
 }

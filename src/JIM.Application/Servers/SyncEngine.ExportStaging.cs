@@ -701,10 +701,15 @@ public partial class SyncEngine
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedReferenceValues = null,
         List<AttributeFlowError>? flowErrors = null,
-        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null)
+        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null,
+        bool stageEveryMapping = false)
     {
         var changes = new List<PendingExportAttributeValueChange>();
         var isCreateOperation = changeType == PendingExportChangeType.Create;
+
+        // A Create stages every value it writes, whatever changed; so does an Update for a rule that has just started
+        // covering the account (#2826), which no-net-change detection still trims to what the account does not hold.
+        var selectsEveryValue = isCreateOperation || stageEveryMapping;
         csoAlreadyCurrentCount = 0;
 
         // The engine holds no evaluator (stateless, zero-dependency by design); callers pass theirs, and a
@@ -866,12 +871,12 @@ public partial class SyncEngine
                 {
                     // Dates into a multi-valued target are diffed as sets at the target's resolution (#2153, D2).
                     stagedValues = StageDateSetAtTargetResolution(mvo, source.MetaverseAttribute, mapping.TargetConnectedSystemAttribute,
-                        changedAttributes, isCreateOperation, PerValueChangeType, flowErrors);
+                        changedAttributes, selectsEveryValue, PerValueChangeType, flowErrors);
                 }
                 else if (perValue)
                 {
                     IEnumerable<MetaverseObjectAttributeValue> mvoValues;
-                    if (isCreateOperation)
+                    if (selectsEveryValue)
                     {
                         // A Create provisions the whole object, so it carries every value the Metaverse Object holds,
                         // whatever this pass changed (#2832): synchronisation queues only the values that changed, and
@@ -907,7 +912,7 @@ public partial class SyncEngine
                 else
                 {
                     var (stage, wholeValue) = SelectWholeAttributeValue(mvo, source.MetaverseAttribute.Id, changedAttributes,
-                        removedAttributes, isCreateOperation);
+                        removedAttributes, selectsEveryValue);
                     stagedValues = stage ? [(wholeValue, PendingExportAttributeChangeType.Update)] : [];
 
                     if (stage && wholeValue == null)

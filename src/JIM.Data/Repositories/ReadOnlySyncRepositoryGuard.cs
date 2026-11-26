@@ -331,6 +331,22 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         IReadOnlyCollection<int> connectedSystemObjectTypeIds)
         => _inner.GetMetaverseObjectConnectionsAsync(metaverseObjectIds, connectedSystemObjectTypeIds);
 
+    public Task<Dictionary<Guid, HashSet<int>>> GetExportRuleCoveragesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetExportRuleCoveragesAsync(connectedSystemObjectIds);
+
+    public Task AddExportRuleCoveragesAsync(IReadOnlyCollection<ExportRuleCoverage> coverages)
+        => throw new PreviewWriteAttemptedException(nameof(AddExportRuleCoveragesAsync));
+
+    public Task DeleteExportRuleCoveragesAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int SyncRuleId)> coverages)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteExportRuleCoveragesAsync));
+
+    public Task<List<(Guid ConnectedSystemObjectId, Guid MetaverseObjectId)>> GetJoinedConnectedSystemObjectPageAsync(
+        int connectedSystemId, int connectedSystemObjectTypeId, Guid afterId, int take)
+        => _inner.GetJoinedConnectedSystemObjectPageAsync(connectedSystemId, connectedSystemObjectTypeId, afterId, take);
+
+    public Task MarkSyncRuleCoverageRecordedAsync(int syncRuleId, DateTime recordedAt)
+        => throw new PreviewWriteAttemptedException(nameof(MarkSyncRuleCoverageRecordedAsync));
+
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _inner.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 

@@ -1906,6 +1906,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemObjectTypeId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("CoverageRecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
@@ -4775,6 +4778,25 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectorSpaceClearJoinRecords");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ExportRuleCoverage", b =>
+                {
+                    b.Property<Guid>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Recorded")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ConnectedSystemObjectId", "SyncRuleId");
+
+                    b.HasIndex("SyncRuleId")
+                        .HasDatabaseName("IX_ExportRuleCoverages_SyncRuleId");
+
+                    b.ToTable("ExportRuleCoverages");
+                });
+
             modelBuilder.Entity("JIM.Models.Tasking.WorkerTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6969,6 +6991,21 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
                         .WithMany()
                         .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ExportRuleCoverage", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Logic.SyncRule", null)
+                        .WithMany()
+                        .HasForeignKey("SyncRuleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

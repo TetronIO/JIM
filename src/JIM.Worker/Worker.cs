@@ -1138,8 +1138,48 @@ public class Worker : BackgroundService
     internal async Task PerformIdleTickAsync(JimApplication mainLoopJim)
     {
         await PerformHousekeepingAsync();
+        await PerformExportRuleCoverageBaselineAsync();
         mainLoopJim.SyncRepo.ClearChangeTracker();
     }
+
+    private readonly ExportRuleCoverageBaselineCursor _exportRuleCoverageBaselineCursor = new();
+    private bool _exportRuleCoverageBaselineMayHaveWork = true;
+    private DateTime _lastExportRuleCoverageBaselineCheck = DateTime.MinValue;
+
+    /// <summary>
+    /// Records, a page per idle tick, the accounts each export rule from before the coverage record already covers (#2826),
+    /// so the rule can tell an account it starts covering from one it always has. Runs every idle tick while there is work;
+    /// once there is none, it looks again every five minutes, which is how a rule switched to the export direction is
+    /// picked up. Internal for testability.
+    /// </summary>
+    internal async Task PerformExportRuleCoverageBaselineAsync()
+    {
+        if (!_exportRuleCoverageBaselineMayHaveWork && (DateTime.UtcNow - _lastExportRuleCoverageBaselineCheck).TotalMinutes < 5)
+            return;
+
+        _lastExportRuleCoverageBaselineCheck = DateTime.UtcNow;
+
+        // A JimApplication of its own, as housekeeping has, so each page reads the configuration as it stands now.
+        using var jim = _jimFactory.Create();
+        try
+        {
+            _exportRuleCoverageBaselineMayHaveWork =
+                await jim.ExportEvaluation.AdvanceExportRuleCoverageBaselineAsync(_exportRuleCoverageBaselineCursor, ExportRuleCoverageBaselinePageSize);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Nothing is lost: the page is repeated at the next look, and until then the rule records coverage without a
+            // full send, as it did before the record existed.
+            Log.Error(ex, "PerformExportRuleCoverageBaselineAsync: Error recording export rule coverage; will retry");
+            _exportRuleCoverageBaselineMayHaveWork = false;
+        }
+    }
+
+    /// <summary>
+    /// Accounts the coverage baseline looks at per idle tick: a synchronisation page's worth, so a tick stays short and a
+    /// queued task waits no longer for it than for one page.
+    /// </summary>
+    private const int ExportRuleCoverageBaselinePageSize = 500;
 
     /// <summary>
     /// Performs housekeeping tasks during worker idle time.

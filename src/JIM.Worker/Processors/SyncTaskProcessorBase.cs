@@ -186,6 +186,12 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
 
+    // The page's changes to the export rule coverage record (#2826), written by the page flush. Coverage of an account the
+    // page is creating is held apart until the flush creates it: a creation cancelled in between takes its coverage with it.
+    private readonly List<ExportRuleCoverage> _exportRuleCoverageStarted = [];
+    private readonly List<ExportRuleCoverage> _provisionedAccountCoverageStarted = [];
+    private readonly List<(Guid ConnectedSystemObjectId, int SyncRuleId)> _exportRuleCoverageEnded = [];
+
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
@@ -4254,6 +4260,15 @@ public abstract class SyncTaskProcessorBase
                 _provisioningCsosToCreate.AddRange(result.ProvisioningCsosToCreate);
             }
 
+            // Collect the coverage record's changes for the page flush (#2826)
+            if (result.CoverageStarted.Count > 0)
+            {
+                var provisioningCsoIds = result.ProvisioningCsosToCreate.Select(cso => cso.Id).ToHashSet();
+                foreach (var coverage in result.CoverageStarted)
+                    (provisioningCsoIds.Contains(coverage.ConnectedSystemObjectId) ? _provisionedAccountCoverageStarted : _exportRuleCoverageStarted).Add(coverage);
+            }
+            _exportRuleCoverageEnded.AddRange(result.CoverageEnded);
+
             // Collect Pending Exports for batch saving at end of page
             if (result.PendingExports.Count > 0)
             {
@@ -5947,7 +5962,8 @@ public abstract class SyncTaskProcessorBase
         if (_provisioningCsosToCreate.Count == 0 && _pendingExportsToCreate.Count == 0 &&
             _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0 &&
             _inScopeEvaluatedCsoIds.Count == 0 && _deprovisionedCsoIdsThisPage.Count == 0 &&
-            _scopeExitQueueingStamps.Count == 0)
+            _scopeExitQueueingStamps.Count == 0 && _exportRuleCoverageStarted.Count == 0 &&
+            _provisionedAccountCoverageStarted.Count == 0 && _exportRuleCoverageEnded.Count == 0)
             return;
 
         // Unique Value Generation (#242, Phase 2 work package H) integrity guard: every marked change
@@ -5974,6 +5990,15 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
 
+        // The coverage of an account the page is creating is written only if the account still is: a Create cancelled against
+        // a persisted Delete removed it from the list, and its coverage goes with it.
+        if (_provisionedAccountCoverageStarted.Count > 0)
+        {
+            var creatingCsoIds = _provisioningCsosToCreate.Select(cso => cso.Id).ToHashSet();
+            _exportRuleCoverageStarted.AddRange(_provisionedAccountCoverageStarted.Where(coverage => creatingCsoIds.Contains(coverage.ConnectedSystemObjectId)));
+            _provisionedAccountCoverageStarted.Clear();
+        }
+
         // Batch create provisioning CSOs first (Pending Exports reference CSOs by ID)
         if (_provisioningCsosToCreate.Count > 0)
         {
@@ -5993,6 +6018,17 @@ public abstract class SyncTaskProcessorBase
                 _snapshotReferenceNames.RecordFound(cso.MetaverseObjectId!.Value, cso.ConnectedSystemId, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
             _snapshotReferenceNames.ForgetMisses();
             _provisioningCsosToCreate.Clear();
+        }
+
+        // The coverage record (#2826), once every account it names exists
+        if (_exportRuleCoverageStarted.Count > 0 || _exportRuleCoverageEnded.Count > 0)
+        {
+            await _syncRepo.AddExportRuleCoveragesAsync(_exportRuleCoverageStarted);
+            await _syncRepo.DeleteExportRuleCoveragesAsync(_exportRuleCoverageEnded);
+            Log.Debug("FlushPendingExportOperationsAsync: Recorded {Started} export rule coverage starts and {Ended} ends",
+                _exportRuleCoverageStarted.Count, _exportRuleCoverageEnded.Count);
+            _exportRuleCoverageStarted.Clear();
+            _exportRuleCoverageEnded.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode

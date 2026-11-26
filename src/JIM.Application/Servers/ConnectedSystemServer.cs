@@ -10830,6 +10830,9 @@ public partial class ConnectedSystemServer
             // new Synchronisation Rule - create
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedBy);
+            // A rule created now has no accounts it covered before the coverage record began (#2826), so it sends every
+            // attribute it writes to each account it starts covering.
+            syncRule.CoverageRecordedAt = syncRule.Direction == SyncRuleDirection.Export ? DateTime.UtcNow : null;
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             // Detach references to existing entities (capture FK ids, null navs) so the insert adds only the new rows.
             DetachExistingEntityReferences(syncRule);
@@ -11077,6 +11080,9 @@ public partial class ConnectedSystemServer
         {
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedByApiKey);
+            // A rule created now has no accounts it covered before the coverage record began (#2826), so it sends every
+            // attribute it writes to each account it starts covering.
+            syncRule.CoverageRecordedAt = syncRule.Direction == SyncRuleDirection.Export ? DateTime.UtcNow : null;
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             // Detach references to existing entities (capture FK ids, null navs) so the insert adds only the new rows.
             DetachExistingEntityReferences(syncRule);

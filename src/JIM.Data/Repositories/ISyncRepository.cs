@@ -1719,6 +1719,36 @@ public interface ISyncRepository
         IReadOnlyCollection<int> connectedSystemObjectTypeIds);
 
     /// <summary>
+    /// The export rules recorded as covering each of the given Connected System Objects (#2826), read in one statement for a
+    /// page. An object with no row is absent from the answer.
+    /// </summary>
+    Task<Dictionary<Guid, HashSet<int>>> GetExportRuleCoveragesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Records export rule coverage (#2826). A row already held is left as it is.
+    /// </summary>
+    Task AddExportRuleCoveragesAsync(IReadOnlyCollection<ExportRuleCoverage> coverages);
+
+    /// <summary>
+    /// Removes the recorded coverage of the given (Connected System Object, export rule) pairs (#2826).
+    /// </summary>
+    Task DeleteExportRuleCoveragesAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int SyncRuleId)> coverages);
+
+    /// <summary>
+    /// A page of the joined Connected System Objects of one Object Type in one Connected System, in id order after
+    /// <paramref name="afterId"/>, each with the Metaverse Object it is joined to. Read by the export rule coverage
+    /// baseline (#2826).
+    /// </summary>
+    Task<List<(Guid ConnectedSystemObjectId, Guid MetaverseObjectId)>> GetJoinedConnectedSystemObjectPageAsync(
+        int connectedSystemId, int connectedSystemObjectTypeId, Guid afterId, int take);
+
+    /// <summary>
+    /// Records that an export rule's existing coverage has been recorded (#2826), unless it already was. Not a
+    /// configuration change: it records nothing in the rule's change history.
+    /// </summary>
+    Task MarkSyncRuleCoverageRecordedAsync(int syncRuleId, DateTime recordedAt);
+
+    /// <summary>
     /// Gets CSO IDs that have Pending Exports for a Connected System.
     /// Used during import reconciliation to identify which CSOs have outstanding exports.
     /// </summary>
