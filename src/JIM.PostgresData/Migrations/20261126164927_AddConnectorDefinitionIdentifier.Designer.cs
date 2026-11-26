@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261126153515_AddConnectorDefinitionIdentifier")]
+    [Migration("20261126164927_AddConnectorDefinitionIdentifier")]
     partial class AddConnectorDefinitionIdentifier
     {
         /// <inheritdoc />
@@ -5511,6 +5511,22 @@ namespace JIM.PostgresData.Migrations
                         });
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.UnpublishedMetaverseObject", b =>
+                {
+                    b.Property<Guid>("MetaverseObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MetaverseObjectId");
+
+                    b.ToTable("UnpublishedMetaverseObjects");
+                });
+
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
                 {
                     b.Property<int>("AttributesId")
@@ -7204,6 +7220,17 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectTypeAttribute");
 
                     b.Navigation("MetaverseAttribute");
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.UnpublishedMetaverseObject", b =>
+                {
+                    b.HasOne("JIM.Models.Core.MetaverseObject", "MetaverseObject")
+                        .WithMany()
+                        .HasForeignKey("MetaverseObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MetaverseObject");
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
