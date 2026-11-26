@@ -318,9 +318,10 @@ try {
         Assert-Equal -Expected 'Leader' -Actual (Get-DirectoryValue -AccountName $people.Ben.AccountName -AttributeName 'sn') `
             -Message "Ben's other changes were exported"
 
-        # Give title back to the base rule alone, keeping what it exported.
-        $clashMapping = @(Get-JIMSyncRule -Id $addOnRule.id -Mappings) | Where-Object { $_.targetConnectedSystemAttributeId -eq $titleAttribute.id }
-        Remove-JIMSyncRuleMapping -SyncRuleId $addOnRule.id -MappingId $clashMapping.id -KeepContributedValues -Force | Out-Null
+        # Give title back to the base rule alone.
+        $clashMapping = @(Get-JIMSyncRuleMapping -SyncRuleId $addOnRule.id) | Where-Object { $_.targetConnectedSystemAttributeId -eq $titleAttribute.id }
+        if (-not $clashMapping) { throw "The add-on rule's title mapping was not found" }
+        Remove-JIMSyncRuleMapping -SyncRuleId $addOnRule.id -MappingId $clashMapping.id -Force | Out-Null
         $testResults.Steps += @{ Name = "Clash"; Success = $true }
     }
 
