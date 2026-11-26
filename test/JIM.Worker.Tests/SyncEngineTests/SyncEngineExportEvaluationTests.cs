@@ -140,6 +140,65 @@ public class SyncEngineExportEvaluationTests
     }
 
     [Test]
+    public void DecideMvoDeletionExport_AnAddOnRuleSaysDeleteOnAnAccountADisconnectRuleManages_OnlyDisconnects()
+    {
+        // #2826: the rule that manages an account decides what deleting its Metaverse Object does to it. An add-on rule
+        // that only writes attributes never deletes an account another rule manages, whatever its own action says.
+        var managingRule = ExportRule(1, 5, OutboundDeprovisionAction.Disconnect, id: 10);
+        var addOnRule = ExportRule(1, 5, OutboundDeprovisionAction.Delete, id: 11);
+        var cso = Cso();
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, managingRule, DateTime.UtcNow);
+
+        var decision = _engine.DecideMvoDeletionExport(cso, 100, RulesByMvoType(100, managingRule, addOnRule), existingPendingExport: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.False);
+            Assert.That(decision.Reason, Is.EqualTo(MvoDeletionExportReason.MatchingRulesDeclineDeletion));
+            Assert.That(decision.WinningRule, Is.SameAs(managingRule));
+            Assert.That(decision.RulesConflicted, Is.False, "only the managing rule decides, so there is nothing to resolve");
+        }
+    }
+
+    [Test]
+    public void DecideMvoDeletionExport_TheManagingRuleSaysDeleteAndAnAddOnSaysDisconnect_Deletes()
+    {
+        var managingRule = ExportRule(1, 5, OutboundDeprovisionAction.Delete, id: 10);
+        var addOnRule = ExportRule(1, 5, OutboundDeprovisionAction.Disconnect, id: 11);
+        var cso = Cso();
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.ExportMatching, managingRule, DateTime.UtcNow);
+
+        var decision = _engine.DecideMvoDeletionExport(cso, 100, RulesByMvoType(100, addOnRule, managingRule), existingPendingExport: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
+            Assert.That(decision.ExportChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(decision.WinningRule, Is.SameAs(managingRule));
+            Assert.That(decision.RulesConflicted, Is.False);
+        }
+    }
+
+    [Test]
+    public void DecideMvoDeletionExport_TheManagingRuleIsDisabled_AnAddOnRuleStillDoesNotDelete()
+    {
+        // A disabled managing rule is paused, not gone: the account is still its to decide, so an add-on rule's Delete does
+        // not take over. Deleting the Metaverse Object disconnects the account, as it does when no enabled rule matches.
+        var disabledManagingRule = ExportRule(1, 5, OutboundDeprovisionAction.Disconnect, id: 10);
+        var addOnRule = ExportRule(1, 5, OutboundDeprovisionAction.Delete, id: 11);
+        var cso = Cso();
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, disabledManagingRule, DateTime.UtcNow);
+
+        var decision = _engine.DecideMvoDeletionExport(cso, 100, RulesByMvoType(100, addOnRule), existingPendingExport: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.False);
+            Assert.That(decision.Reason, Is.EqualTo(MvoDeletionExportReason.NoMatchingExportRule));
+        }
+    }
+
+    [Test]
     public void DecideMvoDeletionExport_ADisableRuleMatches_StagesADisable()
     {
         var disableRule = ExportRule(1, 5, OutboundDeprovisionAction.Disable);
@@ -477,8 +536,9 @@ public class SyncEngineExportEvaluationTests
         return cso;
     }
 
-    private static SyncRule ExportRule(int connectedSystemId, int csoTypeId, OutboundDeprovisionAction action) => new()
+    private static SyncRule ExportRule(int connectedSystemId, int csoTypeId, OutboundDeprovisionAction action, int id = 0) => new()
     {
+        Id = id,
         Name = $"Export rule ({action})",
         ConnectedSystemId = connectedSystemId,
         ConnectedSystemObjectTypeId = csoTypeId,

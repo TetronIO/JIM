@@ -606,6 +606,49 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_OutboundToggleOfTheManagingRuleWhileOnlyARuleThatDoesNotProvisionCovers_ReportsTheDeleteAsync()
+    {
+        // #2826: a rule that does not provision cannot keep the account the edited rule manages.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rules.Add(new SyncRule
+        {
+            Id = SiblingRuleId, Name = "Manager Attributes", ConnectedSystemId = SystemId, ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId, Direction = SyncRuleDirection.Export, Enabled = true, ProvisionToConnectedSystem = false
+        });
+        var managed = GivenJoinedCso("Engineering");
+        managed.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, _rule, DateTime.UtcNow);
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete });
+
+        Assert.That(deltas.Where(d => d.ConnectedSystemObjectId == managed.Id &&
+                                      d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport), Is.Not.Empty);
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_OutboundToggleOfAnAddOnRuleOnAnAccountAnotherRuleManages_ReportsNothingForItAsync()
+    {
+        // #2826: the edited rule only adds attributes to the account, so its Deprovisioning Action never reaches it, in
+        // scope or out.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        var manager = new SyncRule
+        {
+            Id = SiblingRuleId, Name = "Base Accounts", ConnectedSystemId = SystemId, ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId, Direction = SyncRuleDirection.Export, Enabled = true, ProvisionToConnectedSystem = true
+        };
+        _rules.Add(manager);
+        var leaving = GivenJoinedCso("Engineering");
+        leaving.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, manager, DateTime.UtcNow);
+        var staying = GivenJoinedCso("Sales");
+        staying.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, manager, DateTime.UtcNow);
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete });
+
+        Assert.That(deltas.Where(d => d.ConnectedSystemObjectId == leaving.Id || d.ConnectedSystemObjectId == staying.Id), Is.Empty);
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_OutboundDeleteToDisconnect_ImminentDeletionBecomesDisconnectionAsync()
     {
         GivenExportRule();

@@ -1,6 +1,6 @@
 # Several Export Synchronisation Rules per Connected System Object
 
-- **Status:** Planned
+- **Status:** Doing (layer 1 of 3)
 - **Created:** 2026-11-24
 - **Author:** JayVDZ (drafted via Claude Code)
 - **Issue:** [#2826](https://github.com/TetronIO/JIM/issues/2826)
@@ -35,7 +35,7 @@ The decisions below were made in the design review of 2026-11-24, one topic at a
 ## Non-Goals
 
 - **Precedence between rules writing the same attribute.** A clash stays a reported clash. Ranking the rules per attribute (the export equivalent of Attribute Priority, with null handling) is [#2827](https://github.com/TetronIO/JIM/issues/2827).
-- **Several rules contributing values to one multi-valued attribute** (for example two rules each adding group memberships). This is a clash in this PRD. Combining values with per-value ownership is in scope of #2827, alongside the inbound design in [PRD_MULTI_VALUED_CONTRIBUTION_MODES](PRD_MULTI_VALUED_CONTRIBUTION_MODES.md).
+- **Several rules contributing values to one multi-valued attribute** (for example two rules each adding group memberships). This is a clash in this PRD. Combining values with per-value ownership is in scope of #2827, alongside the inbound design in [PRD_MULTI_VALUED_CONTRIBUTION_MODES](../PRD_MULTI_VALUED_CONTRIBUTION_MODES.md).
 - **Several accounts per Metaverse Object in one Connected System.** A Metaverse Object still holds at most one Connected System Object per Connected System; rules targeting different Connected System Object Types in one system remain the #1331 / #2824 conflict.
 - **Changing what a lone export rule does.** Where only one export rule covers an account, every behaviour is exactly as today.
 
@@ -94,6 +94,7 @@ The decisions below were made in the design review of 2026-11-24, one topic at a
 26. For an account with a managing rule, only the managing rule decides whether the account exists. An add-on rule covering the account never keeps it alive, and its Deprovisioning Action is not used for that account.
 27. When the managing rule stops covering the account, another covering rule takes the account over (#2822) only if it provisions (Provision to Connected System on). Otherwise the account is deprovisioned by the managing rule's Deprovisioning Action, even while add-on rules still cover it.
 28. When the managing rule and add-on rules stop covering an account at the same time, only the managing rule's Deprovisioning Action applies. (Today Delete beats Disconnect between rules; for an account with a managing rule, an add-on's Delete no longer wins.)
+28a. When the account's Metaverse Object is deleted, the same holds: for an account with a managing rule, only the managing rule's Deprovisioning Action applies. (Today the strongest action across every matching rule wins: Delete, then Disable, then Disconnect.) Accounts with no managing rule keep the strongest-action rule.
 29. For an account with no managing rule (joined by an import rule), behaviour is as today: the account is deprovisioned when no export rule covers it, by the actions of the rules it left.
 30. The portal shows, on an export rule that does not provision, that its Deprovisioning Action is not used for accounts another rule manages. The export rule documentation says the same.
 31. Requirement 27 narrows shipped #2822 behaviour, which today lets any covering rule take an account over. The changelog records it as a behaviour change; #2822's own changelog entry describes the provisioning case, which is unchanged.
@@ -192,7 +193,7 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 ## Constraints
 
 - **Upgrade default: Recall its values, for existing and new export rules alike** (decided 2026-11-24). The one existing configuration this changes is a hand-over between two provisioning rules (Scenario 8): attributes only the departing rule wrote are now recalled where today they are left. The changelog records it as a behaviour change, beside the #2822 narrowing, and says how to keep today's behaviour (set the rule to **Leave them in place**). Upgrading in place otherwise keeps working unchanged.
-- **The coverage record starts empty.** It fills as objects are evaluated after the upgrade; an account without a record is treated as never covered, so nothing is recalled from it until a rule has been recorded covering it.
+- **The coverage record starts empty.** For a rule that existed before the upgrade, JIM records the accounts it already covers silently, with no full send (requirement 13) and no recall, until that rule's existing coverage has been recorded once; from then on it behaves as any new rule. Drift Detection with Enforce State on keeps covering those accounts, as it does today. An account without a record is treated as never covered, so nothing is recalled from it.
 - Released migrations are append-only; the new setting and the coverage record arrive in a new migration.
 - No new third-party dependencies.
 - English text is written in British English with Title Case product nouns; every new portal string ships with its en-US, French and German entries per `engineering/LOCALISATION.md`, using the glossary's word for each term. No em dashes in any language.
@@ -234,6 +235,9 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 
 1. **Upgrade default** (2026-11-24): Recall its values for existing rules as well as new ones; see Constraints.
 2. **Import-joined accounts** (2026-11-24): an account joined by an import rule has no managing export rule, and stays as today under E (requirement 29).
+3. **Metaverse Object deletion** (2026-11-26): the managing rule decides there too (requirement 28a).
+4. **First evaluation after upgrade** (2026-11-26): existing rules record the accounts they already cover silently; see Constraints.
+5. **Import Out-of-Scope Action on create** (2026-11-26): added to the create DTO and `New-JIMSyncRule` alongside the export setting, closing an existing parity gap (requirement 36).
 
 ## Acceptance Criteria
 
@@ -254,6 +258,6 @@ The examples share one cast. Corporate AD, Connected System Object Type `user`.
 ## Additional Context
 
 - Design review walkthrough (2026-11-24) and its explainer artefact.
-- [PRD_ATTRIBUTE_VALUE_RECALL_CHOICE](done/PRD_ATTRIBUTE_VALUE_RECALL_CHOICE.md): the inbound Recall/Keep choice this mirrors.
-- [Attribute Priority](../../docs/concepts/attribute-priority.md): the inbound model #2827 will mirror on export.
+- [PRD_ATTRIBUTE_VALUE_RECALL_CHOICE](../done/PRD_ATTRIBUTE_VALUE_RECALL_CHOICE.md): the inbound Recall/Keep choice this mirrors.
+- [Attribute Priority](../../../docs/concepts/attribute-priority.md): the inbound model #2827 will mirror on export.
 - Delivery is planned as three stacked pull requests: E (managing rule decides) at the bottom, then A, B, C and F (combining rules), then D (Out-of-Scope Action and Recall).

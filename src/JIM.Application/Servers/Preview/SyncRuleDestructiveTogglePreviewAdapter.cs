@@ -328,6 +328,11 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                 continue;
             }
 
+            // Another export rule manages the account (#2826): this rule only adds attributes to it, so its Deprovisioning
+            // Action never reaches it, in scope or out.
+            if (SyncEngine.ManagingExportRuleId(cso) is { } managingRuleId && managingRuleId != rule.Id)
+                continue;
+
             ActivityRunProfileExecutionItemSyncOutcomeType transition;
             if (scope.InScope)
             {
@@ -335,12 +340,15 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             }
             else
             {
-                // Another export rule still covers the identity, so it takes the account over and nothing is deprovisioned
-                // (#2822). A sibling whose scope cannot be decided stops the run for the object, which deprovisions nothing
-                // either.
-                if (siblingExportRules.Any(sibling => PreviewScopeAnswer.Decide(() =>
+                // Another export rule keeps the account (#2822): for one this rule manages, only a rule that provisions, by
+                // taking it over (#2826). A sibling whose scope cannot be decided stops the run for the object, which
+                // deprovisions nothing either.
+                var coveringSiblings = siblingExportRules
+                    .Where(sibling => PreviewScopeAnswer.Decide(() =>
                         _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, sibling, asAt, connections)) is var answer &&
-                        (answer.Undecided || answer.InScope)))
+                        (answer.Undecided || answer.InScope))
+                    .ToList();
+                if (SyncEngine.DecideExportScopeExit(rule, cso, coveringSiblings).Outcome != ExportScopeExitOutcome.Deprovision)
                     continue;
 
                 var fateDecision = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, queuedByCsoId.GetValueOrDefault(cso.Id));

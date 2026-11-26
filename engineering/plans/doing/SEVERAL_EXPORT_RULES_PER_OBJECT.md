@@ -1,8 +1,8 @@
 # Several Export Synchronisation Rules per Connected System Object
 
-- **Status:** Planned
+- **Status:** Doing (layer 1 of 3)
 - **Issue:** [#2826](https://github.com/TetronIO/JIM/issues/2826)
-- **PRD:** [PRD_SEVERAL_EXPORT_RULES_PER_OBJECT](../prd/PRD_SEVERAL_EXPORT_RULES_PER_OBJECT.md)
+- **PRD:** [PRD_SEVERAL_EXPORT_RULES_PER_OBJECT](../../prd/doing/PRD_SEVERAL_EXPORT_RULES_PER_OBJECT.md)
 - **Last Updated:** 2026-11-25
 
 ## Overview
@@ -195,8 +195,8 @@ The PRD's acceptance criteria, plus:
 | Stack landed without the native link | Bottom-up landing with the rebase procedure in the root `CLAUDE.md`; layers branch as `claude/fervent-hawking-xly0y5` (layer 1) and `-stack-` names above it |
 | Deleting a managing rule leaves its accounts unmanaged (pre-existing: `JoinSyncRuleId` is nulled and nothing deprovisions) | Unchanged here and stated in the docs; those accounts fall under "no managing rule" |
 
-## Open Decisions
+## Decisions (2026-11-26)
 
-1. **The first evaluation after upgrade.** The coverage record starts empty, so every account an add-on rule already covers looks like a new coverage, and would get a full send. That includes import-joined accounts with a single export rule, the common brownfield case. Recommended: a rule created before the upgrade records its existing coverage silently on first sight (no full send); rules created after it always full-send. Drift Detection with Enforce State on already covers the existing accounts, as it does today. The alternative, a one-off full send, is a catch-up that no-net-change mostly drops, but it costs a full attribute load per account on the first synchronisation after upgrade and re-asserts values once for rules with Enforce State off.
-2. **Metaverse Object deletion** (Phase 1.3) is not in the PRD. It applies decision 5 to the deletion path, where the same Delete-beats-Disconnect problem exists. Recommended: include it, and add it to the PRD as requirement E-28a.
-3. **The import Out-of-Scope Action on create.** `CreateSyncRuleRequest` and `New-JIMSyncRule` lack it today (a parity gap found during research). Phase 3.1 touches the same two places. Recommended: add it there too.
+1. **The first evaluation after upgrade:** a rule that existed before the upgrade records the accounts it already covers silently, with no full send and no recall. Mechanism (Phase 2.3): a nullable `SyncRule.CoverageRecordedAt`, null for every rule in the migration and set at creation for new rules. While it is null, a coverage start is recorded without staging. A one-off baseline task, queued at the first Worker start after the upgrade, evaluates scope for every Metaverse Object of the rule's type, writes the record, and sets the column. From then on the rule behaves as a new one.
+2. **Metaverse Object deletion:** included in layer 1 (Phase 1.3); PRD requirement 28a.
+3. **The import Out-of-Scope Action on create:** added to `CreateSyncRuleRequest` and `New-JIMSyncRule` in Phase 3.1.

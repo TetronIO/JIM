@@ -49,10 +49,17 @@ public partial class SyncEngine
             .Where(r => r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId)
             .ToList();
 
+        // The export rule that manages the account decides what deleting its Metaverse Object does to it (#2826): another rule
+        // covering it only adds attributes, and its Deprovisioning Action does not apply. A managing rule that is disabled is
+        // not among the enabled rules, so nothing decides and the account is only disconnected.
+        if (ManagingExportRuleId(cso) is { } managingRuleId)
+            matchingRules = matchingRules.Where(r => r.Id == managingRuleId).ToList();
+
         if (matchingRules.Count == 0)
             return MvoDeletionExportDecision.DisconnectOnly(MvoDeletionExportReason.NoMatchingExportRule);
 
-        // The strongest action wins a conflict: Delete, then Disable (#2085), then Disconnect (#655).
+        // Where no export rule manages the account, the strongest action wins a conflict: Delete, then Disable (#2085), then
+        // Disconnect (#655).
         var winningRule = matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete)
                           ?? matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Disable);
         if (winningRule == null)
