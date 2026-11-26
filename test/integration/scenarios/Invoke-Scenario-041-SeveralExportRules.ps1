@@ -240,8 +240,9 @@ try {
         Invoke-ExportAndConfirm -Config $config -Label "Joiner"
         Assert-Equal -Expected 'Contractor' -Actual (Get-DirectoryValue -AccountName $people.Ben.AccountName -AttributeName 'employeeType') `
             -Message "Ben's account holds the add-on rule's employeeType"
-        Assert-Equal -Expected $null -Actual (Get-DirectoryValue -AccountName $people.Ana.AccountName -AttributeName 'employeeType') `
-            -Message "Ana's account has no employeeType: the add-on rule does not cover her"
+        $anaEmployeeType = Get-DirectoryValue -AccountName $people.Ana.AccountName -AttributeName 'employeeType'
+        Assert-Condition -Condition ($null -eq $anaEmployeeType) `
+            -Message "Ana's account has no employeeType: the add-on rule does not cover her (found '$anaEmployeeType')"
         $testResults.Steps += @{ Name = "Joiner"; Success = $true }
     }
 
