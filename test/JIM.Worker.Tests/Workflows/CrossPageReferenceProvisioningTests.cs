@@ -36,13 +36,24 @@ namespace JIM.Worker.Tests.Workflows;
 public class CrossPageReferenceProvisioningTests : WorkflowTestBase
 {
     [Test]
-    public async Task FullSync_GroupOnEarlierPageThanItsMembers_KeepsOneUnsentCreateCarryingEveryAttributeAsync()
+    public Task FullSync_GroupOnEarlierPageThanItsMembers_KeepsOneUnsentCreateCarryingEveryAttributeAsync() =>
+        AssertGroupOnEarlierPageKeepsOneUnsentCreateAsync(membersWrittenByAnAddOnRule: false);
+
+    /// <summary>
+    /// The same, with the group's members written by a second export rule that does not provision (#2826): the cross-page
+    /// pass stages its members into the base rule's Create, never a second Pending Export.
+    /// </summary>
+    [Test]
+    public Task FullSync_GroupOnEarlierPageThanItsMembersWrittenByAnAddOnRule_KeepsOneUnsentCreateCarryingEveryAttributeAsync() =>
+        AssertGroupOnEarlierPageKeepsOneUnsentCreateAsync(membersWrittenByAnAddOnRule: true);
+
+    private async Task AssertGroupOnEarlierPageKeepsOneUnsentCreateAsync(bool membersWrittenByAnAddOnRule)
     {
         // Two objects per page: the group and one member on page one, the remaining members on later pages.
         await SetSyncPageSizeAsync(2);
 
         var (source, target, userType, groupType, groupMemberAttr, targetGroupType, targetGroupDisplayNameAttr, targetGroupMemberAttr) =
-            await BuildDirectoriesAsync();
+            await BuildDirectoriesAsync(membersWrittenByAnAddOnRule: membersWrittenByAnAddOnRule);
 
         // --- Source objects. Users are paged before groups; within the group type pages are ordered by Id, two to a
         // page, so Team Alpha (page one) contains Team Beta, which only Alpha's own page has not reached yet. ---
@@ -364,7 +375,7 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
     private async Task<(ConnectedSystem Source, ConnectedSystem Target, ConnectedSystemObjectType UserType, ConnectedSystemObjectType GroupType,
         ConnectedSystemObjectTypeAttribute GroupMemberAttr, ConnectedSystemObjectType TargetGroupType,
         ConnectedSystemObjectTypeAttribute TargetGroupDisplayNameAttr, ConnectedSystemObjectTypeAttribute TargetGroupMemberAttr)> BuildDirectoriesAsync(
-        bool exportUsers = true)
+        bool exportUsers = true, bool membersWrittenByAnAddOnRule = false)
     {
         // --- Source directory: users, and a group whose Member attribute references them ---
         var source = await CreateConnectedSystemAsync("Directory Source");
@@ -424,7 +435,10 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
         }
         var groupExportRule = await CreateExportSyncRuleAsync(target.Id, targetGroupType, mvGroupType, "Group Export");
         groupExportRule.AttributeFlowRules.Add(BuildExportMapping(groupExportRule, targetGroupDisplayNameAttr, mvGroupDisplayNameAttr));
-        groupExportRule.AttributeFlowRules.Add(BuildExportMapping(groupExportRule, targetGroupMemberAttr, mvMemberAttr));
+        var memberRule = groupExportRule;
+        if (membersWrittenByAnAddOnRule)
+            memberRule = await CreateExportSyncRuleAsync(target.Id, targetGroupType, mvGroupType, "Group Members", enableProvisioning: false);
+        memberRule.AttributeFlowRules.Add(BuildExportMapping(memberRule, targetGroupMemberAttr, mvMemberAttr));
         await DbContext.SaveChangesAsync();
 
         return (source, target, userType, groupType, groupMemberAttr, targetGroupType, targetGroupDisplayNameAttr, targetGroupMemberAttr);
