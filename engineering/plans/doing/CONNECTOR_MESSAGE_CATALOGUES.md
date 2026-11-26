@@ -1,8 +1,8 @@
 # Connector Message Catalogues: Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 in progress)
 - **Issue:** [#3103](https://github.com/TetronIO/JIM/issues/3103)
-- **PRD:** [PRD_CONNECTOR_MESSAGE_CATALOGUES.md](../prd/PRD_CONNECTOR_MESSAGE_CATALOGUES.md)
+- **PRD:** [PRD_CONNECTOR_MESSAGE_CATALOGUES.md](../../prd/doing/PRD_CONNECTOR_MESSAGE_CATALOGUES.md)
 
 ## Overview
 
@@ -36,15 +36,15 @@ Make everything a Connector shows an administrator renderable in the reader's la
             write (Worker)                                   read (Web, Worker)
 Connector ──JimMessage──► record: English + DetailJson ──► MessageRenderer
                                                               │
-                                                  MessageCatalogues (registry)
-                                                   ├─ AssemblyResxSource   "JIM.Application:ActivityMessages"
+                                                  MessageCatalogueSources (registry)
+                                                   ├─ AssemblyResxCatalogueSource "JIM.Application:ActivityMessages"
                                                    ├─ ConnectorResxSource  "connector:jim.ldap/Messages"   (Part 1: built-in)
                                                    └─ StoredCatalogueSource "connector:acme.workday/Messages" (Part 2: installed)
                                                               │
                                           template in language → English template → stored English
 ```
 
-- **Catalogue sources.** `IMessageCatalogueSource` in `JIM.Models.Localisation` answers one question: the template for a catalogue, key and language, or none. `MessageCatalogues` holds the registered sources and asks each in turn. `AssemblyResxSource` is today's behaviour, unchanged for every existing catalogue name. Sources are registered at start-up in the Web app and the Worker; the Models default registers `AssemblyResxSource` alone, so tests and tools keep working.
+- **Catalogue sources.** `IMessageCatalogueSource` in `JIM.Models.Localisation` answers one question: the template for a catalogue, key and language, or none. `MessageCatalogueSources` holds the registered sources and asks each in turn. `AssemblyResxCatalogueSource` is today's behaviour, unchanged for every existing catalogue name. Sources are registered at start-up in the Web app and the Worker; the Models default registers `AssemblyResxCatalogueSource` alone, so tests and tools keep working.
 - **Connector identity.** `IConnector` gains `Identifier`, a stable, lower-case, dotted id (`jim.ldap`, `jim.scim`, `jim.sql`, `jim.graph`, `jim.file`), validated by pattern `^[a-z0-9]+(\.[a-z0-9-]+)+$`. The display name stays free to change. `ConnectorDefinition` gains a nullable `Identifier` column (one migration), filled for built-in Connectors when seeding converges (`SeedingServer`), so the portal can go from a Connected System to its Connector's catalogue without loading the Connector.
 - **Catalogue names.** A Connector's catalogue is `connector:<identifier>/Messages`. `ConnectorResxSource` maps a built-in identifier to its embedded `.resx` (`JIM.Connectors/Resources/Ldap/LdapConnectorMessages.resx` and so on), registered by `ConnectorFactory`. The existing `JIM.Connectors:ConnectorMessages` catalogue stays, as the shared catalogue for text common to all Connectors (certificates, TLS, `ServerNoun`); its keys are published and cannot move.
 - **Fallback.** `Render` gains a "could not render" outcome. On a missing catalogue, a missing key, or a template whose placeholders do not fit the arguments (format failure caught, never thrown), `MessageDisplay.Show(detail, english)` shows the stored English. `Show()` with no English (live messages that are never stored) renders the catalogue's English, then the key, as today. Built-in keys are kept from reaching that last step by the typed `nameof(...)` accessors, which fail the build on a mistyped key, and by tests that render every variant of keys composed at run time (the per-recipient-type Exchange keys, for example). `MessageRenderer`'s comment names a `JimMessageConventionTests` that does not exist; Phase 1 corrects it.
@@ -59,7 +59,7 @@ Connector ──JimMessage──► record: English + DetailJson ──► Messa
   | Setting group heading | `SettingGroup_<Group>` |
   | Phase the Connector declares | `Phase_<PhaseKey>` |
 
-  `ConnectorSettingDisplay` and `RunPhaseDisplay` look these up through `MessageCatalogues` by the definition's `Identifier`, falling back to the stored English exactly as today. The 233 `ConnectorSettingText` entries move into the Connectors' catalogues. Phases JIM itself declares stay in `RunPhaseText.resx`.
+  `ConnectorSettingDisplay` and `RunPhaseDisplay` look these up through `MessageCatalogueSources` by the definition's `Identifier`, falling back to the stored English exactly as today. The 233 `ConnectorSettingText` entries move into the Connectors' catalogues. Phases JIM itself declares stay in `RunPhaseText.resx`.
 
 ### What stays the same
 
@@ -71,9 +71,9 @@ Connector ──JimMessage──► record: English + DetailJson ──► Messa
 
 Each phase is test-first, ships its own PR, and leaves the build green.
 
-### Phase 1: Renderer resilience and catalogue sources
+### Phase 1: Renderer resilience and catalogue sources ✅
 
-- `IMessageCatalogueSource`, `MessageCatalogues` registry, `AssemblyResxSource` (today's lookup moved behind it).
+- `IMessageCatalogueSource`, `MessageCatalogueSources` registry (`MessageCatalogues` already names JIM.Models' catalogue constants), `AssemblyResxCatalogueSource` (today's lookup moved behind it).
 - `Render` reports "could not render"; safe formatting (catch `FormatException`).
 - `MessageDisplay.Show(detail, english)` falls back to the stored English on any "could not render".
 - Correct `MessageRenderer`'s comment, which names a test that does not exist.
@@ -96,7 +96,7 @@ Each phase is test-first, ships its own PR, and leaves the build green.
 ### Phase 4: Declared text from Connector catalogues
 
 - Move `ConnectorSettingText` entries into each Connector's catalogue under the conventional keys, French and German included; delete `ConnectorSettingText.resx`.
-- `ConnectorSettingDisplay`, `RunPhaseDisplay` and the Connector description display read through `MessageCatalogues` by identifier.
+- `ConnectorSettingDisplay`, `RunPhaseDisplay` and the Connector description display read through `MessageCatalogueSources` by identifier.
 - `ConnectorSettingDisplayTests` keeps failing the build for a built-in setting with no label, now checking the Connector's catalogue.
 
 ### Phase 5: Convention test and conversion, one Connector per PR
