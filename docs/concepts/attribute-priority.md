@@ -31,7 +31,7 @@ answers:
 - {from: niv, to: left, label: "no: skip it"}
 ```
 
-This is an **inbound** concern. It governs how values flow from Connected Systems into the Metaverse; it does not change how the Metaverse is exported back out.
+This is an **inbound** concern. It governs how values flow from Connected Systems into the Metaverse; it does not change how the Metaverse is exported back out. Where several export Synchronisation Rules write the same attribute of one account, there is no precedence between them: neither exports it (see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects)).
 
 Picking one winner is the **Priority** contribution mode, which every attribute uses unless you choose otherwise. A multi-valued attribute can instead take values from every contributor: **Accumulate** keeps every value it has ever been given (see [Accumulating values from every contributor](#accumulating-values-from-every-contributor)), and **Merge** holds the values its contributors supply now (see [Merging values from every contributor](#merging-values-from-every-contributor)).
 

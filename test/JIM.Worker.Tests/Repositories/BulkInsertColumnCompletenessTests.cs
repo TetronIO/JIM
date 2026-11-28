@@ -244,6 +244,12 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
+    public void ExportRuleCoverageBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ExportRuleCoverage), "ExportRuleCoverages", ExportRuleCoverageBulkColumns.ExportRuleCoverages);
+    }
+
+    [Test]
     public void PendingExportBulkColumns_MatchMappedColumnsExactly()
     {
         AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExport), "PendingExports", PendingExportBulkColumns.PendingExports);

@@ -1474,8 +1474,11 @@ public class SyncPreviewServer
         DriftDetectionResult drift;
         try
         {
+            // Every export rule writing to the account, enforcing or not, so an attribute two of them write is left as the
+            // run leaves it (#2826).
             drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
-                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, connections: context.Cache.Connections);
+                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, connections: context.Cache.Connections,
+                coveringExportRules: [.. context.Cache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules)]);
         }
         catch (ScopingCriterionFailedException scopingEx)
         {
@@ -1527,13 +1530,10 @@ public class SyncPreviewServer
             };
         }));
 
-        // Two or more enforcing rules cover the object (#2820): the run corrects nothing and records the overlap once,
-        // however many of its paths find it.
+        // An attribute several rules covering the object write (#2826): the run leaves it uncorrected, corrects the rest,
+        // and records the overlap once, however many of its paths find it.
         if (drift.RuleOverlap != null)
-        {
             AddExportRuleOverlapError(result, drift.RuleOverlap);
-            return 0;
-        }
 
         if (!drift.HasDrift)
             return 0;
@@ -2904,8 +2904,8 @@ public class SyncPreviewServer
     {
         result.OutboundDecisions = outbound;
 
-        // Two or more export rules cover the object in one Connected System (#2820): the run stages nothing for them and
-        // records the overlap, so the preview reports it and has no entry for those rules to propose.
+        // Two or more export rules covering the object write the same attribute (#2826): the run stages it for neither and
+        // records the clash, so the preview reports it; everything else they write is proposed below.
         foreach (var overlap in outbound.RuleOverlaps)
             AddExportRuleOverlapError(result, overlap);
 
@@ -2938,6 +2938,16 @@ public class SyncPreviewServer
                 // initial values) and for an Update only when there are changes to write.
                 case OutboundPreviewEntryKind.Staging when entry.EffectiveChangeType == PendingExportChangeType.Create
                     || (entry.EffectiveChangeType.HasValue && entry.AttributeChanges.Count > 0):
+                    // Several rules covering one account stage into its one Pending Export (#2826): a later rule's changes
+                    // join the proposal its group's lead made, as the run merges them.
+                    if (result.Outbound.ProposedExports.Find(pe => pe.ConnectedSystemId == entry.ConnectedSystemId &&
+                            pe.SourceMetaverseObjectId == entry.MetaverseObjectId &&
+                            pe.ChangeType is PendingExportChangeType.Create or PendingExportChangeType.Update) is { } groupProposal)
+                    {
+                        groupProposal.AttributeValueChanges.AddRange(entry.AttributeChanges);
+                        break;
+                    }
+
                     result.Outbound.ProposedExports.Add(new PendingExport
                     {
                         ChangeType = entry.EffectiveChangeType!.Value,

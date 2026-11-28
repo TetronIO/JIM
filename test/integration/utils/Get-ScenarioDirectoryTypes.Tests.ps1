@@ -40,6 +40,10 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 32 | Should -Be @('OpenLDAP')
     }
 
+    It 'returns OpenLDAP only for Scenario 041 (Several Export Rules per Account)' {
+        Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 41 | Should -Be @('OpenLDAP')
+    }
+
     It 'restricts Scenario 017 (Initial Password) to Samba AD and the Active Directory lab' {
         Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 17 | Should -Be @('SambaAD', 'ActiveDirectory')
     }

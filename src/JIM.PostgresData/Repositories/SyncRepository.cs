@@ -755,6 +755,132 @@ public partial class SyncRepository : ISyncRepository
         return new MetaverseObjectConnections(metaverseObjectIds, joined, connectedSystemObjectTypeIds);
     }
 
+    public async Task<Dictionary<Guid, HashSet<int>>> GetExportRuleCoveragesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var result = new Dictionary<Guid, HashSet<int>>();
+        if (connectedSystemObjectIds.Count == 0)
+            return result;
+
+        // Per page on the synchronisation hot path, so raw SQL over the composite key's leading column (#2826).
+        const string sql = """
+            SELECT "ConnectedSystemObjectId", "SyncRuleId"
+            FROM "ExportRuleCoverages"
+            WHERE "ConnectedSystemObjectId" = ANY(@ids)
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = connectedSystemObjectIds.ToArray() });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var csoId = reader.GetGuid(0);
+            if (!result.TryGetValue(csoId, out var ruleIds))
+                result[csoId] = ruleIds = [];
+            ruleIds.Add(reader.GetInt32(1));
+        }
+
+        return result;
+    }
+
+    public async Task AddExportRuleCoveragesAsync(IReadOnlyCollection<ExportRuleCoverage> coverages)
+    {
+        if (coverages.Count == 0)
+            return;
+
+        // One statement per page; a row already held (another run recorded it first) is left as it is. The SELECT list
+        // below MUST match ExportRuleCoverageBulkColumns.ExportRuleCoverages, in order.
+        var sql = $"""
+            INSERT INTO "ExportRuleCoverages" ({BulkSqlHelpers.ToQuotedList(ExportRuleCoverageBulkColumns.ExportRuleCoverages)})
+            SELECT cso_id, rule_id, recorded FROM unnest(@csoIds, @ruleIds, @recorded) AS rows(cso_id, rule_id, recorded)
+            ON CONFLICT DO NOTHING
+            """;
+
+        var rows = coverages.ToList();
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = rows.Select(r => r.ConnectedSystemObjectId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("ruleIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = rows.Select(r => r.SyncRuleId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("recorded", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = rows.Select(r => r.Recorded).ToArray() });
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task DeleteExportRuleCoveragesAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int SyncRuleId)> coverages)
+    {
+        if (coverages.Count == 0)
+            return;
+
+        const string sql = """
+            DELETE FROM "ExportRuleCoverages" c
+            USING unnest(@csoIds, @ruleIds) AS gone(cso_id, rule_id)
+            WHERE c."ConnectedSystemObjectId" = gone.cso_id AND c."SyncRuleId" = gone.rule_id
+            """;
+
+        var rows = coverages.ToList();
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = rows.Select(r => r.ConnectedSystemObjectId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("ruleIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = rows.Select(r => r.SyncRuleId).ToArray() });
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<List<(Guid ConnectedSystemObjectId, Guid MetaverseObjectId)>> GetJoinedConnectedSystemObjectPageAsync(
+        int connectedSystemId, int connectedSystemObjectTypeId, Guid afterId, int take)
+    {
+        // Keyset paging over the primary key, so each page costs the same however far the baseline has got.
+        const string sql = """
+            SELECT "Id", "MetaverseObjectId"
+            FROM "ConnectedSystemObjects"
+            WHERE "ConnectedSystemId" = @systemId AND "TypeId" = @typeId AND "MetaverseObjectId" IS NOT NULL AND "Id" > @afterId
+            ORDER BY "Id"
+            LIMIT @take
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("systemId", NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("typeId", NpgsqlDbType.Integer) { Value = connectedSystemObjectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("afterId", NpgsqlDbType.Uuid) { Value = afterId });
+        command.Parameters.Add(new NpgsqlParameter("take", NpgsqlDbType.Integer) { Value = take });
+
+        var page = new List<(Guid, Guid)>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            page.Add((reader.GetGuid(0), reader.GetGuid(1)));
+        return page;
+    }
+
+    public async Task MarkSyncRuleCoverageRecordedAsync(int syncRuleId, DateTime recordedAt)
+    {
+        // A targeted mark, not the rule's write path: no Activity, no change history, and LastUpdated is left alone, since
+        // nothing an administrator configured has changed.
+        await _context.SyncRules
+            .Where(rule => rule.Id == syncRuleId && rule.CoverageRecordedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(rule => rule.CoverageRecordedAt, recordedAt));
+
+        // Bring a tracked copy into line with the row, so a later save on this context does not write the null back.
+        var detectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var entry in _context.ChangeTracker.Entries<SyncRule>().Where(entry => entry.Entity.Id == syncRuleId && entry.Entity.CoverageRecordedAt == null))
+            {
+                var property = entry.Property(rule => rule.CoverageRecordedAt);
+                property.CurrentValue = recordedAt;
+                property.OriginalValue = recordedAt;
+            }
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = detectChanges;
+        }
+    }
+
     public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
         => HideQueued(await _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize));
 

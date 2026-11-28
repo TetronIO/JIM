@@ -201,6 +201,9 @@
   <data name="SaveWarningExportRulesOverlap" xml:space="preserve">
     <value>Die Export-Synchronisierungsregel „{0}“ verwaltet ebenfalls „{1}“-Objekte in „{2}“ für „{3}“. Nur eine Exportregel darf ein Objekt verwalten: Eine Synchronisierung exportiert nichts in dieses verbundene System für ein Objekt, das in den Geltungsbereich beider Regeln fällt, und meldet es als „Exportregeln überschneiden sich“. Geben Sie den Regeln Geltungsbereiche, die sich nie überschneiden, oder fassen Sie sie zu einer Regel zusammen.</value>
   </data>
+  <data name="SaveWarningExportRulesShareAttributes" xml:space="preserve">
+    <value>Die Export-Synchronisierungsregel „{0}“ schreibt ebenfalls {1} in „{2}“-Objekte in „{3}“ für „{4}“. Für ein Objekt, das in den Geltungsbereich beider Regeln fällt, exportiert eine Synchronisierung für ein gemeinsames Attribut den Wert keiner der beiden Regeln und meldet es als „Exportregeln überschneiden sich“; alle anderen Attribute, die jede Regel schreibt, werden weiterhin exportiert. Lassen Sie jedes gemeinsame Attribut nur von einer der Regeln schreiben, oder geben Sie den Regeln Geltungsbereiche, die sich nie überschneiden.</value>
+  </data>
   <data name="SaveWarningExportObjectTypesDiffer" xml:space="preserve">
     <value>Die Export-Synchronisierungsregel „{0}“ provisioniert „{1}“-Objekte in „{2}“ als „{3}“, und diese Regel provisioniert sie als {4}. Jedes kann in „{2}“ nur ein Objekt haben; wo die Geltungsbereiche beider Regeln dasselbe abdecken, provisioniert es daher nur eine Regel, und die andere meldet bei jeder Synchronisierung „Synchronisierung fehlgeschlagen“ dafür. Stellen Sie sicher, dass sich die Geltungsbereiche nie überschneiden.</value>
   </data>

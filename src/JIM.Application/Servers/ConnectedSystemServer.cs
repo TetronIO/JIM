@@ -8298,6 +8298,7 @@ public partial class ConnectedSystemServer
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
         await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
+        await StampSharedExportAttributeWarningsAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -8358,6 +8359,7 @@ public partial class ConnectedSystemServer
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
         await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
+        await StampSharedExportAttributeWarningsAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -8417,6 +8419,7 @@ public partial class ConnectedSystemServer
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
         await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
+        await StampSharedExportAttributeWarningsAsync(mapping);
         // FR 3 (#1750): a full update can disable, retarget or rewrite the mapping, taking away the last contributor
         // of an attribute a derived flow reads. Reported on the mapping, never blocking; read before anything below
         // can flush the change.
@@ -8523,6 +8526,7 @@ public partial class ConnectedSystemServer
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
         await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
+        await StampSharedExportAttributeWarningsAsync(mapping);
         // FR 3 (#1750): disabling the mapping, or rewriting its Expression, can take away the last contributor of an
         // attribute a derived flow reads. Reported on the mapping, never blocking. Read before the Activity below is
         // created: its save would flush this tracked mapping's changes, and "before" must be the stored configuration.
@@ -10647,11 +10651,16 @@ public partial class ConnectedSystemServer
             .OrderBy(other => other.Name, StringComparer.Ordinal)
             .ToList();
 
-        foreach (var other in otherRulesInThisSystem.Where(other => other.ConnectedSystemObjectTypeId == objectTypeId))
-        {
-            syncRule.AddRuleSaveWarning(Msg.Create(nameof(CsText.SaveWarningExportRulesOverlap),
-                other.Name, other.ConnectedSystemObjectTypeName, other.ConnectedSystemName, other.MetaverseObjectTypeName));
-        }
+        // Rules into the same Object Type stage into one account together (#2826); only an attribute both write is a problem,
+        // since neither exports it for an object both have in scope.
+        var writtenHere = syncRule.AttributeFlowRules
+            .Where(mapping => mapping.Enabled)
+            .Select(mapping => mapping.ResolveTargetConnectedSystemAttributeId())
+            .OfType<int>()
+            .ToHashSet();
+        foreach (var warning in await FindExportAttributesSharedWithOtherRulesAsync(
+                     otherRulesInThisSystem.Where(other => other.ConnectedSystemObjectTypeId == objectTypeId).ToList(), writtenHere))
+            syncRule.AddRuleSaveWarning(warning);
 
         var thisObjectTypeName = syncRule.ConnectedSystemObjectType?.Name;
         var thisRuleProvisionsThemAs = thisObjectTypeName != null
@@ -10662,6 +10671,65 @@ public partial class ConnectedSystemServer
             syncRule.AddRuleSaveWarning(Msg.Create(nameof(CsText.SaveWarningExportObjectTypesDiffer),
                 other.Name, other.MetaverseObjectTypeName, other.ConnectedSystemName, other.ConnectedSystemObjectTypeName, thisRuleProvisionsThemAs));
         }
+    }
+
+    /// <summary>
+    /// One warning per rule in <paramref name="sameObjectTypeRules"/> (other enabled export rules into the same Object Type)
+    /// that writes any of <paramref name="attributeIds"/> (#2826), naming the attributes: neither rule exports such an
+    /// attribute for an object both have in scope. A configuration-sized read, a rule at a time.
+    /// </summary>
+    private async Task<List<JimMessage>> FindExportAttributesSharedWithOtherRulesAsync(
+        IReadOnlyCollection<SyncRuleHeader> sameObjectTypeRules, IReadOnlySet<int> attributeIds)
+    {
+        var warnings = new List<JimMessage>();
+        if (attributeIds.Count == 0)
+            return warnings;
+
+        foreach (var other in sameObjectTypeRules)
+        {
+            var otherRule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(other.Id);
+            var shared = (otherRule?.AttributeFlowRules ?? [])
+                .Where(mapping => mapping.Enabled && mapping.ResolveTargetConnectedSystemAttributeId() is { } id && attributeIds.Contains(id))
+                .Select(mapping => mapping.TargetConnectedSystemAttribute?.Name)
+                .OfType<string>()
+                .Distinct()
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+            if (shared.Count > 0)
+            {
+                warnings.Add(Msg.Create(nameof(CsText.SaveWarningExportRulesShareAttributes),
+                    other.Name, string.Join(", ", shared.Select(name => $"'{name}'")), other.ConnectedSystemObjectTypeName,
+                    other.ConnectedSystemName, other.MetaverseObjectTypeName));
+            }
+        }
+
+        return warnings;
+    }
+
+    /// <summary>
+    /// Adds a save warning to a single export mapping (#2826) for each other enabled export rule into the same Object Type that
+    /// writes its target attribute. The single-flow create, update and settings paths; the whole-rule save checks every
+    /// mapping itself.
+    /// </summary>
+    private async Task StampSharedExportAttributeWarningsAsync(SyncRuleMapping mapping)
+    {
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
+        if (!mapping.Enabled || syncRuleId == 0 || mapping.ResolveTargetConnectedSystemAttributeId() is not { } targetId)
+            return;
+
+        var syncRule = mapping.SyncRule ?? await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null || syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
+            return;
+
+        var objectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
+        var sameObjectTypeRules = (await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(
+                syncRule.ResolveMetaverseObjectTypeId(), SyncRuleDirection.Export))
+            .Where(other => other.Enabled && other.Id != syncRule.Id && other.ConnectedSystemId == syncRule.ConnectedSystemId &&
+                            other.ConnectedSystemObjectTypeId == objectTypeId)
+            .OrderBy(other => other.Name, StringComparer.Ordinal)
+            .ToList();
+        foreach (var warning in await FindExportAttributesSharedWithOtherRulesAsync(sameObjectTypeRules, new HashSet<int> { targetId }))
+            mapping.AddSaveWarning(warning);
     }
 
     /// <param name="previewActivityId">
@@ -10830,6 +10898,9 @@ public partial class ConnectedSystemServer
             // new Synchronisation Rule - create
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedBy);
+            // A rule created now has no accounts it covered before the coverage record began (#2826), so it sends every
+            // attribute it writes to each account it starts covering.
+            syncRule.CoverageRecordedAt = syncRule.Direction == SyncRuleDirection.Export ? DateTime.UtcNow : null;
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             // Detach references to existing entities (capture FK ids, null navs) so the insert adds only the new rows.
             DetachExistingEntityReferences(syncRule);
@@ -11077,6 +11148,9 @@ public partial class ConnectedSystemServer
         {
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedByApiKey);
+            // A rule created now has no accounts it covered before the coverage record began (#2826), so it sends every
+            // attribute it writes to each account it starts covering.
+            syncRule.CoverageRecordedAt = syncRule.Direction == SyncRuleDirection.Export ? DateTime.UtcNow : null;
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             // Detach references to existing entities (capture FK ids, null navs) so the insert adds only the new rows.
             DetachExistingEntityReferences(syncRule);

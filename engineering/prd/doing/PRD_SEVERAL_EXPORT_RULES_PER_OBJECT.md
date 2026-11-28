@@ -1,6 +1,6 @@
 # Several Export Synchronisation Rules per Connected System Object
 
-- **Status:** Doing (layer 1 of 3)
+- **Status:** Doing (layer 2 of 3)
 - **Created:** 2026-11-24
 - **Author:** JayVDZ (drafted via Claude Code)
 - **Issue:** [#2826](https://github.com/TetronIO/JIM/issues/2826)

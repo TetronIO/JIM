@@ -193,6 +193,7 @@ internal static class ConnectedSystemObjectDeletionSql
         ConnectedSystemObjectAttributeValue => entry.Property(AttributeValueOwnerKey).CurrentValue is Guid owner && ids.Contains(owner),
         DeferredReference deferredReference => ids.Contains(deferredReference.SourceCsoId),
         GeneratedValueAssignment assignment => assignment.ConnectedSystemObjectId is { } owner && ids.Contains(owner),
+        ExportRuleCoverage coverage => ids.Contains(coverage.ConnectedSystemObjectId),
         _ => false
     };
 

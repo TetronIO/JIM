@@ -207,6 +207,10 @@ Most database upgrades are near-instant; one that rewrites a large table scales 
 !!! warning "If the database upgrade fails"
     The worker logs the full error and JIM stays unready, so the web interface never opens. Fix the cause (usually a permissions problem on the database user) and restart the services. Do not restore a backup unless the upgrade has left the schema in a state you cannot move forwards from.
 
+## :material-sync: After the upgrade: export rule coverage
+
+From v1.0.0 or earlier, the worker records, while idle, which accounts each export Synchronisation Rule already covers. Until then, a rule starting to cover an account sends only changed attributes, not [everything it writes](../configuration/scoping-criteria.md#several-rules-for-the-same-objects).
+
 ## :material-check-decagram-outline: Check it worked {#verifying}
 
 1. **All services are healthy:**

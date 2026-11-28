@@ -82,7 +82,8 @@ public class DriftDetectionService
         AttributePriorityContext? priorityContext = null,
         UniqueValueResolveOptions? generatedValueAssignments = null,
         IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null,
-        MetaverseObjectConnections? connections = null)
+        MetaverseObjectConnections? connections = null,
+        IReadOnlyList<SyncRule>? coveringExportRules = null)
     {
         var result = new DriftDetectionResult();
 
@@ -137,26 +138,16 @@ public class DriftDetectionService
             .Where(rule => _scopingEvaluation.IsMvoInScopeForExportRule(targetMvo, rule, connections: connections))
             .ToList();
 
-        // Several enforcing rules still covering it (#2820): neither may enforce, since only one rule may manage an object.
-        if (applicableExportRules.Count > 1)
-        {
-            var overlap = SyncEngine.FindExportRuleOverlaps(targetMvo, applicableExportRules, _ => cso).FirstOrDefault();
-            if (overlap != null)
-            {
-                Log.Warning("EvaluateDrift: CSO {CsoId} is covered by {RuleCount} export rules with Enforce State in Connected System {SystemId} " +
-                    "({Rules}); only one rule may manage an object, so no drift was corrected.",
-                    cso.Id, overlap.SyncRuleNames.Count, cso.ConnectedSystemId, LogSanitiser.Sanitise(string.Join(", ", overlap.SyncRuleNames)));
-                result.RuleOverlap = overlap;
-                return result;
-            }
-        }
-
         if (applicableExportRules.Count == 0)
         {
             Log.Debug("EvaluateDrift: No applicable export rules with EnforceState=true for CSO {CsoId} in system {SystemId}",
                 cso.Id, cso.ConnectedSystemId);
             return result;
         }
+
+        // Each enforcing rule corrects the attributes it writes (#2826), except one another rule covering the account also
+        // writes, enforcing or not: export staging stages neither rule's value for it, so neither is the state to restore.
+        var clashedAttributeIds = FindClashedAttributes(cso, targetMvo, applicableExportRules, coveringExportRules, connections, result);
 
         Log.Debug("EvaluateDrift: Evaluating {RuleCount} export rules for drift detection on CSO {CsoId}",
             applicableExportRules.Count, cso.Id);
@@ -174,7 +165,8 @@ public class DriftDetectionService
             // drift; and mappings targeting a WritableOnCreate attribute, where re-asserting the value
             // would rewrite the Connected System's identifier for the object. A disabled mapping (#1485) does
             // not run at all, so a diverged value on its target is not drift either.
-            foreach (var mapping in exportRule.AttributeFlowRules.Where(m => m.Enabled && m.FlowsOnUpdateExport()))
+            foreach (var mapping in exportRule.AttributeFlowRules.Where(m => m.Enabled && m.FlowsOnUpdateExport() &&
+                         !(m.TargetConnectedSystemAttribute != null && clashedAttributeIds.Contains(m.TargetConnectedSystemAttribute.Id))))
             {
                 if (mapping.TargetConnectedSystemAttribute == null)
                 {
@@ -308,6 +300,44 @@ public class DriftDetectionService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// The attributes of <paramref name="cso"/> that more than one export rule covering it writes (#2826), reported on
+    /// <paramref name="result"/> as an overlap where an enforcing rule writes one. The covering rules are the enforcing rules
+    /// in scope plus every other enabled export rule into the account's Object Type whose scope takes the object in.
+    /// </summary>
+    private IReadOnlySet<int> FindClashedAttributes(ConnectedSystemObject cso, MetaverseObject mvo, List<SyncRule> enforcingRules,
+        IReadOnlyList<SyncRule>? coveringExportRules, MetaverseObjectConnections? connections, DriftDetectionResult result)
+    {
+        var enforcingRuleIds = enforcingRules.Select(rule => rule.Id).ToHashSet();
+        var otherCoveringRules = (coveringExportRules ?? [])
+            .Where(rule => rule.Enabled && rule.Direction == SyncRuleDirection.Export && !enforcingRuleIds.Contains(rule.Id) &&
+                           rule.ConnectedSystemId == cso.ConnectedSystemId && rule.ConnectedSystemObjectTypeId == cso.TypeId &&
+                           rule.MetaverseObjectTypeId == mvo.Type!.Id)
+            .Where(rule => _scopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, connections: connections));
+        var covering = enforcingRules.Concat(otherCoveringRules).ToList();
+        if (covering.Count < 2)
+            return new HashSet<int>();
+
+        var groups = SyncEngine.PlanExportGroups(covering, _ => cso);
+        var clashed = groups.SelectMany(group => group.ClashedAttributeIds).ToHashSet();
+        var enforcedClash = enforcingRules
+            .SelectMany(rule => rule.AttributeFlowRules)
+            .Any(mapping => mapping.Enabled && mapping.TargetConnectedSystemAttribute != null && clashed.Contains(mapping.TargetConnectedSystemAttribute.Id));
+        if (enforcedClash)
+        {
+            var overlap = SyncEngine.DescribeExportRuleOverlaps(mvo, groups, _ => cso).FirstOrDefault();
+            if (overlap != null)
+            {
+                Log.Warning("EvaluateDrift: CSO {CsoId} in Connected System {SystemId} has attributes several export rules write ({Rules}); " +
+                    "their drift is not corrected, as export staging stages none of their values.",
+                    cso.Id, cso.ConnectedSystemId, LogSanitiser.Sanitise(string.Join(", ", overlap.SyncRuleNames)));
+                result.RuleOverlap = overlap;
+            }
+        }
+
+        return clashed;
     }
 
     /// <summary>
@@ -1325,7 +1355,9 @@ public class DriftDetectionService
         var pendingExports = new List<PendingExport>();
         var corrected = new List<DriftedAttribute>();
 
-        // Group drifted attributes by export rule (one Pending Export per rule)
+        // Every enforcing rule's corrections go in the account's one Pending Export (#2826), each change naming the rule
+        // that staged it; the rules write different attributes, since one two of them write is never corrected.
+        var attributeChanges = new List<PendingExportAttributeValueChange>();
         var attributesByRule = driftedAttributes
             .GroupBy(d => d.ExportRule)
             .ToList();
@@ -1333,20 +1365,18 @@ public class DriftDetectionService
         foreach (var ruleGroup in attributesByRule)
         {
             var exportRule = ruleGroup.Key;
-
-            // Create Pending Export attribute changes
-            var attributeChanges = new List<PendingExportAttributeValueChange>();
+            var ruleChanges = new List<PendingExportAttributeValueChange>();
             var attributes = new List<DriftedAttribute>();
 
             foreach (var (drifted, changes) in ruleGroup
                 .Select(drifted => (Drifted: drifted, Changes: drifted.CorrectiveChanges?.ToList() ?? BuildCorrectiveChanges(drifted, exportRule)))
                 .Where(correction => correction.Changes.Count > 0))
             {
-                attributeChanges.AddRange(changes);
+                ruleChanges.AddRange(changes);
                 attributes.Add(drifted);
             }
 
-            if (attributeChanges.Count == 0)
+            if (ruleChanges.Count == 0)
                 continue;
 
             corrected.AddRange(attributes);
@@ -1356,38 +1386,46 @@ public class DriftDetectionService
             // exactly as ordinary export staging does, or the Connected System refuses the whole modify.
             // Enforce State is on by default, so this is the path most exports to an already-joined object
             // stage through.
-            AddClassMembershipCorrections(exportRule, cso, attributes, attributeChanges);
+            AddClassMembershipCorrections(exportRule, cso, attributes, ruleChanges);
 
-            // Check if any attribute changes have unresolved reference values
-            // This is used to defer exports with reference attributes until the referenced objects have been exported
-            var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
-
-            // Create the Pending Export
-            var pendingExport = new PendingExport
-            {
-                Id = TimeOrderedIds.New(),
-                ConnectedSystemId = cso.ConnectedSystemId,
-                ConnectedSystemObjectId = cso.Id,
-                ChangeType = PendingExportChangeType.Update,
-                Status = PendingExportStatus.Pending,
-                SourceMetaverseObjectId = mvo.Id,
-                AttributeValueChanges = new(attributeChanges),
-                CreatedAt = DateTime.UtcNow,
-                HasUnresolvedReferences = hasUnresolvedReferences
-            };
-
-            if (hasUnresolvedReferences)
-            {
-                Log.Debug("CreateCorrectiveExportsAsync: PendingExport {ExportId} has {Count} unresolved reference(s), will be deferred for resolution",
-                    pendingExport.Id, attributeChanges.Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)));
-            }
-
-            pendingExports.Add(pendingExport);
-
-            Log.Information("CreateCorrectiveExportsAsync: Staged corrective PendingExport {ExportId} for CSO {CsoId} " +
-                "with {AttrCount} attribute corrections via rule '{RuleName}' (deferred for batch save)",
-                pendingExport.Id, cso.Id, attributeChanges.Count, exportRule.Name);
+            // A class two rules' corrections both oblige is added once.
+            attributeChanges.AddRange(ruleChanges.Where(change => change.ChangeType != PendingExportAttributeChangeType.Add ||
+                !attributeChanges.Any(held => held.ChangeType == PendingExportAttributeChangeType.Add && held.AttributeId == change.AttributeId &&
+                                              held.StringValue != null && held.StringValue == change.StringValue)));
         }
+
+        if (attributeChanges.Count == 0)
+            return (pendingExports, corrected);
+
+        // Check if any attribute changes have unresolved reference values
+        // This is used to defer exports with reference attributes until the referenced objects have been exported
+        var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+
+        // Create the Pending Export
+        var pendingExport = new PendingExport
+        {
+            Id = TimeOrderedIds.New(),
+            ConnectedSystemId = cso.ConnectedSystemId,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvo.Id,
+            AttributeValueChanges = new(attributeChanges),
+            CreatedAt = DateTime.UtcNow,
+            HasUnresolvedReferences = hasUnresolvedReferences
+        };
+
+        if (hasUnresolvedReferences)
+        {
+            Log.Debug("CreateCorrectiveExportsAsync: PendingExport {ExportId} has {Count} unresolved reference(s), will be deferred for resolution",
+                pendingExport.Id, attributeChanges.Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)));
+        }
+
+        pendingExports.Add(pendingExport);
+
+        Log.Information("CreateCorrectiveExportsAsync: Staged corrective PendingExport {ExportId} for CSO {CsoId} " +
+            "with {AttrCount} attribute corrections via {RuleCount} rule(s) (deferred for batch save)",
+            pendingExport.Id, cso.Id, attributeChanges.Count, attributesByRule.Count);
 
         return (pendingExports, corrected);
     }

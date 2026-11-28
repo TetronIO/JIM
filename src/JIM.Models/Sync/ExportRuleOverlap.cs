@@ -7,15 +7,17 @@ using JIM.Models.Resources;
 namespace JIM.Models.Sync;
 
 /// <summary>
-/// Records a Metaverse Object that two or more enabled export Synchronisation Rules have in scope for the same Connected
-/// System and Connected System Object Type. Nothing is staged for any of those rules on this object; its other Connected
-/// Systems are unaffected. Surfaced to the administrator as an <c>ExportRuleOverlap</c> Run Profile Execution Item error.
+/// Records a Metaverse Object that two or more enabled export Synchronisation Rules cover in the same Connected System and
+/// Connected System Object Type while writing the same target attribute (#2826). Neither rule stages the contested
+/// attributes for this object; everything else they write is staged into the object's one Pending Export, and its other
+/// Connected Systems are unaffected. Surfaced to the administrator as an <c>ExportRuleOverlap</c> Run Profile Execution Item
+/// error.
 /// </summary>
 /// <remarks>
-/// A Metaverse Object holds one Connected System Object per Connected System, and only one export rule may manage it until
-/// several rules per object are supported (#2826, #2827). Before #2820 each overlapping rule staged its own Pending Export
-/// for the one object; the page's flush then failed on IX_PendingExports_ConnectedSystemObjectId_Unique (the in-memory
-/// repository's equivalent check in tests), losing every object on the page.
+/// A Metaverse Object holds one Connected System Object per Connected System, so every rule covering it there writes to the
+/// same object. Rules that write different attributes share it (#2826); which of several rules wins one attribute is
+/// export precedence, #2827. An overlap with no <see cref="AttributeNames"/> is one #2820 recorded, when any two rules
+/// covering an object were an overlap; it reads as it did then.
 /// </remarks>
 public class ExportRuleOverlap
 {
@@ -40,9 +42,14 @@ public class ExportRuleOverlap
     public required string ObjectTypeName { get; set; }
 
     /// <summary>
-    /// The names of the overlapping export Synchronisation Rules, in the order the run evaluated them.
+    /// The names of the export Synchronisation Rules that write a contested attribute, in the order the run stages them.
     /// </summary>
     public required List<string> SyncRuleNames { get; set; }
+
+    /// <summary>
+    /// The target attributes more than one of the rules writes, which none of them exports for this object.
+    /// </summary>
+    public List<string> AttributeNames { get; set; } = [];
 
     /// <summary>
     /// The Connected System Object the Metaverse Object already holds in that Connected System, or null when it has none
@@ -57,7 +64,10 @@ public class ExportRuleOverlap
     public string DescribeForAdministrator() => Describe().ToEnglish();
 
     /// <summary><see cref="DescribeForAdministrator"/> as a message.</summary>
-    public JimMessage Describe() =>
-        JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExportRuleOverlap), SyncRuleNames.Count, ObjectTypeName, ConnectedSystemName,
+    public JimMessage Describe() => AttributeNames.Count > 0
+        ? JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExportRuleAttributeClash), SyncRuleNames.Count, ObjectTypeName,
+            ConnectedSystemName, string.Join(", ", AttributeNames.Select(name => $"'{name}'")),
+            string.Join(", ", SyncRuleNames.Select(name => $"'{name}'")))
+        : JimMessage.Create(MessageCatalogues.Sync, nameof(SyncMessages.ExportRuleOverlap), SyncRuleNames.Count, ObjectTypeName, ConnectedSystemName,
             string.Join(", ", SyncRuleNames.Select(name => $"'{name}'")));
 }

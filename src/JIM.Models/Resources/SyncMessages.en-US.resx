@@ -38,4 +38,7 @@
   <data name="HistoryFailedAfterPages" xml:space="preserve">
     <value>Failed to record the execution items and change history of the steps after the pages for Connected System '{0}'. Those synchronization changes were saved; their history was not, and the run stopped before saving any further changes.</value>
   </data>
+  <data name="ExportRuleAttributeClash" xml:space="preserve">
+    <value>{0} export Synchronization Rules that target '{1}' in '{2}' all write {3}: {4}. JIM cannot tell which value is right, so none of them exports {3} for this Metaverse Object and the Connected System keeps the value it holds; everything else is exported. Give the attribute to one rule, or give the rules scopes that never overlap.</value>
+  </data>
 </root>

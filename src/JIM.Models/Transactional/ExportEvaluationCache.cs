@@ -71,6 +71,14 @@ public class ExportEvaluationCache
     public HashSet<Guid>? CsoIdsWithPersistedPendingExports { get; set; }
 
     /// <summary>
+    /// Per-page: the export rules recorded as covering each of the page's target Connected System Objects besides the one
+    /// managing it (#2826). Export evaluation compares it with the rules covering each account now, so a rule starting to
+    /// cover one sends every attribute it writes. Null means it has not been loaded, in which case no coverage is compared
+    /// or recorded. Rebuilt each page via RefreshForPageAsync.
+    /// </summary>
+    public Dictionary<Guid, HashSet<int>>? Coverage { get; set; }
+
+    /// <summary>
     /// Page-scoped export-matching candidates: populated by a per-page batch prefetch (one query per
     /// Object Matching Rule per page) so export evaluation can look up an unjoined Connected System
     /// Object without a per-object database round trip. Null means no prefetch has been performed for

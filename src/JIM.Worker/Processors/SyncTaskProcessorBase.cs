@@ -65,6 +65,7 @@ public abstract class SyncTaskProcessorBase
 
     // Cache of export rules for drift detection (filtered to EnforceState = true)
     protected List<SyncRule>? _driftDetectionExportRules;
+    protected List<SyncRule>? _driftCoveringExportRules;
 
     // Per-run attribute priority context (#91): contributors per (Metaverse Object Type, Metaverse Attribute) across
     // all Connected Systems, backing the inline incumbent-comparison gate in the attribute-flow engine. Null until
@@ -185,6 +186,12 @@ public abstract class SyncTaskProcessorBase
 
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
+
+    // The page's changes to the export rule coverage record (#2826), written by the page flush. Coverage of an account the
+    // page is creating is held apart until the flush creates it: a creation cancelled in between takes its coverage with it.
+    private readonly List<ExportRuleCoverage> _exportRuleCoverageStarted = [];
+    private readonly List<ExportRuleCoverage> _provisionedAccountCoverageStarted = [];
+    private readonly List<(Guid ConnectedSystemObjectId, int SyncRuleId)> _exportRuleCoverageEnded = [];
 
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
@@ -4254,6 +4261,15 @@ public abstract class SyncTaskProcessorBase
                 _provisioningCsosToCreate.AddRange(result.ProvisioningCsosToCreate);
             }
 
+            // Collect the coverage record's changes for the page flush (#2826)
+            if (result.CoverageStarted.Count > 0)
+            {
+                var provisioningCsoIds = result.ProvisioningCsosToCreate.Select(cso => cso.Id).ToHashSet();
+                foreach (var coverage in result.CoverageStarted)
+                    (provisioningCsoIds.Contains(coverage.ConnectedSystemObjectId) ? _provisionedAccountCoverageStarted : _exportRuleCoverageStarted).Add(coverage);
+            }
+            _exportRuleCoverageEnded.AddRange(result.CoverageEnded);
+
             // Collect Pending Exports for batch saving at end of page
             if (result.PendingExports.Count > 0)
             {
@@ -5947,7 +5963,8 @@ public abstract class SyncTaskProcessorBase
         if (_provisioningCsosToCreate.Count == 0 && _pendingExportsToCreate.Count == 0 &&
             _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0 &&
             _inScopeEvaluatedCsoIds.Count == 0 && _deprovisionedCsoIdsThisPage.Count == 0 &&
-            _scopeExitQueueingStamps.Count == 0)
+            _scopeExitQueueingStamps.Count == 0 && _exportRuleCoverageStarted.Count == 0 &&
+            _provisionedAccountCoverageStarted.Count == 0 && _exportRuleCoverageEnded.Count == 0)
             return;
 
         // Unique Value Generation (#242, Phase 2 work package H) integrity guard: every marked change
@@ -5974,6 +5991,15 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
 
+        // The coverage of an account the page is creating is written only if the account still is: a Create cancelled against
+        // a persisted Delete removed it from the list, and its coverage goes with it.
+        if (_provisionedAccountCoverageStarted.Count > 0)
+        {
+            var creatingCsoIds = _provisioningCsosToCreate.Select(cso => cso.Id).ToHashSet();
+            _exportRuleCoverageStarted.AddRange(_provisionedAccountCoverageStarted.Where(coverage => creatingCsoIds.Contains(coverage.ConnectedSystemObjectId)));
+            _provisionedAccountCoverageStarted.Clear();
+        }
+
         // Batch create provisioning CSOs first (Pending Exports reference CSOs by ID)
         if (_provisioningCsosToCreate.Count > 0)
         {
@@ -5993,6 +6019,17 @@ public abstract class SyncTaskProcessorBase
                 _snapshotReferenceNames.RecordFound(cso.MetaverseObjectId!.Value, cso.ConnectedSystemId, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
             _snapshotReferenceNames.ForgetMisses();
             _provisioningCsosToCreate.Clear();
+        }
+
+        // The coverage record (#2826), once every account it names exists
+        if (_exportRuleCoverageStarted.Count > 0 || _exportRuleCoverageEnded.Count > 0)
+        {
+            await _syncRepo.AddExportRuleCoveragesAsync(_exportRuleCoverageStarted);
+            await _syncRepo.DeleteExportRuleCoveragesAsync(_exportRuleCoverageEnded);
+            Log.Debug("FlushPendingExportOperationsAsync: Recorded {Started} export rule coverage starts and {Ended} ends",
+                _exportRuleCoverageStarted.Count, _exportRuleCoverageEnded.Count);
+            _exportRuleCoverageStarted.Clear();
+            _exportRuleCoverageEnded.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode
@@ -8778,6 +8815,12 @@ public abstract class SyncTaskProcessorBase
                         sr.ConnectedSystemId == _connectedSystem.Id)
             .ToList();
 
+        // Every enabled export rule into this system, enforcing or not: an attribute two rules covering an account write is
+        // corrected by neither (#2826).
+        _driftCoveringExportRules = currentSystemSyncRules
+            .Where(sr => sr.Enabled && sr.Direction == SyncRuleDirection.Export && sr.ConnectedSystemId == _connectedSystem.Id)
+            .ToList();
+
         Log.Debug("BuildDriftDetectionCache: Built import mapping cache with {ImportMappings} entries from all systems, " +
             "{ExportRules} export rules with EnforceState=true for system {SystemId}",
             _importMappingCache.Count, _driftDetectionExportRules.Count, _connectedSystem.Id);
@@ -9160,7 +9203,8 @@ public abstract class SyncTaskProcessorBase
                 _attributePriorityContext,
                 _uniqueValueResolveOptions,
                 heldReferenceAnswers,
-                connections);
+                connections,
+                _driftCoveringExportRules);
         }
         catch (ScopingCriterionFailedException scopingEx)
         {
@@ -9227,15 +9271,10 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 
-        // Two or more enforcing rules cover the object (#2820): nothing was corrected. Reported once per object and system per run,
-        // since export evaluation reports the same overlap when the object's exports are evaluated.
-        if (result.RuleOverlap != null)
-        {
-            if (_exportRuleOverlapsReported.Add((targetMvo.Id, result.RuleOverlap.ConnectedSystemId)))
-                _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(targetMvo, result.RuleOverlap));
-            span.SetSuccess();
-            return;
-        }
+        // An attribute several rules covering the object write (#2826): left uncorrected, the rest corrected. Reported once per
+        // object and system per run, since export evaluation reports the same overlap when the object's exports are evaluated.
+        if (result.RuleOverlap != null && _exportRuleOverlapsReported.Add((targetMvo.Id, result.RuleOverlap.ConnectedSystemId)))
+            _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(targetMvo, result.RuleOverlap));
 
         if (heldPendingExport != null)
         {

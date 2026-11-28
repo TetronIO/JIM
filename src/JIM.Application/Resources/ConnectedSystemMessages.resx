@@ -253,7 +253,11 @@
   </data>
   <data name="SaveWarningExportRulesOverlap" xml:space="preserve">
     <value>The export Synchronisation Rule '{0}' also manages '{1}' objects in '{2}' for '{3}'. Only one export rule may manage an object: a synchronisation exports nothing to this Connected System for an object both rules have in scope, and reports it as Export Rules Overlap. Give the rules scopes that never overlap, or combine them into one rule.</value>
-    <comment>{0} is the other rule's name; {1} the Connected System Object Type; {2} the Connected System; {3} the Metaverse Object Type. Export Rules Overlap is the name of an outcome shown in Activities.</comment>
+    <comment>{0} is the other rule's name; {1} the Connected System Object Type; {2} the Connected System; {3} the Metaverse Object Type. Export Rules Overlap is the name of an outcome shown in Activities. No longer produced since several export rules may cover one object (#2826; SaveWarningExportRulesShareAttributes replaced it); kept because the REST API publishes message keys.</comment>
+  </data>
+  <data name="SaveWarningExportRulesShareAttributes" xml:space="preserve">
+    <value>The export Synchronisation Rule '{0}' also writes {1} to '{2}' objects in '{3}' for '{4}'. For an object both rules have in scope, a synchronisation exports neither rule's value for a shared attribute, and reports it as Export Rules Overlap; every other attribute each rule writes is still exported. Have only one of the rules write each shared attribute, or give the rules scopes that never overlap.</value>
+    <comment>{0} is the other rule's name; {1} the attributes both rules write (quoted, comma separated); {2} the Connected System Object Type; {3} the Connected System; {4} the Metaverse Object Type. Export Rules Overlap is the name of an outcome shown in Activities.</comment>
   </data>
   <data name="SaveWarningExportObjectTypesDiffer" xml:space="preserve">
     <value>The export Synchronisation Rule '{0}' provisions '{1}' objects to '{2}' as '{3}', and this rule provisions them as {4}. Each can have only one object in '{2}', so where both rules' scopes cover the same one, only one rule provisions it and the other reports Synchronisation Failed for it on every synchronisation. Make sure the scopes never overlap.</value>

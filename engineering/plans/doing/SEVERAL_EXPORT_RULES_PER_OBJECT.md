@@ -1,6 +1,6 @@
 # Several Export Synchronisation Rules per Connected System Object
 
-- **Status:** Doing (layer 1 of 3)
+- **Status:** Doing (layer 2 of 3)
 - **Issue:** [#2826](https://github.com/TetronIO/JIM/issues/2826)
 - **PRD:** [PRD_SEVERAL_EXPORT_RULES_PER_OBJECT](../../prd/doing/PRD_SEVERAL_EXPORT_RULES_PER_OBJECT.md)
 - **Last Updated:** 2026-11-25
@@ -197,6 +197,6 @@ The PRD's acceptance criteria, plus:
 
 ## Decisions (2026-11-26)
 
-1. **The first evaluation after upgrade:** a rule that existed before the upgrade records the accounts it already covers silently, with no full send and no recall. Mechanism (Phase 2.3): a nullable `SyncRule.CoverageRecordedAt`, null for every rule in the migration and set at creation for new rules. While it is null, a coverage start is recorded without staging. A one-off baseline task, queued at the first Worker start after the upgrade, evaluates scope for every Metaverse Object of the rule's type, writes the record, and sets the column. From then on the rule behaves as a new one.
+1. **The first evaluation after upgrade:** a rule that existed before the upgrade records the accounts it already covers silently, with no full send and no recall. Mechanism (Phase 2.3): a nullable `SyncRule.CoverageRecordedAt`, null for every rule in the migration and set at creation for new rules. While it is null, a coverage start is recorded without staging. A one-off baseline task, queued at the first Worker start after the upgrade, evaluates scope for every Metaverse Object of the rule's type, writes the record, and sets the column. From then on the rule behaves as a new one. **As built (layer 2):** not a queued Worker Task but an idle-time step, `Worker.PerformExportRuleCoverageBaselineAsync`, a page of 500 joined accounts of the rule's Object Type per idle tick (keyset over the Connected System Object id, cursor in memory; a restart repeats harmlessly). It runs only while no task runs, so no synchronisation overlaps a page, and it needed no new task type, Activity type or migration discriminator. It records nothing in the rule's change history.
 2. **Metaverse Object deletion:** included in layer 1 (Phase 1.3); PRD requirement 28a.
 3. **The import Out-of-Scope Action on create:** added to `CreateSyncRuleRequest` and `New-JIMSyncRule` in Phase 3.1.

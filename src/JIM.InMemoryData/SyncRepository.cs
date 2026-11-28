@@ -2896,6 +2896,57 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(new MetaverseObjectConnections(mvoIds, joined, typeIds));
     }
 
+    private readonly Dictionary<(Guid ConnectedSystemObjectId, int SyncRuleId), ExportRuleCoverage> _exportRuleCoverages = [];
+
+    /// <summary>
+    /// The export rule coverage the store holds (#2826), for test assertions.
+    /// </summary>
+    public IReadOnlyCollection<ExportRuleCoverage> ExportRuleCoverages => _exportRuleCoverages.Values;
+
+    public Task<Dictionary<Guid, HashSet<int>>> GetExportRuleCoveragesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var ids = connectedSystemObjectIds.ToHashSet();
+        var result = _exportRuleCoverages.Keys
+            .Where(key => ids.Contains(key.ConnectedSystemObjectId) && _csos.ContainsKey(key.ConnectedSystemObjectId))
+            .GroupBy(key => key.ConnectedSystemObjectId)
+            .ToDictionary(group => group.Key, group => group.Select(key => key.SyncRuleId).ToHashSet());
+        return Task.FromResult(result);
+    }
+
+    public Task AddExportRuleCoveragesAsync(IReadOnlyCollection<ExportRuleCoverage> coverages)
+    {
+        foreach (var coverage in coverages)
+            _exportRuleCoverages.TryAdd((coverage.ConnectedSystemObjectId, coverage.SyncRuleId), coverage);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteExportRuleCoveragesAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int SyncRuleId)> coverages)
+    {
+        foreach (var coverage in coverages)
+            _exportRuleCoverages.Remove(coverage);
+        return Task.CompletedTask;
+    }
+
+    public Task<List<(Guid ConnectedSystemObjectId, Guid MetaverseObjectId)>> GetJoinedConnectedSystemObjectPageAsync(
+        int connectedSystemId, int connectedSystemObjectTypeId, Guid afterId, int take)
+    {
+        var page = _csos.Values
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId && cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId.HasValue && cso.Id.CompareTo(afterId) > 0)
+            .OrderBy(cso => cso.Id)
+            .Take(take)
+            .Select(cso => (cso.Id, cso.MetaverseObjectId!.Value))
+            .ToList();
+        return Task.FromResult(page);
+    }
+
+    public Task MarkSyncRuleCoverageRecordedAsync(int syncRuleId, DateTime recordedAt)
+    {
+        if (_syncRules.TryGetValue(syncRuleId, out var rule) && rule.CoverageRecordedAt == null)
+            rule.CoverageRecordedAt = recordedAt;
+        return Task.CompletedTask;
+    }
+
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
         var result = new HashSet<Guid>();

@@ -172,6 +172,7 @@ public class ExportEvaluationServer
             cache.CsoAttributeValues = Array.Empty<ConnectedSystemObjectAttributeValue>()
                 .ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId));
             cache.CsoIdsWithPersistedPendingExports = [];
+            cache.Coverage = [];
             return;
         }
 
@@ -204,9 +205,11 @@ public class ExportEvaluationServer
             cache.CsoAttributeValues = csoAttributeValues
                 .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
             cache.CsoIdsWithPersistedPendingExports = await SyncRepo.GetConnectedSystemObjectIdsWithPendingExportsAsync(targetCsoIds);
+            cache.Coverage = await SyncRepo.GetExportRuleCoveragesAsync(targetCsoIds);
         }
         else
         {
+            cache.Coverage = [];
             cache.CsoAttributeValues = Array.Empty<ConnectedSystemObjectAttributeValue>()
                 .ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId));
             cache.CsoIdsWithPersistedPendingExports = [];
@@ -607,15 +610,17 @@ public class ExportEvaluationServer
             }
         }
 
-        // Two or more rules covering the object in one Connected System and Object Type would each stage a Pending Export
-        // for its one Connected System Object, and the page could not be saved (#2820). Hold every such rule back for this
-        // object and report it; the object's other systems carry on.
-        var overlaps = SyncEngine.FindExportRuleOverlaps(mvo, inScopeExportRules,
+        // The rules covering the object in one Connected System and Object Type share the one Connected System Object it holds
+        // there, so they stage into its one Pending Export together (#2826): the rule that manages the account, or would create
+        // it, first, so every other rule's changes join its Create. An attribute two of them write is staged by neither and
+        // reported; everything else they write still goes.
+        var groups = SyncEngine.PlanExportGroups(inScopeExportRules,
+            connectedSystemId => cache.CsoLookup.TryGetValue((mvo.Id, connectedSystemId), out var cso) ? cso : null);
+        var overlaps = SyncEngine.DescribeExportRuleOverlaps(mvo, groups,
             connectedSystemId => cache.CsoLookup.TryGetValue((mvo.Id, connectedSystemId), out var cso) ? cso : null);
         foreach (var overlap in overlaps)
             LogExportRuleOverlap(overlap);
         result.RuleOverlaps.AddRange(overlaps);
-        var standaloneExportRules = SyncEngine.StandaloneExportRules(inScopeExportRules);
 
         // An account whose managing rule no longer covers the object, with no provisioning rule to take it over, is being
         // deprovisioned by that rule (#2826): the add-on rules still covering the object stage nothing for it, and it is not
@@ -623,78 +628,292 @@ public class ExportEvaluationServer
         foreach (var leavingAccount in inScopeExportRules
             .Select(rule => cache.CsoLookup.TryGetValue((mvo.Id, rule.ConnectedSystemId), out var account) ? account : null)
             .Where(account => SyncEngine.IsLeavingWithItsManagingRule(account, exportRules, inScopeExportRules))
-            .Distinct())
+            .Distinct()
+            .ToList())
         {
             Log.Debug("EvaluateExportRulesWithNoNetChangeDetectionAsync: CSO {CsoId} is leaving with the export rule that manages it, " +
                 "so the other rules covering MVO {MvoId} stage nothing for it.", leavingAccount!.Id, mvo.Id);
             result.InScopeJoinedCsoIds.Remove(leavingAccount.Id);
-            standaloneExportRules.RemoveAll(rule => rule.ConnectedSystemId == leavingAccount.ConnectedSystemId &&
-                                                    rule.ConnectedSystemObjectTypeId == leavingAccount.TypeId);
+            groups.RemoveAll(group => group.ConnectedSystemId == leavingAccount.ConnectedSystemId &&
+                                      group.ConnectedSystemObjectTypeId == leavingAccount.TypeId);
         }
 
         // An account the rule now covering the object did not provision is taken over when the rule that managed it no
         // longer covers the object (#2822): its join is re-pointed, and the covering rule's Attribute Flows stage below as
-        // for any account it manages. Not on a recall, which asserts nothing about who manages an object.
+        // for any account it manages. Only each group's lead can take it over: the first rule there that provisions, since
+        // the managing rule has left. Not on a recall, which asserts nothing about who manages an object.
         if (!recallSemantics)
-            await AdoptHandedOverObjectsAsync(mvo, cache, exportRules, inScopeExportRules, standaloneExportRules, result);
+            await AdoptHandedOverObjectsAsync(mvo, cache, exportRules, inScopeExportRules, groups.Select(group => group.OrderedRules[0]).ToList(), result);
 
-        foreach (var exportRule in standaloneExportRules)
+        // Which rules cover each of the object's accounts besides the one managing it (#2826): a rule starting to cover one
+        // sends every attribute it writes, once. Not on a recall, and not where the page did not load the record (a caller
+        // outside synchronisation), since a start can only be told from a steady state by reading it.
+        var fullSends = recallSemantics || cache.Coverage == null
+            ? null
+            : RecordExportRuleCoverage(mvo, cache, exportRules, groups, result);
+
+        foreach (var group in groups)
         {
-            // Flatten the pre-resolved reference values for this rule's target system (reference recall, #908).
-            IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedForSystem = null;
-            if (preResolvedReferences != null)
+            // The Pending Export this group has staged so far in this evaluation, so the next rule's changes merge into it.
+            PendingExport? groupPendingExport = null;
+
+            foreach (var exportRule in group.OrderedRules)
             {
-                var forSystem = new Dictionary<Guid, ResolvedRecallReference>();
-                foreach (var (referencedMvoId, resolvedReference) in preResolvedReferences
-                    .Select(kvp => (kvp.Key, Value: kvp.Value.TryGetValue(exportRule.ConnectedSystemId, out var value) ? value : null))
-                    .Where(pair => pair.Value != null))
+                // Flatten the pre-resolved reference values for this rule's target system (reference recall, #908).
+                IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedForSystem = null;
+                if (preResolvedReferences != null)
                 {
-                    forSystem[referencedMvoId] = resolvedReference!;
-                }
-                preResolvedForSystem = forSystem;
-            }
-
-            // Find or create the Pending Export using cached CSO lookup, with no-net-change detection
-            using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateOrUpdatePendingExport")
-                .SetTag("ruleName", exportRule.Name ?? "unnamed")
-                .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
-            {
-                var (pendingExport, mergedExistingPendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
-                    mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
-                    mvAttributeDictionary, preResolvedForSystem, recallSemantics, result.AttributeFlowErrors,
-                    result.ObjectTypeConflicts, result.Withdrawals, result.ProvisioningMatchErrors);
-
-                result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
-
-                if (pendingExport != null)
-                {
-                    result.PendingExports.Add(pendingExport);
+                    var forSystem = new Dictionary<Guid, ResolvedRecallReference>();
+                    foreach (var (referencedMvoId, resolvedReference) in preResolvedReferences
+                        .Select(kvp => (kvp.Key, Value: kvp.Value.TryGetValue(exportRule.ConnectedSystemId, out var value) ? value : null))
+                        .Where(pair => pair.Value != null))
+                    {
+                        forSystem[referencedMvoId] = resolvedReference!;
+                    }
+                    preResolvedForSystem = forSystem;
                 }
 
-                // Merged into an already-staged Pending Export (#242): never added to PendingExports (it
-                // already belongs to the caller's batch and must not be queued a second time), but still
-                // reported so a generated export mapping's change merged into it gets resolved.
-                if (mergedExistingPendingExport != null)
+                // Find or create the Pending Export using cached CSO lookup, with no-net-change detection
+                using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateOrUpdatePendingExport")
+                    .SetTag("ruleName", exportRule.Name ?? "unnamed")
+                    .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
                 {
-                    result.MergedExistingPendingExports.Add(mergedExistingPendingExport);
-                }
+                    var (pendingExport, mergedExistingPendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
+                        mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
+                        mvAttributeDictionary, preResolvedForSystem, recallSemantics, result.AttributeFlowErrors,
+                        result.ObjectTypeConflicts, result.Withdrawals, result.ProvisioningMatchErrors,
+                        groupPendingExport, group.ClashedAttributeIds,
+                        stageEveryMapping: fullSends != null &&
+                            cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var coveredAccount) &&
+                            fullSends.Contains((coveredAccount.Id, exportRule.Id)));
 
-                // Collect provisioning CSOs for batch creation when deferSave is true, recording
-                // which export Synchronisation Rule caused each provisioning so the worker can
-                // attribute the Provisioned sync outcome to it (#1085).
-                if (provisioningCso != null)
-                {
-                    result.ProvisioningCsosToCreate.Add(provisioningCso);
-                    result.ProvisioningSyncRulesByCsoId[provisioningCso.Id] = exportRule;
+                    result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
+
+                    if (pendingExport != null)
+                    {
+                        result.PendingExports.Add(pendingExport);
+                        groupPendingExport = pendingExport;
+                    }
+
+                    // Merged into an already-staged Pending Export (#242): never added to PendingExports (it
+                    // already belongs to the caller's batch and must not be queued a second time), but still
+                    // reported so a generated export mapping's change merged into it gets resolved. One this group
+                    // staged in this evaluation is already in PendingExports, and one merged into twice is reported once.
+                    if (mergedExistingPendingExport != null)
+                    {
+                        if (!result.PendingExports.Contains(mergedExistingPendingExport) &&
+                            !result.MergedExistingPendingExports.Contains(mergedExistingPendingExport))
+                            result.MergedExistingPendingExports.Add(mergedExistingPendingExport);
+                        groupPendingExport ??= mergedExistingPendingExport;
+                    }
+
+                    // Collect provisioning CSOs for batch creation when deferSave is true, recording
+                    // which export Synchronisation Rule caused each provisioning so the worker can
+                    // attribute the Provisioned sync outcome to it (#1085).
+                    if (provisioningCso != null)
+                    {
+                        result.ProvisioningCsosToCreate.Add(provisioningCso);
+                        result.ProvisioningSyncRulesByCsoId[provisioningCso.Id] = exportRule;
+                    }
                 }
             }
         }
+
+        // An account created in this evaluation is covered by every rule of its group except the one creating it, whose
+        // changes all join the Create, so nothing needs sending later.
+        if (fullSends != null)
+            RecordProvisionedAccountsCoverage(groups, result);
 
         loopSpan.SetTag("skippedDueToScope", skippedDueToScope);
         loopSpan.SetTag("pendingExportsCreated", result.PendingExports.Count);
         loopSpan.SetSuccess();
 
         return result;
+    }
+
+    /// <summary>
+    /// Compares, for each account the Metaverse Object holds in a system its export rules target, the rules now covering it
+    /// besides the one managing it against the page's coverage record (#2826), and records what started and ended on
+    /// <paramref name="result"/> for the page flush to write. Returns the (account, rule) pairs that must send every attribute
+    /// they write: a rule starting to cover an account it has never written to, where the rule was created since the record
+    /// began. A rule from before then records the coverage without sending, since it cannot tell a new account from one it
+    /// has always covered.
+    /// </summary>
+    /// <remarks>
+    /// An account joined by an import rule has no managing export rule, so every export rule covering it is recorded. A
+    /// disabled rule is not among <paramref name="exportRules"/>, so its record is left alone: switching a rule off pauses it.
+    /// An account whose managing rule is deprovisioning it has no group left, so every recorded rule ends.
+    /// </remarks>
+    private static HashSet<(Guid ConnectedSystemObjectId, int SyncRuleId)> RecordExportRuleCoverage(MetaverseObject mvo,
+        ExportEvaluationCache cache, IReadOnlyList<SyncRule> exportRules, IReadOnlyList<ExportGroupPlan> groups, ExportEvaluationResult result)
+    {
+        var fullSends = new HashSet<(Guid ConnectedSystemObjectId, int SyncRuleId)>();
+        var recordedAt = DateTime.UtcNow;
+        var accounts = exportRules
+            .Select(rule => rule.ConnectedSystemId)
+            .Distinct()
+            .Select(systemId => cache.CsoLookup.TryGetValue((mvo.Id, systemId), out var account) ? account : null)
+            .OfType<ConnectedSystemObject>();
+
+        foreach (var account in accounts)
+        {
+            var ruleIdsForAccount = exportRules
+                .Where(rule => rule.ConnectedSystemId == account.ConnectedSystemId && rule.ConnectedSystemObjectTypeId == account.TypeId)
+                .Select(rule => rule.Id)
+                .ToHashSet();
+            if (ruleIdsForAccount.Count == 0)
+                continue;
+
+            var group = groups.FirstOrDefault(g => g.ConnectedSystemId == account.ConnectedSystemId && g.ConnectedSystemObjectTypeId == account.TypeId);
+            var managingRuleId = SyncEngine.ManagingExportRuleId(account);
+            var covering = group?.OrderedRules.Where(rule => rule.Id != managingRuleId).ToList() ?? [];
+            var recorded = cache.Coverage!.TryGetValue(account.Id, out var held) ? held : [];
+
+            foreach (var rule in covering.Where(rule => !recorded.Contains(rule.Id)))
+            {
+                result.CoverageStarted.Add(new ExportRuleCoverage { ConnectedSystemObjectId = account.Id, SyncRuleId = rule.Id, Recorded = recordedAt });
+                if (rule.CoverageRecordedAt != null && account.Status == ConnectedSystemObjectStatus.Normal)
+                    fullSends.Add((account.Id, rule.Id));
+            }
+
+            // A rule that has just taken the account over (#2822) and was not covering it before has never written to it, so it
+            // sends everything too; one that was covering it already has, and its row ends below as it now manages the account.
+            var takenOverBy = group?.OrderedRules.FirstOrDefault(rule => rule.Id == managingRuleId &&
+                result.HandOvers.Any(handOver => handOver.ConnectedSystemObjectId == account.Id));
+            if (takenOverBy != null && !recorded.Contains(takenOverBy.Id) && takenOverBy.CoverageRecordedAt != null &&
+                account.Status == ConnectedSystemObjectStatus.Normal)
+                fullSends.Add((account.Id, takenOverBy.Id));
+
+            result.CoverageEnded.AddRange(recorded
+                .Where(ruleId => ruleIdsForAccount.Contains(ruleId) && covering.All(rule => rule.Id != ruleId))
+                .Select(ruleId => (account.Id, ruleId)));
+        }
+
+        return fullSends;
+    }
+
+    /// <summary>
+    /// Takes one step of the export rule coverage baseline (#2826): for the first enabled export rule whose existing coverage
+    /// has not been recorded, records, for one page of the joined accounts in its Object Type, which are in its scope and
+    /// managed by another rule (or by none, having been joined on import); and once the last page is done, marks the rule
+    /// recorded, from when on an account it starts covering is sent everything it writes. Returns false when no rule is
+    /// waiting, so there was nothing to do.
+    /// </summary>
+    /// <remarks>
+    /// A rule that existed before the coverage record cannot tell an account it has always covered from one it starts to
+    /// cover, so until this has run for it, coverage it starts is recorded without a full send. The Worker runs it while idle,
+    /// a page per tick, so no synchronisation overlaps a page; one that runs between pages records the rule's coverage the
+    /// same way, silently, since the rule is not yet marked. Recording a coverage already held changes nothing, so a page
+    /// repeated after a restart is harmless.
+    /// </remarks>
+    public async Task<bool> AdvanceExportRuleCoverageBaselineAsync(ExportRuleCoverageBaselineCursor cursor, int pageSize)
+    {
+        var allSyncRules = await SyncRepo.GetAllSyncRulesAsync();
+        var awaiting = allSyncRules
+            .Where(rule => rule.Enabled && rule.Direction == SyncRuleDirection.Export && rule.CoverageRecordedAt == null)
+            .OrderBy(rule => rule.Id)
+            .ToList();
+        if (awaiting.Count == 0)
+        {
+            cursor.SyncRuleId = null;
+            return false;
+        }
+
+        var rule = awaiting.FirstOrDefault(candidate => candidate.Id == cursor.SyncRuleId) ?? awaiting[0];
+        if (rule.Id != cursor.SyncRuleId)
+        {
+            cursor.SyncRuleId = rule.Id;
+            cursor.AfterConnectedSystemObjectId = Guid.Empty;
+            Log.Information("AdvanceExportRuleCoverageBaselineAsync: Recording the accounts export rule {RuleName} already covers", LogSanitiser.Sanitise(rule.Name));
+        }
+
+        var page = await SyncRepo.GetJoinedConnectedSystemObjectPageAsync(rule.ConnectedSystemId, rule.ConnectedSystemObjectTypeId,
+            cursor.AfterConnectedSystemObjectId, pageSize);
+        if (page.Count > 0)
+        {
+            var coverages = await FindExistingCoverageAsync(rule, allSyncRules, page);
+            await SyncRepo.AddExportRuleCoveragesAsync(coverages);
+            cursor.AfterConnectedSystemObjectId = page[^1].ConnectedSystemObjectId;
+            Log.Debug("AdvanceExportRuleCoverageBaselineAsync: Export rule {RuleName} covers {Covered} of {Accounts} accounts on this page",
+                LogSanitiser.Sanitise(rule.Name), coverages.Count, page.Count);
+        }
+
+        if (page.Count < pageSize)
+        {
+            await SyncRepo.MarkSyncRuleCoverageRecordedAsync(rule.Id, DateTime.UtcNow);
+            cursor.SyncRuleId = null;
+            Log.Information("AdvanceExportRuleCoverageBaselineAsync: Recorded the accounts export rule {RuleName} covers; an account it starts " +
+                "covering from now on is sent every attribute it writes", LogSanitiser.Sanitise(rule.Name));
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The coverage <paramref name="rule"/> already has among one page of accounts in its Object Type (#2826): each account
+    /// whose Metaverse Object is in its scope and which another rule manages, or none does.
+    /// </summary>
+    private async Task<List<ExportRuleCoverage>> FindExistingCoverageAsync(SyncRule rule, List<SyncRule> allSyncRules,
+        List<(Guid ConnectedSystemObjectId, Guid MetaverseObjectId)> page)
+    {
+        var mvoIds = page.Select(entry => entry.MetaverseObjectId).Distinct().ToList();
+        var mvos = await SyncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(mvoIds);
+        var cache = await BuildExportEvaluationCacheAsync(allSyncRules);
+        await RefreshExportEvaluationCacheForPageAsync(cache, mvoIds);
+
+        var accountIds = page.Select(entry => entry.ConnectedSystemObjectId).ToHashSet();
+        var recordedAt = DateTime.UtcNow;
+        var coverages = new List<ExportRuleCoverage>();
+        var candidates = mvos
+            .Where(mvo => mvo.Type?.Id == rule.MetaverseObjectTypeId)
+            .Select(mvo => (Mvo: mvo, Account: cache.CsoLookup.TryGetValue((mvo.Id, rule.ConnectedSystemId), out var account) ? account : null))
+            .Where(candidate => candidate.Account != null && accountIds.Contains(candidate.Account.Id) &&
+                                SyncEngine.ManagingExportRuleId(candidate.Account) != rule.Id)
+            .Select(candidate => (candidate.Mvo, Account: candidate.Account!));
+        foreach (var (mvo, account) in candidates)
+        {
+            bool inScope;
+            try
+            {
+                inScope = IsMvoInScopeForExportRule(mvo, rule, cache.Connections);
+            }
+            catch (ScopingCriterionFailedException ex)
+            {
+                // Left unrecorded, the account is read as never covered, so the rule's next evaluation of it records the
+                // coverage and sends what it writes: what any rule does on starting to cover an account.
+                Log.Warning("AdvanceExportRuleCoverageBaselineAsync: Could not decide whether Metaverse Object {MvoId} is in the scope of " +
+                    "export rule {RuleName}, so its coverage is not recorded: {Message}", mvo.Id, LogSanitiser.Sanitise(rule.Name), ex.Message);
+                continue;
+            }
+
+            if (inScope)
+                coverages.Add(new ExportRuleCoverage { ConnectedSystemObjectId = account.Id, SyncRuleId = rule.Id, Recorded = recordedAt });
+        }
+
+        return coverages;
+    }
+
+    /// <summary>
+    /// Records the coverage of each account this evaluation is creating (#2826): every rule of its group but the one creating
+    /// it. The page flush writes these once the accounts themselves exist.
+    /// </summary>
+    private static void RecordProvisionedAccountsCoverage(IReadOnlyList<ExportGroupPlan> groups, ExportEvaluationResult result)
+    {
+        var recordedAt = DateTime.UtcNow;
+        var provisionedAccounts = result.ProvisioningCsosToCreate
+            .Select(account => (Account: account, Group: groups.FirstOrDefault(g => g.ConnectedSystemId == account.ConnectedSystemId &&
+                                                                                   g.ConnectedSystemObjectTypeId == account.TypeId)))
+            .Where(provisioned => provisioned.Group != null)
+            .Select(provisioned => (provisioned.Account, Group: provisioned.Group!))
+            .ToList();
+        foreach (var (account, group) in provisionedAccounts)
+        {
+            var creatingRuleId = SyncEngine.ManagingExportRuleId(account)
+                ?? (result.ProvisioningSyncRulesByCsoId.TryGetValue(account.Id, out var creatingRule) ? creatingRule.Id : (int?)null);
+            result.CoverageStarted.AddRange(group.OrderedRules
+                .Where(rule => rule.Id != creatingRuleId)
+                .Select(rule => new ExportRuleCoverage { ConnectedSystemObjectId = account.Id, SyncRuleId = rule.Id, Recorded = recordedAt }));
+        }
     }
 
     /// <summary>
@@ -2719,7 +2938,9 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// The in-scope export rules that may stage for the Metaverse Object, for the overloads with no channel to a Run Profile
-    /// Execution Item: overlapping rules (#2820) are logged and held back, exactly as the cached evaluation holds them back.
+    /// Execution Item, which only tests call: a rule sharing its account with another is logged and held back, as #2820 held
+    /// every such rule back. Several rules stage into one account together only through
+    /// <see cref="EvaluateExportRulesWithNoNetChangeDetectionAsync"/> (#2826), the path every run and preview takes.
     /// </summary>
     private static List<SyncRule> StandaloneExportRulesLoggingOverlaps(MetaverseObject mvo, List<SyncRule> inScopeExportRules)
     {
@@ -2789,24 +3010,36 @@ public class ExportEvaluationServer
         List<AttributeFlowError>? flowErrors = null,
         List<ExportObjectTypeConflict>? objectTypeConflicts = null,
         List<PendingExportChangesWithdrawal>? withdrawals = null,
-        List<ProvisioningMatchError>? provisioningMatchErrors = null)
+        List<ProvisioningMatchError>? provisioningMatchErrors = null,
+        PendingExport? groupPendingExport = null,
+        IReadOnlySet<int>? clashedAttributeIds = null,
+        bool stageEveryMapping = false)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
         cache.CsoLookup.TryGetValue(lookupKey, out var existingCso);
 
+        // The Pending Export another rule covering the same account staged earlier in this evaluation (#2826): this rule's
+        // changes merge into it rather than staging a second one for the same Connected System Object.
+        var groupPendingExportForCso = existingCso != null && groupPendingExport?.ConnectedSystemObjectId == existingCso.Id
+            ? groupPendingExport
+            : null;
+
         // Resolved once, ahead of the decision, and reused below in the merge-fallback block instead of a
         // second database round trip for the same row (only ever relevant for a PendingProvisioning CSO).
         // Named distinctly from the in-memory-batch "existingPendingExport" local further down (a
         // different, narrower lookup scoped to Update merges only) to avoid shadowing it.
-        var existingPendingExportForDecision = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports);
+        var existingPendingExportForDecision = existingCso is { Status: ConnectedSystemObjectStatus.PendingProvisioning } && groupPendingExportForCso != null
+            ? groupPendingExportForCso
+            : await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports);
 
         // The verdict comes from the pure engine (#288 extraction); this method is orchestration: resolve
         // the CSO, attempt export matching where the verdict provisions, compute the delta and persist. The
         // lookup is keyed by (Metaverse Object, Connected System) with no Object Type in it, so a Rule
         // targeting a different Object Type resolves to whichever Object holds that slot; the engine reports
         // that conflict (#1331) and the Metaverse Object's other export Rules are unaffected.
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics, existingPendingExportForDecision);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics, existingPendingExportForDecision,
+            groupCreateStagedThisEvaluation: groupPendingExportForCso?.ChangeType == PendingExportChangeType.Create);
 
         if (decision.Outcome == OutboundStagingOutcome.ObjectTypeConflict)
         {
@@ -2973,7 +3206,15 @@ public class ExportEvaluationServer
                 existingCso: existingCso, csoAttributeCache: cache.CsoAttributeValues, out csoAlreadyCurrentCount,
                 removedAttributes: removedAttributes, mvAttributeDictionary: mvAttributeDictionary,
                 preResolvedReferenceValues: preResolvedReferenceValues, flowErrors: flowErrors,
-                noNetChangeSkipped: alreadyCurrentChanges);
+                noNetChangeSkipped: alreadyCurrentChanges, stageEveryMapping: stageEveryMapping);
+
+            // An attribute another rule covering the account also writes is staged by neither (#2826), and so withdraws
+            // nothing queued for it either: which value is right is not this rule's to decide.
+            if (clashedAttributeIds is { Count: > 0 })
+            {
+                attributeChanges.RemoveAll(change => clashedAttributeIds.Contains(change.AttributeId));
+                alreadyCurrentChanges.RemoveAll(change => clashedAttributeIds.Contains(change.AttributeId));
+            }
 
             attrSpan.SetTag("changeCount", attributeChanges.Count);
             attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
@@ -3020,10 +3261,16 @@ public class ExportEvaluationServer
         // (e.g., created by drift detection earlier in the same page). If so, merge our attribute
         // changes into the existing one to avoid duplicates. Export evaluation values take precedence
         // over drift values on attribute conflicts (export eval uses the latest MVO state).
-        if (csoId.HasValue && changeType == PendingExportChangeType.Update && existingPendingExports != null)
+        // A Create from another rule covering the account in this evaluation (#2826) takes this rule's attributes the same way.
+        var mergesIntoGroupCreate = changeType == PendingExportChangeType.Create &&
+                                    groupPendingExportForCso is { ChangeType: PendingExportChangeType.Create } &&
+                                    groupPendingExportForCso.ConnectedSystemObjectId == csoId;
+        if (csoId.HasValue && (changeType == PendingExportChangeType.Update || mergesIntoGroupCreate) &&
+            (existingPendingExports != null || groupPendingExportForCso != null))
         {
-            var existingPendingExport = existingPendingExports
-                .FirstOrDefault(pe => pe.ConnectedSystemObjectId == csoId.Value);
+            var existingPendingExport = groupPendingExportForCso?.ConnectedSystemObjectId == csoId.Value
+                ? groupPendingExportForCso
+                : existingPendingExports?.FirstOrDefault(pe => pe.ConnectedSystemObjectId == csoId.Value);
 
             if (existingPendingExport != null)
             {
@@ -3476,10 +3723,11 @@ public class ExportEvaluationServer
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedReferenceValues = null,
         List<AttributeFlowError>? flowErrors = null,
-        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null)
+        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null,
+        bool stageEveryMapping = false)
         => _syncEngine.ComputeAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
             existingCso, csoAttributeCache, out csoAlreadyCurrentCount, ExpressionEvaluator,
-            removedAttributes, mvAttributeDictionary, preResolvedReferenceValues, flowErrors, noNetChangeSkipped);
+            removedAttributes, mvAttributeDictionary, preResolvedReferenceValues, flowErrors, noNetChangeSkipped, stageEveryMapping);
 
     /// <summary>
     /// Compares a Pending Export attribute value change against existing CSO attribute values to determine
@@ -3788,12 +4036,13 @@ public class ExportEvaluationServer
             // Scope is decided for every rule before anything is evaluated, as the run decides it: two or more rules in
             // scope for one Connected System and Object Type are an overlap (#2820), and the run stages nothing for them.
             var inScopeExportRules = exportRules.Where(exportRule => IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections)).ToList();
-            var overlaps = SyncEngine.FindExportRuleOverlaps(mvo, inScopeExportRules,
+            var groups = SyncEngine.PlanExportGroups(inScopeExportRules,
                 csId => cache.CsoLookup.TryGetValue((mvo.Id, csId), out var cso) ? cso : null);
-            result.RuleOverlaps.AddRange(overlaps);
-            var standaloneExportRules = SyncEngine.StandaloneExportRules(inScopeExportRules).ToHashSet();
-            standaloneExportRules.RemoveWhere(rule => SyncEngine.IsLeavingWithItsManagingRule(
-                cache.CsoLookup.TryGetValue((mvo.Id, rule.ConnectedSystemId), out var account) ? account : null, exportRules, inScopeExportRules));
+            result.RuleOverlaps.AddRange(SyncEngine.DescribeExportRuleOverlaps(mvo, groups,
+                csId => cache.CsoLookup.TryGetValue((mvo.Id, csId), out var cso) ? cso : null));
+            groups.RemoveAll(group => SyncEngine.IsLeavingWithItsManagingRule(
+                cache.CsoLookup.TryGetValue((mvo.Id, group.ConnectedSystemId), out var account) ? account : null, exportRules, inScopeExportRules));
+            var standaloneExportRules = groups.Select(group => group.OrderedRules[0]).ToHashSet();
 
             // The accounts a covering rule would take over (#2822), as the run's adoption finds them. A recall asserts
             // nothing about who manages an object, so it takes none over.
@@ -3806,16 +4055,28 @@ public class ExportEvaluationServer
                     .Select(handOver => handOver!));
             }
 
+            // Staged group by group, as the run stages them (#2826): the lead first, then each other rule, which adds its
+            // attributes to the lead's Create where the lead would create the account. An attribute two of them write is
+            // staged by neither.
+            foreach (var group in groups)
+            {
+                cache.CsoLookup.TryGetValue((mvo.Id, group.ConnectedSystemId), out var groupCso);
+                var groupCreate = false;
+                foreach (var exportRule in group.OrderedRules)
+                {
+                    var entry = await BuildStagingPreviewEntryAsync(this, cache, mvo, exportRule, groupCso, changedAttributes, removedAttributes,
+                        recallSemantics: recall != null, groupCreate, group.ClashedAttributeIds);
+                    result.Entries.Add(entry);
+                    groupCreate |= entry.EffectiveChangeType == PendingExportChangeType.Create;
+                }
+            }
+
             foreach (var exportRule in exportRules)
             {
                 cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var existingCso);
 
                 if (standaloneExportRules.Contains(exportRule))
-                {
-                    result.Entries.Add(await BuildStagingPreviewEntryAsync(
-                        this, cache, mvo, exportRule, existingCso, changedAttributes, removedAttributes, recallSemantics: recall != null));
                     continue;
-                }
 
                 if (inScopeExportRules.Contains(exportRule))
                     continue;
@@ -3880,13 +4141,21 @@ public class ExportEvaluationServer
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes,
-        bool recallSemantics)
+        bool recallSemantics,
+        bool groupCreate = false,
+        IReadOnlySet<int>? clashedAttributeIds = null)
     {
         // Read-only lookup (the preview never writes): needed for the same reason as the real staging
         // path - telling a never-sent Create apart from one already sent and awaiting confirmation.
         var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
         var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes,
-            recallSemantics, existingPendingExport);
+            recallSemantics, existingPendingExport, groupCreateStagedThisEvaluation: groupCreate);
+
+        // Another rule covering the account would create it in this evaluation (#2826): the run adds this rule's attributes
+        // to that Create, whatever this rule's own provisioning setting, so the preview does too.
+        if (groupCreate && !recallSemantics &&
+            decision.Outcome is OutboundStagingOutcome.ProvisioningDeclined or OutboundStagingOutcome.ProvisionNewCso)
+            decision = new OutboundStagingDecision { Outcome = OutboundStagingOutcome.ReusePendingProvisioningCso, ChangeType = PendingExportChangeType.Create };
 
         Guid? wouldJoinCsoId = null;
         var effectiveChangeType = decision.ChangeType;
@@ -3946,6 +4215,14 @@ public class ExportEvaluationServer
                 out noNetChangeSkipped, ExpressionEvaluator,
                 removedAttributes: removedAttributes,
                 noNetChangeSkipped: noNetChangeSkippedChanges);
+
+            // An attribute another rule covering the account also writes is staged by neither (#2826).
+            if (clashedAttributeIds is { Count: > 0 })
+            {
+                attributeChanges.RemoveAll(change => clashedAttributeIds.Contains(change.AttributeId));
+                noNetChangeSkippedChanges.RemoveAll(change => clashedAttributeIds.Contains(change.AttributeId));
+            }
+
             evaluatedChangeCount = attributeChanges.Count;
 
             if (!wouldJoinCsoId.HasValue && (attributeChanges.Count > 0 || noNetChangeSkippedChanges.Count > 0))

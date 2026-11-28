@@ -60,4 +60,7 @@
   <data name="HistoryDependencyOfPage" xml:space="preserve">
     <value>{0} von Seite {1}</value>
   </data>
+  <data name="ExportRuleAttributeClash" xml:space="preserve">
+    <value>{0} Export-Synchronisierungsregeln, die „{1}“ in „{2}“ als Ziel haben, schreiben alle {3}: {4}. JIM kann nicht entscheiden, welcher Wert richtig ist, daher exportiert keine von ihnen {3} für dieses Metaverse-Objekt, und das verbundene System behält den vorhandenen Wert. Alles andere wird exportiert. Weisen Sie das Attribut einer einzigen Regel zu, oder geben Sie den Regeln Geltungsbereiche, die sich nie überschneiden.</value>
+  </data>
 </root>

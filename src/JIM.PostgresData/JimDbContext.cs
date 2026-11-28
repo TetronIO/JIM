@@ -113,6 +113,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<GeneratedValueSequence> GeneratedValueSequences { get; set; } = null!;
     public virtual DbSet<ConfigurationTestCase> ConfigurationTestCases { get; set; } = null!;
     public virtual DbSet<GeneratedValueAssignment> GeneratedValueAssignments { get; set; } = null!;
+    public virtual DbSet<ExportRuleCoverage> ExportRuleCoverages { get; set; } = null!;
     public virtual DbSet<RetiredGeneratedValue> RetiredGeneratedValues { get; set; } = null!;
     public virtual DbSet<GeneratedValueRevisionPending> GeneratedValueRevisionsPending { get; set; } = null!;
     public virtual DbSet<UnpublishedMetaverseObject> UnpublishedMetaverseObjects { get; set; } = null!;
@@ -1394,6 +1395,25 @@ public class JimDbContext : DbContext
             .IsUnique()
             .HasFilter("\"MetaverseObjectId\" IS NOT NULL")
             .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique");
+
+        // Export rule coverage (#2826): which export rules cover an object they do not manage. Live data, so it goes with
+        // the object and with the rule; the composite key is the lookup a page makes by object, and the rule index serves
+        // a rule's deletion.
+        modelBuilder.Entity<ExportRuleCoverage>()
+            .HasKey(coverage => new { coverage.ConnectedSystemObjectId, coverage.SyncRuleId });
+        modelBuilder.Entity<ExportRuleCoverage>()
+            .HasOne<ConnectedSystemObject>()
+            .WithMany()
+            .HasForeignKey(coverage => coverage.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ExportRuleCoverage>()
+            .HasOne<SyncRule>()
+            .WithMany()
+            .HasForeignKey(coverage => coverage.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ExportRuleCoverage>()
+            .HasIndex(coverage => coverage.SyncRuleId)
+            .HasDatabaseName("IX_ExportRuleCoverages_SyncRuleId");
 
         // Durable join record (#348): the Synchronisation Rule that projected, provisioned or joined the object.
         // SetNull on rule deletion so the object survives and JoinSyncRuleName still names the rule. No navigation:

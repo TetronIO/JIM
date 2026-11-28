@@ -75,4 +75,8 @@
     <value>{0} of page {1}</value>
     <comment>What a later page's history refers to; {0} names it.</comment>
   </data>
+  <data name="ExportRuleAttributeClash" xml:space="preserve">
+    <value>{0} export Synchronisation Rules that target '{1}' in '{2}' all write {3}: {4}. JIM cannot tell which value is right, so none of them exports {3} for this Metaverse Object and the Connected System keeps the value it holds; everything else is exported. Give the attribute to one rule, or give the rules scopes that never overlap.</value>
+    <comment>{0} is how many rules, {1} the Object Type, {2} the Connected System, {3} the clashing attribute names (quoted, comma separated), {4} the rule names.</comment>
+  </data>
 </root>

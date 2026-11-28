@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Values an **Accumulate** attribute has kept can be removed from the portal's Inspect view, `Remove-JIMMetaverseObjectAttributeValue` or the REST API; JIM refuses a value a Synchronisation Rule still supplies and names the rule, and records the removal as yours. (#3059)
 - ✨ Before an attribute's contribution mode is changed, the portal, `Set-JIMMetaverseAttribute -WhatIf` and the REST API report how many Metaverse Objects would lose or gain values. (#3059)
 - ✨ JIM can reach the internet through an outbound proxy, as the Microsoft Entra ID Connector may need: the installer asks for one, and the standard `HTTPS_PROXY` and `NO_PROXY` settings work on Docker and Podman alike. (#3051)
+- ✨ Several export Synchronisation Rules can now cover one account, each writing its own attributes, such as a base rule plus add-on rules for some people's extras; their changes go out as one export. An attribute two rules write is exported by neither and reported. (#2826)
 
 ### Changed
 
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An export Synchronisation Rule that starts covering an account, because the person moves into its scope or the rule is created or switched on, now sends every attribute it writes, not only those that changed since. (#2826)
 - 🐛 Object Matching on a text attribute that respects case no longer risks reading every value the attribute holds for each object it matches, which could stall a first Full Synchronisation for minutes per page of objects. (#3100)
 - 🐛 Example data no longer repeats values JIM already holds: `[UniqueInt]` patterns, Example Data Set patterns and numbers counting up now give each new object its own value, even when a template runs twice. (#1789)
 - 🐛 A Delta Import that finds an object deleted now confirms JIM's exported Delete of it and its exported removals of references to it, such as a leaver's group memberships, rather than leaving them waiting for a Full Import or, for the Delete, for ever.

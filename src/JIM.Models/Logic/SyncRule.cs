@@ -51,6 +51,14 @@ public class SyncRule : IAuditable, IValidated
     public DateTime? LastUpdated { get; set; }
 
     /// <summary>
+    /// For an export rule, when JIM began recording which accounts it covers (#2826); null for a rule that existed before
+    /// the record did, until its existing coverage has been recorded once. While null, an account the rule starts covering
+    /// is recorded without the rule sending every attribute it writes, since JIM cannot tell new coverage from coverage
+    /// that predates the record.
+    /// </summary>
+    public DateTime? CoverageRecordedAt { get; set; }
+
+    /// <summary>
     /// The type of security principal that last modified this entity.
     /// </summary>
     public ActivityInitiatorType LastUpdatedByType { get; set; }

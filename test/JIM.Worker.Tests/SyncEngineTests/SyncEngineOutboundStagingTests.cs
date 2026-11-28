@@ -73,6 +73,66 @@ public class SyncEngineOutboundStagingTests
     }
 
     [Test]
+    public void DecideOutboundStaging_AnAddOnRuleAndAnUnsentCreateAnotherRuleQueued_ContributesToTheCreate()
+    {
+        // #2826: a rule that does not provision adds its attributes to the Create the rule managing the account queued, so
+        // the account is complete from its first export.
+        var addOn = ExportRule(provisionToConnectedSystem: false, directSourceAttributeId: 7);
+        addOn.Id = 11;
+        var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, new SyncRule { Id = 10, Name = "Base" }, DateTime.UtcNow);
+
+        var decision = _engine.DecideOutboundStaging(Mvo(), addOn, cso, changedAttributes: [ChangedAttribute(7)], recallSemantics: false,
+            existingPendingExport: UnsentCreate());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.ReusePendingProvisioningCso));
+            Assert.That(decision.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+        }
+    }
+
+    [Test]
+    public void DecideOutboundStaging_AnAddOnRuleAndASentCreateAnotherRuleQueued_StagesAnUpdate()
+    {
+        var addOn = ExportRule(provisionToConnectedSystem: false, directSourceAttributeId: 7);
+        addOn.Id = 11;
+        var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, new SyncRule { Id = 10, Name = "Base" }, DateTime.UtcNow);
+
+        var decision = _engine.DecideOutboundStaging(Mvo(), addOn, cso, changedAttributes: [ChangedAttribute(7)], recallSemantics: false,
+            existingPendingExport: SentCreate(PendingExportStatus.Exported));
+
+        Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.UpdateExportedProvisioningCso));
+    }
+
+    [Test]
+    public void DecideOutboundStaging_TheGroupQueuedTheCreateInThisEvaluation_ContributesWhateverChanged()
+    {
+        // The account is being created now, so every rule covering it contributes all it writes, not only what changed.
+        var addOn = ExportRule(provisionToConnectedSystem: false, directSourceAttributeId: 7);
+        addOn.Id = 11;
+        var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, new SyncRule { Id = 10, Name = "Base" }, DateTime.UtcNow);
+
+        var decision = _engine.DecideOutboundStaging(Mvo(), addOn, cso, changedAttributes: [ChangedAttribute(99)], recallSemantics: false,
+            existingPendingExport: UnsentCreate(), groupCreateStagedThisEvaluation: true);
+
+        Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.ReusePendingProvisioningCso));
+    }
+
+    [Test]
+    public void DecideOutboundStaging_AnAddOnRuleAndNoAccount_Declines()
+    {
+        var addOn = ExportRule(provisionToConnectedSystem: false, directSourceAttributeId: 7);
+
+        var decision = _engine.DecideOutboundStaging(Mvo(), addOn, existingCso: null, changedAttributes: [ChangedAttribute(7)], recallSemantics: false,
+            existingPendingExport: null);
+
+        Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.ProvisioningDeclined));
+    }
+
+    [Test]
     public void DecideOutboundStaging_NoCsoAndProvisioningEnabled_ProvisionsACreate()
     {
         // The orchestrator interposes export matching before acting on this outcome (a matched CSO becomes an

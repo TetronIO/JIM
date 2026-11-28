@@ -61,8 +61,9 @@ function Get-ScenarioSupportedDirectoryTypes {
         # attributes), so it is treated like Samba AD here.
         # Scenario 032 (Intra-type References) composes Scenario 008's OpenLDAP setup with a bespoke two-suffix
         # dataset of its own (Populate-OpenLDAP-Scenario-032.ps1); the cross-page reference step it measures is
-        # directory-independent, so one directory covers it.
-        { $_ -in 14, 19, 22, 32 } { return @('OpenLDAP') }
+        # directory-independent, so one directory covers it. Scenario 041 (Several Export Rules per Account) is
+        # likewise directory-independent, and its assertions read OpenLDAP's attribute names.
+        { $_ -in 14, 19, 22, 32, 41 } { return @('OpenLDAP') }
 
         # Scenario 017 (Initial Password) is Active Directory family only (Samba AD and the Active
         # Directory lab): "must change at next sign-in" (its central assertion) is an Active Directory
