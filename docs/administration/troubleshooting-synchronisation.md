@@ -119,7 +119,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 ## :material-call-split: **Export Rules Overlap**: `... export Synchronisation Rules that target '...' in '...' all write ...: ...`
 
-**What it means.** Two or more enabled export Synchronisation Rules for the same Connected System and Object Type have this Metaverse Object in scope, and they write the same attribute. JIM cannot tell which value is right, so it exported neither rule's value for that attribute and corrected no drift on it; the Connected System keeps the value it holds. Every other attribute the rules write was exported as usual. The message names the attributes and the rules. Items recorded by v1.0.0 or earlier read `This Metaverse Object is in scope of ...`: those releases exported nothing at all for an object two rules covered.
+**What it means.** Two or more enabled export Synchronisation Rules for the same Connected System and Object Type have this Metaverse Object in scope, and they write the same attribute. JIM cannot tell which value is right, so it exported neither rule's value for that attribute and corrected no drift on it; the Connected System keeps the value it holds. Their other attributes were exported. The message names the attributes and the rules; items from v1.0.0 or earlier read `This Metaverse Object is in scope of ...`.
 
 **How to fix.** Have only one of the rules write the attribute, or give the rules Scoping Criteria that never overlap; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the shared attribute.
 

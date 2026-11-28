@@ -209,7 +209,7 @@ Most database upgrades are near-instant; one that rewrites a large table scales 
 
 ## :material-sync: After the upgrade: export rule coverage
 
-Upgrading from v1.0.0 or earlier, the worker records in the background, while it has no other work, which accounts each existing export Synchronisation Rule already covers. Until it has finished with a rule, an account that rule starts covering is sent only the attributes that changed; afterwards it is sent everything the rule writes, as [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects) describes. Nothing needs doing, and synchronisation runs as usual meanwhile.
+From v1.0.0 or earlier, the worker records, while idle, which accounts each export Synchronisation Rule already covers. Until then, a rule starting to cover an account sends only changed attributes, not [everything it writes](../configuration/scoping-criteria.md#several-rules-for-the-same-objects).
 
 ## :material-check-decagram-outline: Check it worked {#verifying}
 
